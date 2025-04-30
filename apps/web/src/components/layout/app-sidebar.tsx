@@ -1,4 +1,5 @@
 "use client";
+
 import { DialogAction } from "@/components/shared/dialog-action";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,11 +12,9 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
-	DropdownMenuPortal,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
-	DropdownMenuSub,
-	DropdownMenuSubContent,
-	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -38,17 +37,17 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { listInvitationsQueryOptions } from "@/qc/teams/invitations";
-import { listUserOrganizationMembershipsQueryOptions } from "@/qc/teams/organizations";
-import { acceptInvitation } from "@/server/teams/invitations";
-import type { TeamMembership } from "@repo/api";
-import { useQuery } from "@tanstack/react-query";
 import {
-	Link,
-	useParams,
-	useRouteContext,
-	useRouter,
-} from "@tanstack/react-router";
+	invitationsListQueryOptions,
+	userOrganizationsQueryKey,
+	userOrganizationsQueryOptions,
+} from "@/qc/queries/user";
+import {
+	authClient,
+	type Organization,
+	type OrganizationMember,
+} from "@/lib/auth-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Brodcast,
 	Category2,
@@ -57,24 +56,34 @@ import {
 	Warning2,
 } from "iconsax-react";
 import {
-	Bell,
+	BellIcon,
 	BookIcon,
 	BuildingIcon,
-	ChevronRight,
-	ChevronsUpDown,
+	ChevronRightIcon,
+	ChevronsUpDownIcon,
 	KeyRoundIcon,
 	LibraryBigIcon,
-	Loader2,
+	Loader2Icon,
 	type LucideIcon,
+	PlusIcon,
 	TestTubesIcon,
 } from "lucide-react";
 import type * as React from "react";
 import { toast } from "sonner";
-import { LogsIcon, TracesIcon } from "../icons";
-import { Logo } from "../shared/logo";
-import { AddOrganization } from "../teams/add-org";
-import { AddProject } from "../teams/add-project";
-import { UserNav } from "./user-nav";
+import { useRouter } from "next/navigation";
+import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+	Dialog,
+	DialogTitle,
+	DialogHeader,
+	DialogFooter,
+	DialogContent,
+	DialogDescription,
+	DialogTrigger,
+} from "@/components/ui/dialog";
+import { CreateOrganizationForm } from "@/components/forms/create-org";
 
 /**
  * Core types for sidebar navigation
@@ -86,7 +95,7 @@ type NavItem = {
 	title: string;
 	url: string;
 	icon?: Icon;
-	isEnabled?: (userMembership: TeamMembership) => boolean;
+	isEnabled?: (userMembership: OrganizationMember) => boolean;
 	isAvailable?: boolean;
 	items?: NavItem[]; // For grouped items
 };
@@ -96,7 +105,7 @@ type ExternalLink = {
 	name: string;
 	url: string;
 	icon: React.ComponentType<{ className?: string }>;
-	isEnabled?: (userMembership: TeamMembership) => boolean;
+	isEnabled?: (userMembership: OrganizationMember) => boolean;
 	isAvailable?: boolean;
 };
 
@@ -112,29 +121,18 @@ const MENU: Menu = {
 	resources: [
 		{
 			title: "Events",
-			url: "/$orgSlug/$projSlug/events",
+			url: "/events",
 			icon: Brodcast,
 		},
 		{
-			title: "App Logs",
-			url: "/$orgSlug/$projSlug/app-logs",
-			icon: LogsIcon,
-		},
-		{
 			title: "Request Logs",
-			url: "/$orgSlug/$projSlug/request-logs",
+			url: "/request-logs",
 			icon: Global,
 		},
 		{
 			title: "Metrics",
-			url: "/$orgSlug/$projSlug/metrics",
+			url: "/metrics",
 			icon: TestTubesIcon,
-			isAvailable: false,
-		},
-		{
-			title: "Traces",
-			url: "/$orgSlug/$projSlug/traces",
-			icon: TracesIcon,
 			isAvailable: false,
 		},
 	],
@@ -142,13 +140,13 @@ const MENU: Menu = {
 	settings: [
 		{
 			title: "Alerts",
-			url: "/$orgSlug/$projSlug/alerts",
+			url: "/alerts",
 			icon: Warning2,
 			isAvailable: false,
 		},
 		{
 			title: "Organization Settings",
-			url: "/$orgSlug/$projSlug/settings/organization",
+			url: "/organization",
 			icon: BuildingIcon,
 			isEnabled: (userMembership) =>
 				["admin", "owner"].includes(userMembership.role),
@@ -156,7 +154,7 @@ const MENU: Menu = {
 		},
 		{
 			title: "Project Settings",
-			url: "/$orgSlug/$projSlug/settings/project",
+			url: "/project",
 			icon: LibraryBigIcon,
 			isEnabled: (userMembership) =>
 				["admin", "owner"].includes(userMembership.role),
@@ -164,7 +162,7 @@ const MENU: Menu = {
 		},
 		{
 			title: "API Keys",
-			url: "/$orgSlug/$projSlug/settings/api-keys",
+			url: "/api-keys",
 			icon: KeyRoundIcon,
 		},
 	],
@@ -182,7 +180,10 @@ const MENU: Menu = {
 /**
  * Filters menu items based on user's role and permissions
  */
-function filterMenuForUser(menu: Menu, userMembership: TeamMembership): Menu {
+function filterMenuForUser(
+	menu: Menu,
+	userMembership: OrganizationMember,
+): Menu {
 	return {
 		resources: menu.resources.filter((item) =>
 			!item.isEnabled ? true : item.isEnabled(userMembership),
@@ -202,17 +203,15 @@ function filterMenuForUser(menu: Menu, userMembership: TeamMembership): Menu {
 function isActiveRoute(itemUrl: string, pathname: string): boolean {
 	if (!pathname) return false;
 
-	// Remove the first two path segments (orgSlug and projSlug)
 	const itemUrlParts = itemUrl.split("/").slice(3).join("/");
-	const pathnameParts = pathname.split("/").slice(3).join("/");
 
-	if (!pathnameParts) return itemUrlParts === "";
+	if (pathname === "/") return itemUrlParts === "";
 	if (!itemUrlParts) return false;
 
-	if (pathnameParts === itemUrlParts) return true;
+	if (pathname === itemUrlParts) return true;
 
-	if (pathnameParts.startsWith(itemUrlParts)) {
-		const nextChar = pathnameParts.charAt(itemUrlParts.length);
+	if (pathname.startsWith(itemUrlParts)) {
+		const nextChar = pathname.charAt(itemUrlParts.length);
 		return nextChar === "/";
 	}
 
@@ -222,29 +221,28 @@ function isActiveRoute(itemUrl: string, pathname: string): boolean {
 /**
  * Organization logo and selector component
  */
-function SidebarLogo() {
+function SidebarLogo({
+	currentUserOrg,
+}: {
+	currentUserOrg: Organization;
+}) {
 	const { state, isMobile } = useSidebar();
-	const { session } = useRouteContext({
-		from: "/_authd/$orgSlug/$projSlug/_dashboard",
-	});
-
-	const { orgSlug, projSlug } = useParams({
-		from: "/_authd/$orgSlug/$projSlug/_dashboard",
-	});
+	const router = useRouter();
+	const queryClient = useQueryClient();
 
 	const { data: userOrgs, isLoading } = useQuery(
-		listUserOrganizationMembershipsQueryOptions(),
+		userOrganizationsQueryOptions(),
 	);
 
 	const activeOrganization = userOrgs?.find(
-		(org) => org.organization_id === session.active_organization,
-	)?.organization;
+		(org) => org.id === currentUserOrg.id,
+	);
 
 	return (
-		<>
+		<Dialog>
 			{isLoading ? (
 				<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground min-h-[5vh] pt-4">
-					<Loader2 className="animate-spin size-4" />
+					<Loader2Icon className="animate-spin size-4" />
 				</div>
 			) : (
 				<SidebarMenu
@@ -267,35 +265,34 @@ function SidebarLogo() {
 								>
 									<div
 										className={cn(
-											"flex items-center gap-2",
+											"flex items-center gap-2  min-w-0",
 											state === "collapsed" && "justify-center",
 										)}
 									>
-										<div className="flex items-center justify-center transition-all dark:bg-[#EDFFB2] bg-[#E1FF80] rounded-full size-8">
-											<Logo
-												className="transition-all size-4 shrink-0"
-												logoUrl={activeOrganization?.logo || undefined}
-												variant="iconOnly"
+										<div className="flex items-center justify-center transition-all rounded-full size-8">
+											<OrganizationLogo
+												logoUrl={activeOrganization?.logo}
+												orgMetadata={activeOrganization?.metadata}
+												name={activeOrganization?.name ?? ""}
+												size="sm"
 											/>
 										</div>
 										<div
 											className={cn(
-												"flex flex-col items-start whitespace-nowrap",
+												"text-sm font-medium leading-none truncate",
 												state === "collapsed" && "hidden",
 											)}
 										>
-											<p className="text-sm font-medium leading-none">
-												{activeOrganization?.name ?? "Select Organization"}
-											</p>
+											{activeOrganization?.name ?? "Select Organization"}
 										</div>
 									</div>
-									<ChevronsUpDown
+									<ChevronsUpDownIcon
 										className={cn("ml-auto", state === "collapsed" && "hidden")}
 									/>
 								</SidebarMenuButton>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent
-								className="rounded-lg min-w-[12.5rem]"
+								className="rounded-lg w-56"
 								align="start"
 								side={isMobile ? "bottom" : "right"}
 								sideOffset={4}
@@ -303,56 +300,69 @@ function SidebarLogo() {
 								<DropdownMenuLabel className="text-xs text-muted-foreground">
 									Organizations
 								</DropdownMenuLabel>
-								{userOrgs?.map(({ organization: org }) => (
-									<div className="flex flex-row justify-between" key={org.name}>
-										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="w-full items-center gap-2 p-2">
-												<Logo
-													className="size-4"
-													logoUrl={org.logo ?? undefined}
-												/>
-												<span>{org.name}</span>
-											</DropdownMenuSubTrigger>
-											<DropdownMenuPortal>
-												<DropdownMenuSubContent
-													className="min-w-[12.5rem]"
-													sideOffset={4}
-												>
-													<DropdownMenuLabel className="text-xs text-muted-foreground">
-														Projects
-													</DropdownMenuLabel>
-													{org.projects.map((project) => (
-														<DropdownMenuItem key={project.id} asChild>
-															<Link
-																to="/$orgSlug/$projSlug"
-																data-active={
-																	project.slug === projSlug &&
-																	org.slug === orgSlug
-																}
-																params={{
-																	orgSlug: org.slug,
-																	projSlug: project.slug,
-																}}
-															>
-																{project.name}
-															</Link>
-														</DropdownMenuItem>
-													))}
-													<DropdownMenuSeparator />
-													<AddProject />
-												</DropdownMenuSubContent>
-											</DropdownMenuPortal>
-										</DropdownMenuSub>
-									</div>
-								))}
+								<DropdownMenuRadioGroup
+									value={currentUserOrg.slug}
+									onValueChange={async (value) => {
+										const { error } = await authClient.organization.setActive({
+											organizationSlug: value,
+										});
+
+										if (error) {
+											toast.error(
+												error.message || "Error setting active organization",
+											);
+										}
+
+										queryClient.invalidateQueries({
+											queryKey: userOrganizationsQueryKey,
+										});
+
+										router.push(`/~/${value}`);
+									}}
+								>
+									{userOrgs?.map((org) => (
+										<DropdownMenuRadioItem
+											key={org.id}
+											value={org.slug}
+											className="justify-between min-w-0"
+										>
+											<span className="truncate">{org.name}</span>
+											<OrganizationLogo
+												logoUrl={org.logo}
+												orgMetadata={org.metadata}
+												name={org.name}
+												size="sm"
+											/>
+										</DropdownMenuRadioItem>
+									))}
+								</DropdownMenuRadioGroup>
 								<DropdownMenuSeparator />
-								<AddOrganization />
+								<DialogTrigger asChild>
+									<DropdownMenuItem>
+										<PlusIcon className="size-4" />
+										Create Organization
+									</DropdownMenuItem>
+								</DialogTrigger>
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</SidebarMenuItem>
 				</SidebarMenu>
 			)}
-		</>
+			<DialogContent className="sm:max-w-[425px]">
+				<DialogHeader>
+					<DialogTitle>Create Organization</DialogTitle>
+					<DialogDescription>
+						Create an organization to manage projects and providers.
+					</DialogDescription>
+				</DialogHeader>
+				<CreateOrganizationForm
+					onSuccess={({ slug }) => {
+						router.push(`/~/${slug}`);
+					}}
+					submitWrapper={DialogFooter}
+				/>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -362,14 +372,12 @@ function SidebarLogo() {
 function NavItemComponent({
 	item,
 	orgSlug,
-	projSlug,
-	pathname,
 }: {
 	item: NavItem;
 	orgSlug: string;
-	projSlug: string;
-	pathname: string;
 }) {
+	const pathname = usePathname();
+
 	const hasSubitems = item.items && item.items.length > 0;
 	const isActive = hasSubitems
 		? item.items?.some((subItem) => isActiveRoute(subItem.url, pathname))
@@ -390,14 +398,13 @@ function NavItemComponent({
 						tooltip={item.title}
 					>
 						<Link
-							to={item.url}
-							params={{ orgSlug, projSlug }}
+							href={`/~/${orgSlug}${item.url}`}
 							data-active={isActive}
 							className="flex w-full items-center gap-2"
 						>
 							{item.icon && (
 								<item.icon
-									className={cn(isActive && "text-primary")}
+									className={cn(isActive && "text-secondary-foreground")}
 									color="currentColor"
 								/>
 							)}
@@ -416,7 +423,7 @@ function NavItemComponent({
 
 								<span>{item.title}</span>
 								{hasSubitems && (
-									<ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+									<ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
 								)}
 							</SidebarMenuButton>
 						</CollapsibleTrigger>
@@ -426,8 +433,7 @@ function NavItemComponent({
 									<SidebarMenuSubItem key={subItem.title}>
 										<SidebarMenuSubButton asChild>
 											<Link
-												to={subItem.url}
-												params={{ orgSlug, projSlug }}
+												href={`/~/${orgSlug}${subItem.url}`}
 												data-active={isActiveRoute(subItem.url, pathname)}
 												className="flex w-full items-center"
 											>
@@ -436,7 +442,7 @@ function NavItemComponent({
 														<subItem.icon
 															className={cn(
 																"h-4 w-4 text-muted-foreground",
-																isActive && "text-primary",
+																isActive && "text-secondary-foreground",
 															)}
 														/>
 													</span>
@@ -455,31 +461,113 @@ function NavItemComponent({
 	);
 }
 
+function SidebarNotifications() {
+	const { data: invitations, refetch: refetchInvitations } = useQuery(
+		invitationsListQueryOptions(),
+	);
+
+	const { refetch: refetchUserOrgs } = useQuery(
+		userOrganizationsQueryOptions(),
+	);
+
+	return (
+		<SidebarMenuItem className="group-data-[collapsible=icon]:-translate-x-0.5">
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="relative h-8 w-8 p-1.5 mx-auto"
+					>
+						<BellIcon className="size-4" />
+						{invitations && invitations.length > 0 && (
+							<span className="absolute -top-0 -right-0 flex size-4 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
+								{invitations.length}
+							</span>
+						)}
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="start" side="right" className="w-80">
+					<DropdownMenuLabel>Pending Invitations</DropdownMenuLabel>
+					{/* TODO: Add a loading state */}
+					<div className="flex flex-col gap-2">
+						{invitations && invitations.length > 0 ? (
+							invitations.map((invitation) => (
+								<div key={invitation.id} className="flex flex-col gap-2">
+									<DropdownMenuItem
+										className="flex flex-col items-start gap-1 p-3"
+										onSelect={(e) => e.preventDefault()}
+									>
+										<div className="font-medium">
+											{invitation?.organization?.name}
+										</div>
+										<div className="text-xs text-muted-foreground">
+											Expires: {new Date(invitation.expiresAt).toLocaleString()}
+										</div>
+										<div className="text-xs text-muted-foreground">
+											Role: {invitation.role}
+										</div>
+									</DropdownMenuItem>
+									<DialogAction
+										title="Accept Invitation"
+										description="Are you sure you want to accept this invitation?"
+										type="default"
+										onClick={async () => {
+											const { error } =
+												await authClient.organization.acceptInvitation({
+													invitationId: invitation.id,
+												});
+
+											if (error) {
+												toast.error(
+													error.message || "Error accepting invitation",
+												);
+											} else {
+												toast.success("Invitation accepted successfully");
+												await refetchInvitations();
+												await refetchUserOrgs();
+											}
+										}}
+									>
+										<Button size="sm" variant="secondary">
+											Accept Invitation
+										</Button>
+									</DialogAction>
+								</div>
+							))
+						) : (
+							<DropdownMenuItem disabled>
+								No pending invitations
+							</DropdownMenuItem>
+						)}
+					</div>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</SidebarMenuItem>
+	);
+}
+
 /**
  * Main sidebar component
  */
 interface AppSidebarProps {
 	children: React.ReactNode;
+	currentUserOrg: Organization;
+	currentUserOrgMember: OrganizationMember;
+	sidebarStates: {
+		sidebarState: boolean;
+	};
 }
 
-export function AppSidebar({ children }: AppSidebarProps) {
-	const { sidebarStates, currentUserOrg } = useRouteContext({
-		from: "/_authd/$orgSlug/$projSlug/_dashboard",
-	});
+export function AppSidebar({
+	children,
+	currentUserOrg,
+	currentUserOrgMember,
+	sidebarStates,
+}: AppSidebarProps) {
+	const pathname = usePathname();
 
-	const { orgSlug, projSlug } = useParams({
-		from: "/_authd/$orgSlug/$projSlug/_dashboard",
-	});
-
-	const router = useRouter();
-	const pathname = router.latestLocation.pathname;
-
-	const filteredMenu = filterMenuForUser(MENU, currentUserOrg);
-
-	const { data: invitations, refetch: refetchInvitations } = useQuery(
-		listInvitationsQueryOptions(),
-	);
-	const { refetch } = useQuery(listUserOrganizationMembershipsQueryOptions());
+	const filteredMenu = filterMenuForUser(MENU, currentUserOrgMember);
 
 	return (
 		<SidebarProvider
@@ -493,28 +581,20 @@ export function AppSidebar({ children }: AppSidebarProps) {
 		>
 			<Sidebar collapsible="icon" variant="floating">
 				<SidebarHeader>
-					<SidebarLogo />
+					<SidebarLogo currentUserOrg={currentUserOrg} />
 				</SidebarHeader>
 
 				<SidebarContent>
 					{/* Dashboard Link */}
 					<SidebarGroup>
 						<SidebarMenu>
-							<SidebarMenuButton
-								isAvailable={false}
-								asChild
-								tooltip="Dashboard"
-							>
+							<SidebarMenuButton asChild tooltip="Dashboard">
 								<Link
-									to="/$orgSlug/$projSlug"
-									data-active={isActiveRoute(
-										`/${orgSlug}/${projSlug}`,
-										pathname,
-									)}
-									params={{ orgSlug, projSlug }}
+									href={`/~/${currentUserOrg.slug}`}
+									data-active={isActiveRoute(`/~/${currentUserOrg.slug}`, "/")}
 									className="flex w-full items-center gap-2"
 								>
-									<Category2 className="text-primary" color="currentColor" />
+									<Category2 color="currentColor" />
 									<span>Dashboard</span>
 								</Link>
 							</SidebarMenuButton>
@@ -529,9 +609,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 								<NavItemComponent
 									key={item.title}
 									item={item}
-									orgSlug={orgSlug}
-									projSlug={projSlug}
-									pathname={pathname}
+									orgSlug={currentUserOrg.slug}
 								/>
 							))}
 						</SidebarMenu>
@@ -545,9 +623,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 								<NavItemComponent
 									key={item.title}
 									item={item}
-									orgSlug={orgSlug}
-									projSlug={projSlug}
-									pathname={pathname}
+									orgSlug={currentUserOrg.slug}
 								/>
 							))}
 						</SidebarMenu>
@@ -580,91 +656,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
 				<SidebarFooter>
 					<SidebarMenu className="flex flex-col gap-2">
-						{/* Notifications */}
-						<SidebarMenuItem className="group-data-[collapsible=icon]:-translate-x-0.5">
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="relative h-8 w-8 p-1.5 mx-auto"
-									>
-										<Bell className="size-4" />
-										{invitations && invitations.length > 0 && (
-											<span className="absolute -top-0 -right-0 flex size-4 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
-												{invitations.length}
-											</span>
-										)}
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									align="start"
-									side="right"
-									className="w-80"
-								>
-									<DropdownMenuLabel>Pending Invitations</DropdownMenuLabel>
-									<div className="flex flex-col gap-2">
-										{invitations && invitations.length > 0 ? (
-											invitations.map((invitation) => (
-												<div
-													key={invitation.id}
-													className="flex flex-col gap-2"
-												>
-													<DropdownMenuItem
-														className="flex flex-col items-start gap-1 p-3"
-														onSelect={(e) => e.preventDefault()}
-													>
-														<div className="font-medium">
-															{invitation?.organization?.name}
-														</div>
-														<div className="text-xs text-muted-foreground">
-															Expires:{" "}
-															{new Date(invitation.expires_at).toLocaleString()}
-														</div>
-														<div className="text-xs text-muted-foreground">
-															Role: {invitation.role}
-														</div>
-													</DropdownMenuItem>
-													<DialogAction
-														title="Accept Invitation"
-														description="Are you sure you want to accept this invitation?"
-														type="default"
-														onClick={async () => {
-															const { error } = await acceptInvitation({
-																data: { token: invitation.token },
-															});
-
-															if (error) {
-																toast.error(
-																	error.message || "Error accepting invitation",
-																);
-															} else {
-																toast.success(
-																	"Invitation accepted successfully",
-																);
-																await refetchInvitations();
-																await refetch();
-															}
-														}}
-													>
-														<Button size="sm" variant="secondary">
-															Accept Invitation
-														</Button>
-													</DialogAction>
-												</div>
-											))
-										) : (
-											<DropdownMenuItem disabled>
-												No pending invitations
-											</DropdownMenuItem>
-										)}
-									</div>
-								</DropdownMenuContent>
-							</DropdownMenu>
-						</SidebarMenuItem>
+						<SidebarNotifications />
 						<SidebarTrigger className="group-data-[collapsible=]:translate-x-0.5" />
 						<SidebarMenuItem className="min-h-12 flex items-center">
-							<UserNav />
+							<SideBarUserNav />
 						</SidebarMenuItem>
 					</SidebarMenu>
 				</SidebarFooter>

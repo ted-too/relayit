@@ -28,6 +28,7 @@ import { DatePickerWithRange } from "@/components/ui/date-picker";
 import { DatePickerSingeWithMonths } from "@/components/ui/date-picker";
 import { DatePickerSingle } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
+import { HashIcon, RefreshCwIcon } from "lucide-react";
 
 export const { fieldContext, formContext, useFieldContext, useFormContext } =
 	createFormHookContexts();
@@ -70,7 +71,6 @@ export function TextField(
 	props: BaseFieldProps & {
 		type?: string;
 		placeholder?: string;
-
 		textarea?: boolean;
 	},
 ) {
@@ -101,6 +101,66 @@ export function TextField(
 				required={required}
 				disabled={disabled}
 			/>
+			{description && (
+				<p className="text-muted-foreground text-sm">{description}</p>
+			)}
+			<FormErrorMessage
+				errors={field.state.meta.errors}
+				className={className.message}
+			/>
+		</div>
+	);
+}
+
+export function SlugField(
+	props: BaseFieldProps & {
+		placeholder?: string;
+		regenerate?: () => void;
+		isLoading?: boolean;
+	},
+) {
+	const {
+		label,
+		className = {},
+		placeholder,
+		description,
+		required,
+		disabled,
+		regenerate,
+		isLoading = false,
+	} = props;
+	const field = useFieldContext<string>();
+	return (
+		<div className={cn("grid gap-2", className.root)}>
+			<Label htmlFor={field.name} className={className.label}>
+				{label}
+			</Label>
+			<div className="relative">
+				<Input
+					id={field.name}
+					className={cn("w-full peer ps-9 pe-9", className.input)}
+					value={field.state.value}
+					placeholder={placeholder}
+					required={required}
+					disabled
+					readOnly
+				/>
+				<div className="text-muted-foreground/80 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+					<HashIcon size={16} />
+				</div>
+				<button
+					className="cursor-pointer text-muted-foreground/80 hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-md transition-[color,box-shadow] outline-none focus:z-10 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label="Submit search"
+					type="button"
+					onClick={regenerate}
+				>
+					<RefreshCwIcon
+						size={16}
+						aria-hidden="true"
+						className={cn(isLoading && "animate-spin")}
+					/>
+				</button>
+			</div>
 			{description && (
 				<p className="text-muted-foreground text-sm">{description}</p>
 			)}
@@ -606,6 +666,7 @@ export function SubmitButton({
 export const { useAppForm } = createFormHook({
 	fieldComponents: {
 		TextField,
+		SlugField,
 		// PhoneInputField,
 		NumberField,
 		RadioGroup,

@@ -92,7 +92,7 @@ CREATE TABLE "project" (
 	"organization_id" text NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp,
-	"metadata" text
+	"metadata" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "session" (
@@ -156,6 +156,7 @@ CREATE TABLE "message_event" (
 CREATE TABLE "provider_credential" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
+	"project_id" text,
 	"slug" text NOT NULL,
 	"channel_type" "channel" NOT NULL,
 	"provider_type" "provider_type",
@@ -191,12 +192,14 @@ ALTER TABLE "message" ADD CONSTRAINT "message_api_key_id_api_key_id_fk" FOREIGN 
 ALTER TABLE "message" ADD CONSTRAINT "message_provider_credential_id_provider_credential_id_fk" FOREIGN KEY ("provider_credential_id") REFERENCES "public"."provider_credential"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "message_event" ADD CONSTRAINT "message_event_message_id_message_id_fk" FOREIGN KEY ("message_id") REFERENCES "public"."message"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "provider_credential" ADD CONSTRAINT "provider_credential_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "provider_credential" ADD CONSTRAINT "provider_credential_project_id_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."project"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "webhook_endpoint" ADD CONSTRAINT "webhook_endpoint_project_id_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."project"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "slug_idx" ON "project" USING btree ("slug","organization_id");--> statement-breakpoint
 CREATE INDEX "message_project_status_idx" ON "message" USING btree ("project_id","status");--> statement-breakpoint
 CREATE INDEX "message_api_key_idx" ON "message" USING btree ("api_key_id");--> statement-breakpoint
 CREATE INDEX "message_credential_idx" ON "message" USING btree ("provider_credential_id");--> statement-breakpoint
 CREATE INDEX "message_event_message_idx" ON "message_event" USING btree ("message_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "provider_credential_organization_slug_idx" ON "provider_credential" USING btree ("organization_id","slug");--> statement-breakpoint
+CREATE UNIQUE INDEX "provider_credential_org_project_slug_unique_idx" ON "provider_credential" USING btree ("organization_id","project_id","slug");--> statement-breakpoint
 CREATE INDEX "provider_credential_organization_idx" ON "provider_credential" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "provider_credential_project_idx" ON "provider_credential" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "webhook_endpoint_project_idx" ON "webhook_endpoint" USING btree ("project_id");

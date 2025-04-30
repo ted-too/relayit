@@ -1,7 +1,8 @@
-import { authClient } from "@/lib/auth-client";
+import type { Session } from "@/lib/auth-client";
 import { getQueryClient } from "@/qc/client";
 import {
 	sessionQueryKey,
+	sessionQueryOptions,
 	userOrganizationsQueryOptions,
 } from "@/qc/queries/user";
 import { headers as headersFn } from "next/headers";
@@ -13,17 +14,19 @@ export default async function DashboardLayout({
 	children: React.ReactNode;
 }) {
 	const headers = await headersFn();
-	const session = await authClient.getSession({
-		fetchOptions: {
-			headers,
-		},
-	});
+	const queryClient = getQueryClient();
 
-	if (!session) {
+	let session: Session | undefined;
+
+	try {
+		session = await queryClient.ensureQueryData(
+			sessionQueryOptions({ headers }),
+		);
+		if (!session) throw new Error("No session");
+	} catch (error) {
+		console.error(error);
 		throw redirect("/auth/sign-in");
 	}
-
-	const queryClient = getQueryClient();
 
 	queryClient.setQueryData(sessionQueryKey, session);
 

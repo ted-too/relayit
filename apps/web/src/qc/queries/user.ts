@@ -1,4 +1,6 @@
+import { apiClient, callRpc } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { getOrganizationMetadata } from "@/lib/utils";
 import { queryOptions } from "@tanstack/react-query";
 
 type QueryOpts<T = void> = {
@@ -43,27 +45,34 @@ export const userOrganizationsQueryOptions = (opts?: QueryOpts) =>
 				},
 			});
 			if (error) return Promise.reject(error);
-			return data;
+
+			return data.map((org) => ({
+				...org,
+				metadata: getOrganizationMetadata(org.metadata),
+			}));
 		},
 		retry: opts?.retry,
 		enabled: opts?.enabled,
 	});
 
-export const userTeamsQueryKey = [
+export const orgProjectsQueryKey = [
 	"organizations",
 	"current-user",
-	"teams",
+	"projects",
 ] as const;
 
-export const userTeamsQueryOptions = (opts?: QueryOpts) =>
+export const userProjectsQueryOptions = (opts?: QueryOpts) =>
 	queryOptions({
-		queryKey: userTeamsQueryKey,
+		queryKey: orgProjectsQueryKey,
 		queryFn: async () => {
-			const { data, error } = await authClient.organization.listTeams({
-				fetchOptions: {
-					headers: Object.fromEntries(opts?.headers ?? []),
-				},
-			});
+			const { data, error } = await callRpc(
+				apiClient.projects.$get(
+					{},
+					{
+						headers: Object.fromEntries(opts?.headers ?? []),
+					},
+				),
+			);
 			if (error) return Promise.reject(error);
 			return data;
 		},
@@ -74,7 +83,7 @@ export const userTeamsQueryOptions = (opts?: QueryOpts) =>
 export const organizationQueryKey = [
 	"organizations",
 	"current-user",
-	"organization",
+	"active-organization",
 ] as const;
 
 export const organizationQueryOptions = (opts?: QueryOpts) =>
@@ -88,6 +97,32 @@ export const organizationQueryOptions = (opts?: QueryOpts) =>
 					},
 				},
 			);
+			if (error) return Promise.reject(error);
+
+			return {
+				...data,
+				metadata: getOrganizationMetadata(data.metadata),
+			};
+		},
+		retry: opts?.retry,
+		enabled: opts?.enabled,
+	});
+
+export const organizationMemberQueryKey = [
+	"organizations",
+	"current-user",
+	"organization-member",
+] as const;
+
+export const organizationMemberQueryOptions = (opts?: QueryOpts) =>
+	queryOptions({
+		queryKey: organizationMemberQueryKey,
+		queryFn: async () => {
+			const { data, error } = await authClient.organization.getActiveMember({
+				fetchOptions: {
+					headers: Object.fromEntries(opts?.headers ?? []),
+				},
+			});
 			if (error) return Promise.reject(error);
 			return data;
 		},
@@ -105,11 +140,14 @@ export const invitationsListQueryOptions = (opts?: QueryOpts) =>
 	queryOptions({
 		queryKey: invitationsListQueryKey,
 		queryFn: async () => {
-			const { data, error } = await authClient.organization.listInvitations({
-				fetchOptions: {
-					headers: Object.fromEntries(opts?.headers ?? []),
-				},
-			});
+			const { data, error } = await callRpc(
+				apiClient.invitations.$get(
+					{},
+					{
+						headers: Object.fromEntries(opts?.headers ?? []),
+					},
+				),
+			);
 			if (error) return Promise.reject(error);
 			return data;
 		},

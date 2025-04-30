@@ -1,5 +1,5 @@
 {
-  "id": "d2031630-0b5e-411e-bafa-f9693ac1dbf4",
+  "id": "db3fe868-8df0-4bd9-a0e9-c2b12b4131df",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -629,7 +629,7 @@
         },
         "metadata": {
           "name": "metadata",
-          "type": "text",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         }
@@ -1168,6 +1168,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "slug": {
           "name": "slug",
           "type": "text",
@@ -1222,11 +1228,17 @@
         }
       },
       "indexes": {
-        "provider_credential_organization_slug_idx": {
-          "name": "provider_credential_organization_slug_idx",
+        "provider_credential_org_project_slug_unique_idx": {
+          "name": "provider_credential_org_project_slug_unique_idx",
           "columns": [
             {
               "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1257,6 +1269,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "provider_credential_project_idx": {
+          "name": "provider_credential_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1266,6 +1293,19 @@
           "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "provider_credential_project_id_project_id_fk": {
+          "name": "provider_credential_project_id_project_id_fk",
+          "tableFrom": "provider_credential",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
           ],
           "columnsTo": [
             "id"

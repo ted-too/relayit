@@ -1,0 +1,79 @@
+import { count, eq, and, isNull } from "drizzle-orm";
+import slugify from "slugify";
+import { db, schema } from "@repo/api/db";
+
+/**
+ * Generates a unique slug for a project within an organization.
+ * If the initial slug derived from the name exists, it appends '-1', '-2', etc.
+ */
+export async function generateProjectSlug(
+	name: string,
+	organizationId: string,
+): Promise<string> {
+	const baseSlug = slugify(name, { lower: true, strict: true });
+	let slug = baseSlug;
+	let counter = 1;
+
+	// Loop until a unique slug is found
+	while (true) {
+		const existing = await db
+			.select({ count: count() })
+			.from(schema.project)
+			.where(
+				and(
+					eq(schema.project.organizationId, organizationId),
+					eq(schema.project.slug, slug),
+				),
+			);
+
+		if (existing[0].count === 0) {
+			break; // Slug is unique
+		}
+
+		// If slug exists, append counter and try again
+		slug = `${baseSlug}-${counter}`;
+		counter++;
+	}
+	return slug;
+}
+
+/**
+ * Generates a unique slug for a provider credential within an organization,
+ * considering whether it's project-specific or organization-wide.
+ */
+export async function generateProviderSlug(
+	name: string,
+	organizationId: string,
+	projectId: string | null | undefined,
+): Promise<string> {
+	const baseSlug = slugify(name, { lower: true, strict: true });
+	let slug = baseSlug;
+	let counter = 1;
+
+	// Loop until a unique slug is found for the given scope (org or project)
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		const scopeCondition = projectId
+			? eq(schema.providerCredential.projectId, projectId)
+			: isNull(schema.providerCredential.projectId);
+
+		const existing = await db
+			.select({ count: count() })
+			.from(schema.providerCredential)
+			.where(
+				and(
+					eq(schema.providerCredential.organizationId, organizationId),
+					scopeCondition,
+					eq(schema.providerCredential.slug, slug),
+				),
+			);
+
+		if (existing[0].count === 0) {
+			break; // Slug is unique within the scope
+		}
+
+		slug = `${baseSlug}-${counter}`;
+		counter++;
+	}
+	return slug;
+}

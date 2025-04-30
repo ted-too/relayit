@@ -1,210 +1,304 @@
-// "use client";
-// import { Button, type ButtonProps } from "@/components/ui/button";
-// import {
-// 	Dialog,
-// 	DialogContent,
-// 	DialogDescription,
-// 	DialogFooter,
-// 	DialogHeader,
-// 	DialogTitle,
-// 	DialogTrigger,
-// } from "@/components/ui/dialog";
-// import { useAppForm } from "@/components/ui/form";
-// import { apiClient, callRpc } from "@/lib/api";
-// import { authClient } from "@/lib/auth-client";
-// import { houseHoldsQueryOptions } from "@/qc/queries/user";
-// import {
-// 	type CreateOrganizationRequest,
-// 	createOrganizationSchema,
-// } from "@repo/shared";
-// import { useQueryClient } from "@tanstack/react-query";
-// import { getTimezonesForCountry } from "countries-and-timezones";
-// import { useRouter } from "next/navigation";
-// import { Fragment } from "react";
-// import { toast } from "sonner";
+"use client";
 
-// interface CreateHouseholdFormProps {
-// 	onSuccess: (data: { id: string; slug: string }) => void;
-// 	submitWrapper?: typeof DialogFooter;
-// }
+import type { ButtonProps } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
+import { authClient } from "@/lib/auth-client";
+import { userOrganizationsQueryKey } from "@/qc/queries/user";
+import {
+	type CreateOrganizationRequest,
+	createOrganizationSchema,
+} from "@repo/shared";
+import { useRouter } from "next/navigation";
+import { Fragment, useCallback, useState } from "react";
+import { FormErrorMessage, useAppForm } from "@/components/ui/form";
+import {
+	ORGANIZATION_LOGO_GRADIENTS,
+	type OrganizationLogoGradientKey,
+} from "@repo/shared";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { EmojiPicker } from "@ferrucc-io/emoji-picker";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { CircleCheckIcon, PlusIcon } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+	RadioGroup,
+	RadioGroupIndicator,
+	RadioGroupItem,
+} from "@radix-ui/react-radio-group";
+import { apiClient, callRpc } from "@/lib/api";
+import { useStore } from "@tanstack/react-form";
 
-// export function CreateHouseholdForm({
-// 	onSuccess,
-// 	submitWrapper,
-// }: CreateHouseholdFormProps) {
-// 	const queryClient = useQueryClient();
-// 	const form = useAppForm({
-// 		defaultValues: {
-// 			name: "",
-// 			description: "",
-// 			country: "",
-// 			timezone: "",
-// 			logoBgKey: "sky",
-// 			logoEmoji: "",
-// 		} as CreateOrganizationRequest,
-// 		validators: {
-// 			onSubmit: createOrganizationSchema,
-// 		},
-// 		onSubmit: async ({ value }) => {
-// 			const { data, error } = await callRpc(
-// 				apiClient.households.$post({ json: value }),
-// 			);
+interface CreateOrganizationFormProps {
+	onSuccess: (data: { id: string; slug: string }) => void;
+	submitWrapper?: typeof DialogFooter;
+}
 
-// 			if (error)
-// 				return toast.error(error?.message, {
-// 					description: error?.details.join("\n"),
-// 				});
+export function CreateOrganizationForm({
+	onSuccess,
+	submitWrapper,
+}: CreateOrganizationFormProps) {
+	const queryClient = useQueryClient();
 
-// 			await authClient.organization.setActive({
-// 				organizationId: data.id,
-// 			});
+	const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
 
-// 			await queryClient.invalidateQueries({
-// 				queryKey: houseHoldsQueryOptions().queryKey,
-// 			});
+	const form = useAppForm({
+		defaultValues: {
+			name: "",
+			slug: "",
+			metadata: {
+				logoBgKey: "sky",
+				logoEmoji: "",
+			},
+		} as CreateOrganizationRequest,
+		validators: {
+			onSubmit: createOrganizationSchema,
+		},
+		onSubmit: async ({ value }) => {
+			const { data, error } = await authClient.organization.create({
+				...value,
+				keepCurrentActiveOrganization: false,
+			});
 
-// 			if (onSuccess) onSuccess(data);
-// 		},
-// 	});
+			if (error) return toast.error(error?.message);
 
-// 	const SubmitWrapper = submitWrapper ?? Fragment;
+			await queryClient.invalidateQueries({
+				queryKey: userOrganizationsQueryKey,
+			});
 
-// 	return (
-// 		<form
-// 			onSubmit={(e) => {
-// 				e.preventDefault();
-// 				form.handleSubmit();
-// 			}}
-// 			className="space-y-4 w-full"
-// 		>
-// 			<form.AppField
-// 				name="name"
-// 				children={(field) => (
-// 					<field.TextField
-// 						label="Household Name"
-// 						placeholder="e.g., Smith Family"
-// 					/>
-// 				)}
-// 			/>
+			if (onSuccess) onSuccess(data);
+		},
+	});
 
-// 			<form.AppField
-// 				name="country"
-// 				children={(field) => (
-// 					<field.CountryDropdownField label="Country" required />
-// 				)}
-// 			/>
+	const name = useStore(form.store, (state) => state.values.name);
 
-// 			<form.Subscribe
-// 				selector={(state) => state.values.country}
-// 				children={(country) => (
-// 					<form.AppField
-// 						name="timezone"
-// 						children={(field) => (
-// 							<field.SelectField
-// 								label="Timezone"
-// 								placeholder="e.g., America/New_York"
-// 								options={
-// 									country !== undefined
-// 										? (getTimezonesForCountry(country) ?? []).map((tz) => ({
-// 												label: `${tz.name} (UTC ${tz.utcOffsetStr})`,
-// 												value: tz.name,
-// 											}))
-// 										: []
-// 								}
-// 								className={{
-// 									input: "w-full",
-// 								}}
-// 								triggerProps={{
-// 									disabled: country === undefined || country === "",
-// 									"aria-required": true,
-// 								}}
-// 							/>
-// 						)}
-// 					/>
-// 				)}
-// 			/>
+	const generateSlug = useCallback(async () => {
+		if (!name || name.length === 0) return;
 
-// 			<form.AppField
-// 				name="description"
-// 				children={(field) => (
-// 					<field.TextField
-// 						label="Description (Optional)"
-// 						placeholder="Tell us about your household"
-// 						textarea
-// 					/>
-// 				)}
-// 			/>
+		setIsGeneratingSlug(true);
+		const { data } = await callRpc(
+			apiClient.projects["generate-slug"].$post({
+				json: {
+					name,
+				},
+			}),
+		);
 
-// 			<SubmitWrapper>
-// 				<form.AppForm>
-// 					<form.SubmitButton className="w-full mt-6" size="lg">
-// 						Create Household
-// 					</form.SubmitButton>
-// 				</form.AppForm>
-// 			</SubmitWrapper>
-// 		</form>
-// 	);
-// }
+		if (data) {
+			form.setFieldValue("slug", data.slug);
+		}
 
-// export function CreateHouseholdDialog({
-// 	button = {
-// 		label: "Create Household",
-// 		variant: "outline",
-// 		size: "default",
-// 	},
-// 	onSuccess: onSuccessProp,
-// 	children,
-// }: {
-// 	button?: {
-// 		label: string;
-// 		variant?: ButtonProps["variant"];
-// 		size?: ButtonProps["size"];
-// 		className?: string;
-// 	};
-// 	onSuccess?: CreateHouseholdFormProps["onSuccess"];
-// 	children?: React.ReactNode;
-// }) {
-// 	const router = useRouter();
-// 	const onSuccess =
-// 		onSuccessProp ??
-// 		(({ slug }) => {
-// 			router.push(`/~/${slug}`);
-// 		});
+		setIsGeneratingSlug(false);
+	}, [form, name]);
 
-// 	return (
-// 		<Dialog>
-// 			<DialogTrigger asChild>
-// 				{children ?? (
-// 					<Button
-// 						variant={button.variant}
-// 						className={button.className}
-// 						size={button.size}
-// 					>
-// 						{button.label}
-// 					</Button>
-// 				)}
-// 			</DialogTrigger>
-// 			<DialogContent className="sm:max-w-[425px]">
-// 				<DialogHeader>
-// 					<DialogTitle>Create Household</DialogTitle>
-// 					<DialogDescription>
-// 						Create a household to manage chores, bills, and members
-// 					</DialogDescription>
-// 				</DialogHeader>
-// 				<CreateHouseholdForm
-// 					onSuccess={onSuccess}
-// 					submitWrapper={DialogFooter}
-// 				/>
-// 			</DialogContent>
-// 		</Dialog>
-// 	);
-// }
+	const SubmitWrapper = submitWrapper ?? Fragment;
 
-// export function CreateHouseholdClient() {
-// 	const router = useRouter();
-// 	const onSuccess = ({ slug }: { slug: string }) => {
-// 		router.push(`/~/${slug}`);
-// 	};
+	return (
+		<form
+			onSubmit={(e) => {
+				e.preventDefault();
+				form.handleSubmit();
+			}}
+			className="grid gap-4 w-full"
+		>
+			<div className="flex items-center gap-4">
+				<form.AppField
+					name="name"
+					listeners={{
+						onChangeDebounceMs: 250,
+						onChange: generateSlug,
+					}}
+					children={(field) => (
+						<field.TextField
+							label="Organization Name"
+							placeholder="e.g., 2labs"
+							className={{
+								root: "grow",
+							}}
+						/>
+					)}
+				/>
+				<form.Subscribe
+					selector={(state) => state.values.metadata.logoBgKey}
+					children={(logoBgKey) => (
+						<form.Field
+							name="metadata.logoEmoji"
+							children={(field) => (
+								<Popover>
+									<div className="grid gap-2">
+										<Label htmlFor={field.name}>Logo</Label>
+										<PopoverTrigger asChild>
+											<Button
+												variant="outline"
+												className="rounded-full size-9 text-2xl"
+												size="icon"
+												style={{
+													background: logoBgKey
+														? ORGANIZATION_LOGO_GRADIENTS[
+																logoBgKey as OrganizationLogoGradientKey
+															]
+														: undefined,
+												}}
+											>
+												{field.state.value ?? <PlusIcon />}
+											</Button>
+										</PopoverTrigger>
+										{/* @ts-expect-error - TODO: fix this */}
+										<FormErrorMessage errors={field.state.meta.errors} />
+									</div>
+									<PopoverContent className="sm:w-[434px] w-svw" align="end">
+										<Tabs defaultValue="emoji" className="w-full">
+											<TabsList className="w-full grid grid-cols-2">
+												<TabsTrigger value="emoji">Emoji</TabsTrigger>
+												<TabsTrigger value="style">Style</TabsTrigger>
+											</TabsList>
+											<TabsContent value="emoji">
+												<EmojiPicker
+													onEmojiSelect={field.handleChange}
+													className="shadow-none border-none"
+													emojiSize={32}
+												>
+													<EmojiPicker.Header>
+														<EmojiPicker.Input placeholder="Search emoji" />
+													</EmojiPicker.Header>
+													<EmojiPicker.Group>
+														<EmojiPicker.List />
+													</EmojiPicker.Group>
+												</EmojiPicker>
+											</TabsContent>
+											<TabsContent value="style">
+												<form.Field
+													name="metadata.logoBgKey"
+													children={(field) => (
+														<RadioGroup
+															onValueChange={(value) =>
+																field.handleChange(
+																	value as OrganizationLogoGradientKey,
+																)
+															}
+															defaultValue={field.state.value}
+															className="flex flex-wrap gap-4 min-h-9 items-center p-2"
+														>
+															{Object.entries(ORGANIZATION_LOGO_GRADIENTS).map(
+																([key, value]) => (
+																	<div
+																		key={key}
+																		className="flex items-center gap-4"
+																	>
+																		<RadioGroupItem
+																			className="aspect-square cursor-pointer relative size-10 rounded-full focus:outline-none data-[state=checked]:border border-primary focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+																			style={{ background: value }}
+																			value={key}
+																		>
+																			<RadioGroupIndicator className="flex items-center justify-center absolute -top-2 -right-2">
+																				<CircleCheckIcon className="size-4 fill-primary stroke-background" />
+																			</RadioGroupIndicator>
+																		</RadioGroupItem>
+																	</div>
+																),
+															)}
+														</RadioGroup>
+													)}
+												/>
+											</TabsContent>
+										</Tabs>
+									</PopoverContent>
+								</Popover>
+							)}
+						/>
+					)}
+				/>
+			</div>
 
-// 	return <CreateHouseholdForm onSuccess={onSuccess} />;
-// }
+			<form.AppField
+				name="slug"
+				children={(field) => (
+					<field.SlugField
+						label="Organization Slug"
+						isLoading={isGeneratingSlug}
+						regenerate={generateSlug}
+						className={{
+							root: "col-span-full",
+						}}
+					/>
+				)}
+			/>
+
+			<SubmitWrapper className="col-span-full">
+				<form.AppForm>
+					<form.SubmitButton className="w-full mt-6" size="lg">
+						Create Organization
+					</form.SubmitButton>
+				</form.AppForm>
+			</SubmitWrapper>
+		</form>
+	);
+}
+
+export function CreateOrganizationDialog({
+	button = {
+		label: "Create Organization",
+		variant: "outline",
+		size: "default",
+	},
+	onSuccess: onSuccessProp,
+	children,
+}: {
+	button?: {
+		label: string;
+		variant?: ButtonProps["variant"];
+		size?: ButtonProps["size"];
+		className?: string;
+	};
+	onSuccess?: CreateOrganizationFormProps["onSuccess"];
+	children?: React.ReactNode;
+}) {
+	const router = useRouter();
+	const onSuccess =
+		onSuccessProp ??
+		(({ slug }) => {
+			router.push(`/~/${slug}`);
+		});
+
+	return (
+		<Dialog>
+			<DialogTrigger asChild>
+				{children ?? (
+					<Button
+						variant={button.variant}
+						className={button.className}
+						size={button.size}
+					>
+						{button.label}
+					</Button>
+				)}
+			</DialogTrigger>
+			<DialogContent className="sm:max-w-[425px]">
+				<DialogHeader>
+					<DialogTitle>Create Organization</DialogTitle>
+					<DialogDescription>
+						Create an organization to manage projects and providers.
+					</DialogDescription>
+				</DialogHeader>
+				<CreateOrganizationForm
+					onSuccess={onSuccess}
+					submitWrapper={DialogFooter}
+				/>
+			</DialogContent>
+		</Dialog>
+	);
+}

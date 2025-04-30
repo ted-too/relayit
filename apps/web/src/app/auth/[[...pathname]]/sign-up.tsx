@@ -1,11 +1,11 @@
 "use client";
 
-import { CombinedLogo } from "@/components/logo";
+import { CombinedLogo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { useAppForm } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
 import { userOrganizationsQueryOptions } from "@/qc/queries/user";
-import { type SignUpRequest, signUpSchema } from "@/validations/auth";
+import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

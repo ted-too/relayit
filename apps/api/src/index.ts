@@ -4,14 +4,19 @@ import { auth, initialUserSetup } from "@repo/api/lib/auth";
 import { cors } from "hono/cors";
 import { sendRouter } from "@repo/api/routes/send";
 import type { ParsedApiKey } from "@repo/api/db/schema/auth";
-import { credentialRoutes, webhookRoutes } from "@repo/api/routes/core";
+import { webhookRoutes } from "@repo/api/routes/webhooks";
 import {
 	authSessionMiddleware,
+	hasOrganizationSelected,
 	protectedMiddleware,
 } from "@repo/api/lib/middleware";
-import { db, schema } from "./db";
-import { desc, eq } from "drizzle-orm";
+import { db, schema } from "@repo/api/db";
+import { and, desc, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { projectRoutes } from "@repo/api/routes/projects";
+import type { InferSelectModel } from "drizzle-orm";
+import { messagesRoutes } from "@repo/api/routes/messages";
+import { providerRoutes } from "@repo/api/routes/providers";
 
 type Session = typeof auth.$Infer.Session.session;
 
@@ -19,6 +24,7 @@ interface NullableVariables {
 	user: typeof auth.$Infer.Session.user | null;
 	session: Session | null;
 	apiKey: Omit<ParsedApiKey, "key"> | null;
+	organization: InferSelectModel<typeof schema.organization> | null;
 }
 
 type RawNonNullableVariables = {
@@ -104,8 +110,42 @@ const routes = app
 
 		return c.json(await initialUserSetup(user.id));
 	})
-	.route("/teams/:teamId/credentials", credentialRoutes)
-	.route("/teams/:teamId/webhooks", webhookRoutes);
+	.use(hasOrganizationSelected)
+	.get("/invitations", async (c) => {
+		const user = c.get("user");
+
+		if (!user) {
+			throw new HTTPException(401, {
+				message: "Unauthorized",
+			});
+		}
+
+		const invitations = await db.query.invitation.findMany({
+			where: and(
+				eq(schema.invitation.email, user.email),
+				eq(schema.invitation.status, "pending"),
+			),
+			with: {
+				organization: {
+					columns: {
+						name: true,
+						logo: true,
+					},
+				},
+			},
+			columns: {
+				id: true,
+				expiresAt: true,
+				role: true,
+			},
+		});
+
+		return c.json(invitations);
+	})
+	.route("/projects", projectRoutes)
+	.route("/projects/:projectId/messages", messagesRoutes)
+	.route("/providers", providerRoutes)
+	.route("/webhooks/:projectId", webhookRoutes);
 
 export default {
 	port: process.env.PORT || 3000,

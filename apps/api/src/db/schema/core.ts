@@ -59,6 +59,8 @@ export const providerCredential = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organization.id, { onDelete: "cascade" }),
+		projectId: text("project_id")
+			.references(() => project.id, { onDelete: "cascade" }),
 		slug: text("slug").notNull(),
 		channelType: channelEnum("channel_type").notNull(),
 		providerType: providerTypeEnum("provider_type"),
@@ -69,17 +71,19 @@ export const providerCredential = pgTable(
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
 	(t) => [
-		uniqueIndex("provider_credential_organization_slug_idx").on(
+		uniqueIndex("provider_credential_org_project_slug_unique_idx").on(
 			t.organizationId,
+			t.projectId,
 			t.slug,
 		),
 		index("provider_credential_organization_idx").on(t.organizationId),
+		index("provider_credential_project_idx").on(t.projectId),
 	],
 );
 
 /**
- * Defines the relationship between provider credentials and teams.
- * Each credential belongs to one team.
+ * Defines the relationship between provider credentials, organizations, and optionally projects.
+ * Each credential belongs to one organization and optionally one project.
  */
 export const providerCredentialRelations = relations(
 	providerCredential,
@@ -87,6 +91,10 @@ export const providerCredentialRelations = relations(
 		organization: one(organization, {
 			fields: [providerCredential.organizationId],
 			references: [organization.id],
+		}),
+		project: one(project, {
+			fields: [providerCredential.projectId],
+			references: [project.id],
 		}),
 	}),
 );

@@ -5,6 +5,7 @@ import {
 	boolean,
 	integer,
 	uniqueIndex,
+	jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { typeid } from "typeid-js";
@@ -267,6 +268,8 @@ export const memberRelations = relations(member, ({ one }) => ({
 	}),
 }));
 
+export type InvitationStatus = "pending" | "accepted" | "rejected" | "canceled";
+
 /**
  * Stores invitations for users to join an organization.
  */
@@ -279,7 +282,7 @@ export const invitation = pgTable("invitation", {
 		.references(() => organization.id, { onDelete: "cascade" }),
 	email: text("email").notNull(),
 	role: text("role"),
-	status: text("status").notNull(),
+	status: text("status").$type<InvitationStatus>().notNull(),
 	expiresAt: timestamp("expires_at").notNull(),
 	inviterId: text("inviter_id")
 		.notNull()
@@ -317,7 +320,7 @@ export const project = pgTable(
 			.references(() => organization.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-		metadata: text("metadata"),
+		metadata: jsonb("metadata"),
 	},
 	(t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)],
 );
