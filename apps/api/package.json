@@ -1,13 +1,31 @@
 {
-  "name": "api",
+  "name": "@repo/api",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "check-types": "tsc --noEmit"
+    "build": "bun build ./src/index.ts --outdir ./build --target bun; bun build ../../node_modules/@logsicle/client/dist/server/logsicle-worker.js --outdir ./build; cp -r ./drizzle ./build/drizzle; bun build ./src/migrate.ts --outdir ./build --target bun;",
+    "check-types": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "hono": "^4.7.7"
+    "@hono/zod-validator": "^0.5.0",
+    "@repo/shared": "workspace:*",
+    "better-auth": "^1.2.7",
+    "better-auth-harmony": "^1.2.4",
+    "drizzle-orm": "^0.43.1",
+    "hono": "^4.7.7",
+    "pg": "^8.15.6",
+    "slugify": "^1.6.6",
+    "typeid-js": "^1.2.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/pg": "^8.11.14",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.3"
   }
 }
