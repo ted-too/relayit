@@ -43,6 +43,7 @@ export interface BaseFieldProps {
 		label?: string;
 		input?: string;
 		message?: string;
+		description?: string;
 	};
 }
 
@@ -63,6 +64,22 @@ export function FormErrorMessage({
 			{errors
 				.map((error) => (typeof error === "string" ? error : error.message))
 				.join(", ")}
+		</p>
+	);
+}
+
+export function FormDescription({
+	description,
+	className,
+}: {
+	description?: string;
+	className?: string;
+}) {
+	if (!description) return null;
+
+	return (
+		<p className={cn("text-muted-foreground text-xs", className)}>
+			{description}
 		</p>
 	);
 }
@@ -101,9 +118,10 @@ export function TextField(
 				required={required}
 				disabled={disabled}
 			/>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}
@@ -161,9 +179,10 @@ export function SlugField(
 					/>
 				</button>
 			</div>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}
@@ -239,9 +258,10 @@ export function NumberField(
 				min={min}
 				max={max}
 			/>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}
@@ -361,9 +381,10 @@ export function SelectField(props: SelectFieldProps) {
 					</SelectGroup>
 				</SelectContent>
 			</Select>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}
@@ -410,9 +431,10 @@ export function MultiSelectField(props: MultiSelectFieldProps) {
 				hideClearAllButton
 				hidePlaceholderWhenSelected
 			/>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}
@@ -451,9 +473,10 @@ export function MultipleCheckboxField(props: MultipleCheckboxFieldProps) {
 					</Button>
 				)}
 			</div>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<div className="flex flex-col gap-4">
 				{options.map((option) => (
 					<div
@@ -485,11 +508,10 @@ export function MultipleCheckboxField(props: MultipleCheckboxFieldProps) {
 						>
 							{option.label}
 						</Label>
-						{option.description && (
-							<p className="text-sm text-muted-foreground">
-								{option.description}
-							</p>
-						)}
+						<FormDescription
+							description={option.description}
+							className={className.description}
+						/>
 					</div>
 				))}
 			</div>
@@ -528,9 +550,10 @@ export function CheckboxField({
 					{label}
 				</Label>
 			</div>
-			{description && (
-				<p className="text-muted-foreground text-sm">{description}</p>
-			)}
+			<FormDescription
+				description={description}
+				className={className.description}
+			/>
 			<FormErrorMessage
 				errors={field.state.meta.errors}
 				className={className.message}

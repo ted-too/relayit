@@ -11,7 +11,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { authClient } from "@/lib/auth-client";
-import { userOrganizationsQueryKey } from "@/qc/queries/user";
+import { usersOrganizationsQueryKey } from "@/qc/queries/user";
 import {
 	type CreateOrganizationRequest,
 	createOrganizationSchema,
@@ -77,7 +77,7 @@ export function CreateOrganizationForm({
 			if (error) return toast.error(error?.message);
 
 			await queryClient.invalidateQueries({
-				queryKey: userOrganizationsQueryKey,
+				queryKey: usersOrganizationsQueryKey,
 			});
 
 			if (onSuccess) onSuccess(data);

@@ -1,10 +1,7 @@
 import type { Session } from "@/lib/auth-client";
 import { getQueryClient } from "@/qc/client";
-import {
-	sessionQueryKey,
-	sessionQueryOptions,
-	userOrganizationsQueryOptions,
-} from "@/qc/queries/user";
+import { sessionQueryKey, sessionQueryOptions } from "@/qc/queries/base";
+import { usersOrganizationsQueryOptions } from "@/qc/queries/user";
 import { headers as headersFn } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -31,7 +28,7 @@ export default async function DashboardLayout({
 	queryClient.setQueryData(sessionQueryKey, session);
 
 	const organizations = await queryClient.ensureQueryData(
-		userOrganizationsQueryOptions({ headers }),
+		usersOrganizationsQueryOptions({ headers }),
 	);
 
 	if (organizations.length === 0) {

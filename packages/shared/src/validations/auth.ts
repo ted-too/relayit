@@ -41,3 +41,10 @@ export const createOrganizationSchema = z.object({
 export type CreateOrganizationRequest = z.infer<
 	typeof createOrganizationSchema
 >;
+
+export const createApiKeySchema = z.object({
+	name: z.string(),
+	expiresIn: z.number().optional(),
+});
+
+export type CreateApiKeyRequest = z.infer<typeof createApiKeySchema>;

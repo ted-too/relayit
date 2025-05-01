@@ -37,7 +37,7 @@ export const userRelations = relations(user, ({ many }) => ({
 	sessions: many(session),
 	accounts: many(account),
 	passkeys: many(passkey),
-	apikeys: many(apiKey),
+	apikeys: many(apikey),
 	memberships: many(member),
 	invitationsSent: many(invitation),
 }));
@@ -154,7 +154,7 @@ export const passkeyRelations = relations(passkey, ({ one }) => ({
 /**
  * Stores API keys for programmatic access.
  */
-export const apiKey = pgTable("api_key", {
+export const apikey = pgTable("api_key", {
 	id: text("id")
 		.primaryKey()
 		.$defaultFn(() => typeid("apik").toString()),
@@ -183,7 +183,7 @@ export const apiKey = pgTable("api_key", {
 });
 
 export type ParsedApiKey = Omit<
-	typeof apiKey.$inferSelect,
+	typeof apikey.$inferSelect,
 	"permissions" | "metadata"
 > & {
 	/**
@@ -202,9 +202,9 @@ export type ParsedApiKey = Omit<
  * Defines relationships for the apiKey table.
  * Each API key belongs to one user and can be associated with multiple messages.
  */
-export const apiKeyRelations = relations(apiKey, ({ one, many }) => ({
+export const apiKeyRelations = relations(apikey, ({ one, many }) => ({
 	user: one(user, {
-		fields: [apiKey.userId],
+		fields: [apikey.userId],
 		references: [user.id],
 	}),
 	messages: many(message),

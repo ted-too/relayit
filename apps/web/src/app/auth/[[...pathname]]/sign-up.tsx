@@ -4,7 +4,7 @@ import { CombinedLogo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { useAppForm } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
-import { userOrganizationsQueryOptions } from "@/qc/queries/user";
+import { usersOrganizationsQueryOptions } from "@/qc/queries/user";
 import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -47,7 +47,7 @@ export function SignUpForm({
 			toast.success("Signed up successfully");
 
 			const userOrgs = await queryClient.ensureQueryData(
-				userOrganizationsQueryOptions(),
+				usersOrganizationsQueryOptions(),
 			);
 
 			const defaultOrg = userOrgs[0];

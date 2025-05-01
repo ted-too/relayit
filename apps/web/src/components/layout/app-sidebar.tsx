@@ -38,9 +38,9 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
-	invitationsListQueryOptions,
-	userOrganizationsQueryKey,
-	userOrganizationsQueryOptions,
+	usersInvitationsListQueryOptions,
+	usersOrganizationsQueryKey,
+	usersOrganizationsQueryOptions,
 } from "@/qc/queries/user";
 import {
 	authClient,
@@ -48,25 +48,21 @@ import {
 	type OrganizationMember,
 } from "@/lib/auth-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-	Brodcast,
-	Category2,
-	Global,
-	type IconProps,
-	Warning2,
-} from "iconsax-react";
+import { Category2, type IconProps } from "iconsax-react";
 import {
 	BellIcon,
-	BookIcon,
 	BuildingIcon,
 	ChevronRightIcon,
 	ChevronsUpDownIcon,
 	KeyRoundIcon,
-	LibraryBigIcon,
-	Loader2Icon,
 	type LucideIcon,
 	PlusIcon,
-	TestTubesIcon,
+	MessagesSquareIcon,
+	ScrollTextIcon,
+	LineChartIcon,
+	PlugZapIcon,
+	WebhookIcon,
+	BookIcon,
 } from "lucide-react";
 import type * as React from "react";
 import { toast } from "sonner";
@@ -83,7 +79,8 @@ import {
 	DialogDescription,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { CreateOrganizationForm } from "@/components/forms/create-org";
+import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
+import { Skeleton } from "../ui/skeleton";
 
 /**
  * Core types for sidebar navigation
@@ -111,68 +108,61 @@ type ExternalLink = {
 
 // Complete menu structure
 type Menu = {
-	resources: NavItem[];
+	activity: NavItem[];
 	settings: NavItem[];
 	help: ExternalLink[];
 };
 
-// Define menu items structure
 const MENU: Menu = {
-	resources: [
+	activity: [
 		{
-			title: "Events",
-			url: "/events",
-			icon: Brodcast,
+			title: "Messages",
+			url: "/messages", // Central place to view message status and history
+			icon: MessagesSquareIcon,
 		},
 		{
-			title: "Request Logs",
-			url: "/request-logs",
-			icon: Global,
+			title: "Logs",
+			url: "/logs", // For more detailed logs (API requests, processing)
+			icon: ScrollTextIcon,
+			isAvailable: false, // Mark as future feature if not implemented
 		},
 		{
 			title: "Metrics",
-			url: "/metrics",
-			icon: TestTubesIcon,
+			url: "/metrics", // High-level performance overview
+			icon: LineChartIcon,
 			isAvailable: false,
 		},
 	],
 
 	settings: [
 		{
-			title: "Alerts",
-			url: "/alerts",
-			icon: Warning2,
-			isAvailable: false,
+			title: "Providers",
+			url: "/providers", // Manage service credentials (SES, SNS, etc.)
+			icon: PlugZapIcon,
 		},
 		{
-			title: "Organization Settings",
-			url: "/organization",
-			icon: BuildingIcon,
-			isEnabled: (userMembership) =>
-				["admin", "owner"].includes(userMembership.role),
-			isAvailable: false,
-		},
-		{
-			title: "Project Settings",
-			url: "/project",
-			icon: LibraryBigIcon,
-			isEnabled: (userMembership) =>
-				["admin", "owner"].includes(userMembership.role),
-			isAvailable: false,
+			title: "Webhooks",
+			url: "/webhooks", // Configure endpoints for status updates
+			icon: WebhookIcon,
 		},
 		{
 			title: "API Keys",
-			url: "/api-keys",
+			url: "/api-keys", // Manage keys for sending messages
 			icon: KeyRoundIcon,
 		},
+		{
+			title: "Organization Settings",
+			url: "/settings/organization", // Manage org members, invites, etc.
+			icon: BuildingIcon,
+			isEnabled: (userMembership) =>
+				["admin", "owner"].includes(userMembership.role),
+		},
 	],
-
 	help: [
 		{
 			name: "Documentation",
-			url: "https://logsicle.app/docs",
+			url: process.env.NEXT_PUBLIC_DOCS_URL,
 			icon: BookIcon,
-			isAvailable: false,
 		},
 	],
 };
@@ -185,7 +175,7 @@ function filterMenuForUser(
 	userMembership: OrganizationMember,
 ): Menu {
 	return {
-		resources: menu.resources.filter((item) =>
+		activity: menu.activity.filter((item) =>
 			!item.isEnabled ? true : item.isEnabled(userMembership),
 		),
 		settings: menu.settings.filter((item) =>
@@ -199,21 +189,16 @@ function filterMenuForUser(
 
 /**
  * Checks if a route is active based on current pathname
+ * TODO: Fix sub menu items
  */
 function isActiveRoute(itemUrl: string, pathname: string): boolean {
 	if (!pathname) return false;
 
-	const itemUrlParts = itemUrl.split("/").slice(3).join("/");
+	const pathnameParts = `/${pathname.split("/").slice(3).join("/")}`;
 
-	if (pathname === "/") return itemUrlParts === "";
-	if (!itemUrlParts) return false;
+	if (itemUrl === "/") return pathname === pathnameParts;
 
-	if (pathname === itemUrlParts) return true;
-
-	if (pathname.startsWith(itemUrlParts)) {
-		const nextChar = pathname.charAt(itemUrlParts.length);
-		return nextChar === "/";
-	}
+	if (pathnameParts === itemUrl) return true;
 
 	return false;
 }
@@ -230,8 +215,8 @@ function SidebarLogo({
 	const router = useRouter();
 	const queryClient = useQueryClient();
 
-	const { data: userOrgs, isLoading } = useQuery(
-		userOrganizationsQueryOptions(),
+	const { data: userOrgs, isPending } = useQuery(
+		usersOrganizationsQueryOptions(),
 	);
 
 	const activeOrganization = userOrgs?.find(
@@ -240,22 +225,25 @@ function SidebarLogo({
 
 	return (
 		<Dialog>
-			{isLoading ? (
-				<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground min-h-[5vh] pt-4">
-					<Loader2Icon className="animate-spin size-4" />
-				</div>
-			) : (
-				<SidebarMenu
-					className={cn(
-						"flex gap-2",
-						state === "collapsed"
-							? "flex-col"
-							: "flex-row justify-between items-center",
-					)}
-				>
-					<SidebarMenuItem className="w-full">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
+			<SidebarMenu
+				className={cn(
+					"flex gap-2",
+					state === "collapsed"
+						? "flex-col"
+						: "flex-row justify-between items-center",
+				)}
+			>
+				<SidebarMenuItem className="w-full">
+					<DropdownMenu>
+						<DropdownMenuTrigger disabled={isPending} asChild>
+							{isPending ? (
+								<Skeleton
+									className={cn(
+										"h-12 w-full",
+										state === "collapsed" && "size-8 rounded-full",
+									)}
+								/>
+							) : (
 								<SidebarMenuButton
 									size="lg"
 									className={cn(
@@ -290,64 +278,64 @@ function SidebarLogo({
 										className={cn("ml-auto", state === "collapsed" && "hidden")}
 									/>
 								</SidebarMenuButton>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent
-								className="rounded-lg w-56"
-								align="start"
-								side={isMobile ? "bottom" : "right"}
-								sideOffset={4}
+							)}
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							className="rounded-lg w-56"
+							align="start"
+							side={isMobile ? "bottom" : "right"}
+							sideOffset={4}
+						>
+							<DropdownMenuLabel className="text-xs text-muted-foreground">
+								Organizations
+							</DropdownMenuLabel>
+							<DropdownMenuRadioGroup
+								value={currentUserOrg.slug}
+								onValueChange={async (value) => {
+									const { error } = await authClient.organization.setActive({
+										organizationSlug: value,
+									});
+
+									if (error) {
+										toast.error(
+											error.message || "Error setting active organization",
+										);
+									}
+
+									queryClient.invalidateQueries({
+										queryKey: usersOrganizationsQueryKey,
+									});
+
+									router.push(`/~/${value}`);
+								}}
 							>
-								<DropdownMenuLabel className="text-xs text-muted-foreground">
-									Organizations
-								</DropdownMenuLabel>
-								<DropdownMenuRadioGroup
-									value={currentUserOrg.slug}
-									onValueChange={async (value) => {
-										const { error } = await authClient.organization.setActive({
-											organizationSlug: value,
-										});
-
-										if (error) {
-											toast.error(
-												error.message || "Error setting active organization",
-											);
-										}
-
-										queryClient.invalidateQueries({
-											queryKey: userOrganizationsQueryKey,
-										});
-
-										router.push(`/~/${value}`);
-									}}
-								>
-									{userOrgs?.map((org) => (
-										<DropdownMenuRadioItem
-											key={org.id}
-											value={org.slug}
-											className="justify-between min-w-0"
-										>
-											<span className="truncate">{org.name}</span>
-											<OrganizationLogo
-												logoUrl={org.logo}
-												orgMetadata={org.metadata}
-												name={org.name}
-												size="sm"
-											/>
-										</DropdownMenuRadioItem>
-									))}
-								</DropdownMenuRadioGroup>
-								<DropdownMenuSeparator />
-								<DialogTrigger asChild>
-									<DropdownMenuItem>
-										<PlusIcon className="size-4" />
-										Create Organization
-									</DropdownMenuItem>
-								</DialogTrigger>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</SidebarMenuItem>
-				</SidebarMenu>
-			)}
+								{userOrgs?.map((org) => (
+									<DropdownMenuRadioItem
+										key={org.id}
+										value={org.slug}
+										className="justify-between min-w-0"
+									>
+										<span className="truncate">{org.name}</span>
+										<OrganizationLogo
+											logoUrl={org.logo}
+											orgMetadata={org.metadata}
+											name={org.name}
+											size="sm"
+										/>
+									</DropdownMenuRadioItem>
+								))}
+							</DropdownMenuRadioGroup>
+							<DropdownMenuSeparator />
+							<DialogTrigger asChild>
+								<DropdownMenuItem>
+									<PlusIcon className="size-4" />
+									Create Organization
+								</DropdownMenuItem>
+							</DialogTrigger>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</SidebarMenuItem>
+			</SidebarMenu>
 			<DialogContent className="sm:max-w-[425px]">
 				<DialogHeader>
 					<DialogTitle>Create Organization</DialogTitle>
@@ -463,11 +451,11 @@ function NavItemComponent({
 
 function SidebarNotifications() {
 	const { data: invitations, refetch: refetchInvitations } = useQuery(
-		invitationsListQueryOptions(),
+		usersInvitationsListQueryOptions(),
 	);
 
 	const { refetch: refetchUserOrgs } = useQuery(
-		userOrganizationsQueryOptions(),
+		usersOrganizationsQueryOptions(),
 	);
 
 	return (
@@ -565,8 +553,6 @@ export function AppSidebar({
 	currentUserOrgMember,
 	sidebarStates,
 }: AppSidebarProps) {
-	const pathname = usePathname();
-
 	const filteredMenu = filterMenuForUser(MENU, currentUserOrgMember);
 
 	return (
@@ -588,7 +574,11 @@ export function AppSidebar({
 					{/* Dashboard Link */}
 					<SidebarGroup>
 						<SidebarMenu>
-							<SidebarMenuButton asChild tooltip="Dashboard">
+							<SidebarMenuButton
+								isAvailable={false}
+								asChild
+								tooltip="Dashboard"
+							>
 								<Link
 									href={`/~/${currentUserOrg.slug}`}
 									data-active={isActiveRoute(`/~/${currentUserOrg.slug}`, "/")}
@@ -603,9 +593,9 @@ export function AppSidebar({
 
 					{/* Resources */}
 					<SidebarGroup>
-						<SidebarGroupLabel>Resources</SidebarGroupLabel>
+						<SidebarGroupLabel>Activity</SidebarGroupLabel>
 						<SidebarMenu>
-							{filteredMenu.resources.map((item) => (
+							{filteredMenu.activity.map((item) => (
 								<NavItemComponent
 									key={item.title}
 									item={item}

@@ -3,10 +3,11 @@ import { zValidator } from "@hono/zod-validator";
 import type { Context } from "@repo/api";
 import {
 	createProviderCredentialSchema,
+	getProvidersQuerySchema,
 	updateProviderCredentialSchema,
 } from "@repo/shared";
 import { db, schema } from "@repo/api/db";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { encryptRecord, getSafeEncryptedRecord } from "@repo/api/lib/crypto";
 import { generateProviderSlug } from "@repo/api/lib/slugs";
@@ -65,7 +66,8 @@ export const providerRoutes = new Hono<Context>()
 			});
 		}
 
-		const encryptedCredentials = encryptRecord(validatedData.credentials);
+		// Access nested properties and encrypt credentials
+		const encryptedCredentials = encryptRecord(validatedData.providerConfig.credentials);
 
 		const [newCredential] = await db
 			.insert(schema.providerCredential)
@@ -73,7 +75,9 @@ export const providerRoutes = new Hono<Context>()
 				organizationId: organization.id,
 				projectId: validatedData.projectId, // Will be null if not provided
 				slug: slug,
-				channelType: validatedData.providerType,
+				// Get channel and provider type from the nested config
+				channelType: validatedData.providerConfig.channelType,
+				providerType: validatedData.providerConfig.providerType,
 				name: validatedData.name,
 				credentials: encryptedCredentials,
 				isActive: validatedData.isActive,
@@ -93,14 +97,22 @@ export const providerRoutes = new Hono<Context>()
 	})
 
 	// GET /providers - List credentials for the organization
-	.get("/", async (c) => {
+	.get("/", zValidator("query", getProvidersQuerySchema), async (c) => {
 		const organization = c.get("organization");
-		// Optional: Add query param validation for projectId if needed
-		// const projectId = c.req.query("projectId");
+		const validatedData = c.req.valid("query");
+
+		const filters: SQL[] = [
+			eq(schema.providerCredential.organizationId, organization.id),
+		];
+
+		if (validatedData.projectId) {
+			filters.push(
+				eq(schema.providerCredential.projectId, validatedData.projectId),
+			);
+		}
 
 		const credentials = await db.query.providerCredential.findMany({
-			where: eq(schema.providerCredential.organizationId, organization.id),
-			// TODO: Add filtering by projectId if query param is implemented
+			where: and(...filters),
 			orderBy: desc(schema.providerCredential.createdAt),
 		});
 
@@ -222,11 +234,33 @@ export const providerRoutes = new Hono<Context>()
 			}
 
 			// Prepare update payload
-			if (validatedData.credentials) {
-				validatedData.credentials = encryptRecord(validatedData.credentials);
+			const updatePayload: Partial<typeof schema.providerCredential.$inferInsert> = {
+				name: validatedData.name,
+				slug: validatedData.slug,
+				projectId: validatedData.projectId,
+				isActive: validatedData.isActive,
+			};
+
+			if (validatedData.providerConfig) {
+				// If providerConfig is part of the update, handle its fields
+				// We don't allow changing channelType or providerType on update
+				// updatePayload.channelType = validatedData.providerConfig.channelType;
+				// updatePayload.providerType = validatedData.providerConfig.providerType;
+				if (validatedData.providerConfig.credentials) {
+					updatePayload.credentials = encryptRecord(
+						validatedData.providerConfig.credentials,
+					);
+				}
 			}
 
-			if (Object.keys(validatedData).length === 0) {
+			// Remove any undefined keys to prevent overwriting existing values unintentionally
+			for (const key of Object.keys(updatePayload)) {
+				if (updatePayload[key as keyof typeof updatePayload] === undefined) {
+					delete updatePayload[key as keyof typeof updatePayload];
+				}
+			}
+
+			if (Object.keys(updatePayload).length === 0) {
 				const safeExisting = {
 					...existingCredential,
 					credentials: getSafeEncryptedRecord(existingCredential.credentials),
@@ -236,7 +270,7 @@ export const providerRoutes = new Hono<Context>()
 
 			const [updatedCredential] = await db
 				.update(schema.providerCredential)
-				.set(validatedData)
+				.set(updatePayload) // Use the constructed payload
 				.where(eq(schema.providerCredential.id, providerId))
 				.returning();
 

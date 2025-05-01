@@ -11,7 +11,7 @@ import {
 	jsonb,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import { project, apiKey, organization } from "./auth";
+import { project, apikey, organization } from "./auth";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
@@ -112,7 +112,7 @@ export const message = pgTable(
 		projectId: text("project_id")
 			.notNull()
 			.references(() => project.id, { onDelete: "cascade" }),
-		apiKeyId: text("api_key_id").references(() => apiKey.id, {
+		apiKeyId: text("api_key_id").references(() => apikey.id, {
 			onDelete: "set null", // Keep message record even if API key is deleted
 		}),
 		providerCredentialId: text("provider_credential_id")
@@ -147,9 +147,9 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 		fields: [message.projectId],
 		references: [project.id],
 	}),
-	apiKey: one(apiKey, {
+	apiKey: one(apikey, {
 		fields: [message.apiKeyId],
-		references: [apiKey.id],
+		references: [apikey.id],
 	}),
 	providerCredential: one(providerCredential, {
 		fields: [message.providerCredentialId],

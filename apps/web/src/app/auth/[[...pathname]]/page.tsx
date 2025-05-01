@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { SignIn } from "./sign-in";
 import { SignUp } from "./sign-up";
 import { FinishSocialSignUp } from "./finish";
-import { sessionQueryOptions } from "@/qc/queries/user";
+import { sessionQueryOptions } from "@/qc/queries/base";
 import type { Session, User } from "@/lib/auth-client";
 import { getQueryClient } from "@/qc/client";
 import { headers } from "next/headers";

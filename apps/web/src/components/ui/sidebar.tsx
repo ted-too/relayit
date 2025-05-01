@@ -25,15 +25,14 @@ import {
 import { useHotKey } from "@/hooks/use-hot-key";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { setSidebarStates } from "@/app/~/actions";
-
-export const SIDEBAR_COOKIE_NAME = "sidebar_state";
-export const SECONDARY_SIDEBAR_COOKIE_NAME = "secondary_sidebar_state";
-export const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+import {
+	SIDEBAR_COOKIE_NAME,
+	SIDEBAR_COOKIE_MAX_AGE,
+	SIDEBAR_KEYBOARD_SHORTCUT,
+	SIDEBAR_WIDTH,
+	SIDEBAR_WIDTH_ICON,
+	SIDEBAR_WIDTH_MOBILE,
+} from "@/constants/sidebar";
 
 type SidebarContextProps = {
 	state: "expanded" | "collapsed";
@@ -86,7 +85,7 @@ function SidebarProvider({
 			}
 
 			// This sets the cookie to keep the sidebar state.
-			setSidebarStates({ sidebarState: openState });
+			document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
 		},
 		[setOpenProp, open],
 	);

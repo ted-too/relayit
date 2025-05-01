@@ -30,3 +30,22 @@ export type OrganizationMember = {
 		image: string | null | undefined;
 	};
 };
+
+export interface BaseApiKey {
+	metadata: any;
+	permissions: any;
+	id: string;
+	name: string | null;
+	start: string | null;
+	prefix: string | null;
+	userId: string;
+	refillInterval: number | null;
+	refillAmount: number | null;
+	// TODO: More fields...
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface CreatedApiKey extends BaseApiKey {
+	key: string;
+}
