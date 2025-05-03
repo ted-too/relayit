@@ -9,81 +9,44 @@ import { db, schema } from "@repo/api/db";
 import { eq, and, desc } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { encrypt, redactedString } from "@repo/api/lib/crypto";
+import { verifyProject } from "@repo/api/lib/middleware";
 
 export const webhookRoutes = new Hono<Context>()
 	// POST /webhooks/:projectId - Create new webhook endpoint for the project in context
-	.post("/", zValidator("json", createWebhookEndpointSchema), async (c) => {
-		const projectId = c.req.param("projectId"); // Get projectId from the path param
-		const validatedData = c.req.valid("json");
-		const organization = c.get("organization"); // Get organization from context
+	.post(
+		"/:projectId",
+		verifyProject,
+		zValidator("json", createWebhookEndpointSchema),
+		async (c) => {
+			const projectId = c.req.param("projectId"); // Get projectId from the path param
+			const validatedData = c.req.valid("json");
 
-		if (!projectId) {
-			// This should ideally be caught by routing if the base path is correct
-			throw new HTTPException(400, {
-				message: "Project ID is required in path",
-			});
-		}
+			const encryptedSecret = validatedData.secret
+				? encrypt(validatedData.secret)
+				: null;
 
-		// Verify project belongs to the organization
-		const project = await db.query.project.findFirst({
-			columns: { id: true },
-			where: and(
-				eq(schema.project.id, projectId),
-				eq(schema.project.organizationId, organization.id),
-			),
-		});
-		if (!project) {
-			throw new HTTPException(404, {
-				message: "Project not found in this organization",
-			});
-		}
+			const [newWebhook] = await db
+				.insert(schema.webhookEndpoint)
+				.values({
+					projectId: projectId, // Use projectId
+					url: validatedData.url,
+					secret: encryptedSecret,
+					eventTypes: validatedData.eventTypes,
+					isActive: validatedData.isActive,
+				})
+				.returning();
 
-		const encryptedSecret = validatedData.secret
-			? encrypt(validatedData.secret)
-			: null;
+			const safeWebhook = {
+				...newWebhook,
+				secret: encryptedSecret ? redactedString : null,
+			};
 
-		const [newWebhook] = await db
-			.insert(schema.webhookEndpoint)
-			.values({
-				projectId: projectId, // Use projectId
-				url: validatedData.url,
-				secret: encryptedSecret,
-				eventTypes: validatedData.eventTypes,
-				isActive: validatedData.isActive,
-			})
-			.returning();
-
-		const safeWebhook = {
-			...newWebhook,
-			secret: encryptedSecret ? redactedString : null,
-		};
-
-		return c.json(safeWebhook, 201);
-	})
+			return c.json(safeWebhook, 201);
+		},
+	)
 	// GET /webhooks/:projectId - List webhooks for the project in context
-	.get("/", async (c) => {
+	.get("/:projectId", verifyProject, async (c) => {
 		const projectId = c.req.param("projectId");
-		const organization = c.get("organization"); // Get organization from context
-
-		if (!projectId) {
-			throw new HTTPException(400, {
-				message: "Project ID is required in path",
-			});
-		}
-
-		// Verify project belongs to the organization
-		const project = await db.query.project.findFirst({
-			columns: { id: true },
-			where: and(
-				eq(schema.project.id, projectId),
-				eq(schema.project.organizationId, organization.id),
-			),
-		});
-		if (!project) {
-			throw new HTTPException(404, {
-				message: "Project not found in this organization",
-			});
-		}
 
 		const webhooks = await db.query.webhookEndpoint.findMany({
 			where: eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
@@ -98,32 +61,9 @@ export const webhookRoutes = new Hono<Context>()
 		return c.json(safeWebhooks);
 	})
 	// GET /webhooks/:projectId/:webhookId - Get specific webhook for the project
-	.get("/:webhookId", async (c) => {
+	.get("/:projectId/:webhookId", verifyProject, async (c) => {
 		const projectId = c.req.param("projectId");
 		const webhookId = c.req.param("webhookId");
-		const organization = c.get("organization"); // Get organization from context
-
-		if (!projectId) {
-			throw new HTTPException(400, {
-				message: "Project ID is required in path",
-			});
-		}
-		if (!webhookId) {
-			throw new HTTPException(400, { message: "Webhook ID is required" });
-		}
-
-		// Verify project belongs to the organization first
-		const project = await db.query.project.findFirst({
-			columns: { id: true },
-			where: and(
-				eq(schema.project.id, projectId),
-				eq(schema.project.organizationId, organization.id),
-			),
-		});
-		if (!project) {
-			// Use 404 for the project itself, as the webhook wouldn't be reachable anyway
-			throw new HTTPException(404, { message: "Project not found" });
-		}
 
 		const webhook = await db.query.webhookEndpoint.findFirst({
 			where: and(
@@ -145,34 +85,13 @@ export const webhookRoutes = new Hono<Context>()
 	})
 	// PATCH /webhooks/:projectId/:webhookId - Update webhook for the project
 	.patch(
-		"/:webhookId",
+		"/:projectId/:webhookId",
+		verifyProject,
 		zValidator("json", updateWebhookEndpointSchema),
 		async (c) => {
 			const projectId = c.req.param("projectId");
 			const webhookId = c.req.param("webhookId");
 			const validatedData = c.req.valid("json");
-			const organization = c.get("organization"); // Get organization from context
-
-			if (!projectId) {
-				throw new HTTPException(400, {
-					message: "Project ID is required in path",
-				});
-			}
-			if (!webhookId) {
-				throw new HTTPException(400, { message: "Webhook ID is required" });
-			}
-
-			// Verify project belongs to the organization
-			const project = await db.query.project.findFirst({
-				columns: { id: true },
-				where: and(
-					eq(schema.project.id, projectId),
-					eq(schema.project.organizationId, organization.id),
-				),
-			});
-			if (!project) {
-				throw new HTTPException(404, { message: "Project not found" });
-			}
 
 			// First check if the webhook exists and belongs to the project
 			const existingWebhook = await db.query.webhookEndpoint.findFirst({
@@ -244,35 +163,9 @@ export const webhookRoutes = new Hono<Context>()
 		},
 	)
 	// DELETE /webhooks/:projectId/:webhookId - Delete webhook for the project
-	.delete("/:webhookId", async (c) => {
+	.delete("/:projectId/:webhookId", verifyProject, async (c) => {
 		const projectId = c.req.param("projectId");
 		const webhookId = c.req.param("webhookId");
-		const organization = c.get("organization"); // Get organization from context
-
-		if (!projectId) {
-			throw new HTTPException(400, {
-				message: "Project ID is required in path",
-			});
-		}
-		if (!webhookId) {
-			throw new HTTPException(400, { message: "Webhook ID is required" });
-		}
-
-		// Verify project belongs to the organization before attempting delete
-		const project = await db.query.project.findFirst({
-			columns: { id: true },
-			where: and(
-				eq(schema.project.id, projectId),
-				eq(schema.project.organizationId, organization.id),
-			),
-		});
-		if (!project) {
-			// If project doesn't belong to org, treat webhook as not found
-			throw new HTTPException(404, {
-				message:
-					"Webhook endpoint not found or already deleted for this project",
-			});
-		}
 
 		const { rowCount } = await db.delete(schema.webhookEndpoint).where(
 			and(

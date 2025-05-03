@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import z from "zod";
 import { auth } from "@repo/api/lib/auth";
 import { db, schema } from "@repo/api/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const factory = createFactory<NullableContext>();
 
@@ -102,13 +102,42 @@ export const hasOrganizationSelected = factory.createMiddleware(
 	},
 );
 
-// export const hasChoresAdminAccess = factory.createMiddleware(
+export const verifyProject = factory.createMiddleware(async (c, next) => {
+	const organization = c.get("organization");
+	const projectId = c.req.param("projectId");
+
+	if (!projectId) {
+		throw new HTTPException(400, { message: "Project ID is required" });
+	}
+
+	if (!organization) {
+		throw new HTTPException(401, { message: "Unauthorized" });
+	}
+
+	const project = await db.query.project.findFirst({
+		columns: { id: true },
+		where: and(
+			eq(schema.project.id, projectId),
+			eq(schema.project.organizationId, organization.id),
+		),
+	});
+
+	if (!project) {
+		throw new HTTPException(404, {
+			message: "Project not found in this organization",
+		});
+	}
+
+	await next();
+});
+
+// export const hasOrganizationAdminAccess = factory.createMiddleware(
 // 	async (c, next) => {
 // 		const hasPermission = await auth.api.hasPermission({
 // 			headers: c.req.raw.headers,
 // 			body: {
 // 				permission: {
-// 					chore: ["create", "update", "delete"],
+// 					organization: ["update"],
 // 				},
 // 			},
 // 		});

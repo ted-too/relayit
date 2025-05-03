@@ -20,6 +20,7 @@ export const updateProjectSchema = createProjectSchema.partial();
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
 export const getProjectMessagesQuerySchema = z.object({
+	projectId: z.string().optional(),
 	page: z.coerce.number().int().positive().optional().default(1),
 	limit: z.coerce.number().int().positive().max(100).optional().default(20),
 	status: z.enum(AVAILABLE_MESSAGE_STATUSES).optional(),

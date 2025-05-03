@@ -15,6 +15,20 @@
       "when": 1746077747034,
       "tag": "0001_glamorous_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1746079131272,
+      "tag": "0002_same_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1746084362026,
+      "tag": "0003_overrated_eternity",
+      "breakpoints": true
     }
   ]
 }

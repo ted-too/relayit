@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { IconProps } from ".";
 
-export function Sms({ className, ...props }: IconProps) {
+export function Sms({ className, ...props }: IconProps): React.ReactNode {
 	return (
 		<svg
 			width="24px"
@@ -9,7 +9,7 @@ export function Sms({ className, ...props }: IconProps) {
 			viewBox="0 0 24 24"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
-			stroke-width="1.5"
+			strokeWidth="1.5"
 			className={cn("size-5", className)}
 			{...props}
 		>

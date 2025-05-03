@@ -16,14 +16,14 @@ import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
 	AVAILABLE_PROVIDER_TYPES,
+	type ProviderCredentials,
+	type ProjectProviderConfig,
 } from "@repo/shared";
 
 /**
  * Enum defining the supported notification channels.
  */
 export const channelEnum = pgEnum("channel", AVAILABLE_CHANNELS);
-
-export type Channel = InferEnum<typeof channelEnum>;
 
 /**
  * Enum defining the possible statuses of a message throughout its lifecycle.
@@ -43,12 +43,9 @@ export const providerTypeEnum = pgEnum(
 	AVAILABLE_PROVIDER_TYPES,
 );
 
-export type ProviderType = InferEnum<typeof providerTypeEnum>;
-
 /**
- * Stores user-provided credentials for accessing external notification providers.
- * Credentials are encrypted before being stored in the 'credentials' field.
- * Each credential set is linked to a specific team and identified by a unique slug within that team.
+ * Stores organization-level credentials for external notification providers.
+ * Credentials are encrypted.
  */
 export const providerCredential = pgTable(
 	"provider_credential",
@@ -59,42 +56,84 @@ export const providerCredential = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organization.id, { onDelete: "cascade" }),
-		projectId: text("project_id")
-			.references(() => project.id, { onDelete: "cascade" }),
 		slug: text("slug").notNull(),
 		channelType: channelEnum("channel_type").notNull(),
-		providerType: providerTypeEnum("provider_type"),
+		providerType: providerTypeEnum("provider_type").notNull(),
 		name: text("name").notNull(),
-		credentials: jsonb("credentials").$type<Record<string, string>>().notNull(),
+		credentials: jsonb("credentials").$type<ProviderCredentials>().notNull(),
 		isActive: boolean("is_active").default(true).notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
 	(t) => [
-		uniqueIndex("provider_credential_org_project_slug_unique_idx").on(
+		uniqueIndex("provider_credential_org_slug_unique_idx").on(
 			t.organizationId,
-			t.projectId,
 			t.slug,
 		),
 		index("provider_credential_organization_idx").on(t.organizationId),
-		index("provider_credential_project_idx").on(t.projectId),
 	],
 );
 
 /**
- * Defines the relationship between provider credentials, organizations, and optionally projects.
- * Each credential belongs to one organization and optionally one project.
+ * Defines relationships for organization-level provider credentials.
+ * Each credential belongs to one organization and can be associated with multiple projects.
  */
 export const providerCredentialRelations = relations(
 	providerCredential,
-	({ one }) => ({
+	({ one, many }) => ({
 		organization: one(organization, {
 			fields: [providerCredential.organizationId],
 			references: [organization.id],
 		}),
+		projectAssociations: many(projectProviderAssociation),
+	}),
+);
+
+/**
+ * Associates an organization-level provider credential with a specific project,
+ * allowing project-specific activation status.
+ */
+export const projectProviderAssociation = pgTable(
+	"project_provider_association",
+	{
+		id: text("id")
+			.primaryKey()
+			.$defaultFn(() => typeid("ppasc").toString()),
+		projectId: text("project_id")
+			.notNull()
+			.references(() => project.id, { onDelete: "cascade" }),
+		providerCredentialId: text("provider_credential_id")
+			.notNull()
+			.references(() => providerCredential.id, { onDelete: "cascade" }),
+		config: jsonb("config").$type<ProjectProviderConfig>(),
+		isActive: boolean("is_active").default(true).notNull(),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("proj_provider_assoc_unique_idx").on(
+			t.projectId,
+			t.providerCredentialId,
+		),
+		index("ppa_project_idx").on(t.projectId),
+		index("ppa_provider_idx").on(t.providerCredentialId),
+	],
+);
+
+/**
+ * Defines relationships for the project-provider association table.
+ * Each association links one project and one provider credential.
+ */
+export const projectProviderAssociationRelations = relations(
+	projectProviderAssociation,
+	({ one }) => ({
 		project: one(project, {
-			fields: [providerCredential.projectId],
+			fields: [projectProviderAssociation.projectId],
 			references: [project.id],
+		}),
+		providerCredential: one(providerCredential, {
+			fields: [projectProviderAssociation.providerCredentialId],
+			references: [providerCredential.id],
 		}),
 	}),
 );
@@ -117,22 +156,19 @@ export const message = pgTable(
 		}),
 		providerCredentialId: text("provider_credential_id")
 			.notNull()
-			.references(() => providerCredential.id, { onDelete: "restrict" }), // Prevent deleting credentials if messages used them
-		channel: channelEnum("channel").notNull(), // Target delivery channel
-		recipient: text("recipient").notNull(), // Destination address/identifier
-		payload: jsonb("payload").notNull(), // Original content/data sent in the API request
-		status: messageStatusEnum("status").default("queued").notNull(), // Current status of the message
-		statusReason: text("status_reason"), // Additional details for status (e.g., error message)
-		lastStatusAt: timestamp("last_status_at").defaultNow().notNull(), // When the status field was last updated
+			.references(() => providerCredential.id, { onDelete: "restrict" }),
+		channel: channelEnum("channel").notNull(),
+		recipient: text("recipient").notNull(),
+		payload: jsonb("payload").notNull(),
+		status: messageStatusEnum("status").default("queued").notNull(),
+		statusReason: text("status_reason"),
+		lastStatusAt: timestamp("last_status_at"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
 	(t) => [
-		// Index for efficient lookup by team and status
 		index("message_project_status_idx").on(t.projectId, t.status),
-		// Index for querying by API key
 		index("message_api_key_idx").on(t.apiKeyId),
-		// Index for querying by credential
 		index("message_credential_idx").on(t.providerCredentialId),
 	],
 );
@@ -155,7 +191,7 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 		fields: [message.providerCredentialId],
 		references: [providerCredential.id],
 	}),
-	events: many(messageEvent), // A message can have many events
+	events: many(messageEvent),
 }));
 
 /**
@@ -165,19 +201,15 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 export const messageEvent = pgTable(
 	"message_event",
 	{
-		// Using bigserial for a simple auto-incrementing ID for events
 		id: bigserial("id", { mode: "number" }).primaryKey(),
 		messageId: text("message_id")
 			.notNull()
-			.references(() => message.id, { onDelete: "cascade" }), // Link back to the message
-		status: messageStatusEnum("status").notNull(), // The status being recorded at this event time
-		details: jsonb("details"), // Any relevant data associated with this event (e.g., provider response)
-		occurredAt: timestamp("occurred_at").defaultNow().notNull(), // When this specific status event happened
+			.references(() => message.id, { onDelete: "cascade" }),
+		status: messageStatusEnum("status").notNull(),
+		details: jsonb("details"),
+		occurredAt: timestamp("occurred_at").defaultNow().notNull(),
 	},
-	(t) => [
-		// Index for querying events for a specific message efficiently
-		index("message_event_message_idx").on(t.messageId),
-	],
+	(t) => [index("message_event_message_idx").on(t.messageId)],
 );
 
 /**
@@ -200,22 +232,18 @@ export const webhookEndpoint = pgTable(
 	{
 		id: text("id")
 			.primaryKey()
-			.$defaultFn(() => typeid("whep").toString()), // Unique ID for the webhook configuration
+			.$defaultFn(() => typeid("whep").toString()),
 		projectId: text("project_id")
 			.notNull()
 			.references(() => project.id, { onDelete: "cascade" }),
-		url: text("url").notNull(), // Target URL for the webhook POST request
-		secret: text("secret"), // Optional secret for signing/verifying requests (store securely)
-		// Store event types as JSON array for flexibility
-		eventTypes: jsonb("event_types").$type<string[]>().notNull(), // Message statuses that trigger this webhook
-		isActive: boolean("is_active").default(true).notNull(), // Whether this webhook endpoint is enabled
+		url: text("url").notNull(),
+		secret: text("secret"),
+		eventTypes: jsonb("event_types").$type<string[]>().notNull(),
+		isActive: boolean("is_active").default(true).notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
-	(t) => [
-		// Index for efficient lookup by team
-		index("webhook_endpoint_project_idx").on(t.projectId),
-	],
+	(t) => [index("webhook_endpoint_project_idx").on(t.projectId)],
 );
 
 /**

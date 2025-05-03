@@ -1,0 +1,1 @@
+ALTER TABLE "provider_credential" ALTER COLUMN "provider_type" SET NOT NULL;

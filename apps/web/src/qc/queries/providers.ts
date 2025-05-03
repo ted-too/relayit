@@ -2,7 +2,6 @@ import { apiClient, callRpc } from "@/lib/api";
 import { queryOptions } from "@tanstack/react-query";
 import type { QueryOpts } from "@/qc/queries/base";
 import { activeOrganizationQueryKey } from "@/qc/queries/user";
-import { type GetProvidersQueryInput, stringifyObject } from "@repo/shared";
 import type { InferResponseType } from "hono/client";
 
 export const providersListQueryKey = [
@@ -10,21 +9,14 @@ export const providersListQueryKey = [
 	"providers-list",
 ] as const;
 
-export const providersListQueryOptions = (
-	opts?: QueryOpts<GetProvidersQueryInput>,
-) =>
+export const providersListQueryOptions = (opts?: QueryOpts) =>
 	queryOptions({
 		queryKey: providersListQueryKey,
 		queryFn: async () => {
 			const { data, error } = await callRpc(
-				apiClient.providers.$get(
-					{
-						query: stringifyObject(opts?.query),
-					},
-					{
-						headers: Object.fromEntries(opts?.headers ?? []),
-					},
-				),
+				apiClient.providers.$get({
+					headers: Object.fromEntries(opts?.headers ?? []),
+				}),
 			);
 			if (error) return Promise.reject(error);
 			return data;
@@ -33,7 +25,7 @@ export const providersListQueryOptions = (
 		enabled: opts?.enabled,
 	});
 
-export type Provider = InferResponseType<
+export type NotificationProvider = InferResponseType<
 	typeof apiClient.providers.$get
 >[number];
 

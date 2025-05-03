@@ -17,6 +17,7 @@ import { projectRoutes } from "@repo/api/routes/projects";
 import type { InferSelectModel } from "drizzle-orm";
 import { messagesRoutes } from "@repo/api/routes/messages";
 import { providerRoutes } from "@repo/api/routes/providers";
+import { projectProviderAssociationRoutes } from "@repo/api/routes/project-provider-associations";
 
 type Session = typeof auth.$Infer.Session.session;
 
@@ -143,9 +144,10 @@ const routes = app
 		return c.json(invitations);
 	})
 	.route("/projects", projectRoutes)
-	.route("/projects/:projectId/messages", messagesRoutes)
+	.route("/projects/provider-associations", projectProviderAssociationRoutes)
+	.route("/messages", messagesRoutes)
 	.route("/providers", providerRoutes)
-	.route("/webhooks/:projectId", webhookRoutes);
+	.route("/webhooks", webhookRoutes);
 
 export default {
 	port: process.env.PORT || 3000,

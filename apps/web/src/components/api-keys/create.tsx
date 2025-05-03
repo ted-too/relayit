@@ -20,8 +20,8 @@ import { useAppForm } from "@/components/ui/form";
 import { apiKeysListQueryKey } from "@/qc/queries/user";
 import { PlusIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Label } from "../ui/label";
-import { CopyToClipboardContainer } from "../shared/copy-to-clipboard-container";
+import { Label } from "@/components/ui/label";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 
 interface CreateApiKeyFormProps {
 	submitWrapper?: typeof DialogFooter;
@@ -119,98 +119,6 @@ export function CreateApiKeyForm({ submitWrapper }: CreateApiKeyFormProps) {
 				</form.AppForm>
 			</SubmitWrapper>
 		</form>
-		// <Dialog>
-		// 	<DialogTrigger asChild>
-		// 		<Button className="mt-4" variant="outline">
-		// 			<PlusIcon className="mr-2 size-4" />
-		// 			Create API Key
-		// 		</Button>
-		// 	</DialogTrigger>
-		// 	<DialogContent>
-		// 		<DialogHeader>
-		// 			<DialogTitle>Create API Key</DialogTitle>
-		// 			<DialogDescription>
-		// 				{newApiKey
-		// 					? "Copy your API key now. You won't be able to see it again!"
-		// 					: "Give your API key a name to help you identify it later."}
-		// 			</DialogDescription>
-		// 		</DialogHeader>
-
-		// 		{newApiKey ? (
-		// 			<div className="flex flex-col gap-4">
-		// 				<div className="grid gap-2">
-		// 					<Label htmlFor="apiKey">API Key</Label>
-		// 					<div className="flex">
-		// 						<Input
-		// 							id="apiKey"
-		// 							value={newApiKey}
-		// 							readOnly
-		// 							className="font-mono text-xs"
-		// 						/>
-		// 						<Button
-		// 							className="ml-2"
-		// 							variant="outline"
-		// 							onClick={() => {
-		// 								const promise = navigator.clipboard.writeText(newApiKey);
-		// 								toast.promise(promise, {
-		// 									loading: "Copying...",
-		// 									success: "Copied!",
-		// 									error: "Failed to copy",
-		// 								});
-		// 							}}
-		// 						>
-		// 							Copy
-		// 						</Button>
-		// 					</div>
-		// 				</div>
-
-		// <p className="text-sm text-muted-foreground">
-		// 	Make sure to copy your API key now. For security reasons, we don't
-		// 	store the full key and you won't be able to see it again.
-		// </p>
-
-		// 				<DialogFooter>
-		// 					<Button
-		// 						onClick={() => {
-		// 							setNewApiKey(null);
-		// 							setIsDialogOpen(false);
-		// 						}}
-		// 					>
-		// 						Done
-		// 					</Button>
-		// 				</DialogFooter>
-		// 			</div>
-		// 		) : (
-		// 			<div className="flex flex-col gap-4">
-		// 				<div className="grid gap-2">
-		// 					<Label htmlFor="name">Name</Label>
-		// 					<Input
-		// 						id="name"
-		// 						placeholder="My API Key"
-		// 						value={newKeyName}
-		// 						onChange={(e) => setNewKeyName(e.target.value)}
-		// 					/>
-		// 				</div>
-
-		// 				<DialogFooter>
-		// 					<Button
-		// 						disabled={!newKeyName.trim() || createKeyMutation.isPending}
-		// 						onClick={handleCreateKey}
-		// 					>
-		// 						{createKeyMutation.isPending ? (
-		// 							<>
-		// 								<Loader2 className="mr-2 size-4 animate-spin" />
-		// 								Creating...
-		// 							</>
-		// 						) : (
-		// 							"Create"
-		// 						)}
-		// 					</Button>
-		// 				</DialogFooter>
-		// 			</div>
-		// 		)}
-		// 	</DialogContent>
-		// </Dialog>
 	);
 }
 

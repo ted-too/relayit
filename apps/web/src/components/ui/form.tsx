@@ -368,7 +368,10 @@ export function SelectField(props: SelectFieldProps) {
 				{...primitiveProps}
 			>
 				{/* FIXME: Add scroll area to content */}
-				<SelectTrigger className={className.input} {...triggerProps}>
+				<SelectTrigger
+					className={cn("w-full", className.input)}
+					{...triggerProps}
+				>
 					<SelectValue placeholder={placeholder} />
 				</SelectTrigger>
 				<SelectContent {...contentProps}>
@@ -686,7 +689,7 @@ export function SubmitButton({
 
 // Allow us to bind components to the form to keep type safety but reduce production boilerplate
 // Define this once to have a generator of consistent form instances throughout your app
-export const { useAppForm } = createFormHook({
+export const { useAppForm, withForm } = createFormHook({
 	fieldComponents: {
 		TextField,
 		SlugField,

@@ -80,7 +80,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Core types for sidebar navigation

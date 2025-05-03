@@ -26,9 +26,8 @@ export const messagesListQueryOptions = (
 			}
 
 			const { data, error } = await callRpc(
-				apiClient.projects[":projectId"].messages.$get(
+				apiClient.messages.$get(
 					{
-						param: { projectId },
 						query: stringifyObject(queryParams),
 					},
 					{

@@ -7,31 +7,35 @@ import { HTTPException } from "hono/http-exception";
 import { and, count, desc, eq, ilike, type SQL } from "drizzle-orm";
 
 export const messagesRoutes = new Hono<Context>()
-	// GET /projects/:projectId/messages - List messages for a project with filters & pagination
+	// GET /messages - List messages for a project with filters & pagination
 	.get("/", zValidator("query", getProjectMessagesQuerySchema), async (c) => {
-		const projectId = c.req.param("projectId");
-		const { page, limit, status, channel, search } = c.req.valid("query");
-
-		if (!projectId) {
-			throw new HTTPException(400, { message: "Project ID is required" });
-		}
+		const { page, limit, status, channel, search, projectId } =
+			c.req.valid("query");
 
 		const organization = c.get("organization");
 
-		const project = await db.query.project.findFirst({
-			where: and(
-				eq(schema.project.id, projectId),
-				eq(schema.project.organizationId, organization.id),
-			),
-		});
+		if (projectId) {
+			const project = await db.query.project.findFirst({
+				where: and(
+					eq(schema.project.id, projectId),
+					eq(schema.project.organizationId, organization.id),
+				),
+				columns: {
+					id: true,
+				},
+			});
 
-		if (!project) {
-			throw new HTTPException(404, { message: "Project not found" });
+			if (!project) {
+				throw new HTTPException(404, { message: "Project not found" });
+			}
 		}
 
 		const offset = (page - 1) * limit;
 
-		const conditions: SQL[] = [eq(schema.message.projectId, projectId)];
+		const conditions: SQL[] = projectId
+			? [eq(schema.message.projectId, projectId)]
+			: [];
+
 		if (status) {
 			conditions.push(eq(schema.message.status, status));
 		}
