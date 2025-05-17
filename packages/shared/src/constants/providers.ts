@@ -4,6 +4,10 @@ import {
 	discordCredentialsSchema,
 } from "../validations/provider-credentials";
 import type { z } from "zod";
+import {
+	sesProjectProviderConfigSchema,
+	snsProjectProviderConfigSchema,
+} from "../validations/project-provider";
 
 export const PROVIDER_CONFIG = {
 	email: [
@@ -11,6 +15,7 @@ export const PROVIDER_CONFIG = {
 			type: "ses",
 			label: "AWS SES",
 			credentialsSchema: awsCredentialsSchema,
+			configSchema: sesProjectProviderConfigSchema,
 			oneTimeFields: {
 				unencrypted: {
 					region: true,
@@ -23,6 +28,7 @@ export const PROVIDER_CONFIG = {
 			type: "sns",
 			label: "AWS SNS",
 			credentialsSchema: awsCredentialsSchema,
+			configSchema: snsProjectProviderConfigSchema,
 			oneTimeFields: {
 				unencrypted: {
 					region: true,
@@ -35,6 +41,7 @@ export const PROVIDER_CONFIG = {
 			type: "default",
 			label: "WhatsApp",
 			credentialsSchema: whatsappCredentialsSchema,
+			configSchema: null,
 			oneTimeFields: {
 				accessToken: true,
 			} satisfies OneTimeFieldsFromSchema<typeof whatsappCredentialsSchema>,
@@ -45,6 +52,7 @@ export const PROVIDER_CONFIG = {
 			type: "default",
 			label: "Discord",
 			credentialsSchema: discordCredentialsSchema,
+			configSchema: null,
 			oneTimeFields: {
 				accessToken: true,
 			} satisfies OneTimeFieldsFromSchema<typeof discordCredentialsSchema>,

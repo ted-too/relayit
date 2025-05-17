@@ -7,14 +7,10 @@ import {
 	createProviderSchema,
 	updateProviderSchema,
 } from "@repo/shared";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { eq, and, desc, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import {
-	deepMerge,
-	encryptRecord,
-	getSafeEncryptedRecord,
-} from "@repo/api/lib/crypto";
+import { deepMerge, encryptRecord, getSafeEncryptedRecord } from "@repo/db";
 import { generateProviderSlug } from "@repo/api/lib/slugs";
 import { z } from "zod";
 
@@ -87,7 +83,15 @@ export const providerRoutes = new Hono<Context>()
 			}
 
 			// Access nested properties and encrypt credentials
-			const encryptedCredentials = encryptRecord(validatedData.credentials);
+			const encryptedCredentialsResult = encryptRecord(
+				validatedData.credentials,
+			);
+
+			if (encryptedCredentialsResult.error) {
+				throw new HTTPException(500, {
+					message: "Failed to encrypt credentials",
+				});
+			}
 
 			const [newCredential] = await db
 				.insert(schema.providerCredential)
@@ -98,7 +102,7 @@ export const providerRoutes = new Hono<Context>()
 					channelType: validatedData.channelType,
 					providerType: validatedData.providerType,
 					name: validatedData.name,
-					credentials: encryptedCredentials,
+					credentials: encryptedCredentialsResult.data,
 					isActive: validatedData.isActive,
 				})
 				.returning();
@@ -196,7 +200,6 @@ export const providerRoutes = new Hono<Context>()
 		});
 
 		if (!parseResult.success) {
-			console.log(parseResult.error);
 			throw new HTTPException(400, {
 				message: "Invalid provider configuration",
 			});
@@ -225,16 +228,23 @@ export const providerRoutes = new Hono<Context>()
 		}
 
 		if (validatedData.credentials) {
+			const encryptedCredentialsResult = encryptRecord(
+				validatedData.credentials,
+			);
+			if (encryptedCredentialsResult.error) {
+				throw new HTTPException(500, {
+					message: "Failed to encrypt credentials",
+				});
+			}
 			validatedData.credentials = deepMerge(
 				existingCredential.credentials,
-				encryptRecord(validatedData.credentials),
+				encryptedCredentialsResult.data,
 			);
 		}
 
-		console.log("validatedData", validatedData);
-
 		const [updatedCredential] = await db
 			.update(schema.providerCredential)
+			// @ts-expect-error - TODO: fix this
 			.set(validatedData)
 			.where(eq(schema.providerCredential.id, providerId))
 			.returning();

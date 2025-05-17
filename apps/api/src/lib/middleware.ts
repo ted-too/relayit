@@ -5,7 +5,7 @@ import { createFactory } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import z from "zod";
 import { auth } from "@repo/api/lib/auth";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { and, eq } from "drizzle-orm";
 
 const factory = createFactory<NullableContext>();
@@ -73,7 +73,22 @@ export const apiKeyMiddleware = factory.createMiddleware(async (c, next) => {
 		throw new HTTPException(401, { message: error?.message ?? "Unauthorized" });
 	}
 
+	const userMembership = await db.query.member.findFirst({
+		where: eq(schema.member.userId, key.userId),
+		with: {
+			organization: true,
+		},
+		columns: {
+			id: true,
+		},
+	});
+
+	if (!userMembership) {
+		throw new HTTPException(401, { message: "Unauthorized" });
+	}
+
 	c.set("apiKey", key);
+	c.set("organization", userMembership.organization);
 
 	await next();
 });

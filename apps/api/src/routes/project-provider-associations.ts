@@ -2,11 +2,13 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "@repo/api";
 import {
-	createProjectProviderAssociationSchema,
-	updateProjectProviderAssociationSchema,
+	baseProjectProviderAssociationSchema,
 	getProjectProviderAssociationsQuerySchema,
+	createProjectProviderSchema,
+	updateProjectProviderSchema,
+	type UpdateProjectProviderConfig,
 } from "@repo/shared";
-import { db, schema } from "@repo/api/db";
+import { db, deepMerge, schema } from "@repo/db";
 import { eq, and, desc, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { verifyProject } from "@repo/api/lib/middleware";
@@ -14,21 +16,22 @@ import { verifyProject } from "@repo/api/lib/middleware";
 // TODO: Potentially add a middleware to check if the user has permission to access this resource
 
 export const projectProviderAssociationRoutes = new Hono<Context>()
-	// POST /projects/provider-associations/:projectId - Link an org provider
+	// POST /provider-associations/:projectId/:providerCredentialId - Link an org provider
 	.post(
-		"/:projectId",
+		"/:projectId/:providerCredentialId",
 		verifyProject,
-		zValidator("json", createProjectProviderAssociationSchema),
+		zValidator("json", baseProjectProviderAssociationSchema.passthrough()),
 		async (c) => {
 			const organization = c.get("organization");
 			const projectId = c.req.param("projectId");
-			const validatedData = c.req.valid("json");
+			const providerCredentialId = c.req.param("providerCredentialId");
+			const baseValidatedData = c.req.valid("json");
 
 			// 1. Verify the providerCredential exists and belongs to the organization
 			const orgProvider = await db.query.providerCredential.findFirst({
-				columns: { id: true },
+				columns: { id: true, channelType: true, providerType: true },
 				where: and(
-					eq(schema.providerCredential.id, validatedData.providerCredentialId),
+					eq(schema.providerCredential.id, providerCredentialId),
 					eq(schema.providerCredential.organizationId, organization.id),
 				),
 			});
@@ -40,15 +43,25 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 				});
 			}
 
-			// 2. Attempt to create the association
+			const validatedDataResult = createProjectProviderSchema(
+				orgProvider.channelType,
+				orgProvider.providerType,
+			).safeParse(baseValidatedData);
+
+			if (validatedDataResult.error) {
+				throw new HTTPException(400, {
+					message: "Invalid provider configuration",
+				});
+			}
+
 			try {
 				const [newAssociation] = await db
 					.insert(schema.projectProviderAssociation)
 					.values({
 						projectId: projectId,
-						providerCredentialId: validatedData.providerCredentialId,
-						isActive: validatedData.isActive, // Defaults handled by DB if undefined
-						config: validatedData.config, // Add config if provided
+						providerCredentialId,
+						isActive: validatedDataResult.data.isActive,
+						config: validatedDataResult.data.config,
 					})
 					.returning();
 
@@ -76,7 +89,7 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 		},
 	)
 
-	// GET /projects/provider-associations/:projectId - List associated providers
+	// GET /provider-associations/:projectId - List associated providers
 	.get(
 		"/:projectId",
 		verifyProject,
@@ -112,11 +125,14 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 		},
 	)
 
-	// PATCH /projects/provider-associations/:projectId/:associationId - Update association
+	// PATCH /provider-associations/:projectId/:associationId - Update association
 	.patch(
 		"/:projectId/:associationId",
 		verifyProject,
-		zValidator("json", updateProjectProviderAssociationSchema),
+		zValidator(
+			"json",
+			baseProjectProviderAssociationSchema.partial().passthrough(),
+		),
 		async (c) => {
 			const projectId = c.req.param("projectId");
 			const associationId = c.req.param("associationId");
@@ -128,15 +144,48 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 				});
 			}
 
+			const association = await db.query.projectProviderAssociation.findFirst({
+				where: and(
+					eq(schema.projectProviderAssociation.id, associationId),
+					eq(schema.projectProviderAssociation.projectId, projectId),
+				),
+				with: {
+					providerCredential: {
+						columns: {
+							channelType: true,
+							providerType: true,
+						},
+					},
+				},
+			});
+
+			if (!association) {
+				throw new HTTPException(404, {
+					message: "Provider association not found for this project.",
+				});
+			}
+
+			const validatedDataResult = updateProjectProviderSchema(
+				association.providerCredential.channelType,
+				association.providerCredential.providerType,
+				association.config !== null,
+			).safeParse(validatedData);
+
+			if (validatedDataResult.error) {
+				throw new HTTPException(400, {
+					message: "Invalid provider configuration",
+				});
+			}
+
 			// Prepare update payload, removing undefined keys
-			const updatePayload: Partial<
-				typeof schema.projectProviderAssociation.$inferInsert
-			> = {};
+			const updatePayload: Partial<UpdateProjectProviderConfig> = {};
 			if (validatedData.isActive !== undefined) {
 				updatePayload.isActive = validatedData.isActive;
 			}
 			if (validatedData.config !== undefined) {
-				updatePayload.config = validatedData.config;
+				updatePayload.config = association.config
+					? deepMerge(association.config, validatedDataResult.data.config ?? {})
+					: validatedDataResult.data.config;
 			}
 
 			if (Object.keys(updatePayload).length === 0) {
@@ -148,6 +197,7 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 
 			const [updatedAssociation] = await db
 				.update(schema.projectProviderAssociation)
+				// @ts-expect-error - The config will always be valid
 				.set(updatePayload)
 				.where(
 					and(
@@ -167,7 +217,7 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 		},
 	)
 
-	// DELETE /projects/provider-associations/:projectId/:associationId - Unlink provider
+	// DELETE /provider-associations/:projectId/:associationId - Unlink provider
 	.delete("/:projectId/:associationId", async (c) => {
 		const projectId = c.req.param("projectId");
 		const associationId = c.req.param("associationId");

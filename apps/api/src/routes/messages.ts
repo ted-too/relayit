@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "@repo/api";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { getProjectMessagesQuerySchema } from "@repo/shared";
 import { HTTPException } from "hono/http-exception";
 import { and, count, desc, eq, ilike, type SQL } from "drizzle-orm";

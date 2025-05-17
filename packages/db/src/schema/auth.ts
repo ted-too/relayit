@@ -11,7 +11,7 @@ import { relations } from "drizzle-orm";
 import { typeid } from "typeid-js";
 
 // Import relations from core schema
-import { message } from "./core";
+import { message, projectProviderAssociation } from "@repo/db/schema/core";
 
 /**
  * Represents users in the system.
@@ -329,9 +329,10 @@ export const project = pgTable(
  * Defines relationships for the project table.
  * Each project belongs to one organization.
  */
-export const projectRelations = relations(project, ({ one }) => ({
+export const projectRelations = relations(project, ({ one, many }) => ({
 	organization: one(organization, {
 		fields: [project.organizationId],
 		references: [organization.id],
 	}),
+	providerAssociations: many(projectProviderAssociation),
 }));

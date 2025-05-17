@@ -3,6 +3,7 @@ import { authClient } from "@/lib/auth-client";
 import { getOrganizationMetadata } from "@/lib/utils";
 import { queryOptions } from "@tanstack/react-query";
 import { sessionQueryKey, type QueryOpts } from "@/qc/queries/base";
+import type { InferResponseType } from "hono/client";
 
 export const activeOrganizationQueryKey = [
 	...sessionQueryKey,
@@ -92,12 +93,16 @@ export const projectsQueryOptions = (opts?: QueryOpts) =>
 					},
 				),
 			);
+
 			if (error) return Promise.reject(error);
+
 			return data;
 		},
 		retry: opts?.retry,
 		enabled: opts?.enabled,
 	});
+
+export type Project = InferResponseType<typeof apiClient.projects.$get>[number];
 
 export const usersOrganizationsQueryKey = [
 	...sessionQueryKey,

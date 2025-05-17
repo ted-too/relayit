@@ -38,8 +38,8 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
+	activeOrganizationQueryKey,
 	usersInvitationsListQueryOptions,
-	usersOrganizationsQueryKey,
 	usersOrganizationsQueryOptions,
 } from "@/qc/queries/user";
 import {
@@ -63,6 +63,7 @@ import {
 	PlugZapIcon,
 	WebhookIcon,
 	BookIcon,
+	FolderIcon,
 } from "lucide-react";
 import type * as React from "react";
 import { toast } from "sonner";
@@ -119,6 +120,11 @@ const MENU: Menu = {
 			title: "Messages",
 			url: "/messages", // Central place to view message status and history
 			icon: MessagesSquareIcon,
+		},
+		{
+			title: "Projects",
+			url: "/projects", // Central place to view projects
+			icon: FolderIcon,
 		},
 		{
 			title: "Logs",
@@ -213,6 +219,9 @@ function SidebarLogo({
 }) {
 	const { state, isMobile } = useSidebar();
 	const router = useRouter();
+	const pathname = usePathname();
+	const activePage = pathname.split("/").slice(3).join("/");
+
 	const queryClient = useQueryClient();
 
 	const { data: userOrgs, isPending } = useQuery(
@@ -303,10 +312,10 @@ function SidebarLogo({
 									}
 
 									queryClient.invalidateQueries({
-										queryKey: usersOrganizationsQueryKey,
+										queryKey: activeOrganizationQueryKey,
 									});
 
-									router.push(`/~/${value}`);
+									router.push(`/~/${value}/${activePage}`);
 								}}
 							>
 								{userOrgs?.map((org) => (
@@ -657,7 +666,7 @@ export function AppSidebar({
 			</Sidebar>
 			<SidebarInset>
 				<div
-					className="flex flex-col w-full pl-2 pt-4"
+					className="flex flex-col size-full pl-2 py-4"
 					style={
 						{
 							"--content-height": "calc(100svh - 1rem)",

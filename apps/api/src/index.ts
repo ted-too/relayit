@@ -3,14 +3,14 @@ import { logger } from "hono/logger";
 import { auth, initialUserSetup } from "@repo/api/lib/auth";
 import { cors } from "hono/cors";
 import { sendRouter } from "@repo/api/routes/send";
-import type { ParsedApiKey } from "@repo/api/db/schema/auth";
+import type { ParsedApiKey } from "@repo/db/schema/auth";
 import { webhookRoutes } from "@repo/api/routes/webhooks";
 import {
 	authSessionMiddleware,
 	hasOrganizationSelected,
 	protectedMiddleware,
 } from "@repo/api/lib/middleware";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { and, desc, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { projectRoutes } from "@repo/api/routes/projects";
@@ -144,10 +144,11 @@ const routes = app
 		return c.json(invitations);
 	})
 	.route("/projects", projectRoutes)
-	.route("/projects/provider-associations", projectProviderAssociationRoutes)
+	.route("/provider-associations", projectProviderAssociationRoutes)
 	.route("/messages", messagesRoutes)
 	.route("/providers", providerRoutes)
-	.route("/webhooks", webhookRoutes);
+	.route("/webhooks", webhookRoutes)
+	.route("/send", sendRouter);
 
 export default {
 	port: process.env.PORT || 3000,

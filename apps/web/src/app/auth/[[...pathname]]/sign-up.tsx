@@ -40,7 +40,6 @@ export function SignUpForm({
 			});
 
 			if (error) {
-				console.log(error);
 				return toast.error(error.message);
 			}
 

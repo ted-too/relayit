@@ -6,19 +6,19 @@ import {
 	boolean,
 	pgEnum,
 	uniqueIndex,
-	bigserial,
 	index,
 	jsonb,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import { project, apikey, organization } from "./auth";
+import { project, apikey, organization } from "@repo/db/schema/auth";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
 	AVAILABLE_PROVIDER_TYPES,
-	type ProviderCredentials,
+	type SendMessagePayload,
 	type ProjectProviderConfig,
 } from "@repo/shared";
+import type { ProviderCredentials } from "@repo/shared";
 
 /**
  * Enum defining the supported notification channels.
@@ -154,12 +154,14 @@ export const message = pgTable(
 		apiKeyId: text("api_key_id").references(() => apikey.id, {
 			onDelete: "set null", // Keep message record even if API key is deleted
 		}),
-		providerCredentialId: text("provider_credential_id")
+		projectProviderAssociationId: text("project_provider_association_id")
 			.notNull()
-			.references(() => providerCredential.id, { onDelete: "restrict" }),
+			.references(() => projectProviderAssociation.id, {
+				onDelete: "set null", // Keep message record even if project provider association is deleted
+			}),
 		channel: channelEnum("channel").notNull(),
 		recipient: text("recipient").notNull(),
-		payload: jsonb("payload").notNull(),
+		payload: jsonb("payload").$type<SendMessagePayload>().notNull(),
 		status: messageStatusEnum("status").default("queued").notNull(),
 		statusReason: text("status_reason"),
 		lastStatusAt: timestamp("last_status_at"),
@@ -169,7 +171,9 @@ export const message = pgTable(
 	(t) => [
 		index("message_project_status_idx").on(t.projectId, t.status),
 		index("message_api_key_idx").on(t.apiKeyId),
-		index("message_credential_idx").on(t.providerCredentialId),
+		index("message_project_provider_association_idx").on(
+			t.projectProviderAssociationId,
+		),
 	],
 );
 
@@ -187,9 +191,9 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 		fields: [message.apiKeyId],
 		references: [apikey.id],
 	}),
-	providerCredential: one(providerCredential, {
-		fields: [message.providerCredentialId],
-		references: [providerCredential.id],
+	projectProviderAssociation: one(projectProviderAssociation, {
+		fields: [message.projectProviderAssociationId],
+		references: [projectProviderAssociation.id],
 	}),
 	events: many(messageEvent),
 }));
@@ -201,7 +205,9 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 export const messageEvent = pgTable(
 	"message_event",
 	{
-		id: bigserial("id", { mode: "number" }).primaryKey(),
+		id: text("id")
+			.primaryKey()
+			.$defaultFn(() => typeid("msev").toString()),
 		messageId: text("message_id")
 			.notNull()
 			.references(() => message.id, { onDelete: "cascade" }),

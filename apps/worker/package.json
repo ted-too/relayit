@@ -1,0 +1,20 @@
+{
+	"name": "@repo/worker",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --hot src/index.ts"
+	},
+	"dependencies": {
+		"@aws-sdk/client-ses": "^3.803.0",
+		"@aws-sdk/client-sns": "^3.803.0",
+		"@repo/db": "workspace:*",
+    "typeid-js": "^1.2.0",
+		"drizzle-orm": "^0.43.1"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}

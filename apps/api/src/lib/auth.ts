@@ -1,4 +1,4 @@
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, organization } from "better-auth/plugins";
@@ -6,6 +6,7 @@ import { passkey } from "better-auth/plugins/passkey";
 import { emailHarmony } from "better-auth-harmony";
 import slugify from "slugify";
 import { count, desc, eq } from "drizzle-orm";
+import { redis } from "bun";
 
 /**
  * Sets up initial organization, membership and project for a new user
@@ -71,6 +72,21 @@ export const auth = betterAuth({
 		provider: "pg",
 		schema,
 	}),
+	secondaryStorage: {
+		get: async (key) => {
+			const value = await redis.get(key);
+			return value ? value : null;
+		},
+		set: async (key, value, ttl) => {
+			if (ttl) {
+				await redis.set(key, value);
+				await redis.expire(key, ttl);
+			} else await redis.set(key, value);
+		},
+		delete: async (key) => {
+			await redis.del(key);
+		},
+	},
 	emailAndPassword: {
 		enabled: true,
 	},

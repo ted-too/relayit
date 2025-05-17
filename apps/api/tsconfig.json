@@ -1,15 +1,16 @@
 {
-  "compilerOptions": {
-    "strict": true,
-    "jsx": "react-jsx",
-    "lib": ["DOM"],
-    "jsxImportSource": "hono/jsx",
-    "baseUrl": ".",
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
-    "paths": {
-      "@repo/api/*": ["./src/*"],
+	"compilerOptions": {
+		"strict": true,
+		"jsx": "react-jsx",
+		"lib": ["DOM"],
+		"jsxImportSource": "hono/jsx",
+		"baseUrl": ".",
+		"module": "NodeNext",
+		"moduleResolution": "nodenext",
+		"paths": {
+			"@repo/api/*": ["./src/*"],
+			"@repo/db/*": ["../../packages/db/src/*"],
 			"@repo/shared/*": ["../../packages/shared/src/*"]
-    }
-  }
+		}
+	}
 }

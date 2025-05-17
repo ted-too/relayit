@@ -21,7 +21,7 @@ function Card({
 					<div
 						{...wrapperProps}
 						className={cn(
-							"rounded-xl bg-background shadow-md",
+							"rounded-xl bg-background shadow-md flex flex-col",
 							wrapperClassName,
 						)}
 					>

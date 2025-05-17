@@ -105,7 +105,7 @@ export default async function AuthPage({
 		throw redirect("/auth/sign-in");
 
 	if (session && authPathnames.includes(pageData.pathname))
-		throw redirect("/auth/select-household");
+		throw redirect("/auth/setup-organization");
 
 	return (
 		<div className="h-svh w-full flex flex-col md:flex-row items-center justify-between p-4 md:p-8 gap-8">

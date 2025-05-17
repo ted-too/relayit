@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "@repo/api";
 import { createProjectSchema, updateProjectSchema } from "@repo/shared";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { HTTPException } from "hono/http-exception";
 import { generateProjectSlug } from "@repo/api/lib/slugs";
 import { eq, and, desc } from "drizzle-orm";
@@ -69,7 +69,7 @@ export const projectRoutes = new Hono<Context>()
 			throw new HTTPException(500, { message: "Failed to create project" });
 		}
 
-		return c.json(newProject, 201);
+		return c.json({ ...newProject }, 201);
 	})
 
 	// GET /projects - Get all projects in the organization

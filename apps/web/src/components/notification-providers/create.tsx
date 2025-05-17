@@ -66,8 +66,6 @@ export function CreateProviderForm({
 				return parseResult.error;
 			},
 		},
-		onSubmitInvalid: ({ formApi }) =>
-			console.log(formApi.state.errors, formApi.state.values),
 		onSubmit: async ({ value }) => {
 			let error: ErrorResponse | null = null;
 

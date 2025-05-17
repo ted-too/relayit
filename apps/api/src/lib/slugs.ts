@@ -1,6 +1,6 @@
 import { count, eq, and } from "drizzle-orm";
 import slugify from "slugify";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 
 /**
  * Generates a unique slug for a project within an organization.

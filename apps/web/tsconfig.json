@@ -18,9 +18,11 @@
 				"name": "next"
 			}
 		],
+		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
 			"@repo/api/*": ["../api/src/*"],
+			"@repo/db/*": ["../../packages/db/src/*"],
 			"@repo/shared/*": ["../../packages/shared/src/*"]
 		}
 	},

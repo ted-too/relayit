@@ -12,12 +12,50 @@ export const awsCredentialsSchema = z.object({
 	secretAccessKey: z.string().min(1, "Secret Access Key is required"),
 });
 
+export type AWSProviderCredentials = z.infer<typeof awsCredentialsSchema>;
+
 // TODO: Make this a real schema
 export const whatsappCredentialsSchema = z.object({
 	accessToken: z.string().min(1, "Access Token is required"),
 });
 
+export type WhatsappProviderCredentials = z.infer<
+	typeof whatsappCredentialsSchema
+>;
+
 // TODO: Make this a real schema
 export const discordCredentialsSchema = z.object({
 	accessToken: z.string().min(1, "Access Token is required"),
-}); 
+});
+
+export type DiscordProviderCredentials = z.infer<
+	typeof discordCredentialsSchema
+>;
+
+export type ProviderCredentials =
+	| AWSProviderCredentials
+	| WhatsappProviderCredentials
+	| DiscordProviderCredentials;
+
+export function isAWSProviderCredentials(
+	credentials: ProviderCredentials,
+): credentials is AWSProviderCredentials {
+	return (
+		"unencrypted" in credentials &&
+		"region" in credentials.unencrypted &&
+		"accessKeyId" in credentials &&
+		"secretAccessKey" in credentials
+	);
+}
+
+export function isWhatsappProviderCredentials(
+	credentials: ProviderCredentials,
+): credentials is WhatsappProviderCredentials {
+	return "accessToken" in credentials;
+}
+
+export function isDiscordProviderCredentials(
+	credentials: ProviderCredentials,
+): credentials is DiscordProviderCredentials {
+	return "accessToken" in credentials;
+}

@@ -1,0 +1,14 @@
+{
+	"name": "@repo/db",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+    "typeid-js": "^1.2.0",
+		"drizzle-orm": "^0.43.1",
+		"typescript": "^5"
+	}
+}

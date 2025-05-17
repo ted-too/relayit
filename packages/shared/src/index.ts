@@ -2,6 +2,7 @@ export * from "./constants/core";
 export * from "./constants/organization";
 export * from "./constants/providers";
 
+export * from "./validations/provider-credentials";
 export * from "./validations/providers";
 export * from "./validations/project-provider";
 export * from "./validations/webhooks";
@@ -32,3 +33,30 @@ export function stringifyObject<T extends Record<string, unknown>>(
 
 	return result;
 }
+
+export interface GenericError {
+	message: string;
+	details: string[];
+}
+
+export const createGenericError = (
+	message: string,
+	error?: Error | string[] | unknown,
+): GenericError => ({
+	message,
+	details: error
+		? Array.isArray(error)
+			? error
+			: [error instanceof Error ? error.message : String(error)]
+		: [],
+});
+
+export type Result<T> =
+	| {
+			error: null;
+			data: T;
+	  }
+	| {
+			error: GenericError;
+			data: null;
+	  };

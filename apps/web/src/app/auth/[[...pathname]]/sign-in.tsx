@@ -151,7 +151,7 @@ export function SignIn() {
 					</Link>
 				</span>
 			</div>
-			<SignInForm onSuccess={() => router.push("/auth/select-household")} />
+			<SignInForm onSuccess={() => router.push("/auth/setup-organization")} />
 		</div>
 	);
 }

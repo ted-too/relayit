@@ -5,10 +5,10 @@ import {
 	createWebhookEndpointSchema,
 	updateWebhookEndpointSchema,
 } from "@repo/shared";
-import { db, schema } from "@repo/api/db";
+import { db, schema } from "@repo/db";
 import { eq, and, desc } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { encrypt, redactedString } from "@repo/api/lib/crypto";
+import { encrypt, redactedString } from "@repo/db";
 import { verifyProject } from "@repo/api/lib/middleware";
 
 export const webhookRoutes = new Hono<Context>()
@@ -21,16 +21,23 @@ export const webhookRoutes = new Hono<Context>()
 			const projectId = c.req.param("projectId"); // Get projectId from the path param
 			const validatedData = c.req.valid("json");
 
-			const encryptedSecret = validatedData.secret
-				? encrypt(validatedData.secret)
-				: null;
+			let secret = null;
+			if (validatedData.secret) {
+				const encryptedSecret = encrypt(validatedData.secret);
+				if (encryptedSecret.error) {
+					throw new HTTPException(500, {
+						message: "Failed to encrypt secret",
+					});
+				}
+				secret = encryptedSecret.data;
+			}
 
 			const [newWebhook] = await db
 				.insert(schema.webhookEndpoint)
 				.values({
 					projectId: projectId, // Use projectId
 					url: validatedData.url,
-					secret: encryptedSecret,
+					secret,
 					eventTypes: validatedData.eventTypes,
 					isActive: validatedData.isActive,
 				})
@@ -38,7 +45,7 @@ export const webhookRoutes = new Hono<Context>()
 
 			const safeWebhook = {
 				...newWebhook,
-				secret: encryptedSecret ? redactedString : null,
+				secret: secret ? redactedString : null,
 			};
 
 			return c.json(safeWebhook, 201);
@@ -117,9 +124,13 @@ export const webhookRoutes = new Hono<Context>()
 			if (validatedData.isActive !== undefined)
 				updatePayload.isActive = validatedData.isActive;
 			if (validatedData.secret !== undefined) {
-				// Encrypt secret if provided (even if it's an empty string), set to null if explicitly null
-				updatePayload.secret =
-					validatedData.secret === null ? null : encrypt(validatedData.secret);
+				const encryptedSecret = encrypt(validatedData.secret);
+				if (encryptedSecret.error) {
+					throw new HTTPException(500, {
+						message: "Failed to encrypt secret",
+					});
+				}
+				updatePayload.secret = encryptedSecret.data;
 			}
 
 			if (Object.keys(updatePayload).length === 0) {
