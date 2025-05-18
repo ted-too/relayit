@@ -1,7 +1,5 @@
 {
   "compilerOptions": {
-    "composite": true,
-    "incremental": true,
     "strict": true,
     "jsx": "react-jsx",
     "lib": ["DOM"],

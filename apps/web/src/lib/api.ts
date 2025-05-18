@@ -1,4 +1,4 @@
-import type { AppType } from "@repo/api";
+import type { AppType } from "@repo/api/index";
 import { type ClientResponse, hc } from "hono/client";
 
 export const apiClient = hc<AppType>(process.env.NEXT_PUBLIC_API_URL, {

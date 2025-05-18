@@ -3,7 +3,7 @@ import { logger } from "hono/logger";
 import { auth, initialUserSetup } from "@repo/api/lib/auth";
 import { cors } from "hono/cors";
 import { sendRouter } from "@repo/api/routes/send";
-import type { ParsedApiKey } from "@repo/db/schema/auth";
+import type { ParsedApiKey } from "@repo/db";
 import { webhookRoutes } from "@repo/api/routes/webhooks";
 import {
 	authSessionMiddleware,
@@ -59,7 +59,7 @@ app.route("/send", sendRouter);
 app.use(
 	"*",
 	cors({
-		origin: [process.env.FRONTEND_URL],
+		origin: [process.env.FRONTEND_URL!],
 		allowHeaders: ["Content-Type", "Authorization"],
 		allowMethods: ["POST", "PUT", "DELETE", "GET", "OPTIONS"],
 		exposeHeaders: ["Content-Length"],
@@ -150,9 +150,9 @@ const routes = app
 	.route("/webhooks", webhookRoutes)
 	.route("/send", sendRouter);
 
+export { routes };
+
 export default {
 	port: process.env.PORT || 3000,
 	fetch: app.fetch,
 };
-
-export type AppType = typeof routes;

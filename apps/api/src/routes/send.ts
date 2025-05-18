@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api";
+import type { Context } from "@repo/api/index";
 import { apiKeyMiddleware } from "@repo/api/lib/middleware";
 import { db, schema, queueMessage } from "@repo/db";
 import { eq, and } from "drizzle-orm";

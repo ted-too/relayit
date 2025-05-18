@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 
-import * as authSchema from "@repo/db/schema/auth";
-import * as coreSchema from "@repo/db/schema/core";
+import * as authSchema from "./schema/auth";
+import * as coreSchema from "./schema/core";
 
 export const schema = {
 	...authSchema,
@@ -22,6 +22,7 @@ export type Transaction = Parameters<typeof db.transaction>[0] extends (
 	? T
 	: never;
 
+export { ParsedApiKey } from "./schema/auth";
 export * from "./lib/crypto";
 export * from "./lib/redis";
 export * from "./lib/message-ops";

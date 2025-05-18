@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api";
+import type { Context } from "@repo/api/index";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_PROVIDER_TYPES,

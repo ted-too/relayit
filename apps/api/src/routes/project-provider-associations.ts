@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api";
+import type { Context } from "@repo/api/index";
 import {
 	baseProjectProviderAssociationSchema,
 	getProjectProviderAssociationsQuerySchema,

@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api";
+import type { Context } from "@repo/api/index";
 import { createProjectSchema, updateProjectSchema } from "@repo/shared";
 import { db, schema } from "@repo/db";
 import { HTTPException } from "hono/http-exception";
 import { generateProjectSlug } from "@repo/api/lib/slugs";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { verifyProject } from "@repo/api/lib/middleware";
 
@@ -76,10 +76,7 @@ export const projectRoutes = new Hono<Context>()
 	.get("/", async (c) => {
 		const organization = c.get("organization");
 
-		const projects = await db.query.project.findMany({
-			where: eq(schema.project.organizationId, organization.id),
-			orderBy: desc(schema.project.createdAt),
-		});
+		const projects = await db.select().from(schema.project);
 
 		return c.json(projects);
 	})

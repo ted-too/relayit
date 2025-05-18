@@ -1,4 +1,4 @@
-import type { NullableContext } from "@repo/api";
+import type { NullableContext } from "@repo/api/index";
 import { errorResponse } from "@repo/api/lib/error-response";
 import type { Context } from "hono";
 import { createFactory } from "hono/factory";

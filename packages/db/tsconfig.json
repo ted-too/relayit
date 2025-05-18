@@ -1,18 +1,15 @@
 {
 	"compilerOptions": {
-    "composite": true,
-    "incremental": true,
     "strict": true,
     "jsx": "react-jsx",
     "lib": ["DOM"],
     "jsxImportSource": "hono/jsx",
+    "baseUrl": ".",
     "module": "NodeNext",
     "moduleResolution": "nodenext",
-
-		"baseUrl": ".",
-		"paths": {
-			"@repo/db/*": ["./src/*"],
-			"@repo/shared/*": ["../shared/src/*"],
-		}
+    "paths": {
+      "@repo/db/*": ["./src/*"],
+      "@repo/shared/*": ["../shared/src/*"]
+    }
 	}
 }
