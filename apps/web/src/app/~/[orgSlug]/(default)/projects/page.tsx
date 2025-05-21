@@ -1,5 +1,4 @@
-import { getQueryClient } from "@/qc/client";
-import { projectsQueryOptions } from "@/qc/queries/user";
+import { getQueryClient, trpc } from "@/trpc/server";
 import { dehydrate } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
@@ -12,7 +11,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { CreateProjectDialog } from "@/components/projects/create";
-import { ApiKeysCardContent } from "@/components/api-keys";
+import { ProjectsCardContent } from "@/components/projects";
 
 export default async function ProjectsPage({
 	params,
@@ -23,11 +22,15 @@ export default async function ProjectsPage({
 	const queryClient = getQueryClient();
 	const headers = await headersFn();
 
-	void queryClient.prefetchQuery(projectsQueryOptions({ headers }));
+	void queryClient.prefetchQuery(trpc(headers).projects.list.queryOptions());
 
 	return (
 		<HydrationBoundary state={dehydrate(queryClient)}>
-			<Card variant="shadow" className="mx-auto max-w-none h-full" wrapperProps={{ className: "h-full" }}>
+			<Card
+				variant="shadow"
+				className="mx-auto max-w-none h-full"
+				wrapperProps={{ className: "h-full" }}
+			>
 				<CardHeader className="flex flex-row items-center justify-between border-b">
 					<div>
 						<CardTitle className="text-lg md:text-xl">Projects</CardTitle>
@@ -37,7 +40,7 @@ export default async function ProjectsPage({
 					</div>
 					<CreateProjectDialog />
 				</CardHeader>
-				<ApiKeysCardContent />
+				<ProjectsCardContent />
 				<CardFooter className="mt-auto rounded-b-xl border-t bg-muted p-6 dark:bg-transparent">
 					<CardDescription className="text-xs md:text-sm h-max flex items-center gap-2">
 						Organization Slug:

@@ -7,7 +7,7 @@ import {
 	uniqueIndex,
 	jsonb,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { type InferSelectModel, relations } from "drizzle-orm";
 import { typeid } from "typeid-js";
 
 // Import relations from core schema
@@ -324,6 +324,8 @@ export const project = pgTable(
 	},
 	(t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)],
 );
+
+export type Project = InferSelectModel<typeof project>;
 
 /**
  * Defines relationships for the project table.

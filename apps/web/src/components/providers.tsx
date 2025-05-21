@@ -1,9 +1,9 @@
 "use client";
-import { getQueryClient } from "@/qc/client";
-import { QueryClientProvider } from "@tanstack/react-query";
+
 import type * as React from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { TRPCProvider } from "@/trpc/client";
 
 export function ThemeProvider({
 	children,
@@ -13,10 +13,8 @@ export function ThemeProvider({
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-	const queryClient = getQueryClient();
-
 	return (
-		<QueryClientProvider client={queryClient}>
+		<TRPCProvider>
 			<ThemeProvider
 				attribute="class"
 				defaultTheme="system"
@@ -26,6 +24,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
 				{children}
 				<ReactQueryDevtools initialIsOpen={false} />
 			</ThemeProvider>
-		</QueryClientProvider>
+		</TRPCProvider>
 	);
 }

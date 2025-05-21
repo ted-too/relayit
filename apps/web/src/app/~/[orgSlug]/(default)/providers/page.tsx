@@ -1,5 +1,4 @@
-import { getQueryClient } from "@/qc/client";
-import { providersListQueryOptions } from "@/qc/queries/providers";
+import { getQueryClient, trpc } from "@/trpc/server";
 import { dehydrate } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
@@ -21,7 +20,7 @@ export default async function ProvidersPage({
 	const headers = await headersFn();
 
 	void queryClient.prefetchQuery(
-		providersListQueryOptions({ headers, query: {} }),
+		trpc(headers).providers.list.queryOptions(),
 	);
 
 	return (

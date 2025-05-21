@@ -8,7 +8,7 @@
 // import {
 // 	sessionQueryOptions,
 // 	singleInvitationQueryOptions,
-// } from "@/qc/queries/user";
+// } from "@/trpc/queries/user";
 // import { useQuery } from "@tanstack/react-query";
 // import { notFound, useRouter } from "next/navigation";
 // import { toast } from "sonner";

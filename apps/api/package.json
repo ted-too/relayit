@@ -1,11 +1,13 @@
 {
   "name": "@repo/api",
   "exports": {
-    "./hc": {
-      "import": {
-        "default": "./dist/hc.js",
-        "types": "./dist/hc.d.ts"
-      }
+    ".": {
+      "import": "./src/routes/index.ts",
+      "types": "./src/routes/index.ts"
+    },
+    "./trpc": {
+      "import": "./src/trpc.ts",
+      "types": "./src/trpc.ts"
     }
   },
   "scripts": {
@@ -28,6 +30,7 @@
     "hono": "^4.7.7",
     "pg": "^8.15.6",
     "slugify": "^1.6.6",
+    "superjson": "^1.13.3",
     "typeid-js": "^1.2.0",
     "zod": "^3.24.3"
   },

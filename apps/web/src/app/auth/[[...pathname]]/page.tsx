@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { SignIn } from "./sign-in";
 import { SignUp } from "./sign-up";
 import { FinishSocialSignUp } from "./finish";
-import { sessionQueryOptions } from "@/qc/queries/base";
+import { sessionQueryOptions } from "@/trpc/queries/auth";
 import type { Session, User } from "@/lib/auth-client";
-import { getQueryClient } from "@/qc/client";
+import { getQueryClient } from "@/trpc/server";
 import { headers } from "next/headers";
 import authImage1 from "../../../../public/auth-1.svg";
 import authImage2 from "../../../../public/auth-2.svg";
@@ -44,6 +44,7 @@ const PATHS: {
 	},
 	{
 		pathname: "setup-organization",
+		// @ts-expect-error - This is just a redirect
 		component: SetupOrganization,
 		image: authImage3,
 		imageCredit: authImageCredit,

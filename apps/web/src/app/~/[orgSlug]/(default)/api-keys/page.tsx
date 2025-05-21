@@ -1,5 +1,5 @@
-import { getQueryClient } from "@/qc/client";
-import { apiKeysListQueryOptions } from "@/qc/queries/user";
+import { getQueryClient } from "@/trpc/server";
+import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { dehydrate } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";

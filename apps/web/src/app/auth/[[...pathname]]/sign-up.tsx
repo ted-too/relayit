@@ -4,7 +4,7 @@ import { CombinedLogo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { useAppForm } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
-import { usersOrganizationsQueryOptions } from "@/qc/queries/user";
+import { usersOrganizationsQueryOptions } from "@/trpc/queries/auth";
 import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";

@@ -1,7 +1,7 @@
 import type { Session } from "@/lib/auth-client";
-import { getQueryClient } from "@/qc/client";
-import { sessionQueryKey, sessionQueryOptions } from "@/qc/queries/base";
-import { usersOrganizationsQueryOptions } from "@/qc/queries/user";
+import { getQueryClient } from "@/trpc/server";
+import { sessionQueryKey, sessionQueryOptions } from "@/trpc/queries/auth";
+import { usersOrganizationsQueryOptions } from "@/trpc/queries/auth";
 import { headers as headersFn } from "next/headers";
 import { redirect } from "next/navigation";
 

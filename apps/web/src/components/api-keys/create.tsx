@@ -17,7 +17,7 @@ import {
 import { toast } from "sonner";
 import { createApiKeySchema, type CreateApiKeyRequest } from "@repo/shared";
 import { useAppForm } from "@/components/ui/form";
-import { apiKeysListQueryKey } from "@/qc/queries/user";
+import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 import { PlusIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";

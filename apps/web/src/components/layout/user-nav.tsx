@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { cn, getInitials } from "@/lib/utils";
-import { sessionQueryOptions } from "@/qc/queries/base";
+import { sessionQueryOptions } from "@/trpc/queries/auth";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpDownIcon } from "lucide-react";
 import { LogOutIcon } from "lucide-react";

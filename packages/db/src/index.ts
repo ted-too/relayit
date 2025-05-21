@@ -22,7 +22,9 @@ export type Transaction = Parameters<typeof db.transaction>[0] extends (
 	? T
 	: never;
 
-export { ParsedApiKey } from "./schema/auth";
+export type { ParsedApiKey, Project } from "./schema/auth";
+export type { NotificationProvider } from "./schema/core";
+
 export * from "./lib/crypto";
 export * from "./lib/redis";
 export * from "./lib/message-ops";

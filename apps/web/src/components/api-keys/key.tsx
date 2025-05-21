@@ -7,7 +7,7 @@ import { KeyIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ActionButton } from "@/components/ui/button";
-import { apiKeysListQueryKey } from "@/qc/queries/user";
+import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 
 export function ApiKeyCard({ apiKey }: { apiKey: BaseApiKey }) {
 	const queryClient = useQueryClient();

@@ -1,33 +1,31 @@
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api/index";
+import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
+import { z } from "zod";
+import { and, eq, desc, type SQL } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import {
 	baseProjectProviderAssociationSchema,
-	getProjectProviderAssociationsQuerySchema,
 	createProjectProviderSchema,
 	updateProjectProviderSchema,
 	type UpdateProjectProviderConfig,
 } from "@repo/shared";
-import { db, deepMerge, schema } from "@repo/db";
-import { eq, and, desc, type SQL } from "drizzle-orm";
-import { HTTPException } from "hono/http-exception";
-import { verifyProject } from "@repo/api/lib/middleware";
+import { db, schema, deepMerge } from "@repo/db";
 
 // TODO: Potentially add a middleware to check if the user has permission to access this resource
 
-export const projectProviderAssociationRoutes = new Hono<Context>()
-	// POST /provider-associations/:projectId/:providerCredentialId - Link an org provider
-	.post(
-		"/:projectId/:providerCredentialId",
-		verifyProject,
-		zValidator("json", baseProjectProviderAssociationSchema.passthrough()),
-		async (c) => {
-			const organization = c.get("organization");
-			const projectId = c.req.param("projectId");
-			const providerCredentialId = c.req.param("providerCredentialId");
-			const baseValidatedData = c.req.valid("json");
+export const projectProviderAssociationRouter = router({
+	create: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(
+			z
+				.object({
+					providerCredentialId: z.string(),
+				})
+				.merge(baseProjectProviderAssociationSchema.passthrough()),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const { organization, project } = ctx;
+			const { providerCredentialId, ...baseConfig } = input;
 
-			// 1. Verify the providerCredential exists and belongs to the organization
 			const orgProvider = await db.query.providerCredential.findFirst({
 				columns: { id: true, channelType: true, providerType: true },
 				where: and(
@@ -37,20 +35,25 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 			});
 
 			if (!orgProvider) {
-				throw new HTTPException(400, {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
 					message:
 						"Provider credential not found or does not belong to this organization.",
 				});
 			}
 
-			const validatedDataResult = createProjectProviderSchema(
+			const specificProviderSchema = createProjectProviderSchema(
 				orgProvider.channelType,
 				orgProvider.providerType,
-			).safeParse(baseValidatedData);
+			);
+
+			const validatedDataResult = specificProviderSchema.safeParse(baseConfig);
 
 			if (validatedDataResult.error) {
-				throw new HTTPException(400, {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
 					message: "Invalid provider configuration",
+					cause: validatedDataResult.error.flatten(),
 				});
 			}
 
@@ -58,7 +61,7 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 				const [newAssociation] = await db
 					.insert(schema.projectProviderAssociation)
 					.values({
-						projectId: projectId,
+						projectId: project.id,
 						providerCredentialId,
 						isActive: validatedDataResult.data.isActive,
 						config: validatedDataResult.data.config,
@@ -66,53 +69,51 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 					.returning();
 
 				if (!newAssociation) {
-					throw new HTTPException(500, {
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
 						message: "Failed to create provider association",
 					});
 				}
-				return c.json(newAssociation, 201);
+				return newAssociation;
 			} catch (error: any) {
-				// Check for unique constraint violation (already associated)
 				if (error.code === "23505") {
-					// Postgres unique violation code
-					throw new HTTPException(409, {
+					throw new TRPCError({
+						code: "CONFLICT",
 						message:
 							"This provider credential is already associated with this project.",
 					});
 				}
-				// Log other errors if needed
 				console.error("Error creating project provider association:", error);
-				throw new HTTPException(500, {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
 					message: "An unexpected error occurred.",
 				});
 			}
-		},
-	)
-
-	// GET /provider-associations/:projectId - List associated providers
-	.get(
-		"/:projectId",
-		verifyProject,
-		zValidator("query", getProjectProviderAssociationsQuerySchema),
-		async (c) => {
-			const projectId = c.req.param("projectId");
-			const { isActive } = c.req.valid("query");
+		}),
+	list: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(
+			z.object({
+				isActive: z.boolean().optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { isActive } = input;
 
 			const filters: SQL[] = [
-				eq(schema.projectProviderAssociation.projectId, projectId),
+				eq(schema.projectProviderAssociation.projectId, project.id),
 			];
 
 			if (isActive !== undefined) {
 				filters.push(eq(schema.projectProviderAssociation.isActive, isActive));
 			}
 
-			// Fetch associations and join with provider credential details
 			const associations = await db.query.projectProviderAssociation.findMany({
 				where: and(...filters),
 				with: {
 					providerCredential: {
 						columns: {
-							// Exclude raw credentials
 							credentials: false,
 						},
 					},
@@ -120,26 +121,24 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 				orderBy: desc(schema.projectProviderAssociation.createdAt),
 			});
 
-			// Note: Joined providerCredential data will NOT have credentials field
-			return c.json(associations);
-		},
-	)
-
-	// PATCH /provider-associations/:projectId/:associationId - Update association
-	.patch(
-		"/:projectId/:associationId",
-		verifyProject,
-		zValidator(
-			"json",
-			baseProjectProviderAssociationSchema.partial().passthrough(),
-		),
-		async (c) => {
-			const projectId = c.req.param("projectId");
-			const associationId = c.req.param("associationId");
-			const validatedData = c.req.valid("json");
+			return associations;
+		}),
+	update: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(
+			z
+				.object({
+					associationId: z.string(),
+				})
+				.merge(baseProjectProviderAssociationSchema.partial().passthrough()),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { associationId, ...validatedData } = input;
 
 			if (Object.keys(validatedData).length === 0) {
-				throw new HTTPException(400, {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
 					message: "No fields provided for update.",
 				});
 			}
@@ -147,7 +146,7 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 			const association = await db.query.projectProviderAssociation.findFirst({
 				where: and(
 					eq(schema.projectProviderAssociation.id, associationId),
-					eq(schema.projectProviderAssociation.projectId, projectId),
+					eq(schema.projectProviderAssociation.projectId, project.id),
 				),
 				with: {
 					providerCredential: {
@@ -160,7 +159,8 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 			});
 
 			if (!association) {
-				throw new HTTPException(404, {
+				throw new TRPCError({
+					code: "NOT_FOUND",
 					message: "Provider association not found for this project.",
 				});
 			}
@@ -172,70 +172,70 @@ export const projectProviderAssociationRoutes = new Hono<Context>()
 			).safeParse(validatedData);
 
 			if (validatedDataResult.error) {
-				throw new HTTPException(400, {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
 					message: "Invalid provider configuration",
+					cause: validatedDataResult.error.flatten(),
 				});
 			}
 
-			// Prepare update payload, removing undefined keys
 			const updatePayload: Partial<UpdateProjectProviderConfig> = {};
-			if (validatedData.isActive !== undefined) {
-				updatePayload.isActive = validatedData.isActive;
+			if (validatedDataResult.data.isActive !== undefined) {
+				updatePayload.isActive = validatedDataResult.data.isActive;
 			}
-			if (validatedData.config !== undefined) {
+			if (validatedDataResult.data.config !== undefined) {
 				updatePayload.config = association.config
 					? deepMerge(association.config, validatedDataResult.data.config ?? {})
 					: validatedDataResult.data.config;
 			}
 
 			if (Object.keys(updatePayload).length === 0) {
-				// Should not happen due to initial check, but good practice
-				throw new HTTPException(400, {
-					message: "No valid fields provided for update.",
-				});
+				return association;
 			}
 
 			const [updatedAssociation] = await db
 				.update(schema.projectProviderAssociation)
-				// @ts-expect-error - The config will always be valid
-				.set(updatePayload)
+				.set(updatePayload as any) // Using `as any` to bypass strict type checking for now, given the dynamic nature
 				.where(
 					and(
 						eq(schema.projectProviderAssociation.id, associationId),
-						eq(schema.projectProviderAssociation.projectId, projectId), // Ensure it belongs to the correct project
+						eq(schema.projectProviderAssociation.projectId, project.id),
 					),
 				)
 				.returning();
 
 			if (!updatedAssociation) {
-				throw new HTTPException(404, {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Provider association not found during update.",
+				});
+			}
+
+			return updatedAssociation;
+		}),
+	delete: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(z.object({ associationId: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { associationId } = input;
+
+			const { rowCount } = await db
+				.delete(schema.projectProviderAssociation)
+				.where(
+					and(
+						eq(schema.projectProviderAssociation.id, associationId),
+						eq(schema.projectProviderAssociation.projectId, project.id),
+					),
+				);
+
+			if (rowCount === 0) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
 					message: "Provider association not found for this project.",
 				});
 			}
 
-			return c.json(updatedAssociation);
-		},
-	)
-
-	// DELETE /provider-associations/:projectId/:associationId - Unlink provider
-	.delete("/:projectId/:associationId", async (c) => {
-		const projectId = c.req.param("projectId");
-		const associationId = c.req.param("associationId");
-
-		const { rowCount } = await db
-			.delete(schema.projectProviderAssociation)
-			.where(
-				and(
-					eq(schema.projectProviderAssociation.id, associationId),
-					eq(schema.projectProviderAssociation.projectId, projectId), // Ensure it belongs to the correct project
-				),
-			);
-
-		if (rowCount === 0) {
-			throw new HTTPException(404, {
-				message: "Provider association not found for this project.",
-			});
-		}
-
-		return c.json({ message: "Provider association deleted successfully." });
-	});
+			return { message: "Provider association deleted successfully." };
+		}),
+});

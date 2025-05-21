@@ -1,9 +1,33 @@
-import { apiClient, callRpc } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getOrganizationMetadata } from "@/lib/utils";
 import { queryOptions } from "@tanstack/react-query";
-import { sessionQueryKey, type QueryOpts } from "@/qc/queries/base";
-import type { InferResponseType } from "hono/client";
+
+export type QueryOpts<T = void> = {
+	headers?: Headers;
+	retry?: number;
+	enabled?: boolean;
+} & (T extends void ? {} : { query: T });
+
+export const sessionQueryKey = ["current-user", "session"] as const;
+
+export const sessionQueryOptions = (opts?: QueryOpts) =>
+	queryOptions({
+		queryKey: sessionQueryKey,
+		queryFn: async () => {
+			const { data, error } = await authClient.getSession(
+				opts?.headers
+					? {
+							fetchOptions: {
+								headers: Object.fromEntries(opts.headers ?? []),
+							},
+						}
+					: undefined,
+			);
+			if (error) return Promise.reject(error);
+			return data;
+		},
+		staleTime: 15 * 60 * 1000,
+	});
 
 export const activeOrganizationQueryKey = [
 	...sessionQueryKey,
@@ -74,36 +98,6 @@ export const currentMemberQueryOptions = (opts?: QueryOpts) =>
 		enabled: opts?.enabled,
 	});
 
-export const projectsBaseQueryKey = [
-	...activeOrganizationQueryKey,
-	"projects",
-] as const;
-
-export const projectsQueryKey = [...projectsBaseQueryKey, "list"] as const;
-
-export const projectsQueryOptions = (opts?: QueryOpts) =>
-	queryOptions({
-		queryKey: projectsQueryKey,
-		queryFn: async () => {
-			const { data, error } = await callRpc(
-				apiClient.projects.$get(
-					{},
-					{
-						headers: Object.fromEntries(opts?.headers ?? []),
-					},
-				),
-			);
-
-			if (error) return Promise.reject(error);
-
-			return data;
-		},
-		retry: opts?.retry,
-		enabled: opts?.enabled,
-	});
-
-export type Project = InferResponseType<typeof apiClient.projects.$get>[number];
-
 export const usersOrganizationsQueryKey = [
 	...sessionQueryKey,
 	"users-organizations-list",
@@ -124,31 +118,6 @@ export const usersOrganizationsQueryOptions = (opts?: QueryOpts) =>
 				...org,
 				metadata: getOrganizationMetadata(org.metadata),
 			}));
-		},
-		retry: opts?.retry,
-		enabled: opts?.enabled,
-	});
-
-// TODO: This might need to be fixed as it lists all invitations for the organization
-export const usersInvitationsListQueryKey = [
-	...sessionQueryKey,
-	"invitations-list",
-] as const;
-
-export const usersInvitationsListQueryOptions = (opts?: QueryOpts) =>
-	queryOptions({
-		queryKey: usersInvitationsListQueryKey,
-		queryFn: async () => {
-			const { data, error } = await callRpc(
-				apiClient.invitations.$get(
-					{},
-					{
-						headers: Object.fromEntries(opts?.headers ?? []),
-					},
-				),
-			);
-			if (error) return Promise.reject(error);
-			return data;
 		},
 		retry: opts?.retry,
 		enabled: opts?.enabled,

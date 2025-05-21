@@ -113,7 +113,7 @@ export function getProviderDefaults(
 	const shape = schema.shape;
 
 	// Generate default values based on schema types
-	const generateDefaultFromShape = (shape: z.ZodRawShape): any => {
+	const generateDefaultFromShape = (shape: z.ZodRawShape) => {
 		const defaults: Record<string, any> = {};
 
 		for (const [key, value] of Object.entries(shape)) {
@@ -148,7 +148,7 @@ export function getProviderDefaults(
 		providerType,
 		channelType,
 		credentials: generateDefaultFromShape(config.credentialsSchema.shape),
-	};
+	} as z.infer<ReturnType<typeof createProviderSchema>>;
 }
 
 // Export the CreateProviderInput type

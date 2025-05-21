@@ -1,4 +1,4 @@
-import { relations, type InferEnum } from "drizzle-orm";
+import { type InferSelectModel, relations, type InferEnum } from "drizzle-orm";
 import {
 	pgTable,
 	text,
@@ -73,6 +73,8 @@ export const providerCredential = pgTable(
 		index("provider_credential_organization_idx").on(t.organizationId),
 	],
 );
+
+export type NotificationProvider = InferSelectModel<typeof providerCredential>;
 
 /**
  * Defines relationships for organization-level provider credentials.

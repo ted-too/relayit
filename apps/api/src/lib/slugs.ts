@@ -70,3 +70,28 @@ export async function generateProviderSlug(
 	}
 	return slug;
 }
+
+/**
+ * Generates a unique slug for an organization based on a name.
+ */
+export async function generateOrganizationSlug(name: string): Promise<string> {
+	const baseSlug = slugify(name, { lower: true, strict: true });
+	let slug = baseSlug;
+	let counter = 1;
+
+	while (true) {
+		const [existing] = await db
+			.select({ count: count() })
+			.from(schema.organization)
+			.where(eq(schema.organization.slug, slug));
+
+		if (existing.count === 0) {
+			break; // Slug is unique
+		}
+
+		// If slug exists, append counter and try again
+		slug = `${baseSlug}-${counter}`;
+		counter++;
+	}
+	return slug;
+}

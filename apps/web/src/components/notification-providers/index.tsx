@@ -1,19 +1,16 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
-import { providersListQueryOptions } from "@/qc/queries/providers";
 import { EmailProvider } from "@/components/notification-providers/email";
 import { SmsProvider } from "./sms";
 import { WhatsappProvider } from "./whatsapp";
 import { DiscordProvider } from "./discord";
 import { NotificationProviderCard } from "@/components/notification-providers/card";
+import { trpc } from "@/trpc/client";
 
 export function ProvidersCardContent() {
-	const { data: rawProviders, isPending } = useQuery(
-		providersListQueryOptions(),
-	);
+	const { data: rawProviders, isPending } = trpc.providers.list.useQuery();
 
 	const providers = rawProviders ?? [];
 	return (

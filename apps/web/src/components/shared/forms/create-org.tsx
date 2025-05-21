@@ -11,13 +11,13 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { authClient } from "@/lib/auth-client";
-import { usersOrganizationsQueryKey } from "@/qc/queries/user";
+import { usersOrganizationsQueryKey } from "@/trpc/queries/auth";
 import {
 	type CreateOrganizationRequest,
 	createOrganizationSchema,
 } from "@repo/shared";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback } from "react";
 import { FormErrorMessage, useAppForm } from "@/components/ui/form";
 import {
 	ORGANIZATION_LOGO_GRADIENTS,
@@ -40,8 +40,9 @@ import {
 	RadioGroupIndicator,
 	RadioGroupItem,
 } from "@radix-ui/react-radio-group";
-import { apiClient, callRpc } from "@/lib/api";
 import { useStore } from "@tanstack/react-form";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
 
 interface CreateOrganizationFormProps {
 	onSuccess: (data: { id: string; slug: string }) => void;
@@ -53,8 +54,8 @@ export function CreateOrganizationForm({
 	submitWrapper,
 }: CreateOrganizationFormProps) {
 	const queryClient = useQueryClient();
-
-	const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
+	const { mutateAsync: generateSlugFn, isPending: isGeneratingSlug } =
+		trpc.misc.generateOrgSlug.useMutation();
 
 	const form = useAppForm({
 		defaultValues: {
@@ -89,20 +90,15 @@ export function CreateOrganizationForm({
 	const generateSlug = useCallback(async () => {
 		if (!name || name.length === 0) return;
 
-		setIsGeneratingSlug(true);
-		const { data } = await callRpc(
-			apiClient.projects["generate-slug"].$post({
-				json: {
-					name,
-				},
+		const { data } = await noThrow(
+			generateSlugFn({
+				name,
 			}),
 		);
 
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-
-		setIsGeneratingSlug(false);
 	}, [form, name]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
@@ -15,12 +15,11 @@ import {
 import { toast } from "sonner";
 import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import { useAppForm } from "@/components/ui/form";
-import { projectsQueryKey } from "@/qc/queries/user";
 import { PlusIcon } from "lucide-react";
-import { callRpc } from "@/lib/api";
-import { apiClient } from "@/lib/api";
 import { useStore } from "@tanstack/react-form";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
 
 interface CreateProjectFormProps {
 	onSuccess: (data: { id: string; slug: string }) => void;
@@ -32,7 +31,10 @@ export function CreateProjectForm({
 	onSuccess,
 }: CreateProjectFormProps) {
 	const queryClient = useQueryClient();
-	const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
+	const { mutateAsync: createProject, isPending } =
+		trpc.projects.create.useMutation();
+	const { mutateAsync: generateSlugFn, isPending: isGeneratingSlug } =
+		trpc.projects.generateSlug.useMutation();
 
 	const form = useAppForm({
 		defaultValues: {
@@ -43,17 +45,13 @@ export function CreateProjectForm({
 			onSubmit: createProjectSchema,
 		},
 		onSubmit: async ({ value }) => {
-			const { data, error } = await callRpc(
-				apiClient.projects.$post({
-					json: value,
-				}),
-			);
+			const { data, error } = await noThrow(createProject(value));
 
 			if (error) return toast.error(error?.message);
 
-			await queryClient.invalidateQueries({
-				queryKey: projectsQueryKey,
-			});
+			// await queryClient.invalidateQueries({
+			// 	queryKey: projectsQueryKey,
+			// });
 
 			if (onSuccess) onSuccess(data as { id: string; slug: string });
 		},
@@ -64,20 +62,15 @@ export function CreateProjectForm({
 	const generateSlug = useCallback(async () => {
 		if (!name || name.length === 0) return;
 
-		setIsGeneratingSlug(true);
-		const { data } = await callRpc(
-			apiClient.projects["generate-slug"].$post({
-				json: {
-					name,
-				},
+		const { data } = await noThrow(
+			generateSlugFn({
+				name,
 			}),
 		);
 
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-
-		setIsGeneratingSlug(false);
 	}, [form, name]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
@@ -151,10 +144,14 @@ export function CreateProjectDialog({
 	children?: React.ReactNode;
 }) {
 	const router = useRouter();
+	const pathname = usePathname();
+
+	const [orgSlug] = pathname.split("/").slice(2);
+
 	const onSuccess =
 		onSuccessProp ??
 		(({ slug }) => {
-			router.push(`/~/${slug}`);
+			router.push(`/~/${orgSlug}/${slug}`);
 		});
 
 	return (

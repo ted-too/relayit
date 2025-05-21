@@ -1,121 +1,132 @@
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import type { Context } from "@repo/api/index";
+import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
+import { TRPCError } from "@trpc/server";
 import {
 	createWebhookEndpointSchema,
 	updateWebhookEndpointSchema,
 } from "@repo/shared";
-import { db, schema } from "@repo/db";
-import { eq, and, desc } from "drizzle-orm";
-import { HTTPException } from "hono/http-exception";
-import { encrypt, redactedString } from "@repo/db";
-import { verifyProject } from "@repo/api/lib/middleware";
+import { db, schema, encrypt, redactedString } from "@repo/db";
+import { z } from "zod";
+import { desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { and } from "drizzle-orm";
 
-export const webhookRoutes = new Hono<Context>()
-	// POST /webhooks/:projectId - Create new webhook endpoint for the project in context
-	.post(
-		"/:projectId",
-		verifyProject,
-		zValidator("json", createWebhookEndpointSchema),
-		async (c) => {
-			const projectId = c.req.param("projectId"); // Get projectId from the path param
-			const validatedData = c.req.valid("json");
+export const webhookRouter = router({
+	create: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(createWebhookEndpointSchema)
+		.mutation(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const validatedData = input;
 
-			let secret = null;
+			let secretToStore: string | null = null;
 			if (validatedData.secret) {
 				const encryptedSecret = encrypt(validatedData.secret);
 				if (encryptedSecret.error) {
-					throw new HTTPException(500, {
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
 						message: "Failed to encrypt secret",
 					});
 				}
-				secret = encryptedSecret.data;
+				secretToStore = encryptedSecret.data;
 			}
 
 			const [newWebhook] = await db
 				.insert(schema.webhookEndpoint)
 				.values({
-					projectId: projectId, // Use projectId
+					projectId: project.id,
 					url: validatedData.url,
-					secret,
+					secret: secretToStore,
 					eventTypes: validatedData.eventTypes,
 					isActive: validatedData.isActive,
 				})
 				.returning();
 
+			if (!newWebhook) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to create webhook endpoint",
+				});
+			}
+
 			const safeWebhook = {
 				...newWebhook,
-				secret: secret ? redactedString : null,
+				secret: newWebhook.secret ? redactedString : null,
 			};
 
-			return c.json(safeWebhook, 201);
-		},
-	)
-	// GET /webhooks/:projectId - List webhooks for the project in context
-	.get("/:projectId", verifyProject, async (c) => {
-		const projectId = c.req.param("projectId");
+			return safeWebhook;
+		}),
+	list: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(z.object({}))
+		.query(async ({ ctx }) => {
+			const { project } = ctx;
 
-		const webhooks = await db.query.webhookEndpoint.findMany({
-			where: eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
-			orderBy: desc(schema.webhookEndpoint.createdAt),
-		});
+			const webhooks = await db.query.webhookEndpoint.findMany({
+				where: eq(schema.webhookEndpoint.projectId, project.id),
+				orderBy: desc(schema.webhookEndpoint.createdAt),
+			});
 
-		const safeWebhooks = webhooks.map((webhook) => ({
-			...webhook,
-			secret: webhook.secret ? redactedString : null,
-		}));
+			const safeWebhooks = webhooks.map((webhook) => ({
+				...webhook,
+				secret: webhook.secret ? redactedString : null,
+			}));
 
-		return c.json(safeWebhooks);
-	})
-	// GET /webhooks/:projectId/:webhookId - Get specific webhook for the project
-	.get("/:projectId/:webhookId", verifyProject, async (c) => {
-		const projectId = c.req.param("projectId");
-		const webhookId = c.req.param("webhookId");
+			return safeWebhooks;
+		}),
+	getById: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(z.object({ webhookId: z.string() }))
+		.query(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { webhookId } = input;
 
-		const webhook = await db.query.webhookEndpoint.findFirst({
-			where: and(
-				eq(schema.webhookEndpoint.id, webhookId),
-				eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
-			),
-		});
-
-		if (!webhook) {
-			throw new HTTPException(404, { message: "Webhook endpoint not found" });
-		}
-
-		const safeWebhook = {
-			...webhook,
-			secret: webhook.secret ? redactedString : null,
-		};
-
-		return c.json(safeWebhook);
-	})
-	// PATCH /webhooks/:projectId/:webhookId - Update webhook for the project
-	.patch(
-		"/:projectId/:webhookId",
-		verifyProject,
-		zValidator("json", updateWebhookEndpointSchema),
-		async (c) => {
-			const projectId = c.req.param("projectId");
-			const webhookId = c.req.param("webhookId");
-			const validatedData = c.req.valid("json");
-
-			// First check if the webhook exists and belongs to the project
-			const existingWebhook = await db.query.webhookEndpoint.findFirst({
-				columns: { id: true }, // Only need id to confirm existence
+			const webhook = await db.query.webhookEndpoint.findFirst({
 				where: and(
 					eq(schema.webhookEndpoint.id, webhookId),
-					eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
+					eq(schema.webhookEndpoint.projectId, project.id),
+				),
+			});
+
+			if (!webhook) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Webhook endpoint not found",
+				});
+			}
+
+			const safeWebhook = {
+				...webhook,
+				secret: webhook.secret ? redactedString : null,
+			};
+
+			return safeWebhook;
+		}),
+	update: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(
+			z
+				.object({ webhookId: z.string() })
+				.merge(updateWebhookEndpointSchema),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { webhookId, ...validatedData } = input;
+
+			const existingWebhook = await db.query.webhookEndpoint.findFirst({
+				columns: { id: true },
+				where: and(
+					eq(schema.webhookEndpoint.id, webhookId),
+					eq(schema.webhookEndpoint.projectId, project.id),
 				),
 			});
 
 			if (!existingWebhook) {
-				throw new HTTPException(404, {
+				throw new TRPCError({
+					code: "NOT_FOUND",
 					message: "Webhook endpoint not found for this project",
 				});
 			}
 
-			// Prepare update payload
 			const updatePayload: Partial<typeof schema.webhookEndpoint.$inferInsert> =
 				{};
 			if (validatedData.url) updatePayload.url = validatedData.url;
@@ -123,44 +134,52 @@ export const webhookRoutes = new Hono<Context>()
 				updatePayload.eventTypes = validatedData.eventTypes;
 			if (validatedData.isActive !== undefined)
 				updatePayload.isActive = validatedData.isActive;
+
 			if (validatedData.secret !== undefined) {
-				const encryptedSecret = encrypt(validatedData.secret);
-				if (encryptedSecret.error) {
-					throw new HTTPException(500, {
-						message: "Failed to encrypt secret",
-					});
+				if (validatedData.secret === null || validatedData.secret === "") {
+					updatePayload.secret = null;
+				} else {
+					const encryptedSecret = encrypt(validatedData.secret);
+					if (encryptedSecret.error) {
+						throw new TRPCError({
+							code: "INTERNAL_SERVER_ERROR",
+							message: "Failed to encrypt secret",
+						});
+					}
+					updatePayload.secret = encryptedSecret.data;
 				}
-				updatePayload.secret = encryptedSecret.data;
 			}
 
 			if (Object.keys(updatePayload).length === 0) {
-				// If no fields to update, return the existing (but safe) webhook data
-				// Fetch full existing data if we need to return it
 				const fullExisting = await db.query.webhookEndpoint.findFirst({
 					where: eq(schema.webhookEndpoint.id, webhookId),
 				});
-				if (!fullExisting)
-					throw new HTTPException(404, { message: "Webhook not found" }); // Should not happen
-				return c.json({
+				if (!fullExisting) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: "Webhook not found",
+					});
+				}
+				return {
 					...fullExisting,
 					secret: fullExisting.secret ? redactedString : null,
-				});
+				};
 			}
 
 			const [updatedWebhook] = await db
 				.update(schema.webhookEndpoint)
 				.set(updatePayload)
 				.where(
-					// Redundant check, but safe
 					and(
 						eq(schema.webhookEndpoint.id, webhookId),
-						eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
+						eq(schema.webhookEndpoint.projectId, project.id),
 					),
 				)
 				.returning();
 
 			if (!updatedWebhook) {
-				throw new HTTPException(404, {
+				throw new TRPCError({
+					code: "NOT_FOUND",
 					message: "Webhook endpoint not found during update",
 				});
 			}
@@ -170,27 +189,32 @@ export const webhookRoutes = new Hono<Context>()
 				secret: updatedWebhook.secret ? redactedString : null,
 			};
 
-			return c.json(safeWebhook);
-		},
-	)
-	// DELETE /webhooks/:projectId/:webhookId - Delete webhook for the project
-	.delete("/:projectId/:webhookId", verifyProject, async (c) => {
-		const projectId = c.req.param("projectId");
-		const webhookId = c.req.param("webhookId");
+			return safeWebhook;
+		}),
+	delete: authdProcedureWithOrg
+		.concat(verifyProject)
+		.input(z.object({ webhookId: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			const { project } = ctx;
+			const { webhookId } = input;
 
-		const { rowCount } = await db.delete(schema.webhookEndpoint).where(
-			and(
-				eq(schema.webhookEndpoint.id, webhookId),
-				eq(schema.webhookEndpoint.projectId, projectId), // Use projectId
-			),
-		);
+			const { rowCount } = await db
+				.delete(schema.webhookEndpoint)
+				.where(
+					and(
+						eq(schema.webhookEndpoint.id, webhookId),
+						eq(schema.webhookEndpoint.projectId, project.id),
+					),
+				);
 
-		if (rowCount === 0) {
-			throw new HTTPException(404, {
-				message:
-					"Webhook endpoint not found or already deleted for this project",
-			});
-		}
+			if (rowCount === 0) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message:
+						"Webhook endpoint not found or already deleted for this project",
+				});
+			}
 
-		return c.json({ message: "Webhook deleted successfully" });
-	});
+			return { message: "Webhook deleted successfully" };
+		}),
+});

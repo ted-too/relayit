@@ -1,6 +1,6 @@
 "use client";
 
-import type { NotificationProvider } from "@/qc/queries/providers";
+import type { NotificationProvider } from "@repo/db";
 import { Card } from "@/components/ui/card";
 import {
 	Email,

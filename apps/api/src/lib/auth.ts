@@ -4,9 +4,9 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, organization } from "better-auth/plugins";
 import { passkey } from "better-auth/plugins/passkey";
 import { emailHarmony } from "better-auth-harmony";
-import slugify from "slugify";
-import { count, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { redis } from "bun";
+import { generateOrganizationSlug } from "./slugs";
 
 /**
  * Sets up initial organization, membership and project for a new user
@@ -25,21 +25,9 @@ export async function initialUserSetup(userId: string) {
 	}
 
 	const name = `${user.name.split(" ")[0]}'s Organization`;
-	let slug = slugify(user.email.split("@")[0], {
-		lower: true,
-		strict: true,
-	});
+	const slug = await generateOrganizationSlug(name);
 
 	return await db.transaction(async (tx) => {
-		const [existing] = await tx
-			.select({ count: count() })
-			.from(schema.organization)
-			.where(eq(schema.organization.slug, slug));
-
-		if (existing.count > 0) {
-			slug = `${slug}-${existing.count + 1}`;
-		}
-
 		const [org] = await tx
 			.insert(schema.organization)
 			.values({

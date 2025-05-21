@@ -1,9 +1,9 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { getQueryClient } from "@/qc/client";
+import { getQueryClient } from "@/trpc/server";
 import {
 	currentMemberQueryOptions,
 	activeOrganizationQueryOptions,
-} from "@/qc/queries/user";
+} from "@/trpc/queries/auth";
 import { cookies, headers as headersFn } from "next/headers";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import {

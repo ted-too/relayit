@@ -39,9 +39,8 @@ import {
 import { cn } from "@/lib/utils";
 import {
 	activeOrganizationQueryKey,
-	usersInvitationsListQueryOptions,
 	usersOrganizationsQueryOptions,
-} from "@/qc/queries/user";
+} from "@/trpc/queries/auth";
 import {
 	authClient,
 	type Organization,
@@ -82,6 +81,7 @@ import {
 } from "@/components/ui/dialog";
 import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import { Skeleton } from "@/components/ui/skeleton";
+import { trpc } from "@/trpc/client";
 
 /**
  * Core types for sidebar navigation
@@ -244,7 +244,7 @@ function SidebarLogo({
 			>
 				<SidebarMenuItem className="w-full">
 					<DropdownMenu>
-						<DropdownMenuTrigger disabled={isPending} asChild>
+						<DropdownMenuTrigger disabled={isPending} asChild suppressHydrationWarning>
 							{isPending ? (
 								<Skeleton
 									className={cn(
@@ -459,9 +459,8 @@ function NavItemComponent({
 }
 
 function SidebarNotifications() {
-	const { data: invitations, refetch: refetchInvitations } = useQuery(
-		usersInvitationsListQueryOptions(),
-	);
+	const { data: invitations, refetch: refetchInvitations } =
+		trpc.misc.listInvitations.useQuery();
 
 	const { refetch: refetchUserOrgs } = useQuery(
 		usersOrganizationsQueryOptions(),

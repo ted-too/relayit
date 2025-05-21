@@ -1,6 +1,6 @@
 "use client";
 
-import { apiKeysListQueryOptions } from "@/qc/queries/user";
+import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { CardContent } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { ApiKeyCard } from "./key";

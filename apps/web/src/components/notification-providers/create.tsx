@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useState, type ReactElement } from "react";
+import { Fragment, useCallback, type ReactElement } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -11,15 +11,12 @@ import {
 	PROVIDER_CONFIG,
 } from "@repo/shared";
 import { useAppForm } from "@/components/ui/form";
-import {
-	type NotificationProvider,
-	providersListQueryKey,
-} from "@/qc/queries/providers";
-import { apiClient, type ErrorResponse } from "@/lib/api";
+import type { NotificationProvider } from "@repo/db";
 import { useStore } from "@tanstack/react-form";
-import { callRpc } from "@/lib/api";
 import { z } from "zod";
 import { getChangedFields } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
+import { type ErrorResponse, noThrow } from "@/trpc/no-throw";
 
 interface CreateProviderFormProps {
 	submitWrapper?: typeof DialogFooter;
@@ -35,7 +32,9 @@ export function CreateProviderForm({
 	initialData,
 }: CreateProviderFormProps) {
 	const queryClient = useQueryClient();
-	const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
+	const { mutateAsync: createProvider } = trpc.providers.create.useMutation();
+	const { mutateAsync: generateSlugFn, isPending: isGeneratingSlug } =
+		trpc.providers.generateSlug.useMutation();
 
 	// Get the default provider type for this channel
 	const defaultProviderType = PROVIDER_CONFIG[channelType][0].type;
@@ -71,28 +70,20 @@ export function CreateProviderForm({
 
 			if (initialData) {
 				error = (
-					await callRpc(
-						apiClient.providers[":providerId"].$patch({
-							param: { providerId: initialData.id },
-							json: getChangedFields(value, defaultValues),
-						}),
+					await noThrow(
+						// @ts-expect-error - TODO: fix this
+						createProvider(getChangedFields(value, defaultValues)),
 					)
 				).error;
 			} else {
-				error = (
-					await callRpc(
-						apiClient.providers.$post({
-							json: value,
-						}),
-					)
-				).error;
+				error = (await noThrow(createProvider(value))).error;
 			}
 
 			if (error) return toast.error(error?.message);
 
-			await queryClient.invalidateQueries({
-				queryKey: providersListQueryKey,
-			});
+			// await queryClient.invalidateQueries({
+			// 	queryKey: providersListQueryKey,
+			// });
 
 			toast.success(
 				initialData
@@ -109,20 +100,15 @@ export function CreateProviderForm({
 	const generateSlug = useCallback(async () => {
 		if (!name || name.length === 0) return;
 
-		setIsGeneratingSlug(true);
-		const { data } = await callRpc(
-			apiClient.providers["generate-slug"].$post({
-				json: {
-					name,
-				},
+		const { data } = await noThrow(
+			generateSlugFn({
+				name,
 			}),
 		);
 
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-
-		setIsGeneratingSlug(false);
 	}, [form, name]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
@@ -230,7 +216,7 @@ export function CreateProviderForm({
 							return (
 								<form.AppField
 									key={path}
-									name={`credentials.${path}`}
+									name={`credentials.${path}` as any}
 									children={(field) => (
 										<field.SelectField
 											label={path
@@ -261,7 +247,7 @@ export function CreateProviderForm({
 						return (
 							<form.AppField
 								key={path}
-								name={`credentials.${path}`}
+								name={`credentials.${path}` as any}
 								children={(field) => (
 									<field.TextField
 										label={path
