@@ -3,7 +3,6 @@ import { z } from "zod";
 import { and, eq, desc, type SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
-	baseProjectProviderAssociationSchema,
 	createProjectProviderSchema,
 	updateProjectProviderSchema,
 	type UpdateProjectProviderConfig,
@@ -20,11 +19,11 @@ export const projectProviderAssociationRouter = router({
 				.object({
 					providerCredentialId: z.string(),
 				})
-				.merge(baseProjectProviderAssociationSchema.passthrough()),
+				.passthrough(),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { organization, project } = ctx;
-			const { providerCredentialId, ...baseConfig } = input;
+			const { providerCredentialId, projectId: _, ...baseConfig } = input;
 
 			const orgProvider = await db.query.providerCredential.findFirst({
 				columns: { id: true, channelType: true, providerType: true },
@@ -47,6 +46,8 @@ export const projectProviderAssociationRouter = router({
 				orgProvider.providerType,
 			);
 
+			console.log(baseConfig);
+
 			const validatedDataResult = specificProviderSchema.safeParse(baseConfig);
 
 			if (validatedDataResult.error) {
@@ -63,7 +64,7 @@ export const projectProviderAssociationRouter = router({
 					.values({
 						projectId: project.id,
 						providerCredentialId,
-						isActive: validatedDataResult.data.isActive,
+						priority: validatedDataResult.data.priority,
 						config: validatedDataResult.data.config,
 					})
 					.returning();
@@ -92,22 +93,12 @@ export const projectProviderAssociationRouter = router({
 		}),
 	list: authdProcedureWithOrg
 		.concat(verifyProject)
-		.input(
-			z.object({
-				isActive: z.boolean().optional(),
-			}),
-		)
 		.query(async ({ ctx, input }) => {
 			const { project } = ctx;
-			const { isActive } = input;
 
 			const filters: SQL[] = [
 				eq(schema.projectProviderAssociation.projectId, project.id),
 			];
-
-			if (isActive !== undefined) {
-				filters.push(eq(schema.projectProviderAssociation.isActive, isActive));
-			}
 
 			const associations = await db.query.projectProviderAssociation.findMany({
 				where: and(...filters),
@@ -125,16 +116,10 @@ export const projectProviderAssociationRouter = router({
 		}),
 	update: authdProcedureWithOrg
 		.concat(verifyProject)
-		.input(
-			z
-				.object({
-					associationId: z.string(),
-				})
-				.merge(baseProjectProviderAssociationSchema.partial().passthrough()),
-		)
+		.input(z.object({ associationId: z.string() }).passthrough())
 		.mutation(async ({ ctx, input }) => {
 			const { project } = ctx;
-			const { associationId, ...validatedData } = input;
+			const { associationId, projectId: _, ...validatedData } = input;
 
 			if (Object.keys(validatedData).length === 0) {
 				throw new TRPCError({
@@ -180,8 +165,8 @@ export const projectProviderAssociationRouter = router({
 			}
 
 			const updatePayload: Partial<UpdateProjectProviderConfig> = {};
-			if (validatedDataResult.data.isActive !== undefined) {
-				updatePayload.isActive = validatedDataResult.data.isActive;
+			if (validatedDataResult.data.priority !== undefined) {
+				updatePayload.priority = validatedDataResult.data.priority;
 			}
 			if (validatedDataResult.data.config !== undefined) {
 				updatePayload.config = association.config

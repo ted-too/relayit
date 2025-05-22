@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
 	Dialog,
@@ -20,38 +19,62 @@ import { useStore } from "@tanstack/react-form";
 import { usePathname, useRouter } from "next/navigation";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
-
+import type { Project } from "@repo/db";
+import { getChangedFields } from "@/lib/utils";
+import {
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 interface CreateProjectFormProps {
-	onSuccess: (data: { id: string; slug: string }) => void;
+	onSuccess?: (data: { id: string; slug: string }) => void;
 	submitWrapper?: typeof DialogFooter;
+	initialData?: Project;
 }
 
 export function CreateProjectForm({
 	submitWrapper,
 	onSuccess,
+	initialData,
 }: CreateProjectFormProps) {
-	const queryClient = useQueryClient();
-	const { mutateAsync: createProject, isPending } =
-		trpc.projects.create.useMutation();
+	const utils = trpc.useUtils();
+	const { mutateAsync: createProject } = trpc.projects.create.useMutation({
+		onSuccess: () => {
+			utils.projects.list.invalidate();
+		},
+	});
+	const { mutateAsync: updateProject } = trpc.projects.update.useMutation({
+		onSuccess: () => {
+			utils.projects.list.invalidate();
+		},
+	});
 	const { mutateAsync: generateSlugFn, isPending: isGeneratingSlug } =
 		trpc.projects.generateSlug.useMutation();
 
 	const form = useAppForm({
 		defaultValues: {
-			name: "",
-			slug: "",
+			name: initialData?.name ?? "",
+			slug: initialData?.slug ?? "",
+			// TODO: Add metadata
 		} as CreateProjectInput,
 		validators: {
 			onSubmit: createProjectSchema,
 		},
 		onSubmit: async ({ value }) => {
-			const { data, error } = await noThrow(createProject(value));
+			const { data, error } = await noThrow(
+				initialData
+					? updateProject({
+							...getChangedFields(value, initialData),
+							projectId: initialData.id,
+						})
+					: createProject(value),
+			);
 
 			if (error) return toast.error(error?.message);
-
-			// await queryClient.invalidateQueries({
-			// 	queryKey: projectsQueryKey,
-			// });
 
 			if (onSuccess) onSuccess(data as { id: string; slug: string });
 		},
@@ -62,6 +85,8 @@ export function CreateProjectForm({
 	const generateSlug = useCallback(async () => {
 		if (!name || name.length === 0) return;
 
+		if (initialData?.slug) return;
+
 		const { data } = await noThrow(
 			generateSlugFn({
 				name,
@@ -71,7 +96,7 @@ export function CreateProjectForm({
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-	}, [form, name]);
+	}, [form, name, initialData?.slug]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
 
@@ -117,7 +142,7 @@ export function CreateProjectForm({
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
 					<form.SubmitButton className="w-full mt-6" size="lg">
-						Create Project
+						{initialData ? "Update Project" : "Create Project"}
 					</form.SubmitButton>
 				</form.AppForm>
 			</SubmitWrapper>
@@ -178,5 +203,56 @@ export function CreateProjectDialog({
 				<CreateProjectForm submitWrapper={DialogFooter} onSuccess={onSuccess} />
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+export function DeleteProjectDialogContent({
+	project,
+	onSuccess,
+}: {
+	project: Project;
+	onSuccess?: (() => void) | "redirect";
+}) {
+	const router = useRouter();
+	const pathname = usePathname();
+
+	const [orgSlug] = pathname.split("/").slice(2);
+
+	const utils = trpc.useUtils();
+	const { mutateAsync: deleteProject } = trpc.projects.delete.useMutation({
+		onSuccess: () => {
+			utils.projects.list.invalidate();
+		},
+	});
+
+	const handleDelete = async () => {
+		const { error } = await noThrow(deleteProject({ projectId: project.id }));
+		if (error) return toast.error(error?.message);
+		if (onSuccess === "redirect") {
+			router.push(`/~/${orgSlug}`);
+		} else if (onSuccess) {
+			onSuccess();
+		}
+	};
+
+	return (
+		<AlertDialogContent
+			onClick={(e) => e.stopPropagation()}
+			onKeyDown={(e) => e.stopPropagation()}
+		>
+			<AlertDialogHeader>
+				<AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+				<AlertDialogDescription>
+					This action cannot be undone. This will permanently delete `
+					{project.name}` from your organization.
+				</AlertDialogDescription>
+			</AlertDialogHeader>
+			<AlertDialogFooter>
+				<AlertDialogCancel>Cancel</AlertDialogCancel>
+				<AlertDialogAction variant="destructive" onClick={handleDelete}>
+					Delete
+				</AlertDialogAction>
+			</AlertDialogFooter>
+		</AlertDialogContent>
 	);
 }

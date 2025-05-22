@@ -104,7 +104,7 @@ export function TextField(
 	const field = useFieldContext<string>();
 	const Component = textarea ? Textarea : Input;
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>
@@ -149,7 +149,7 @@ export function SlugField(
 	} = props;
 	const field = useFieldContext<string>();
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>
@@ -243,7 +243,7 @@ export function NumberField(
 	} = props;
 	const field = useFieldContext<number>();
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>
@@ -358,7 +358,7 @@ export function SelectField(props: SelectFieldProps) {
 	} = props;
 	const field = useFieldContext<string>();
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>
@@ -416,7 +416,7 @@ export function MultiSelectField(props: MultiSelectFieldProps) {
 		field.state.value?.includes(option.value),
 	);
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>
@@ -460,7 +460,7 @@ export function MultipleCheckboxField(props: MultipleCheckboxFieldProps) {
 	const field = useFieldContext<string[]>();
 
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<div className="flex items-center gap-4">
 				<Label htmlFor={field.name} className={className.label}>
 					{label}
@@ -591,7 +591,7 @@ export function DatePickerSingleField(
 	const Component =
 		variant === "default" ? DatePickerSingle : DatePickerSingeWithMonths;
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label
 				htmlFor={field.name}
 				className={className.label}
@@ -621,7 +621,7 @@ export function DatePickerRangeField(props: DatePickerFieldProps) {
 	const { label, className = {}, dateDisabled, required } = props;
 	const field = useFieldContext<DateRange | undefined>();
 	return (
-		<div className={cn("grid gap-2", className.root)}>
+		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label htmlFor={field.name} className={className.label}>
 				{label}
 			</Label>

@@ -4,6 +4,7 @@ import {
 	getProviderConfig,
 	type ProviderType,
 } from "../constants/providers";
+import { generateDefaultFromShape } from "./providers";
 
 export const sesProjectProviderConfigSchema = z.object({
 	senderEmail: z.string(),
@@ -38,7 +39,7 @@ export function isSNSProjectProviderConfig(
 }
 
 export const baseProjectProviderAssociationSchema = z.object({
-	isActive: z.boolean().optional(),
+	priority: z.number().default(0),
 });
 
 export function createProjectProviderSchema(
@@ -58,6 +59,26 @@ export function createProjectProviderSchema(
 		.strict();
 }
 
+export function getProjectProviderDefaults(
+	channelType: ChannelType,
+	providerType: ProviderType,
+) {
+	const config = getProviderConfig(channelType, providerType);
+	if (!config) {
+		throw new Error(
+			`No provider configuration found for channel: ${channelType} and type: ${providerType}`,
+		);
+	}
+
+	// Get the schema for this provider
+	const schema = createProjectProviderSchema(channelType, providerType);
+	const shape = schema.shape;
+
+	return generateDefaultFromShape(shape) as z.infer<
+		ReturnType<typeof createProjectProviderSchema>
+	>;
+}
+
 export function updateProjectProviderSchema(
 	channelType: ChannelType,
 	providerType: ProviderType,
@@ -69,7 +90,7 @@ export function updateProjectProviderSchema(
 			`Invalid provider configuration: ${channelType}/${providerType}`,
 		);
 
-	// Get the base schema without one-time fields
+	// This usually should not have one-time fields
 	const baseUpdateSchema = baseProjectProviderAssociationSchema.partial();
 
 	return baseUpdateSchema

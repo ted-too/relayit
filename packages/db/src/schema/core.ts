@@ -8,6 +8,7 @@ import {
 	uniqueIndex,
 	index,
 	jsonb,
+	integer,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import { project, apikey, organization } from "@repo/db/schema/auth";
@@ -61,7 +62,7 @@ export const providerCredential = pgTable(
 		providerType: providerTypeEnum("provider_type").notNull(),
 		name: text("name").notNull(),
 		credentials: jsonb("credentials").$type<ProviderCredentials>().notNull(),
-		isActive: boolean("is_active").default(true).notNull(),
+		orgDefault: boolean("org_default").notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
@@ -69,6 +70,12 @@ export const providerCredential = pgTable(
 		uniqueIndex("provider_credential_org_slug_unique_idx").on(
 			t.organizationId,
 			t.slug,
+		),
+		uniqueIndex("provider_credential_org_default_unique_idx").on(
+			t.organizationId,
+			t.channelType,
+			t.providerType,
+			t.orgDefault,
 		),
 		index("provider_credential_organization_idx").on(t.organizationId),
 	],
@@ -108,7 +115,7 @@ export const projectProviderAssociation = pgTable(
 			.notNull()
 			.references(() => providerCredential.id, { onDelete: "cascade" }),
 		config: jsonb("config").$type<ProjectProviderConfig>(),
-		isActive: boolean("is_active").default(true).notNull(),
+		priority: integer("priority").notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
@@ -121,6 +128,10 @@ export const projectProviderAssociation = pgTable(
 		index("ppa_provider_idx").on(t.providerCredentialId),
 	],
 );
+
+export type ProjectProviderAssociation = InferSelectModel<
+	typeof projectProviderAssociation
+>;
 
 /**
  * Defines relationships for the project-provider association table.

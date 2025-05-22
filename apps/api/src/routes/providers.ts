@@ -81,6 +81,29 @@ export const providerRouter = router({
 				});
 			}
 
+			// Check if there's already a default provider for this channel/type in the org
+			const existingDefault = await db
+				.select({ id: schema.providerCredential.id })
+				.from(schema.providerCredential)
+				.where(
+					and(
+						eq(schema.providerCredential.organizationId, organization.id),
+						eq(
+							schema.providerCredential.channelType,
+							validatedData.channelType,
+						),
+						eq(
+							schema.providerCredential.providerType,
+							validatedData.providerType,
+						),
+						eq(schema.providerCredential.orgDefault, true),
+					),
+				)
+				.limit(1);
+
+			// Set orgDefault to false if one already exists
+			const orgDefault = existingDefault.length === 0;
+
 			const [newCredential] = await db
 				.insert(schema.providerCredential)
 				.values({
@@ -90,7 +113,7 @@ export const providerRouter = router({
 					providerType: validatedData.providerType,
 					name: validatedData.name,
 					credentials: encryptedCredentialsResult.data,
-					isActive: validatedData.isActive,
+					orgDefault,
 				})
 				.returning();
 
@@ -199,9 +222,6 @@ export const providerRouter = router({
 			if (validatedData.name) {
 				updatePayload.name = validatedData.name;
 			}
-			if (validatedData.isActive !== undefined) {
-				updatePayload.isActive = validatedData.isActive;
-			}
 
 			if (
 				validatedData.slug &&
@@ -270,6 +290,62 @@ export const providerRouter = router({
 			};
 
 			return safeCredential;
+		}),
+	setDefault: authdProcedureWithOrg
+		.input(z.object({ providerId: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			const { organization } = ctx;
+			const { providerId } = input;
+
+			// Get the existing provider to verify it exists and get its channel type
+			const existingProvider = await db.query.providerCredential.findFirst({
+				where: and(
+					eq(schema.providerCredential.id, providerId),
+					eq(schema.providerCredential.organizationId, organization.id),
+				),
+			});
+
+			if (!existingProvider) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message:
+						"Provider credential not found or you do not have permission to modify it",
+				});
+			}
+
+			// Remove default from any existing default provider of same channel type
+			await db
+				.update(schema.providerCredential)
+				.set({ orgDefault: false })
+				.where(
+					and(
+						eq(schema.providerCredential.organizationId, organization.id),
+						eq(
+							schema.providerCredential.channelType,
+							existingProvider.channelType,
+						),
+						eq(schema.providerCredential.orgDefault, true),
+					),
+				);
+
+			// Set the new provider as default
+			const [updatedProvider] = await db
+				.update(schema.providerCredential)
+				.set({ orgDefault: true })
+				.where(eq(schema.providerCredential.id, providerId))
+				.returning();
+
+			if (!updatedProvider) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to update provider",
+				});
+			}
+
+			return {
+				...updatedProvider,
+				credentials: getSafeEncryptedRecord(updatedProvider.credentials),
+			};
 		}),
 	delete: authdProcedureWithOrg
 		.input(z.object({ providerId: z.string() }))

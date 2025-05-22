@@ -1,5 +1,3 @@
-"use client";
-
 import {
 	Dialog,
 	DialogContent,
@@ -12,31 +10,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { MessageText } from "iconsax-react";
 import { CreateProviderForm } from "@/components/notification-providers/create";
-import { useState } from "react";
+import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
-export function SmsProvider() {
-	const [isOpen, setIsOpen] = useState(false);
-
+export function SmsProvider({ configured }: NotificationProviderButtonProps) {
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog>
 			<DialogTrigger asChild>
-				<Button variant="secondary" size="lg" className="font-semibold">
-					<MessageText variant="Bold" color="currentColor" />
-					<span>SMS</span>
-				</Button>
+				<ButtonWrapper configured={configured}>
+					<Button variant="secondary" size="lg" className="font-semibold">
+						<MessageText variant="Bold" color="currentColor" />
+						<span>SMS</span>
+					</Button>
+				</ButtonWrapper>
 			</DialogTrigger>
-			<DialogContent>
+			<DialogContent className="sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>SMS</DialogTitle>
 					<DialogDescription>
 						Create a new SMS provider to send text messages to your users.
 					</DialogDescription>
 				</DialogHeader>
-				<CreateProviderForm
-					submitWrapper={DialogFooter}
-					onSuccess={() => setIsOpen(false)}
-					channelType="sms"
-				/>
+				<CreateProviderForm submitWrapper={DialogFooter} channelType="sms" />
 			</DialogContent>
 		</Dialog>
 	);

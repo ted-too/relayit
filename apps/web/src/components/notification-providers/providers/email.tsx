@@ -1,5 +1,3 @@
-"use client";
-
 import {
 	Dialog,
 	DialogContent,
@@ -12,31 +10,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { Email } from "@/components/icons";
 import { CreateProviderForm } from "@/components/notification-providers/create";
-import { useState } from "react";
+import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
-export function EmailProvider() {
-	const [isOpen, setIsOpen] = useState(false);
-
+export function EmailProvider({ configured }: NotificationProviderButtonProps) {
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog>
 			<DialogTrigger asChild>
-				<Button variant="secondary" size="lg" className="font-semibold">
-					<Email />
-					<span>Email</span>
-				</Button>
+				<ButtonWrapper configured={configured}>
+					<Button variant="secondary" size="lg" className="font-semibold">
+						<Email />
+						<span>Email</span>
+					</Button>
+				</ButtonWrapper>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-xl">
+			<DialogContent className="sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Email</DialogTitle>
 					<DialogDescription>
 						Create a new email provider to send emails to your users.
 					</DialogDescription>
 				</DialogHeader>
-				<CreateProviderForm
-					submitWrapper={DialogFooter}
-					onSuccess={() => setIsOpen(false)}
-					channelType="email"
-				/>
+				<CreateProviderForm submitWrapper={DialogFooter} channelType="email" />
 			</DialogContent>
 		</Dialog>
 	);

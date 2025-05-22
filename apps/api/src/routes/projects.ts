@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
 import { TRPCError } from "@trpc/server";
+import type { ProjectDetails } from "@repo/db";
 
 export const projectRouter = router({
 	list: authdProcedureWithOrg.query(async ({ ctx }) => {
@@ -12,6 +13,13 @@ export const projectRouter = router({
 
 		const projects = await db.query.project.findMany({
 			where: eq(schema.project.organizationId, organization.id),
+			with: {
+				providerAssociations: {
+					columns: {
+						id: true,
+					},
+				},
+			},
 		});
 
 		return projects;
@@ -19,7 +27,61 @@ export const projectRouter = router({
 	getById: authdProcedureWithOrg
 		.concat(verifyProject)
 		.query(async ({ ctx }) => {
-			return ctx.project;
+			const project = await db.query.project.findFirst({
+				where: eq(schema.project.id, ctx.project.id),
+				with: {
+					providerAssociations: {
+						with: {
+							providerCredential: {
+								columns: {
+									channelType: true,
+									providerType: true,
+								},
+							},
+						},
+					},
+				},
+			});
+
+			if (!project) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Project not found",
+				});
+			}
+
+			return project satisfies ProjectDetails;
+		}),
+	getBySlug: authdProcedureWithOrg
+		.input(z.object({ slug: z.string() }))
+		.query(async ({ ctx, input }) => {
+			const project = await db.query.project.findFirst({
+				where: and(
+					eq(schema.project.slug, input.slug),
+					eq(schema.project.organizationId, ctx.organization.id),
+				),
+				with: {
+					providerAssociations: {
+						with: {
+							providerCredential: {
+								columns: {
+									channelType: true,
+									providerType: true,
+								},
+							},
+						},
+					},
+				},
+			});
+
+			if (!project) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Project not found",
+				});
+			}
+
+			return project satisfies ProjectDetails;
 		}),
 	update: authdProcedureWithOrg
 		.concat(verifyProject)
@@ -129,5 +191,12 @@ export const projectRouter = router({
 			}
 
 			return newProject;
+		}),
+	delete: authdProcedureWithOrg
+		.concat(verifyProject)
+		.mutation(async ({ ctx }) => {
+			await db
+				.delete(schema.project)
+				.where(eq(schema.project.id, ctx.project.id));
 		}),
 });

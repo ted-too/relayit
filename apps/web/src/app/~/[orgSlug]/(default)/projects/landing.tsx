@@ -13,7 +13,7 @@ import {
 import { CreateProjectDialog } from "@/components/projects/create";
 import { ProjectsCardContent } from "@/components/projects";
 
-export default async function ProjectsPage({
+export async function ProjectsPage({
 	params,
 }: {
 	params: Promise<{ orgSlug: string }>;

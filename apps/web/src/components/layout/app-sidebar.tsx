@@ -199,12 +199,12 @@ function filterMenuForUser(
  */
 function isActiveRoute(itemUrl: string, pathname: string): boolean {
 	if (!pathname) return false;
-
+	
 	const pathnameParts = `/${pathname.split("/").slice(3).join("/")}`;
 
 	if (itemUrl === "/") return pathname === pathnameParts;
 
-	if (pathnameParts === itemUrl) return true;
+	if (pathnameParts.startsWith(itemUrl)) return true;
 
 	return false;
 }

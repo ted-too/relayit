@@ -9,7 +9,7 @@ export function ProjectsCardContent() {
 	const { data: projects, isPending } = trpc.projects.list.useQuery();
 
 	return (
-		<CardContent className="grid grid-cols-3 gap-4">
+		<CardContent className="grid grid-cols-3 gap-4 mt-6">
 			{isPending ? (
 				Array.from({ length: 2 }).map((_, i) => (
 					<Skeleton key={i} className="h-16 w-full rounded-xl" />

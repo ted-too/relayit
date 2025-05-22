@@ -12,7 +12,6 @@ export const baseProviderSchema = z.object({
 			"Only alphanumeric characters and hyphens are allowed",
 		)
 		.optional(),
-	isActive: z.boolean().optional(),
 });
 
 // Helper to create a provider config schema
@@ -96,6 +95,45 @@ export function updateProviderSchema(
 		.strict();
 }
 
+export const generateDefaultFromShape = (shape: z.ZodRawShape) => {
+	const defaults: Record<string, any> = {};
+
+	for (const [key, value] of Object.entries(shape)) {
+		if (value instanceof z.ZodString) {
+			defaults[key] = "";
+		} else if (value instanceof z.ZodBoolean) {
+			defaults[key] = true;
+		} else if (value instanceof z.ZodEnum) {
+			defaults[key] = value.options[0];
+		} else if (value instanceof z.ZodNumber) {
+			defaults[key] = 0;
+		} else if (value instanceof z.ZodDefault) {
+			defaults[key] = value._def.defaultValue();
+		} else if (value instanceof z.ZodObject) {
+			defaults[key] = generateDefaultFromShape(value.shape);
+		} else if (value instanceof z.ZodOptional) {
+			// For optional fields, still provide a default
+			const innerType = value._def.innerType;
+			if (innerType instanceof z.ZodDefault) {
+				defaults[key] = innerType._def.defaultValue();
+			} else if (innerType instanceof z.ZodString) {
+				defaults[key] = "";
+			} else if (innerType instanceof z.ZodBoolean) {
+				defaults[key] = true;
+			} else if (innerType instanceof z.ZodEnum) {
+				defaults[key] = innerType.options[0];
+			} else if (innerType instanceof z.ZodNumber) {
+				defaults[key] = 0;
+			} else if (innerType instanceof z.ZodObject) {
+				defaults[key] = generateDefaultFromShape(innerType.shape);
+			}
+		}
+		// TODO: Add other types as needed (ZodNumber, ZodDate, etc.)
+	}
+
+	return defaults;
+};
+
 // Helper to generate default values for a provider schema
 export function getProviderDefaults(
 	channelType: ChannelType,
@@ -111,37 +149,6 @@ export function getProviderDefaults(
 	// Get the schema for this provider
 	const schema = createProviderSchema(channelType, providerType);
 	const shape = schema.shape;
-
-	// Generate default values based on schema types
-	const generateDefaultFromShape = (shape: z.ZodRawShape) => {
-		const defaults: Record<string, any> = {};
-
-		for (const [key, value] of Object.entries(shape)) {
-			if (value instanceof z.ZodString) {
-				defaults[key] = "";
-			} else if (value instanceof z.ZodBoolean) {
-				defaults[key] = true;
-			} else if (value instanceof z.ZodEnum) {
-				defaults[key] = value.options[0];
-			} else if (value instanceof z.ZodObject) {
-				defaults[key] = generateDefaultFromShape(value.shape);
-			} else if (value instanceof z.ZodOptional) {
-				// For optional fields, still provide a default
-				const innerType = value._def.innerType;
-				if (innerType instanceof z.ZodString) {
-					defaults[key] = "";
-				} else if (innerType instanceof z.ZodBoolean) {
-					defaults[key] = true;
-				} else if (innerType instanceof z.ZodEnum) {
-					defaults[key] = innerType.options[0];
-				} else if (innerType instanceof z.ZodObject) {
-					defaults[key] = generateDefaultFromShape(innerType.shape);
-				}
-			}
-		}
-
-		return defaults;
-	};
 
 	return {
 		...generateDefaultFromShape(shape),

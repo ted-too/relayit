@@ -2,10 +2,10 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmailProvider } from "@/components/notification-providers/email";
-import { SmsProvider } from "./sms";
-import { WhatsappProvider } from "./whatsapp";
-import { DiscordProvider } from "./discord";
+import { EmailProvider } from "@/components/notification-providers/providers/email";
+import { SmsProvider } from "./providers/sms";
+import { WhatsappProvider } from "./providers/whatsapp";
+import { DiscordProvider } from "./providers/discord";
 import { NotificationProviderCard } from "@/components/notification-providers/card";
 import { trpc } from "@/trpc/client";
 

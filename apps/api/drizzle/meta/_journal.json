@@ -36,6 +36,20 @@
       "when": 1746637148987,
       "tag": "0004_zippy_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1747875310060,
+      "tag": "0005_cheerful_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1747875619400,
+      "tag": "0006_shocking_zzzax",
+      "breakpoints": true
     }
   ]
 }

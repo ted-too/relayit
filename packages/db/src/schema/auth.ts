@@ -11,7 +11,12 @@ import { type InferSelectModel, relations } from "drizzle-orm";
 import { typeid } from "typeid-js";
 
 // Import relations from core schema
-import { message, projectProviderAssociation } from "@repo/db/schema/core";
+import {
+	message,
+	type ProjectProviderAssociation,
+	projectProviderAssociation,
+} from "@repo/db/schema/core";
+import type { ChannelType, ProviderType } from "@repo/shared";
 
 /**
  * Represents users in the system.
@@ -304,6 +309,8 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
 	}),
 }));
 
+type ProjectMetadata = Record<string, any>;
+
 /**
  * Represents projects within an organization.
  */
@@ -314,18 +321,29 @@ export const project = pgTable(
 			.primaryKey()
 			.$defaultFn(() => typeid("proj").toString()),
 		name: text("name").notNull(),
-		slug: text("slug"),
+		slug: text("slug").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organization.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-		metadata: jsonb("metadata"),
+		metadata: jsonb("metadata").$type<ProjectMetadata>(),
 	},
 	(t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)],
 );
 
-export type Project = InferSelectModel<typeof project>;
+export type Project = InferSelectModel<typeof project> & {
+	providerAssociations: Pick<ProjectProviderAssociation, "id">[];
+};
+
+export type ProjectDetails = Omit<Project, "providerAssociations"> & {
+	providerAssociations: (ProjectProviderAssociation & {
+		providerCredential: {
+			channelType: ChannelType;
+			providerType: ProviderType;
+		};
+	})[];
+};
 
 /**
  * Defines relationships for the project table.

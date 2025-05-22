@@ -1,6 +1,6 @@
 "use client";
 
-import type { NotificationProvider } from "@repo/db";
+import type { NotificationProvider, ProjectDetails } from "@repo/db";
 import { Card } from "@/components/ui/card";
 import {
 	Email,
@@ -9,8 +9,7 @@ import {
 	Whatsapp,
 	type IconProps,
 } from "@/components/icons";
-import { format } from "date-fns";
-import { PencilIcon, TrashIcon } from "lucide-react";
+import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
 	Tooltip,
@@ -27,7 +26,11 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CreateProviderForm } from "@/components/notification-providers/create";
+import {
+	CreateProjectProviderAssociationForm,
+	CreateProviderForm,
+} from "@/components/notification-providers/create";
+import type { ProjectProviderAssociation } from "@repo/db";
 import { useState } from "react";
 
 const ICONS: Record<
@@ -50,26 +53,31 @@ export function NotificationProviderCard({
 
 	return (
 		<Card className="h-17.5 flex items-center w-full justify-between p-4 rounded-lg">
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-2">
 				<Icon className="size-5" />
-				<div className="flex flex-col gap-1">
-					<span className="text-sm font-medium">{provider.name}</span>
-					<div className="flex items-center gap-1">
-						{provider.providerType !== "default" && (
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Badge variant="outline">{provider.providerType}</Badge>
-								</TooltipTrigger>
-								<TooltipContent side="bottom" align="center">
-									Provider type
-								</TooltipContent>
-							</Tooltip>
-						)}
-						<span className="text-xs text-muted-foreground">
-							{format(provider.createdAt, "dd-MM-yyyy HH:mm:ss aa")}
-						</span>
-					</div>
+				<div className="flex items-center gap-1">
+					{provider.providerType !== "default" && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Badge variant="outline">{provider.providerType}</Badge>
+							</TooltipTrigger>
+							<TooltipContent side="bottom" align="center">
+								{provider.providerType} provider
+							</TooltipContent>
+						</Tooltip>
+					)}
+					{provider.orgDefault && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Badge variant="light-positive">Default</Badge>
+							</TooltipTrigger>
+							<TooltipContent side="bottom" align="center">
+								Default provider for {provider.channelType}
+							</TooltipContent>
+						</Tooltip>
+					)}
 				</div>
+				<span className="text-sm font-medium">{provider.name}</span>
 			</div>
 			<div className="flex items-center gap-2">
 				<Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -78,7 +86,7 @@ export function NotificationProviderCard({
 							<PencilIcon />
 						</Button>
 					</DialogTrigger>
-					<DialogContent>
+					<DialogContent className="sm:max-w-2xl">
 						<DialogHeader>
 							<DialogTitle>Edit provider</DialogTitle>
 							<DialogDescription>
@@ -87,15 +95,92 @@ export function NotificationProviderCard({
 						</DialogHeader>
 						<CreateProviderForm
 							submitWrapper={DialogFooter}
-							onSuccess={() => setIsOpen(false)}
 							channelType={provider.channelType}
 							initialData={provider}
+							onSuccess={() => setIsOpen(false)}
 						/>
 					</DialogContent>
 				</Dialog>
 				<Button variant="ghost-destructive" size="icon">
 					<TrashIcon />
 				</Button>
+			</div>
+		</Card>
+	);
+}
+
+export function ProjectNotificationProviderCard({
+	config,
+	provider,
+	project,
+}: {
+	config?: ProjectProviderAssociation;
+	provider: NotificationProvider;
+	project: ProjectDetails;
+}) {
+	const [isOpen, setIsOpen] = useState(false);
+	const Icon = ICONS[provider.channelType];
+
+	return (
+		<Card className="h-17.5 flex items-center max-w-none justify-between p-4 rounded-lg">
+			<div className="flex items-center gap-2">
+				<Icon className="size-5" />
+				<div className="flex items-center gap-1">
+					{provider.providerType !== "default" && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Badge variant="outline">{provider.providerType}</Badge>
+							</TooltipTrigger>
+							<TooltipContent side="bottom" align="center">
+								{provider.providerType} provider
+							</TooltipContent>
+						</Tooltip>
+					)}
+					{provider.orgDefault && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Badge variant="light-positive">Default</Badge>
+							</TooltipTrigger>
+							<TooltipContent side="bottom" align="center">
+								Default organization provider
+							</TooltipContent>
+						</Tooltip>
+					)}
+				</div>
+				<span className="text-sm font-medium">{provider.name}</span>
+			</div>
+			<div className="flex items-center gap-2">
+				<Dialog open={isOpen} onOpenChange={setIsOpen}>
+					<DialogTrigger asChild>
+						{config ? (
+							<Button variant="ghost" size="icon">
+								<PencilIcon />
+							</Button>
+						) : (
+							<Button variant="outline">Configure</Button>
+						)}
+					</DialogTrigger>
+					<DialogContent className="sm:max-w-2xl">
+						<DialogHeader>
+							<DialogTitle>Configure provider</DialogTitle>
+							<DialogDescription>
+								Currently configuring the provider: {provider.name}
+							</DialogDescription>
+						</DialogHeader>
+						<CreateProjectProviderAssociationForm
+							submitWrapper={DialogFooter}
+							initialData={config}
+							provider={provider}
+							project={project}
+							onSuccess={() => setIsOpen(false)}
+						/>
+					</DialogContent>
+				</Dialog>
+				{config && (
+					<Button variant="ghost-destructive" size="icon">
+						<UnlinkIcon />
+					</Button>
+				)}
 			</div>
 		</Card>
 	);

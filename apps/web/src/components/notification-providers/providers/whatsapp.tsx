@@ -7,10 +7,13 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Discord } from "@/components/icons";
 import { ComingSoon } from "@/components/shared/comming-soon";
+import { Whatsapp } from "@/components/icons";
+import type { NotificationProviderButtonProps } from ".";
 
-export function DiscordProvider() {
+export function WhatsappProvider({
+	configured,
+}: NotificationProviderButtonProps) {
 	return (
 		<Dialog>
 			<DialogTrigger asChild>
@@ -18,11 +21,11 @@ export function DiscordProvider() {
 					<Button
 						variant="secondary"
 						size="lg"
-						className="font-semibold bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
+						className="font-semibold bg-[#25D366] hover:bg-[#25D366]/90 text-white"
 						disabled
 					>
-						<Discord />
-						<span>Discord</span>
+						<Whatsapp />
+						<span>Whatsapp</span>
 					</Button>
 				</ComingSoon>
 			</DialogTrigger>
