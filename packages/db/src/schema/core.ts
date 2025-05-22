@@ -1,25 +1,25 @@
-import { type InferSelectModel, relations, type InferEnum } from "drizzle-orm";
-import {
-	pgTable,
-	text,
-	timestamp,
-	boolean,
-	pgEnum,
-	uniqueIndex,
-	index,
-	jsonb,
-	integer,
-} from "drizzle-orm/pg-core";
-import { typeid } from "typeid-js";
-import { project, apikey, organization } from "@repo/db/schema/auth";
+import { apikey, organization, project } from "@repo/db/schema/auth";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
 	AVAILABLE_PROVIDER_TYPES,
-	type SendMessagePayload,
 	type ProjectProviderConfig,
+	type SendMessagePayload,
 } from "@repo/shared";
 import type { ProviderCredentials } from "@repo/shared";
+import { type InferEnum, type InferSelectModel, relations } from "drizzle-orm";
+import {
+	boolean,
+	index,
+	integer,
+	jsonb,
+	pgEnum,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
+import { typeid } from "typeid-js";
 
 /**
  * Enum defining the supported notification channels.

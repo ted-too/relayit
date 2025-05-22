@@ -1,7 +1,5 @@
-import { getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
-import { headers as headersFn } from "next/headers";
+import { ProjectsCardContent } from "@/components/projects";
+import { CreateProjectDialog } from "@/components/projects/create";
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	Card,
@@ -10,8 +8,10 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { CreateProjectDialog } from "@/components/projects/create";
-import { ProjectsCardContent } from "@/components/projects";
+import { getQueryClient, trpc } from "@/trpc/server";
+import { dehydrate } from "@tanstack/react-query";
+import { HydrationBoundary } from "@tanstack/react-query";
+import { headers as headersFn } from "next/headers";
 
 export async function ProjectsPage({
 	params,

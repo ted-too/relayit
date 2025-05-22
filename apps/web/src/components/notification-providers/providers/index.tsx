@@ -1,13 +1,13 @@
 import {
-	ConfigurationType,
-	ConfiguredIndicator,
-	type ConfiguredIndicatorProps,
-} from "./configured-indicator";
-import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	ConfigurationType,
+	ConfiguredIndicator,
+	type ConfiguredIndicatorProps,
+} from "./configured-indicator";
 
 export interface NotificationProviderButtonProps {
 	configured?: ConfiguredIndicatorProps;

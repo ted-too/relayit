@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { AVAILABLE_MESSAGE_STATUSES } from "@repo/shared";
+import { z } from "zod";
 
 export const createWebhookEndpointSchema = z.object({
 	url: z.string().url("Invalid URL format"),

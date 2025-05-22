@@ -1,4 +1,7 @@
+import { DeleteProjectDialogContent } from "@/components/projects/create";
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -6,24 +9,21 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getQueryClient } from "@/trpc/server";
 import { trpc } from "@/trpc/server";
-import { headers as headersFn } from "next/headers";
-import { notFound } from "next/navigation";
-import { SquareTerminalIcon, TrashIcon } from "lucide-react";
-import { DeleteProjectDialogContent } from "@/components/projects/create";
-import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { ProjectsPage } from "../landing";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GeneralTab } from "./general";
-import { ChannelsTab } from "./channels";
-import { WebhooksTab } from "./webhooks";
-import Link from "next/link";
 import { dehydrate } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
-import { ActivityTab } from "./activity";
 import { TRPCClientError } from "@trpc/client";
+import { SquareTerminalIcon, TrashIcon } from "lucide-react";
+import { headers as headersFn } from "next/headers";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ProjectsPage } from "../landing";
+import { ActivityTab } from "./activity";
+import { ChannelsTab } from "./channels";
+import { GeneralTab } from "./general";
+import { WebhooksTab } from "./webhooks";
 
 const TABS = [
 	{

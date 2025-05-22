@@ -1,13 +1,13 @@
-import { redis } from "bun";
 import { MESSAGE_QUEUE_STREAM, acknowledgeMessage } from "@repo/db";
-import { handleMessage } from "@repo/worker/lib/process-message";
-import { createGenericError, type Result } from "@repo/shared";
+import { type Result, createGenericError } from "@repo/shared";
 import {
+	BLOCK_TIMEOUT_MS,
 	CONSUMER_GROUP_NAME,
 	CONSUMER_NAME,
-	BLOCK_TIMEOUT_MS,
 	READ_COUNT,
 } from "@repo/worker/lib/constants";
+import { handleMessage } from "@repo/worker/lib/process-message";
+import { redis } from "bun";
 
 let isShuttingDown = false;
 
@@ -106,7 +106,10 @@ async function processMessages(): Promise<void> {
 								console.warn(
 									`[Worker] Stream Message ID ${messageStreamId} lacks 'messageId' field. Acknowledging directly.`,
 								);
-								const ackRes = await acknowledgeMessage(messageStreamId, CONSUMER_GROUP_NAME);
+								const ackRes = await acknowledgeMessage(
+									messageStreamId,
+									CONSUMER_GROUP_NAME,
+								);
 								if (ackRes.error) {
 									console.error(
 										`[Worker] CRITICAL: Failed to acknowledge malformed stream message ${messageStreamId}: ${ackRes.error.message}`,
@@ -125,7 +128,7 @@ async function processMessages(): Promise<void> {
 						`[Worker] Processing batch of ${processingPromises.length} message(s) concurrently.`,
 					);
 					const results = await Promise.allSettled(processingPromises);
-					
+
 					let fulfilledCount = 0;
 					let rejectedCount = 0;
 					results.forEach((result, index) => {
@@ -135,7 +138,10 @@ async function processMessages(): Promise<void> {
 							rejectedCount++;
 							// Errors from handleMessage or direct ack are already logged internally by those functions.
 							// We could log the specific reason for rejection here if needed for a batch summary.
-							console.error(`[Worker] Task ${index} in batch rejected:`, result.reason);
+							console.error(
+								`[Worker] Task ${index} in batch rejected:`,
+								result.reason,
+							);
 						}
 					});
 
@@ -159,7 +165,9 @@ async function processMessages(): Promise<void> {
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}
 	}
-	console.log("[Worker] Message processing loop stopped due to shutdown signal.");
+	console.log(
+		"[Worker] Message processing loop stopped due to shutdown signal.",
+	);
 }
 
 /**

@@ -1,8 +1,8 @@
 import type {
+	ProjectProviderConfig,
 	ProviderCredentials,
 	Result,
 	SendMessagePayload,
-	ProjectProviderConfig,
 } from "@repo/shared";
 
 /**

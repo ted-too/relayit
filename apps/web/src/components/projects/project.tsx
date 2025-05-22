@@ -1,16 +1,17 @@
 "use client";
 
-import type { Project } from "@repo/db";
-import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-	EllipsisIcon,
-	SquarePenIcon,
-	SquareTerminalIcon,
-	TrashIcon,
-} from "lucide-react";
+import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -20,19 +21,18 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-	Dialog,
-	DialogContent,
-	DialogTrigger,
-	DialogFooter,
-	DialogTitle,
-	DialogDescription,
-	DialogHeader,
-} from "@/components/ui/dialog";
-import { CreateProjectForm, DeleteProjectDialogContent } from "./create";
-import { useState } from "react";
-import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import type { Project } from "@repo/db";
 import { formatDistanceToNowStrict } from "date-fns";
+import {
+	EllipsisIcon,
+	SquarePenIcon,
+	SquareTerminalIcon,
+	TrashIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { CreateProjectForm, DeleteProjectDialogContent } from "./create";
 
 export function ProjectCard({ project }: { project: Project }) {
 	const pathname = usePathname();

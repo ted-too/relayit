@@ -1,5 +1,5 @@
 import { organizationMetadataSchema } from "@repo/shared";
-import { clsx, type ClassValue } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
@@ -38,7 +38,7 @@ export function getChangedFields<T extends Record<string, any>>(
 	initial: T,
 	opts?: {
 		alwaysKeep?: DeepPartialRecord<T, boolean>;
-	}
+	},
 ): Partial<T> {
 	const changes: Partial<T> = {};
 
@@ -65,18 +65,21 @@ export function getChangedFields<T extends Record<string, any>>(
 			!Array.isArray(initialValue)
 		) {
 			const nestedChanges = getChangedFields(currentValue, initialValue);
-			
+
 			// Check if this field should always keep initial value
 			const alwaysKeepValue = opts?.alwaysKeep?.[key];
-			
+
 			if (Object.keys(nestedChanges).length > 0) {
 				// If field should be kept and has changes, use entire initial value
 				if (alwaysKeepValue === true) {
 					changes[key] = initialValue;
-				} else if (typeof alwaysKeepValue === 'object') {
+				} else if (typeof alwaysKeepValue === "object") {
 					// If nested always keep config exists, pass it down
 					changes[key] = getChangedFields(currentValue, initialValue, {
-						alwaysKeep: alwaysKeepValue as DeepPartialRecord<typeof currentValue, boolean>
+						alwaysKeep: alwaysKeepValue as DeepPartialRecord<
+							typeof currentValue,
+							boolean
+						>,
 					}) as T[keyof T];
 				} else {
 					changes[key] = nestedChanges as T[keyof T];
@@ -102,7 +105,5 @@ export function getChangedFields<T extends Record<string, any>>(
 }
 
 type DeepPartialRecord<T, V> = {
-	[P in keyof T]?: T[P] extends object
-		? DeepPartialRecord<T[P], V> | V
-		: V;
+	[P in keyof T]?: T[P] extends object ? DeepPartialRecord<T[P], V> | V : V;
 };

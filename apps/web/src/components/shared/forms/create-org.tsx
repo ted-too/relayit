@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -10,39 +11,38 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { authClient } from "@/lib/auth-client";
-import { usersOrganizationsQueryKey } from "@/trpc/queries/auth";
-import {
-	type CreateOrganizationRequest,
-	createOrganizationSchema,
-} from "@repo/shared";
-import { useRouter } from "next/navigation";
-import { Fragment, useCallback } from "react";
 import { FormErrorMessage, useAppForm } from "@/components/ui/form";
-import {
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationLogoGradientKey,
-} from "@repo/shared";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { EmojiPicker } from "@ferrucc-io/emoji-picker";
+import { Label } from "@/components/ui/label";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { CircleCheckIcon, PlusIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
+import { usersOrganizationsQueryKey } from "@/trpc/queries/auth";
+import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
 	RadioGroup,
 	RadioGroupIndicator,
 	RadioGroupItem,
 } from "@radix-ui/react-radio-group";
+import {
+	type CreateOrganizationRequest,
+	createOrganizationSchema,
+} from "@repo/shared";
+import {
+	ORGANIZATION_LOGO_GRADIENTS,
+	type OrganizationLogoGradientKey,
+} from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
-import { trpc } from "@/trpc/client";
-import { noThrow } from "@/trpc/no-throw";
+import { useQueryClient } from "@tanstack/react-query";
+import { CircleCheckIcon, PlusIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Fragment, useCallback } from "react";
+import { toast } from "sonner";
 
 interface CreateOrganizationFormProps {
 	onSuccess: (data: { id: string; slug: string }) => void;

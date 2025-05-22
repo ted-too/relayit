@@ -1,10 +1,10 @@
-import { initTRPC, TRPCError } from "@trpc/server";
 import { auth } from "@repo/api/lib/auth";
 import { db, schema } from "@repo/db";
-import z from "zod";
+import { TRPCError, initTRPC } from "@trpc/server";
+import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { and, eq } from "drizzle-orm";
 import superjson from "superjson";
-import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
+import z from "zod";
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
 	const session = await auth.api.getSession({ headers: opts.req.headers });

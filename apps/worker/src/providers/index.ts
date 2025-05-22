@@ -21,4 +21,4 @@ export function getProvider(channel: ChannelType): INotificationProvider {
 			console.warn(`No provider implemented for channel: ${channel}`);
 			throw new Error(`Unsupported channel type: ${channel}`);
 	}
-} 
+}

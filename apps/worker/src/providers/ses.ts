@@ -4,16 +4,13 @@ import {
 	type SendEmailCommandInput,
 	type SendEmailCommandOutput,
 } from "@aws-sdk/client-ses";
+import { decryptRecord } from "@repo/db";
 import type {
-	INotificationProvider,
-	ProviderSendResult,
-} from "@repo/worker/providers/interface";
-import type {
-	ProviderCredentials,
 	AWSProviderCredentials,
+	ProjectProviderConfig,
+	ProviderCredentials,
 	Result,
 	SendMessagePayload,
-	ProjectProviderConfig,
 } from "@repo/shared";
 import {
 	awsCredentialsSchema,
@@ -22,12 +19,15 @@ import {
 	isSESProjectProviderConfig,
 	sesProjectProviderConfigSchema,
 } from "@repo/shared";
-import { decryptRecord } from "@repo/db";
 import {
 	BASE_RETRY_DELAY_MS,
 	MAX_RETRY_ATTEMPTS,
 } from "@repo/worker/lib/constants";
 import { delay } from "@repo/worker/lib/utils";
+import type {
+	INotificationProvider,
+	ProviderSendResult,
+} from "@repo/worker/providers/interface";
 
 export class SESProvider implements INotificationProvider {
 	async send(

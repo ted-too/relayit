@@ -1,5 +1,5 @@
-import z from "zod";
 import { AVAILABLE_CHANNELS } from "@repo/shared";
+import z from "zod";
 
 const payloadSchema = z
 	.object({

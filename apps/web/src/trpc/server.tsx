@@ -1,12 +1,12 @@
 import "server-only";
 
-import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
-import { cache } from "react";
-import { makeQueryClient } from "./query-client";
+import type { AppRouter } from "@repo/api";
 import { httpLink } from "@trpc/client";
 import { createTRPCClient } from "@trpc/react-query";
+import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import { cache } from "react";
 import superjson from "superjson";
-import type { AppRouter } from "@repo/api";
+import { makeQueryClient } from "./query-client";
 
 export const getQueryClient = cache(makeQueryClient);
 

@@ -1,19 +1,19 @@
+import { type InferSelectModel, relations } from "drizzle-orm";
 import {
+	boolean,
+	integer,
+	jsonb,
 	pgTable,
 	text,
 	timestamp,
-	boolean,
-	integer,
 	uniqueIndex,
-	jsonb,
 } from "drizzle-orm/pg-core";
-import { type InferSelectModel, relations } from "drizzle-orm";
 import { typeid } from "typeid-js";
 
 // Import relations from core schema
 import {
-	message,
 	type ProjectProviderAssociation,
+	message,
 	projectProviderAssociation,
 } from "@repo/db/schema/core";
 import type { ChannelType, ProviderType } from "@repo/shared";

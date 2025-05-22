@@ -1,8 +1,7 @@
 "use client";
 import { Fragment, useState } from "react";
 
-import { authClient, type CreatedApiKey } from "@/lib/auth-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
 	Dialog,
@@ -14,14 +13,15 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { createApiKeySchema, type CreateApiKeyRequest } from "@repo/shared";
 import { useAppForm } from "@/components/ui/form";
-import { apiKeysListQueryKey } from "@/trpc/queries/auth";
-import { PlusIcon } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
-import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { Skeleton } from "@/components/ui/skeleton";
+import { type CreatedApiKey, authClient } from "@/lib/auth-client";
+import { apiKeysListQueryKey } from "@/trpc/queries/auth";
+import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";
+import { useQueryClient } from "@tanstack/react-query";
+import { PlusIcon } from "lucide-react";
+import { toast } from "sonner";
 
 interface CreateApiKeyFormProps {
 	submitWrapper?: typeof DialogFooter;

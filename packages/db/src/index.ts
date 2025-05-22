@@ -23,7 +23,10 @@ export type Transaction = Parameters<typeof db.transaction>[0] extends (
 	: never;
 
 export type { ParsedApiKey, Project, ProjectDetails } from "./schema/auth";
-export type { NotificationProvider, ProjectProviderAssociation } from "./schema/core";
+export type {
+	NotificationProvider,
+	ProjectProviderAssociation,
+} from "./schema/core";
 
 export * from "./lib/crypto";
 export * from "./lib/redis";

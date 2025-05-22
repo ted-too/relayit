@@ -1,11 +1,11 @@
 import { db, schema } from "@repo/db";
 import { betterAuth } from "better-auth";
+import { emailHarmony } from "better-auth-harmony";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, organization } from "better-auth/plugins";
 import { passkey } from "better-auth/plugins/passkey";
-import { emailHarmony } from "better-auth-harmony";
-import { desc, eq } from "drizzle-orm";
 import { redis } from "bun";
+import { desc, eq } from "drizzle-orm";
 import { generateOrganizationSlug } from "./slugs";
 
 /**

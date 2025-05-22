@@ -1,15 +1,15 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { getQueryClient } from "@/trpc/server";
-import {
-	currentMemberQueryOptions,
-	activeOrganizationQueryOptions,
-} from "@/trpc/queries/auth";
-import { cookies, headers as headersFn } from "next/headers";
-import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import {
 	SECONDARY_SIDEBAR_COOKIE_NAME,
 	SIDEBAR_COOKIE_NAME,
 } from "@/constants/sidebar";
+import {
+	activeOrganizationQueryOptions,
+	currentMemberQueryOptions,
+} from "@/trpc/queries/auth";
+import { getQueryClient } from "@/trpc/server";
+import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
+import { cookies, headers as headersFn } from "next/headers";
 
 export default async function OrgLayout({
 	children,

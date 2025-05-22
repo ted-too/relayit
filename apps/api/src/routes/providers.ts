@@ -1,16 +1,16 @@
-import { router, authdProcedureWithOrg } from "@repo/api/trpc";
-import { z } from "zod";
 import { generateProviderSlug } from "@repo/api/lib/slugs";
-import { TRPCError } from "@trpc/server";
-import { and, eq, desc, type SQL } from "drizzle-orm";
-import { encryptRecord, getSafeEncryptedRecord, deepMerge } from "@repo/db";
+import { authdProcedureWithOrg, router } from "@repo/api/trpc";
+import { deepMerge, encryptRecord, getSafeEncryptedRecord } from "@repo/db";
+import { db, schema } from "@repo/db";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_PROVIDER_TYPES,
 	createProviderSchema,
 	updateProviderSchema,
 } from "@repo/shared";
-import { db, schema } from "@repo/db";
+import { TRPCError } from "@trpc/server";
+import { type SQL, and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 
 export const providerRouter = router({
 	generateSlug: authdProcedureWithOrg

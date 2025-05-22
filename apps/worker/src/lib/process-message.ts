@@ -1,16 +1,16 @@
 import {
-	db,
-	fetchMessageDetails,
-	updateMessageStatus,
-	logMessageEvent,
-	acknowledgeMessage,
 	type MessageWithRelations,
+	acknowledgeMessage,
+	db,
 	schema as dbSchema,
+	fetchMessageDetails,
+	logMessageEvent,
+	updateMessageStatus,
 } from "@repo/db";
 import type {
+	ProjectProviderConfig,
 	ProviderCredentials,
 	SendMessagePayload,
-	ProjectProviderConfig,
 } from "@repo/shared";
 import { getProvider } from "@repo/worker/providers"; // Adjusted path
 import { eq } from "drizzle-orm"; // Required for the direct status check query
@@ -57,7 +57,10 @@ export async function handleMessage(
 				where: eq(dbSchema.message.id, internalMessageId),
 			});
 
-			if (currentMessageState?.status === "sent" || currentMessageState?.status === "delivered") {
+			if (
+				currentMessageState?.status === "sent" ||
+				currentMessageState?.status === "delivered"
+			) {
 				console.log(
 					`[Worker] Message ${internalMessageId} already in status '${currentMessageState.status}'. Skipping processing, will ensure acknowledgment.`,
 				);
@@ -68,28 +71,37 @@ export async function handleMessage(
 			// --- Start: Malformed Data Checks ---
 			if (!messageDetails?.projectProviderAssociation) {
 				const reason = "Missing projectProviderAssociation for message.";
-				console.warn(`[Worker] Malformed message ${internalMessageId}: ${reason}`);
+				console.warn(
+					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
 				return; // Exit transaction, message will be acked in finally
 			}
 			if (!messageDetails.projectProviderAssociation.providerCredential) {
-				const reason = "Missing providerCredential in projectProviderAssociation.";
-				console.warn(`[Worker] Malformed message ${internalMessageId}: ${reason}`);
+				const reason =
+					"Missing providerCredential in projectProviderAssociation.";
+				console.warn(
+					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
 				return;
 			}
 			if (!messageDetails.projectProviderAssociation.config) {
 				const reason = "Missing config in projectProviderAssociation.";
-				console.warn(`[Worker] Malformed message ${internalMessageId}: ${reason}`);
+				console.warn(
+					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
 				return;
 			}
 			if (!messageDetails.payload || !messageDetails.recipient) {
 				const reason = "Missing payload or recipient for message.";
-				console.warn(`[Worker] Malformed message ${internalMessageId}: ${reason}`);
+				console.warn(
+					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
 				return;

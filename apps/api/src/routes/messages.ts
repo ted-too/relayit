@@ -1,8 +1,8 @@
+import { authdProcedureWithOrg, router } from "@repo/api/trpc";
 import { db, schema } from "@repo/db";
 import { getProjectMessagesQuerySchema } from "@repo/shared";
+import { type SQL, and, count, desc, eq, ilike } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { and, count, desc, eq, ilike, type SQL } from "drizzle-orm";
-import { router, authdProcedureWithOrg } from "@repo/api/trpc";
 
 export const messagesRouter = router({
 	list: authdProcedureWithOrg

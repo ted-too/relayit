@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, useCallback } from "react";
+import {
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
 	Dialog,
@@ -11,25 +19,17 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import { useAppForm } from "@/components/ui/form";
-import { PlusIcon } from "lucide-react";
-import { useStore } from "@tanstack/react-form";
-import { usePathname, useRouter } from "next/navigation";
+import { getChangedFields } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
 import type { Project } from "@repo/db";
-import { getChangedFields } from "@/lib/utils";
-import {
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
+import { useStore } from "@tanstack/react-form";
+import { PlusIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Fragment, useCallback } from "react";
+import { toast } from "sonner";
 interface CreateProjectFormProps {
 	onSuccess?: (data: { id: string; slug: string }) => void;
 	submitWrapper?: typeof DialogFooter;

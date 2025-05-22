@@ -1,7 +1,7 @@
-import { db, schema } from "@repo/db/index";
-import { authdProcedure, authdProcedureWithOrg, router } from "@repo/api/trpc";
-import { and, desc, eq } from "drizzle-orm";
 import { initialUserSetup } from "@repo/api/lib/auth";
+import { authdProcedure, authdProcedureWithOrg, router } from "@repo/api/trpc";
+import { db, schema } from "@repo/db/index";
+import { and, desc, eq } from "drizzle-orm";
 
 export const userRouter = router({
 	initOrganization: authdProcedure.mutation(async ({ ctx }) => {

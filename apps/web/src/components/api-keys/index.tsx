@@ -1,10 +1,10 @@
 "use client";
 
-import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { useQuery } from "@tanstack/react-query";
 import { ApiKeyCard } from "./key";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export function ApiKeysCardContent() {
 	const { data: apiKeys, isPending } = useQuery(apiKeysListQueryOptions());

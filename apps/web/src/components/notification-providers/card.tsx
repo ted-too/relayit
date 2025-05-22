@@ -1,21 +1,19 @@
 "use client";
 
-import type { NotificationProvider, ProjectDetails } from "@repo/db";
-import { Card } from "@/components/ui/card";
 import {
-	Email,
-	Sms,
 	Discord,
-	Whatsapp,
+	Email,
 	type IconProps,
+	Sms,
+	Whatsapp,
 } from "@/components/icons";
-import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
+	CreateProjectProviderAssociationForm,
+	CreateProviderForm,
+} from "@/components/notification-providers/create";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -25,12 +23,14 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import {
-	CreateProjectProviderAssociationForm,
-	CreateProviderForm,
-} from "@/components/notification-providers/create";
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { NotificationProvider, ProjectDetails } from "@repo/db";
 import type { ProjectProviderAssociation } from "@repo/db";
+import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";
 import { useState } from "react";
 
 const ICONS: Record<

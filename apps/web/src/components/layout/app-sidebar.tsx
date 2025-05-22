@@ -1,12 +1,23 @@
 "use client";
 
+import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
 import { DialogAction } from "@/components/shared/dialog-action";
+import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import { Button } from "@/components/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -36,52 +47,41 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+	type Organization,
+	type OrganizationMember,
+	authClient,
+} from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
 import {
 	activeOrganizationQueryKey,
 	usersOrganizationsQueryOptions,
 } from "@/trpc/queries/auth";
-import {
-	authClient,
-	type Organization,
-	type OrganizationMember,
-} from "@/lib/auth-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Category2, type IconProps } from "iconsax-react";
 import {
 	BellIcon,
+	BookIcon,
 	BuildingIcon,
 	ChevronRightIcon,
 	ChevronsUpDownIcon,
-	KeyRoundIcon,
-	type LucideIcon,
-	PlusIcon,
-	MessagesSquareIcon,
-	ScrollTextIcon,
-	LineChartIcon,
-	PlugZapIcon,
-	WebhookIcon,
-	BookIcon,
 	FolderIcon,
+	KeyRoundIcon,
+	LineChartIcon,
+	type LucideIcon,
+	MessagesSquareIcon,
+	PlugZapIcon,
+	PlusIcon,
+	ScrollTextIcon,
+	WebhookIcon,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type * as React from "react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
-import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-	Dialog,
-	DialogTitle,
-	DialogHeader,
-	DialogFooter,
-	DialogContent,
-	DialogDescription,
-	DialogTrigger,
-} from "@/components/ui/dialog";
-import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
-import { Skeleton } from "@/components/ui/skeleton";
-import { trpc } from "@/trpc/client";
 
 /**
  * Core types for sidebar navigation
@@ -199,7 +199,7 @@ function filterMenuForUser(
  */
 function isActiveRoute(itemUrl: string, pathname: string): boolean {
 	if (!pathname) return false;
-	
+
 	const pathnameParts = `/${pathname.split("/").slice(3).join("/")}`;
 
 	if (itemUrl === "/") return pathname === pathnameParts;
@@ -244,7 +244,11 @@ function SidebarLogo({
 			>
 				<SidebarMenuItem className="w-full">
 					<DropdownMenu>
-						<DropdownMenuTrigger disabled={isPending} asChild suppressHydrationWarning>
+						<DropdownMenuTrigger
+							disabled={isPending}
+							asChild
+							suppressHydrationWarning
+						>
 							{isPending ? (
 								<Skeleton
 									className={cn(

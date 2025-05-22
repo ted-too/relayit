@@ -1,5 +1,6 @@
 "use client";
 
+import { CombinedLogo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { useAppForm } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
@@ -7,7 +8,6 @@ import { type SignInRequest, signInSchema } from "@repo/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CombinedLogo } from "@/components/shared/logo";
 
 export function SignInForm({
 	onSuccess,

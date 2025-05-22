@@ -1,13 +1,13 @@
 "use client";
 
-import { authClient, type BaseApiKey } from "@/lib/auth-client";
+import { type BaseApiKey, authClient } from "@/lib/auth-client";
 
-import { Card } from "@/components/ui/card";
-import { KeyIcon } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { ActionButton } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { apiKeysListQueryKey } from "@/trpc/queries/auth";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { KeyIcon } from "lucide-react";
+import { toast } from "sonner";
 
 export function ApiKeyCard({ apiKey }: { apiKey: BaseApiKey }) {
 	const queryClient = useQueryClient();

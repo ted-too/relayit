@@ -1,16 +1,16 @@
-import Image, { type StaticImageData } from "next/image";
-import { notFound, redirect } from "next/navigation";
-import { SignIn } from "./sign-in";
-import { SignUp } from "./sign-up";
-import { FinishSocialSignUp } from "./finish";
-import { sessionQueryOptions } from "@/trpc/queries/auth";
 import type { Session, User } from "@/lib/auth-client";
+import { sessionQueryOptions } from "@/trpc/queries/auth";
 import { getQueryClient } from "@/trpc/server";
 import { headers } from "next/headers";
+import Image, { type StaticImageData } from "next/image";
+import { notFound, redirect } from "next/navigation";
 import authImage1 from "../../../../public/auth-1.svg";
 import authImage2 from "../../../../public/auth-2.svg";
 import authImage3 from "../../../../public/auth-3.svg";
+import { FinishSocialSignUp } from "./finish";
 import { SetupOrganization } from "./setup-organization";
+import { SignIn } from "./sign-in";
+import { SignUp } from "./sign-up";
 
 const authImageCredit = {
 	author: "Olli Kilpi",

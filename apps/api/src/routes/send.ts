@@ -1,10 +1,10 @@
-import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "@repo/api/index";
 import { apiKeyMiddleware } from "@repo/api/lib/middleware";
-import { db, schema, queueMessage } from "@repo/db";
-import { eq, and } from "drizzle-orm";
+import { db, queueMessage, schema } from "@repo/db";
 import { sendMessageSchema } from "@repo/shared";
+import { and, eq } from "drizzle-orm";
+import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
 export const sendRouter = new Hono<Context>()

@@ -1,26 +1,23 @@
 {
-  "name": "relayit",
-  "private": true,
-  "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
+	"name": "relayit",
+	"private": true,
+	"scripts": {
+		"build": "turbo run build",
+		"dev": "turbo run dev",
+		"lint": "turbo run lint",
 		"format": "biome format . --write",
 		"format-and-lint": "biome check .",
 		"format-and-lint:fix": "biome check . --write",
-    "check-types": "turbo run check-types"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "1.9.4",
-    "turbo": "^2.5.2",
-    "typescript": "5.8.2"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "packageManager": "bun@1.2.4",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+		"check-types": "turbo run check-types"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4",
+		"turbo": "^2.5.2",
+		"typescript": "5.8.2"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"packageManager": "bun@1.2.4",
+	"workspaces": ["apps/*", "packages/*"]
 }

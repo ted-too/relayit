@@ -1,26 +1,26 @@
 "use client";
 
-import { Fragment, useCallback } from "react";
 import type { DialogFooter } from "@/components/ui/dialog";
-import {
-	createProviderSchema,
-	getProviderDefaults,
-	type ChannelType,
-	PROVIDER_CONFIG,
-	createProjectProviderSchema,
-	getProjectProviderDefaults,
-} from "@repo/shared";
 import { useAppForm, withForm } from "@/components/ui/form";
+import { getChangedFields } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
 import type {
 	NotificationProvider,
 	ProjectDetails,
 	ProjectProviderAssociation,
 } from "@repo/db";
+import {
+	type ChannelType,
+	PROVIDER_CONFIG,
+	createProjectProviderSchema,
+	createProviderSchema,
+	getProjectProviderDefaults,
+	getProviderDefaults,
+} from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
-import { type z, ZodFirstPartyTypeKind } from "zod";
-import { getChangedFields } from "@/lib/utils";
-import { trpc } from "@/trpc/client";
-import { noThrow } from "@/trpc/no-throw";
+import { Fragment, useCallback } from "react";
+import { ZodFirstPartyTypeKind, type z } from "zod";
 
 interface CreateProviderFormProps {
 	submitWrapper?: typeof DialogFooter;

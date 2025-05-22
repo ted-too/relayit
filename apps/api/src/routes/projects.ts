@@ -1,11 +1,11 @@
-import { createProjectSchema, updateProjectSchema } from "@repo/shared";
-import { db, schema } from "@repo/db";
 import { generateProjectSlug } from "@repo/api/lib/slugs";
-import { eq, and } from "drizzle-orm";
-import { z } from "zod";
-import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
-import { TRPCError } from "@trpc/server";
+import { authdProcedureWithOrg, router, verifyProject } from "@repo/api/trpc";
+import { db, schema } from "@repo/db";
 import type { ProjectDetails } from "@repo/db";
+import { createProjectSchema, updateProjectSchema } from "@repo/shared";
+import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 
 export const projectRouter = router({
 	list: authdProcedureWithOrg.query(async ({ ctx }) => {

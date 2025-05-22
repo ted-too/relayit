@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ProviderType, ChannelType } from "../constants/providers";
+import type { ChannelType, ProviderType } from "../constants/providers";
 import { getProviderConfig } from "../constants/providers";
 
 // Base schema for all providers

@@ -1,3 +1,6 @@
+import { Email } from "@/components/icons";
+import { CreateProviderForm } from "@/components/notification-providers/create";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -7,9 +10,6 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Email } from "@/components/icons";
-import { CreateProviderForm } from "@/components/notification-providers/create";
 import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
 export function EmailProvider({ configured }: NotificationProviderButtonProps) {

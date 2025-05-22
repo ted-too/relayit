@@ -1,16 +1,16 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { composeRefs } from "@/lib/compose-refs";
-import { cn } from "@/lib/utils";
-import { CheckIcon, CopyIcon } from "lucide-react";
-import * as React from "react";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { composeRefs } from "@/lib/compose-refs";
+import { cn } from "@/lib/utils";
+import { CheckIcon, CopyIcon } from "lucide-react";
+import * as React from "react";
 
 export function CopyToClipboardContainer({
 	ref,

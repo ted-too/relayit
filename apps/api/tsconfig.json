@@ -13,5 +13,5 @@
 			"@repo/db/*": ["../../packages/db/src/*"],
 			"@repo/shared/*": ["../../packages/shared/src/*"]
 		}
-	},
+	}
 }

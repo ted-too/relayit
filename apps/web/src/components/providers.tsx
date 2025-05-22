@@ -1,10 +1,10 @@
 "use client";
 
-import type * as React from "react";
-import { ThemeProvider as NextThemesProvider } from "next-themes";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { TRPCProvider } from "@/trpc/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { TRPCProvider } from "@/trpc/client";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+import type * as React from "react";
 
 export function ThemeProvider({
 	children,

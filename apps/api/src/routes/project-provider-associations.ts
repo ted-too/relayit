@@ -1,13 +1,13 @@
-import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
-import { z } from "zod";
-import { and, eq, desc, type SQL } from "drizzle-orm";
-import { TRPCError } from "@trpc/server";
+import { authdProcedureWithOrg, router, verifyProject } from "@repo/api/trpc";
+import { db, deepMerge, schema } from "@repo/db";
 import {
+	type UpdateProjectProviderConfig,
 	createProjectProviderSchema,
 	updateProjectProviderSchema,
-	type UpdateProjectProviderConfig,
 } from "@repo/shared";
-import { db, schema, deepMerge } from "@repo/db";
+import { TRPCError } from "@trpc/server";
+import { type SQL, and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 
 // TODO: Potentially add a middleware to check if the user has permission to access this resource
 

@@ -1,14 +1,14 @@
-import { getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
-import { headers as headersFn } from "next/headers";
+import { ProvidersCardContent } from "@/components/notification-providers";
 import {
 	Card,
 	CardDescription,
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { ProvidersCardContent } from "@/components/notification-providers";
+import { getQueryClient, trpc } from "@/trpc/server";
+import { dehydrate } from "@tanstack/react-query";
+import { HydrationBoundary } from "@tanstack/react-query";
+import { headers as headersFn } from "next/headers";
 
 export default async function ProvidersPage({
 	params,
@@ -19,9 +19,7 @@ export default async function ProvidersPage({
 	const queryClient = getQueryClient();
 	const headers = await headersFn();
 
-	void queryClient.prefetchQuery(
-		trpc(headers).providers.list.queryOptions(),
-	);
+	void queryClient.prefetchQuery(trpc(headers).providers.list.queryOptions());
 
 	return (
 		<HydrationBoundary state={dehydrate(queryClient)}>

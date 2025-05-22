@@ -1,10 +1,10 @@
-import { router } from "@repo/api/trpc";
 import { messagesRouter } from "@repo/api/routes/messages";
+import { miscRouter } from "@repo/api/routes/misc";
 import { projectProviderAssociationRouter } from "@repo/api/routes/project-provider-associations";
 import { projectRouter } from "@repo/api/routes/projects";
 import { providerRouter } from "@repo/api/routes/providers";
 import { webhookRouter } from "@repo/api/routes/webhooks";
-import { miscRouter } from "@repo/api/routes/misc";
+import { router } from "@repo/api/trpc";
 
 export const appRouter = router({
 	messages: messagesRouter,

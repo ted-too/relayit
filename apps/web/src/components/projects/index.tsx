@@ -2,8 +2,8 @@
 
 import { CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ProjectCard } from "./project";
 import { trpc } from "@/trpc/client";
+import { ProjectCard } from "./project";
 
 export function ProjectsCardContent() {
 	const { data: projects, isPending } = trpc.projects.list.useQuery();

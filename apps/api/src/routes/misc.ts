@@ -1,8 +1,8 @@
-import { router, authdProcedure, authdProcedureWithOrg } from "@repo/api/trpc";
-import { db, schema } from "@repo/db";
-import { eq, desc, and } from "drizzle-orm";
 import { initialUserSetup } from "@repo/api/lib/auth";
 import { generateOrganizationSlug } from "@repo/api/lib/slugs";
+import { authdProcedure, authdProcedureWithOrg, router } from "@repo/api/trpc";
+import { db, schema } from "@repo/db";
+import { and, desc, eq } from "drizzle-orm";
 import z from "zod";
 
 export const miscRouter = router({

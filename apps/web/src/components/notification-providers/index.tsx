@@ -1,13 +1,13 @@
 "use client";
 
+import { NotificationProviderCard } from "@/components/notification-providers/card";
+import { EmailProvider } from "@/components/notification-providers/providers/email";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmailProvider } from "@/components/notification-providers/providers/email";
+import { trpc } from "@/trpc/client";
+import { DiscordProvider } from "./providers/discord";
 import { SmsProvider } from "./providers/sms";
 import { WhatsappProvider } from "./providers/whatsapp";
-import { DiscordProvider } from "./providers/discord";
-import { NotificationProviderCard } from "@/components/notification-providers/card";
-import { trpc } from "@/trpc/client";
 
 export function ProvidersCardContent() {
 	const { data: rawProviders, isPending } = trpc.providers.list.useQuery();

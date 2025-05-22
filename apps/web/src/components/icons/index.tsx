@@ -1,6 +1,6 @@
-import type React from "react";
-import parse from "html-react-parser";
 import { cn } from "@/lib/utils";
+import parse from "html-react-parser";
+import type React from "react";
 
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
 	variant?: string;

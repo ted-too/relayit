@@ -1,8 +1,5 @@
-import { getQueryClient } from "@/trpc/server";
-import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
-import { headers as headersFn } from "next/headers";
+import { ApiKeysCardContent } from "@/components/api-keys";
+import { CreateApiKeyDialog } from "@/components/api-keys/create";
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	Card,
@@ -11,8 +8,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { CreateApiKeyDialog } from "@/components/api-keys/create";
-import { ApiKeysCardContent } from "@/components/api-keys";
+import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
+import { getQueryClient } from "@/trpc/server";
+import { dehydrate } from "@tanstack/react-query";
+import { HydrationBoundary } from "@tanstack/react-query";
+import { headers as headersFn } from "next/headers";
 
 export default async function ApiKeysPage({
 	params,

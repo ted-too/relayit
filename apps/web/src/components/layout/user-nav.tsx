@@ -1,6 +1,19 @@
 "use client";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ui/dark-mode-toggle";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
@@ -9,29 +22,16 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { cn, getInitials } from "@/lib/utils";
 import { sessionQueryOptions } from "@/trpc/queries/auth";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDownIcon } from "lucide-react";
-import { LogOutIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-	DropdownMenu,
-	DropdownMenuTrigger,
-	DropdownMenuContent,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { SidebarMenuButton } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ModeToggle } from "@/components/ui/dark-mode-toggle";
-import Link from "next/link";
 import {
 	ORGANIZATION_LOGO_GRADIENTS,
 	type OrganizationMetadata,
 } from "@repo/shared";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronsUpDownIcon } from "lucide-react";
+import { LogOutIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export function LogoutButton({
 	size = "md",

@@ -1,6 +1,8 @@
+import { ProjectNotificationProviderCard } from "@/components/notification-providers/card";
+import type { ConfiguredIndicatorType } from "@/components/notification-providers/providers/configured-indicator";
+import { DiscordProvider } from "@/components/notification-providers/providers/discord";
 import { EmailProvider } from "@/components/notification-providers/providers/email";
 import { SmsProvider } from "@/components/notification-providers/providers/sms";
-import { DiscordProvider } from "@/components/notification-providers/providers/discord";
 import { WhatsappProvider } from "@/components/notification-providers/providers/whatsapp";
 import {
 	Card,
@@ -10,12 +12,10 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import type {
-	ProjectDetails,
 	NotificationProvider,
+	ProjectDetails,
 	ProjectProviderAssociation,
 } from "@repo/db";
-import type { ConfiguredIndicatorType } from "@/components/notification-providers/providers/configured-indicator";
-import { ProjectNotificationProviderCard } from "@/components/notification-providers/card";
 
 export async function ChannelsTab({
 	project,

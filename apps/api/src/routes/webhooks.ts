@@ -1,14 +1,14 @@
-import { router, authdProcedureWithOrg, verifyProject } from "@repo/api/trpc";
-import { TRPCError } from "@trpc/server";
+import { authdProcedureWithOrg, router, verifyProject } from "@repo/api/trpc";
+import { db, encrypt, redactedString, schema } from "@repo/db";
 import {
 	createWebhookEndpointSchema,
 	updateWebhookEndpointSchema,
 } from "@repo/shared";
-import { db, schema, encrypt, redactedString } from "@repo/db";
-import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { desc } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import { and } from "drizzle-orm";
+import { z } from "zod";
 
 export const webhookRouter = router({
 	create: authdProcedureWithOrg
@@ -104,9 +104,7 @@ export const webhookRouter = router({
 	update: authdProcedureWithOrg
 		.concat(verifyProject)
 		.input(
-			z
-				.object({ webhookId: z.string() })
-				.merge(updateWebhookEndpointSchema),
+			z.object({ webhookId: z.string() }).merge(updateWebhookEndpointSchema),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { project } = ctx;

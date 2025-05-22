@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { AVAILABLE_CHANNELS, AVAILABLE_MESSAGE_STATUSES } from "@repo/shared";
+import { z } from "zod";
 
 export const createProjectSchema = z.object({
 	name: z.string().min(1, "Name cannot be empty").optional(),

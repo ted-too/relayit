@@ -1,3 +1,6 @@
+import { Discord } from "@/components/icons";
+import { ComingSoon } from "@/components/shared/comming-soon";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -6,9 +9,6 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Discord } from "@/components/icons";
-import { ComingSoon } from "@/components/shared/comming-soon";
 import type { NotificationProviderButtonProps } from ".";
 
 export function DiscordProvider({

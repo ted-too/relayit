@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
 	type ChannelType,
-	getProviderConfig,
 	type ProviderType,
+	getProviderConfig,
 } from "../constants/providers";
 import { generateDefaultFromShape } from "./providers";
 

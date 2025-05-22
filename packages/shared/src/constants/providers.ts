@@ -1,13 +1,13 @@
-import {
-	awsCredentialsSchema,
-	whatsappCredentialsSchema,
-	discordCredentialsSchema,
-} from "../validations/provider-credentials";
 import type { z } from "zod";
 import {
 	sesProjectProviderConfigSchema,
 	snsProjectProviderConfigSchema,
 } from "../validations/project-provider";
+import {
+	awsCredentialsSchema,
+	discordCredentialsSchema,
+	whatsappCredentialsSchema,
+} from "../validations/provider-credentials";
 
 export const PROVIDER_CONFIG = {
 	email: [
