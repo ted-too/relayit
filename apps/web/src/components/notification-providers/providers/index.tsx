@@ -6,7 +6,6 @@ import {
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 
@@ -24,19 +23,17 @@ export function ButtonWrapper({
 	if (configured === undefined) return children;
 
 	return (
-		<TooltipProvider>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<div className="relative">
-						{children}
-						<ConfiguredIndicator {...configured} />
-					</div>
-				</TooltipTrigger>
-				<TooltipContent side="bottom">
-					<p>{ConfigurationType[configured.configured]}</p>
-				</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<div className="relative">
+					{children}
+					<ConfiguredIndicator {...configured} />
+				</div>
+			</TooltipTrigger>
+			<TooltipContent side="bottom">
+				<p>{ConfigurationType[configured.configured]}</p>
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 

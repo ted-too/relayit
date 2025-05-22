@@ -43,42 +43,49 @@ const ICONS: Record<
 	whatsapp: Whatsapp,
 };
 
+function ProviderTitle({ provider }: { provider: NotificationProvider }) {
+	const Icon = ICONS[provider.channelType];
+
+	return (
+		<div className="flex items-center gap-2">
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Icon className="size-5" />
+				</TooltipTrigger>
+				<TooltipContent side="bottom" align="center">
+					{provider.channelType} provider
+				</TooltipContent>
+			</Tooltip>
+			<div className="flex items-center gap-1">
+				{provider.providerType !== "default" && (
+					<Badge variant="outline">{provider.providerType}</Badge>
+				)}
+				{provider.orgDefault && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Badge variant="light-positive">Default</Badge>
+						</TooltipTrigger>
+						<TooltipContent side="bottom" align="center">
+							Default organization provider
+						</TooltipContent>
+					</Tooltip>
+				)}
+			</div>
+			<span className="text-sm font-medium">{provider.name}</span>
+		</div>
+	);
+}
+
 export function NotificationProviderCard({
 	provider,
 }: {
 	provider: NotificationProvider;
 }) {
 	const [isOpen, setIsOpen] = useState(false);
-	const Icon = ICONS[provider.channelType];
 
 	return (
 		<Card className="h-17.5 flex items-center w-full justify-between p-4 rounded-lg">
-			<div className="flex items-center gap-2">
-				<Icon className="size-5" />
-				<div className="flex items-center gap-1">
-					{provider.providerType !== "default" && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Badge variant="outline">{provider.providerType}</Badge>
-							</TooltipTrigger>
-							<TooltipContent side="bottom" align="center">
-								{provider.providerType} provider
-							</TooltipContent>
-						</Tooltip>
-					)}
-					{provider.orgDefault && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Badge variant="light-positive">Default</Badge>
-							</TooltipTrigger>
-							<TooltipContent side="bottom" align="center">
-								Default provider for {provider.channelType}
-							</TooltipContent>
-						</Tooltip>
-					)}
-				</div>
-				<span className="text-sm font-medium">{provider.name}</span>
-			</div>
+			<ProviderTitle provider={provider} />
 			<div className="flex items-center gap-2">
 				<Dialog open={isOpen} onOpenChange={setIsOpen}>
 					<DialogTrigger asChild>
@@ -119,36 +126,10 @@ export function ProjectNotificationProviderCard({
 	project: ProjectDetails;
 }) {
 	const [isOpen, setIsOpen] = useState(false);
-	const Icon = ICONS[provider.channelType];
 
 	return (
 		<Card className="h-17.5 flex items-center max-w-none justify-between p-4 rounded-lg">
-			<div className="flex items-center gap-2">
-				<Icon className="size-5" />
-				<div className="flex items-center gap-1">
-					{provider.providerType !== "default" && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Badge variant="outline">{provider.providerType}</Badge>
-							</TooltipTrigger>
-							<TooltipContent side="bottom" align="center">
-								{provider.providerType} provider
-							</TooltipContent>
-						</Tooltip>
-					)}
-					{provider.orgDefault && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Badge variant="light-positive">Default</Badge>
-							</TooltipTrigger>
-							<TooltipContent side="bottom" align="center">
-								Default organization provider
-							</TooltipContent>
-						</Tooltip>
-					)}
-				</div>
-				<span className="text-sm font-medium">{provider.name}</span>
-			</div>
+			<ProviderTitle provider={provider} />
 			<div className="flex items-center gap-2">
 				<Dialog open={isOpen} onOpenChange={setIsOpen}>
 					<DialogTrigger asChild>

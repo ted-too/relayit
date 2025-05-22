@@ -9,7 +9,6 @@ import * as React from "react";
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 
@@ -92,13 +91,11 @@ export function CopyToClipboardContainer({
 	if (variant === "default") return Component;
 
 	return (
-		<TooltipProvider>
-			<Tooltip>
-				<TooltipTrigger asChild>{Component}</TooltipTrigger>
-				<TooltipContent>
-					<p>{isCopied ? "Copied" : "Copy to clipboard"}</p>
-				</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
+		<Tooltip>
+			<TooltipTrigger asChild>{Component}</TooltipTrigger>
+			<TooltipContent>
+				<p>{isCopied ? "Copied" : "Copy to clipboard"}</p>
+			</TooltipContent>
+		</Tooltip>
 	);
 }

@@ -4,6 +4,7 @@ import type * as React from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TRPCProvider } from "@/trpc/client";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function ThemeProvider({
 	children,
@@ -14,16 +15,18 @@ export function ThemeProvider({
 
 export function Providers({ children }: { children: React.ReactNode }) {
 	return (
-		<TRPCProvider>
-			<ThemeProvider
-				attribute="class"
-				defaultTheme="system"
-				enableSystem
-				disableTransitionOnChange
-			>
-				{children}
-				<ReactQueryDevtools initialIsOpen={false} />
-			</ThemeProvider>
-		</TRPCProvider>
+		<TooltipProvider delayDuration={0}>
+			<TRPCProvider>
+				<ThemeProvider
+					attribute="class"
+					defaultTheme="system"
+					enableSystem
+					disableTransitionOnChange
+				>
+					{children}
+					<ReactQueryDevtools initialIsOpen={false} />
+				</ThemeProvider>
+			</TRPCProvider>
+		</TooltipProvider>
 	);
 }
