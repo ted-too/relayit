@@ -155,6 +155,7 @@ export const projectProviderAssociationRelations = relations(
  * Represents a single notification message request and tracks its state.
  * Linked to the team that owns it, the API key used, and the provider credentials used for sending.
  */
+// TODO: Add a message trail for each provider independent of message as we will be using priority to determine which provider to use
 export const message = pgTable(
 	"message",
 	{
@@ -167,12 +168,8 @@ export const message = pgTable(
 		apiKeyId: text("api_key_id").references(() => apikey.id, {
 			onDelete: "set null", // Keep message record even if API key is deleted
 		}),
-		projectProviderAssociationId: text("project_provider_association_id")
-			.notNull()
-			.references(() => projectProviderAssociation.id, {
-				onDelete: "set null", // Keep message record even if project provider association is deleted
-			}),
 		channel: channelEnum("channel").notNull(),
+		providerType: providerTypeEnum("provider_type").notNull(),
 		recipient: text("recipient").notNull(),
 		payload: jsonb("payload").$type<SendMessagePayload>().notNull(),
 		status: messageStatusEnum("status").default("queued").notNull(),
@@ -184,9 +181,6 @@ export const message = pgTable(
 	(t) => [
 		index("message_project_status_idx").on(t.projectId, t.status),
 		index("message_api_key_idx").on(t.apiKeyId),
-		index("message_project_provider_association_idx").on(
-			t.projectProviderAssociationId,
-		),
 	],
 );
 
@@ -203,10 +197,6 @@ export const messageRelations = relations(message, ({ one, many }) => ({
 	apiKey: one(apikey, {
 		fields: [message.apiKeyId],
 		references: [apikey.id],
-	}),
-	projectProviderAssociation: one(projectProviderAssociation, {
-		fields: [message.projectProviderAssociationId],
-		references: [projectProviderAssociation.id],
 	}),
 	events: many(messageEvent),
 }));

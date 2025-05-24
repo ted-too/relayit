@@ -10,6 +10,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { openAPISpecs } from "hono-openapi";
 
 type Session = typeof auth.$Infer.Session.session;
 
@@ -61,6 +62,36 @@ app.use(
 );
 
 app.use("*", logger());
+
+app.get(
+	"/openapi",
+	openAPISpecs(app, {
+		documentation: {
+			info: {
+				title: "RelayIt API",
+				version: "1.0.0",
+				description: "RelayIt API",
+			},
+			servers: [
+				{ url: process.env.BETTER_AUTH_URL, description: "Local Server" },
+			],
+			components: {
+				securitySchemes: {
+					apiKey: {
+						type: "apiKey",
+						in: "header",
+						name: "X-API-Key",
+					},
+				},
+			},
+			security: [
+				{
+					apiKey: [],
+				},
+			],
+		},
+	}),
+);
 
 app.on(["POST", "GET"], "/api/auth/*", authSessionMiddleware, (c) => {
 	return auth.handler(c.req.raw);

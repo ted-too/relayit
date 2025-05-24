@@ -1,4 +1,4 @@
-import { AVAILABLE_CHANNELS } from "@repo/shared";
+import { AVAILABLE_CHANNELS, AVAILABLE_PROVIDER_TYPES } from "@repo/shared";
 import z from "zod";
 
 const payloadSchema = z
@@ -13,6 +13,7 @@ export type SendMessagePayload = z.infer<typeof payloadSchema>;
 
 export const sendMessageSchema = z.object({
 	channel: z.enum(AVAILABLE_CHANNELS),
+	providerType: z.enum(AVAILABLE_PROVIDER_TYPES).optional(),
 	recipient: z.string(),
 	payload: payloadSchema,
 	projectSlug: z.string(),

@@ -1,5 +1,11 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import z from "zod";
+
+export const errorResponseSchema = z.object({
+	details: z.array(z.string()),
+	message: z.string(),
+});
 
 export const errorResponse = (
 	c: Context,
