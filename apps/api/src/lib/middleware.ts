@@ -69,26 +69,20 @@ export const apiKeyMiddleware = factory.createMiddleware(async (c, next) => {
 		},
 	});
 
-	if (!valid || !key) {
+	if (!valid || !key || !key.metadata?.organizationId) {
 		throw new HTTPException(401, { message: error?.message ?? "Unauthorized" });
 	}
 
-	const userMembership = await db.query.member.findFirst({
-		where: eq(schema.member.userId, key.userId),
-		with: {
-			organization: true,
-		},
-		columns: {
-			id: true,
-		},
+	const organization = await db.query.organization.findFirst({
+		where: eq(schema.organization.id, key.metadata.organizationId),
 	});
 
-	if (!userMembership) {
+	if (!organization) {
 		throw new HTTPException(401, { message: "Unauthorized" });
 	}
 
 	c.set("apiKey", key);
-	c.set("organization", userMembership.organization);
+	c.set("organization", organization);
 
 	await next();
 });

@@ -14,6 +14,7 @@ import type {
 } from "@repo/shared";
 import { getProvider } from "@repo/worker/providers"; // Adjusted path
 import { eq } from "drizzle-orm"; // Required for the direct status check query
+import { logger } from "@repo/worker/lib/utils";
 
 /**
  * Handles the processing of a single message from the queue.
@@ -27,15 +28,31 @@ export async function handleMessage(
 	messageStreamId: string,
 	consumerGroupName: string,
 ): Promise<void> {
+	const startTime = Date.now();
 	let messageDetails: MessageWithRelations | null = null;
+
+	// Create structured context for this message processing operation
+	const logContext: Record<string, any> = {
+		messageId: internalMessageId,
+		streamId: messageStreamId,
+		consumerGroup: consumerGroupName,
+		operation: 'handleMessage',
+	};
+
+	logger.debug(logContext, 'Starting message processing');
 
 	try {
 		// Attempt to fetch message details first
 		const fetchResult = await fetchMessageDetails(internalMessageId);
 		if (fetchResult.error) {
-			console.error(
-				`[Worker] Failed to fetch message details for ID ${internalMessageId}: ${fetchResult.error.message}`,
-				fetchResult.error.details,
+			logger.error(
+				{ 
+					...logContext, 
+					error: fetchResult.error, 
+					details: fetchResult.error.details,
+					stage: 'fetch_message_details'
+				},
+				`Failed to fetch message details: ${fetchResult.error.message}`,
 			);
 			return;
 		}
@@ -43,11 +60,18 @@ export async function handleMessage(
 		messageDetails = fetchResult.data;
 
 		if (!messageDetails) {
-			console.error(
-				`[Worker] No message found for ID ${internalMessageId}. Acknowledging and skipping.`,
+			logger.error(
+				{ ...logContext, stage: 'fetch_message_details' },
+				'No message found in database. Acknowledging and skipping.',
 			);
 			return; // Message will be ack'd in finally.
 		}
+
+		// Enrich log context with message details
+		logContext.channel = messageDetails.channel;
+		logContext.recipient = messageDetails.recipient;
+		logContext.projectId = messageDetails.projectId;
+		logContext.apiKeyId = messageDetails.apiKeyId;
 
 		// --- Start Transaction for status updates and event logging ---
 		await db.transaction(async (tx) => {
@@ -61,8 +85,14 @@ export async function handleMessage(
 				currentMessageState?.status === "sent" ||
 				currentMessageState?.status === "delivered"
 			) {
-				console.log(
-					`[Worker] Message ${internalMessageId} already in status '${currentMessageState.status}'. Skipping processing, will ensure acknowledgment.`,
+				logger.info(
+					{
+						...logContext,
+						currentStatus: currentMessageState.status,
+						stage: 'idempotency_check',
+						skipped: true,
+					},
+					`Message already in final status '${currentMessageState.status}'. Skipping processing.`,
 				);
 				return; // Exit transaction; finally block will acknowledge.
 			}
@@ -71,18 +101,29 @@ export async function handleMessage(
 			// --- Start: Malformed Data Checks ---
 			if (!messageDetails?.projectProviderAssociation) {
 				const reason = "Missing projectProviderAssociation for message.";
-				console.warn(
-					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				logger.warn(
+					{
+						...logContext,
+						reason,
+						stage: 'validation',
+						status: 'malformed',
+					},
+					`Malformed message detected: ${reason}`,
 				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
-				return; // Exit transaction, message will be acked in finally
+				return;
 			}
 			if (!messageDetails.projectProviderAssociation.providerCredential) {
-				const reason =
-					"Missing providerCredential in projectProviderAssociation.";
-				console.warn(
-					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				const reason = "Missing providerCredential in projectProviderAssociation.";
+				logger.warn(
+					{
+						...logContext,
+						reason,
+						stage: 'validation',
+						status: 'malformed',
+					},
+					`Malformed message detected: ${reason}`,
 				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
@@ -90,8 +131,14 @@ export async function handleMessage(
 			}
 			if (!messageDetails.projectProviderAssociation.config) {
 				const reason = "Missing config in projectProviderAssociation.";
-				console.warn(
-					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				logger.warn(
+					{
+						...logContext,
+						reason,
+						stage: 'validation',
+						status: 'malformed',
+					},
+					`Malformed message detected: ${reason}`,
 				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
@@ -99,8 +146,14 @@ export async function handleMessage(
 			}
 			if (!messageDetails.payload || !messageDetails.recipient) {
 				const reason = "Missing payload or recipient for message.";
-				console.warn(
-					`[Worker] Malformed message ${internalMessageId}: ${reason}`,
+				logger.warn(
+					{
+						...logContext,
+						reason,
+						stage: 'validation',
+						status: 'malformed',
+					},
+					`Malformed message detected: ${reason}`,
 				);
 				await updateMessageStatus(tx, internalMessageId, "malformed", reason);
 				await logMessageEvent(tx, internalMessageId, "malformed", { reason });
@@ -114,13 +167,24 @@ export async function handleMessage(
 				"processing",
 			);
 			if (processingStatusUpdate.error) {
-				console.error(
-					`[Worker] DB Error updating message ${internalMessageId} to 'processing': ${processingStatusUpdate.error.message}`,
-					processingStatusUpdate.error.details,
+				logger.error(
+					{ 
+						...logContext, 
+						error: processingStatusUpdate.error, 
+						details: processingStatusUpdate.error.details,
+						stage: 'status_update',
+						targetStatus: 'processing',
+					},
+					`DB Error updating message to 'processing' status: ${processingStatusUpdate.error.message}`,
 				);
 				throw new Error("Failed to update status to processing");
 			}
 			await logMessageEvent(tx, internalMessageId, "processing");
+
+			logger.debug(
+				{ ...logContext, stage: 'status_update', status: 'processing' },
+				'Message status updated to processing'
+			);
 
 			// Get the provider
 			// Type assertion for channel, assuming it's valid if message exists
@@ -134,23 +198,45 @@ export async function handleMessage(
 			const messagePayload = messageDetails.payload as SendMessagePayload;
 			const recipient = messageDetails.recipient;
 
+			logger.debug(
+				{ 
+					...logContext, 
+					stage: 'provider_send',
+					provider: messageDetails.channel,
+					payloadType: messagePayload.type,
+				},
+				'Sending message via provider'
+			);
+
 			// Send via provider
+			const providerStartTime = Date.now();
 			const sendResult = await provider.send(
 				encryptedCredentials,
 				messagePayload,
 				providerConfig,
 				recipient,
 			);
+			const providerDuration = Date.now() - providerStartTime;
 
 			if (sendResult.error || !sendResult.data?.success) {
 				const reason =
 					sendResult.error?.message ||
 					sendResult.data?.details?.toString() ||
 					"Provider send failed without details";
-				console.error(
-					`[Worker] Provider failed to send message ${internalMessageId}: ${reason}`,
-					sendResult.error?.details,
+				
+				logger.error(
+					{ 
+						...logContext,
+						error: sendResult.error, 
+						details: sendResult.error?.details,
+						reason,
+						providerDuration,
+						stage: 'provider_send',
+						success: false,
+					},
+					`Provider failed to send message: ${reason}`,
 				);
+				
 				await updateMessageStatus(tx, internalMessageId, "failed", reason);
 				await logMessageEvent(tx, internalMessageId, "failed", {
 					reason,
@@ -162,16 +248,37 @@ export async function handleMessage(
 				await logMessageEvent(tx, internalMessageId, "sent", {
 					providerDetails: sendResult.data.details,
 				});
-				console.log(
-					`[Worker] Message ${internalMessageId} sent successfully via ${messageDetails.channel}.`,
+				
+				const totalDuration = Date.now() - startTime;
+				logger.info(
+					{
+						...logContext,
+						providerDetails: sendResult.data.details,
+						providerDuration,
+						totalDuration,
+						stage: 'provider_send',
+						success: true,
+						status: 'sent',
+					},
+					`Message sent successfully via ${messageDetails.channel}`,
 				);
 			}
 		}); // --- End Transaction ---
 	} catch (error: any) {
-		console.error(
-			`[Worker] Unhandled error processing message ID ${internalMessageId}: ${error.message}`,
-			{ stack: error.stack },
+		const totalDuration = Date.now() - startTime;
+		
+		logger.error(
+			{ 
+				...logContext,
+				error, 
+				stack: error.stack,
+				totalDuration,
+				stage: 'unhandled_error',
+				hasMessageDetails: !!messageDetails,
+			},
+			`Unhandled error processing message: ${error.message}`,
 		);
+		
 		// If an error occurred after fetching details, try to mark as failed
 		if (messageDetails) {
 			try {
@@ -188,26 +295,55 @@ export async function handleMessage(
 						stack: error.stack,
 					});
 				});
+				
+				logger.debug(
+					{ ...logContext, stage: 'error_recovery' },
+					'Message marked as failed after unhandled error'
+				);
 			} catch (dbError: any) {
-				console.error(
-					`[Worker] CRITICAL: Failed to update message ${internalMessageId} to 'failed' status after unhandled error: ${dbError.message}`,
+				logger.error(
+					{ 
+						...logContext,
+						error: dbError,
+						originalError: error,
+						stage: 'error_recovery',
+					},
+					`CRITICAL: Failed to update message to 'failed' status after unhandled error: ${dbError.message}`,
 				);
 			}
 		}
 	} finally {
 		// Always acknowledge the message in Redis
+		const ackStartTime = Date.now();
 		const ackResult = await acknowledgeMessage(
 			messageStreamId,
 			consumerGroupName,
 		);
+		const ackDuration = Date.now() - ackStartTime;
+		const totalDuration = Date.now() - startTime;
+		
 		if (ackResult.error) {
-			console.error(
-				`[Worker] CRITICAL: Failed to acknowledge message stream ID ${messageStreamId} in group ${consumerGroupName}: ${ackResult.error.message}`,
-				ackResult.error.details,
+			logger.error(
+				{ 
+					...logContext,
+					error: ackResult.error, 
+					details: ackResult.error.details,
+					ackDuration,
+					totalDuration,
+					stage: 'acknowledgment',
+				},
+				`CRITICAL: Failed to acknowledge message stream: ${ackResult.error.message}`,
 			);
 		} else {
-			console.log(
-				`[Worker] Message stream ID ${messageStreamId} acknowledged in group ${consumerGroupName}. Ack count: ${ackResult.data}`,
+			logger.debug(
+				{
+					...logContext,
+					ackCount: ackResult.data,
+					ackDuration,
+					totalDuration,
+					stage: 'acknowledgment',
+				},
+				'Message acknowledged successfully',
 			);
 		}
 	}

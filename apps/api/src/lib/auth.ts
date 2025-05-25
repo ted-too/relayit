@@ -87,6 +87,7 @@ export const auth = betterAuth({
 				timeWindow: 1000 * 60 * 60, // 1 hour
 				maxRequests: 100, // 100 requests per hour
 			},
+			enableMetadata: true,
 			defaultPrefix: "rel_",
 			disableSessionForAPIKeys: true,
 		}),

@@ -6,7 +6,9 @@ import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { useQuery } from "@tanstack/react-query";
 import { ApiKeyCard } from "./key";
 
-export function ApiKeysCardContent() {
+export function ApiKeysCardContent({
+	organizationId,
+}: { organizationId: string }) {
 	const { data: apiKeys, isPending } = useQuery(apiKeysListQueryOptions());
 
 	return (
@@ -22,7 +24,11 @@ export function ApiKeysCardContent() {
 					</p>
 				</div>
 			) : (
-				apiKeys.map((apiKey) => <ApiKeyCard key={apiKey.id} apiKey={apiKey} />)
+				apiKeys
+					.filter(
+						(apiKey) => apiKey.metadata?.organizationId === organizationId,
+					)
+					.map((apiKey) => <ApiKeyCard key={apiKey.id} apiKey={apiKey} />)
 			)}
 		</CardContent>
 	);

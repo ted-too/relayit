@@ -1,6 +1,7 @@
 import type { ChannelType } from "@repo/shared";
 import type { INotificationProvider } from "@repo/worker/providers/interface";
 import { SESProvider } from "@repo/worker/providers/ses";
+import { logger } from "@repo/worker/lib/utils";
 // Import other providers like SNSProvider here when implemented
 
 /**
@@ -17,8 +18,7 @@ export function getProvider(channel: ChannelType): INotificationProvider {
 		// case "sms":
 		// 	 return new SNSProvider(); // Example for future
 		default:
-			// Optional: Implement a fallback or logging for unsupported channels
-			console.warn(`No provider implemented for channel: ${channel}`);
+			logger.warn(`No provider implemented for channel: ${channel}`);
 			throw new Error(`Unsupported channel type: ${channel}`);
 	}
 }

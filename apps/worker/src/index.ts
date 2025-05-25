@@ -1,21 +1,47 @@
-import { MESSAGE_QUEUE_STREAM, acknowledgeMessage } from "@repo/db";
+import {
+	MESSAGE_QUEUE_STREAM,
+	acknowledgeMessage,
+	claimPendingMessages,
+	getPendingMessages,
+} from "@repo/db";
 import { type Result, createGenericError } from "@repo/shared";
 import {
 	BLOCK_TIMEOUT_MS,
 	CONSUMER_GROUP_NAME,
 	CONSUMER_NAME,
 	READ_COUNT,
+	MIN_IDLE_TIME_MS,
+	PENDING_CHECK_INTERVAL_MS,
+	MAX_CLAIM_COUNT,
 } from "@repo/worker/lib/constants";
 import { handleMessage } from "@repo/worker/lib/process-message";
 import { redis } from "bun";
+import { logger } from "@repo/worker/lib/utils";
 
 let isShuttingDown = false;
+let pendingRecoveryInterval: NodeJS.Timeout | null = null;
+
+// Global context for worker operations
+const workerContext: Record<string, any> = {
+	workerId: CONSUMER_NAME,
+	consumerGroup: CONSUMER_GROUP_NAME,
+	stream: MESSAGE_QUEUE_STREAM,
+	concurrency: READ_COUNT,
+	blockTimeout: BLOCK_TIMEOUT_MS,
+};
 
 /**
  * Initializes the Redis consumer group for the message queue stream.
  * Creates the group if it doesn't exist, starting from the beginning of the stream.
  */
 async function initializeConsumerGroup(): Promise<Result<void>> {
+	const startTime = Date.now();
+
+	logger.debug(
+		{ ...workerContext, operation: "initializeConsumerGroup" },
+		"Initializing Redis consumer group",
+	);
+
 	try {
 		await redis.send("XGROUP", [
 			"CREATE",
@@ -24,21 +50,276 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
 			"0", // Start from beginning of stream
 			"MKSTREAM", // Create stream if doesn't exist
 		]);
-		console.log(
-			`[Worker] Consumer group '${CONSUMER_GROUP_NAME}' ensured on stream '${MESSAGE_QUEUE_STREAM}'.`,
+
+		const duration = Date.now() - startTime;
+		logger.info(
+			{
+				...workerContext,
+				operation: "initializeConsumerGroup",
+				duration,
+				created: true,
+			},
+			`Consumer group '${CONSUMER_GROUP_NAME}' created successfully`,
 		);
 		return { error: null, data: undefined };
 	} catch (error: any) {
+		const duration = Date.now() - startTime;
+
 		if (error?.message?.includes("BUSYGROUP")) {
-			console.log(
-				`[Worker] Consumer group '${CONSUMER_GROUP_NAME}' already exists on stream '${MESSAGE_QUEUE_STREAM}'. Proceeding.`,
+			logger.info(
+				{
+					...workerContext,
+					operation: "initializeConsumerGroup",
+					duration,
+					created: false,
+					alreadyExists: true,
+				},
+				`Consumer group '${CONSUMER_GROUP_NAME}' already exists. Proceeding.`,
 			);
 			return { error: null, data: undefined };
 		}
+
 		const errMessage = `Failed to create/verify consumer group '${CONSUMER_GROUP_NAME}'`;
-		console.error(`[Worker] ${errMessage}:`, error);
+		logger.error(
+			{
+				...workerContext,
+				error,
+				operation: "initializeConsumerGroup",
+				duration,
+			},
+			errMessage,
+		);
 		return { error: createGenericError(errMessage, error), data: null };
 	}
+}
+
+/**
+ * Checks for and claims pending messages that may have been abandoned by crashed workers.
+ * This ensures message processing reliability across worker restarts.
+ */
+async function checkAndClaimPendingMessages(): Promise<void> {
+	const startTime = Date.now();
+
+	logger.debug(
+		{
+			...workerContext,
+			operation: "checkAndClaimPendingMessages",
+			minIdleTimeMs: MIN_IDLE_TIME_MS,
+			maxClaimCount: MAX_CLAIM_COUNT,
+		},
+		"Checking for pending messages to claim",
+	);
+
+	try {
+		// First, get pending message summary for visibility
+		const pendingResult = await getPendingMessages(CONSUMER_GROUP_NAME, 10);
+		if (pendingResult.error) {
+			logger.error(
+				{
+					...workerContext,
+					operation: "checkAndClaimPendingMessages",
+					stage: "get_pending_info",
+					error: pendingResult.error,
+				},
+				"Failed to get pending message info",
+			);
+			return;
+		}
+
+		const { summary, details } = pendingResult.data;
+
+		if (summary?.totalPending > 0) {
+			logger.info(
+				{
+					...workerContext,
+					operation: "checkAndClaimPendingMessages",
+					stage: "pending_summary",
+					totalPending: summary.totalPending,
+					consumers: summary.consumers,
+					firstId: summary.firstId,
+					lastId: summary.lastId,
+				},
+				`Found ${summary.totalPending} pending messages in consumer group`,
+			);
+		}
+
+		// Attempt to claim abandoned messages
+		const claimResult = await claimPendingMessages(
+			CONSUMER_GROUP_NAME,
+			CONSUMER_NAME,
+			MIN_IDLE_TIME_MS,
+			MAX_CLAIM_COUNT,
+		);
+
+		const duration = Date.now() - startTime;
+
+		if (claimResult.error) {
+			logger.error(
+				{
+					...workerContext,
+					operation: "checkAndClaimPendingMessages",
+					stage: "claim_messages",
+					error: claimResult.error,
+					duration,
+				},
+				"Failed to claim pending messages",
+			);
+			return;
+		}
+
+		const claimedMessages = claimResult.data;
+
+		if (claimedMessages.length > 0) {
+			logger.info(
+				{
+					...workerContext,
+					operation: "checkAndClaimPendingMessages",
+					stage: "messages_claimed",
+					claimedCount: claimedMessages.length,
+					duration,
+				},
+				`Successfully claimed ${claimedMessages.length} abandoned messages`,
+			);
+
+			// Process the claimed messages
+			const processingPromises: Promise<void>[] = [];
+
+			for (const [messageStreamId, fields] of claimedMessages) {
+				let internalMessageId: string | null = null;
+				for (let i = 0; i < fields.length; i += 2) {
+					if (fields[i] === "messageId") {
+						internalMessageId = fields[i + 1]!;
+						break;
+					}
+				}
+
+				if (internalMessageId) {
+					logger.debug(
+						{
+							...workerContext,
+							operation: "checkAndClaimPendingMessages",
+							stage: "process_claimed",
+							messageStreamId,
+							internalMessageId,
+						},
+						"Processing claimed message",
+					);
+
+					processingPromises.push(
+						handleMessage(
+							internalMessageId,
+							messageStreamId,
+							CONSUMER_GROUP_NAME,
+						),
+					);
+				} else {
+					logger.warn(
+						{
+							...workerContext,
+							operation: "checkAndClaimPendingMessages",
+							stage: "malformed_claimed",
+							messageStreamId,
+						},
+						"Claimed message lacks messageId field. Acknowledging directly.",
+					);
+
+					// Acknowledge malformed claimed message
+					processingPromises.push(
+						(async () => {
+							const ackRes = await acknowledgeMessage(
+								messageStreamId,
+								CONSUMER_GROUP_NAME,
+							);
+							if (ackRes.error) {
+								logger.error(
+									{
+										...workerContext,
+										error: ackRes.error,
+										messageStreamId,
+										stage: "claimed_malformed_ack_failed",
+									},
+									"Failed to acknowledge malformed claimed message",
+								);
+							}
+						})(),
+					);
+				}
+			}
+
+			// Process all claimed messages concurrently
+			if (processingPromises.length > 0) {
+				const results = await Promise.allSettled(processingPromises);
+				let successCount = 0;
+				let failureCount = 0;
+
+				for (const result of results) {
+					if (result.status === "fulfilled") {
+						successCount++;
+					} else {
+						failureCount++;
+					}
+				}
+
+				logger.info(
+					{
+						...workerContext,
+						operation: "checkAndClaimPendingMessages",
+						stage: "claimed_processing_complete",
+						totalClaimed: claimedMessages.length,
+						successCount,
+						failureCount,
+						totalDuration: Date.now() - startTime,
+					},
+					`Completed processing ${claimedMessages.length} claimed messages`,
+				);
+			}
+		} else {
+			logger.debug(
+				{
+					...workerContext,
+					operation: "checkAndClaimPendingMessages",
+					stage: "no_messages_claimed",
+					duration,
+				},
+				"No pending messages found to claim",
+			);
+		}
+	} catch (error: any) {
+		const duration = Date.now() - startTime;
+		logger.error(
+			{
+				...workerContext,
+				operation: "checkAndClaimPendingMessages",
+				stage: "unhandled_error",
+				error,
+				stack: error.stack,
+				duration,
+			},
+			`Unhandled error in pending message check: ${error.message}`,
+		);
+	}
+}
+
+/**
+ * Starts the pending message recovery loop that runs in the background.
+ * This periodically checks for and claims abandoned messages.
+ */
+function startPendingMessageRecovery(): NodeJS.Timeout {
+	logger.info(
+		{
+			...workerContext,
+			operation: "startPendingMessageRecovery",
+			intervalMs: PENDING_CHECK_INTERVAL_MS,
+			minIdleTimeMs: MIN_IDLE_TIME_MS,
+		},
+		"Starting pending message recovery loop",
+	);
+
+	return setInterval(async () => {
+		if (!isShuttingDown) {
+			await checkAndClaimPendingMessages();
+		}
+	}, PENDING_CHECK_INTERVAL_MS);
 }
 
 /**
@@ -47,9 +328,19 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
  * and processes them concurrently using handleMessage.
  */
 async function processMessages(): Promise<void> {
-	console.log(
-		`[Worker] Starting message processing loop for group '${CONSUMER_GROUP_NAME}', consumer '${CONSUMER_NAME}'. Concurrency: ${READ_COUNT}`,
+	const startTime = Date.now();
+	let totalMessagesProcessed = 0;
+	let totalBatchesProcessed = 0;
+
+	logger.info(
+		{
+			...workerContext,
+			operation: "processMessages",
+			startTime,
+		},
+		"Starting message processing loop",
 	);
+
 	while (!isShuttingDown) {
 		try {
 			if (isShuttingDown) break;
@@ -65,16 +356,29 @@ async function processMessages(): Promise<void> {
 				"STREAMS",
 				MESSAGE_QUEUE_STREAM,
 				">",
-			])) as [string, [string, string[]][]][] | null;
+			])) as Record<string, [string, string[]][]> | null;
 
 			if (isShuttingDown) break;
 
-			if (!response || response.length === 0) {
+			if (!response || Object.keys(response).length === 0) {
 				continue;
 			}
 
-			for (const [_streamName, messages] of response) {
+			for (const [streamName, messages] of Object.entries(response)) {
+				const batchStartTime = Date.now();
 				const processingPromises: Promise<void>[] = [];
+				const batchContext = {
+					...workerContext,
+					operation: "processBatch",
+					streamName,
+					batchSize: messages.length,
+					batchId: `batch_${Date.now()}`,
+				};
+
+				logger.debug(
+					batchContext,
+					`Processing batch of ${messages.length} messages`,
+				);
 
 				for (const [messageStreamId, fields] of messages) {
 					if (isShuttingDown) break;
@@ -88,8 +392,14 @@ async function processMessages(): Promise<void> {
 					}
 
 					if (internalMessageId) {
-						console.log(
-							`[Worker] Queuing for processing: Stream ID ${messageStreamId}, Internal ID ${internalMessageId}`,
+						logger.debug(
+							{
+								...batchContext,
+								messageStreamId,
+								internalMessageId,
+								stage: "queue_message",
+							},
+							"Queuing message for processing",
 						);
 						processingPromises.push(
 							handleMessage(
@@ -103,17 +413,28 @@ async function processMessages(): Promise<void> {
 						// Add a promise to acknowledge it directly.
 						processingPromises.push(
 							(async () => {
-								console.warn(
-									`[Worker] Stream Message ID ${messageStreamId} lacks 'messageId' field. Acknowledging directly.`,
+								logger.warn(
+									{
+										...batchContext,
+										messageStreamId,
+										stage: "malformed_message",
+									},
+									"Stream message lacks messageId field. Acknowledging directly.",
 								);
 								const ackRes = await acknowledgeMessage(
 									messageStreamId,
 									CONSUMER_GROUP_NAME,
 								);
 								if (ackRes.error) {
-									console.error(
-										`[Worker] CRITICAL: Failed to acknowledge malformed stream message ${messageStreamId}: ${ackRes.error.message}`,
-										ackRes.error.details,
+									logger.error(
+										{
+											...batchContext,
+											error: ackRes.error,
+											details: ackRes.error.details,
+											messageStreamId,
+											stage: "malformed_ack_failed",
+										},
+										`CRITICAL: Failed to acknowledge malformed stream message: ${ackRes.error.message}`,
 									);
 								}
 							})(),
@@ -124,10 +445,20 @@ async function processMessages(): Promise<void> {
 				if (isShuttingDown) break;
 
 				if (processingPromises.length > 0) {
-					console.log(
-						`[Worker] Processing batch of ${processingPromises.length} message(s) concurrently.`,
+					const processingStartTime = Date.now();
+
+					logger.info(
+						{
+							...batchContext,
+							stage: "batch_processing",
+							messageCount: processingPromises.length,
+						},
+						"Processing batch concurrently",
 					);
+
 					const results = await Promise.allSettled(processingPromises);
+					const batchDuration = Date.now() - batchStartTime;
+					const processingDuration = Date.now() - processingStartTime;
 
 					let fulfilledCount = 0;
 					let rejectedCount = 0;
@@ -138,35 +469,78 @@ async function processMessages(): Promise<void> {
 							rejectedCount++;
 							// Errors from handleMessage or direct ack are already logged internally by those functions.
 							// We could log the specific reason for rejection here if needed for a batch summary.
-							console.error(
-								`[Worker] Task ${index} in batch rejected:`,
-								result.reason,
+							logger.error(
+								{
+									...batchContext,
+									reason: result.reason,
+									taskIndex: index,
+									stage: "batch_task_rejected",
+								},
+								"Task in batch rejected",
 							);
 						}
 					});
 
+					totalMessagesProcessed += fulfilledCount;
+					totalBatchesProcessed++;
+
+					const batchSummary = {
+						...batchContext,
+						fulfilledCount,
+						rejectedCount,
+						totalCount: processingPromises.length,
+						batchDuration,
+						processingDuration,
+						successRate: (fulfilledCount / processingPromises.length) * 100,
+						stage: "batch_complete",
+						totalMessagesProcessed,
+						totalBatchesProcessed,
+					};
+
 					if (rejectedCount > 0) {
-						console.warn(
-							`[Worker] Batch processing complete. Fulfilled: ${fulfilledCount}, Rejected: ${rejectedCount}. See previous logs for individual errors.`,
+						logger.warn(
+							batchSummary,
+							`Batch processing complete with ${rejectedCount} failures`,
 						);
 					} else {
-						console.log(
-							`[Worker] Batch of ${fulfilledCount} tasks processed successfully.`,
-						);
+						logger.info(batchSummary, "Batch processed successfully");
 					}
 				}
 			} // End of streams in response (typically only one: MESSAGE_QUEUE_STREAM)
 		} catch (err: any) {
 			if (isShuttingDown) break;
-			console.error(
-				`[Worker] Error in processMessages outer loop: ${err.message}. Continuing after delay. `,
-				{ stack: err.stack },
+
+			logger.error(
+				{
+					...workerContext,
+					error: err,
+					stack: err.stack,
+					operation: "processMessages",
+					stage: "outer_loop_error",
+					totalMessagesProcessed,
+					totalBatchesProcessed,
+				},
+				`Error in message processing loop: ${err.message}. Continuing after delay.`,
 			);
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}
 	}
-	console.log(
-		"[Worker] Message processing loop stopped due to shutdown signal.",
+
+	const totalDuration = Date.now() - startTime;
+	logger.info(
+		{
+			...workerContext,
+			operation: "processMessages",
+			stage: "loop_ended",
+			totalDuration,
+			totalMessagesProcessed,
+			totalBatchesProcessed,
+			averageMessagesPerBatch:
+				totalBatchesProcessed > 0
+					? totalMessagesProcessed / totalBatchesProcessed
+					: 0,
+		},
+		"Message processing loop stopped due to shutdown signal",
 	);
 }
 
@@ -175,40 +549,139 @@ async function processMessages(): Promise<void> {
  * Checks Redis connection, initializes consumer group, and starts processing messages.
  */
 async function startWorker() {
-	console.log("[Worker] Starting worker process...");
+	const startTime = Date.now();
 
+	logger.info(
+		{
+			...workerContext,
+			operation: "startWorker",
+			startTime,
+		},
+		"Starting worker process",
+	);
+
+	// Redis connection check
 	try {
+		const pingStartTime = Date.now();
 		const pong = await redis.send("PING", []);
+		const pingDuration = Date.now() - pingStartTime;
+
 		if (pong !== "PONG") {
-			console.error(`[Worker] Redis PING failed. Expected PONG, got: ${pong}`);
+			logger.error(
+				{
+					...workerContext,
+					operation: "startWorker",
+					stage: "redis_ping",
+					expected: "PONG",
+					received: pong,
+					pingDuration,
+				},
+				"Redis PING failed - unexpected response",
+			);
 			process.exit(1);
 		}
-		console.log("[Worker] Redis PING successful.");
-	} catch (error: any) {
-		console.error("[Worker] Redis PING failed:", error);
-		process.exit(1);
-	}
 
-	const groupInitResult = await initializeConsumerGroup();
-	if (groupInitResult.error) {
-		console.error(
-			"[Worker] Failed to initialize consumer group. Exiting.",
-			groupInitResult.error,
+		logger.info(
+			{
+				...workerContext,
+				operation: "startWorker",
+				stage: "redis_ping",
+				pingDuration,
+			},
+			"Redis PING successful",
+		);
+	} catch (error: any) {
+		logger.error(
+			{
+				...workerContext,
+				error,
+				operation: "startWorker",
+				stage: "redis_ping",
+			},
+			"Redis PING failed",
 		);
 		process.exit(1);
 	}
 
+	// Initialize consumer group
+	const groupInitResult = await initializeConsumerGroup();
+	if (groupInitResult.error) {
+		logger.error(
+			{
+				...workerContext,
+				error: groupInitResult.error,
+				operation: "startWorker",
+				stage: "consumer_group_init",
+			},
+			"Failed to initialize consumer group. Exiting.",
+		);
+		process.exit(1);
+	}
+
+	// Set up signal handlers
+	logger.debug(
+		{
+			...workerContext,
+			operation: "startWorker",
+			stage: "signal_handlers",
+		},
+		"Setting up graceful shutdown signal handlers",
+	);
 	process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 	process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
+	// Check for pending messages on startup (recovery from previous crashes)
+	logger.info(
+		{
+			...workerContext,
+			operation: "startWorker",
+			stage: "startup_pending_check",
+		},
+		"Checking for pending messages from previous worker sessions",
+	);
+	await checkAndClaimPendingMessages();
+
+	// Start pending message recovery
+	pendingRecoveryInterval = startPendingMessageRecovery();
+
+	const initDuration = Date.now() - startTime;
+	logger.info(
+		{
+			...workerContext,
+			operation: "startWorker",
+			stage: "initialization_complete",
+			initDuration,
+		},
+		"Worker initialization complete. Starting message processing.",
+	);
+
+	// Start processing messages
 	await processMessages();
-	console.log(
-		"[Worker] ProcessMessages finished. Worker might exit if shutdown was not called via signal.",
+
+	const totalDuration = Date.now() - startTime;
+	logger.info(
+		{
+			...workerContext,
+			operation: "startWorker",
+			stage: "process_messages_finished",
+			totalDuration,
+		},
+		"ProcessMessages finished. Worker might exit if shutdown was not called via signal.",
 	);
 }
 
 startWorker().catch((error) => {
-	console.error("[Worker] Unhandled error in startWorker. Exiting:", error);
+	logger.error(
+		{
+			...workerContext,
+			error,
+			stack: error.stack,
+			operation: "startWorker",
+			stage: "unhandled_error",
+			isShuttingDown,
+		},
+		"Unhandled error in startWorker. Exiting",
+	);
 	if (!isShuttingDown) {
 		process.exit(1);
 	}
@@ -216,15 +689,59 @@ startWorker().catch((error) => {
 
 /** Gracefully shuts down the worker. */
 async function gracefulShutdown(signal: string) {
-	console.log(`[Worker] Received ${signal}. Starting graceful shutdown...`);
+	const shutdownStartTime = Date.now();
+
+	logger.info(
+		{
+			...workerContext,
+			operation: "gracefulShutdown",
+			signal,
+			shutdownStartTime,
+		},
+		`Received ${signal}. Starting graceful shutdown`,
+	);
+
 	isShuttingDown = true;
 
 	// Give existing message processing a moment to complete if necessary,
 	// but XREADGROUP with BLOCK will mostly handle waiting.
 	// The loop will break on the next iteration or when BLOCK times out.
-	redis.close();
-	console.log("[Worker] Redis connection closed.");
 
-	console.log("[Worker] Shutdown complete. Exiting.");
+	// Stop pending message recovery
+	if (pendingRecoveryInterval) {
+		logger.debug(
+			{
+				...workerContext,
+				operation: "gracefulShutdown",
+				stage: "stop_pending_recovery",
+			},
+			"Stopping pending message recovery loop",
+		);
+		clearInterval(pendingRecoveryInterval);
+		pendingRecoveryInterval = null;
+	}
+
+	logger.debug(
+		{
+			...workerContext,
+			operation: "gracefulShutdown",
+			stage: "closing_redis",
+		},
+		"Closing Redis connection",
+	);
+
+	redis.close();
+
+	const shutdownDuration = Date.now() - shutdownStartTime;
+	logger.info(
+		{
+			...workerContext,
+			operation: "gracefulShutdown",
+			stage: "shutdown_complete",
+			shutdownDuration,
+		},
+		"Graceful shutdown complete. Exiting.",
+	);
+
 	process.exit(0);
 }

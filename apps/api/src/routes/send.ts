@@ -60,6 +60,9 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 		const apiKey = c.get("apiKey");
 		const organization = c.get("organization");
 
+		console.log(apiKey);
+		console.log(organization);
+
 		const project = await db.query.project.findFirst({
 			where: and(
 				eq(schema.project.slug, body.projectSlug),

@@ -1,3 +1,5 @@
+import { typeid } from "typeid-js";
+
 // Helper function to get an environment variable as a number or use a default
 const getEnvAsInt = (name: string, defaultValue: number): number => {
 	const value = process.env[name];
@@ -25,7 +27,17 @@ export const CONSUMER_GROUP_NAME = getEnvAsString(
 );
 export const CONSUMER_NAME = getEnvAsString(
 	"WORKER_CONSUMER_NAME",
-	`worker_consumer_${crypto.randomUUID()}`,
+	typeid("worker").toString(),
 );
 export const BLOCK_TIMEOUT_MS = getEnvAsInt("WORKER_BLOCK_TIMEOUT_MS", 5000); // How long to block on XREADGROUP (milliseconds)
 export const READ_COUNT = getEnvAsInt("WORKER_READ_COUNT", 10); // How many messages to attempt to read at once
+
+// Pending message recovery settings
+// How long a message must be idle before it can be claimed (5 minutes)
+export const MIN_IDLE_TIME_MS = getEnvAsInt("WORKER_MIN_IDLE_TIME_MS", 5 * 60 * 1000);
+
+// How often to check for pending messages (30 seconds)
+export const PENDING_CHECK_INTERVAL_MS = getEnvAsInt("WORKER_PENDING_CHECK_INTERVAL_MS", 30 * 1000);
+
+// Maximum number of pending messages to claim at once
+export const MAX_CLAIM_COUNT = getEnvAsInt("WORKER_MAX_CLAIM_COUNT", 5);

@@ -27,16 +27,10 @@ export type MessageWithRelations = typeof schema.message.$inferSelect & {
 export async function fetchMessageDetails(
 	messageId: string,
 ): Promise<Result<MessageWithRelations>> {
+	// TODO: Add a check to see the status of the provider so we can choose a different one if available and primary failed
 	try {
 		const messageDetails = await db.query.message.findFirst({
 			where: eq(schema.message.id, messageId),
-			with: {
-				projectProviderAssociation: {
-					with: {
-						providerCredential: true,
-					},
-				},
-			},
 		});
 
 		if (!messageDetails) {
@@ -46,7 +40,41 @@ export async function fetchMessageDetails(
 			};
 		}
 
-		return { error: null, data: messageDetails };
+		const projectProviderAssociations = (
+			await db.query.projectProviderAssociation.findMany({
+				where: eq(
+					schema.projectProviderAssociation.projectId,
+					messageDetails.projectId,
+				),
+				with: {
+					providerCredential: true,
+				},
+			})
+		)
+			.filter(
+				(ppa) =>
+					ppa.providerCredential.channelType === messageDetails.channel &&
+					ppa.providerCredential.providerType === messageDetails.providerType,
+			)
+			.sort((a, b) => a.priority - b.priority);
+
+		const projectProviderAssociation = projectProviderAssociations?.[0] ?? null;
+		if (!projectProviderAssociation) {
+			return {
+				error: createGenericError(
+					`No project provider association found for message ${messageId}`,
+				),
+				data: null,
+			};
+		}
+
+		return {
+			error: null,
+			data: {
+				...messageDetails,
+				projectProviderAssociation,
+			},
+		};
 	} catch (error) {
 		const errorMessage = `Database error fetching message ${messageId}`;
 		return {

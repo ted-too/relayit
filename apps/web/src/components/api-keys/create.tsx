@@ -25,9 +25,13 @@ import { toast } from "sonner";
 
 interface CreateApiKeyFormProps {
 	submitWrapper?: typeof DialogFooter;
+	organizationId: string;
 }
 
-export function CreateApiKeyForm({ submitWrapper }: CreateApiKeyFormProps) {
+export function CreateApiKeyForm({
+	submitWrapper,
+	organizationId,
+}: CreateApiKeyFormProps) {
 	const queryClient = useQueryClient();
 	const [createdApiKey, setCreatedApiKey] = useState<CreatedApiKey | null>(
 		null,
@@ -44,6 +48,9 @@ export function CreateApiKeyForm({ submitWrapper }: CreateApiKeyFormProps) {
 		onSubmit: async ({ value }) => {
 			const { data, error } = await authClient.apiKey.create({
 				...value,
+				metadata: {
+					organizationId,
+				},
 			});
 
 			if (error) return toast.error(error?.message);
@@ -129,6 +136,7 @@ export function CreateApiKeyDialog({
 		size: "default",
 	},
 	children,
+	organizationId,
 }: {
 	button?: {
 		label: string;
@@ -137,6 +145,7 @@ export function CreateApiKeyDialog({
 		className?: string;
 	};
 	children?: React.ReactNode;
+	organizationId: string;
 }) {
 	return (
 		<Dialog>
@@ -159,7 +168,10 @@ export function CreateApiKeyDialog({
 						Give your API key a name to help you identify it later
 					</DialogDescription>
 				</DialogHeader>
-				<CreateApiKeyForm submitWrapper={DialogFooter} />
+				<CreateApiKeyForm
+					submitWrapper={DialogFooter}
+					organizationId={organizationId}
+				/>
 			</DialogContent>
 		</Dialog>
 	);

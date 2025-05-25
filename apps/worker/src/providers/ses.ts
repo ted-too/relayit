@@ -23,7 +23,7 @@ import {
 	BASE_RETRY_DELAY_MS,
 	MAX_RETRY_ATTEMPTS,
 } from "@repo/worker/lib/constants";
-import { delay } from "@repo/worker/lib/utils";
+import { delay, logger } from "@repo/worker/lib/utils";
 import type {
 	INotificationProvider,
 	ProviderSendResult,
@@ -36,7 +36,19 @@ export class SESProvider implements INotificationProvider {
 		config: ProjectProviderConfig,
 		recipient: string,
 	): Promise<Result<ProviderSendResult>> {
+		const startTime = Date.now();
+		
+		// Create a structured context for this send operation
+		const logContext: Record<string, any> = {
+			provider: 'ses',
+			recipient,
+			messageType: messagePayload.type,
+			hasSubject: !!messagePayload.subject,
+		};
+
+		logger.debug(logContext, 'Starting SES email send operation');
 		if (!isAWSProviderCredentials(encryptedCredentials)) {
+			logger.error(logContext, 'Invalid SES credentials structure (pre-decrypt)');
 			return {
 				error: createGenericError(
 					"Invalid SES credentials structure (pre-decrypt)",
@@ -46,6 +58,7 @@ export class SESProvider implements INotificationProvider {
 		}
 
 		if (!isSESProjectProviderConfig(config)) {
+			logger.error(logContext, 'Invalid SES config structure');
 			return {
 				error: createGenericError("Invalid SES config structure"),
 				data: null,
@@ -54,6 +67,10 @@ export class SESProvider implements INotificationProvider {
 
 		const configParseResult = sesProjectProviderConfigSchema.safeParse(config);
 		if (!configParseResult.success) {
+			logger.error(
+				{ ...logContext, validationError: configParseResult.error },
+				'Invalid SES config content'
+			);
 			return {
 				error: createGenericError(
 					"Invalid SES config content",
@@ -64,6 +81,7 @@ export class SESProvider implements INotificationProvider {
 		}
 
 		if (!messagePayload.subject) {
+			logger.error(logContext, 'Subject is required for SES');
 			return {
 				error: createGenericError("Subject is required for SES"),
 				data: null,
@@ -74,6 +92,10 @@ export class SESProvider implements INotificationProvider {
 			decryptRecord<AWSProviderCredentials>(encryptedCredentials);
 
 		if (decryptResult.error) {
+			logger.error(
+				{ ...logContext, error: decryptResult.error },
+				'Failed to decrypt SES credentials'
+			);
 			return {
 				error: createGenericError(
 					"Failed to decrypt SES credentials",
@@ -85,6 +107,10 @@ export class SESProvider implements INotificationProvider {
 		const decryptedCreds = decryptResult.data;
 		const parseResult = awsCredentialsSchema.safeParse(decryptedCreds);
 		if (!parseResult.success) {
+			logger.error(
+				{ ...logContext, validationError: parseResult.error },
+				'Invalid decrypted SES credentials format'
+			);
 			return {
 				error: createGenericError(
 					"Invalid decrypted SES credentials format",
@@ -94,6 +120,9 @@ export class SESProvider implements INotificationProvider {
 			};
 		}
 		const credentials = parseResult.data;
+		
+		// Add region to log context now that we have credentials
+		logContext.region = credentials.unencrypted.region;
 
 		const sesClient = new SESClient({
 			region: credentials.unencrypted.region,
@@ -117,9 +146,24 @@ export class SESProvider implements INotificationProvider {
 
 		let lastError: any = null;
 		for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+			const attemptStartTime = Date.now();
+			
 			try {
 				const command = new SendEmailCommand(params);
 				const data: SendEmailCommandOutput = await sesClient.send(command);
+				
+				const duration = Date.now() - startTime;
+				logger.info(
+					{
+						...logContext,
+						messageId: data.MessageId,
+						attempt,
+						duration,
+						success: true,
+					},
+					'SES email sent successfully'
+				);
+				
 				return {
 					error: null,
 					data: {
@@ -129,25 +173,61 @@ export class SESProvider implements INotificationProvider {
 				};
 			} catch (error: any) {
 				lastError = error;
-				console.warn(
-					`[SESProvider] Attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed for recipient ${recipient}: ${error.name} - ${error.message}`,
-				);
-
+				const attemptDuration = Date.now() - attemptStartTime;
+				
 				const isRetryable =
 					error.name === "ThrottlingException" ||
 					error.name === "ServiceUnavailableException" ||
 					(error.$metadata?.httpStatusCode &&
 						error.$metadata.httpStatusCode >= 500);
 
+				const errorContext = {
+					...logContext,
+					error: {
+						name: error.name,
+						message: error.message,
+						code: error.code,
+						statusCode: error.$metadata?.httpStatusCode,
+					},
+					attempt,
+					maxAttempts: MAX_RETRY_ATTEMPTS,
+					attemptDuration,
+					isRetryable,
+					isLastAttempt: attempt === MAX_RETRY_ATTEMPTS,
+				};
+
 				if (isRetryable && attempt < MAX_RETRY_ATTEMPTS) {
 					const delayMs = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
-					console.log(`[SESProvider] Retrying in ${delayMs}ms...`);
+					logger.warn(
+						{ ...errorContext, retryDelayMs: delayMs },
+						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`
+					);
 					await delay(delayMs);
 				} else {
+					logger.error(
+						errorContext,
+						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? ' (max attempts reached)' : ' (non-retryable error)'}`
+					);
 					break;
 				}
 			}
 		}
+
+		const totalDuration = Date.now() - startTime;
+		logger.error(
+			{
+				...logContext,
+				totalDuration,
+				totalAttempts: MAX_RETRY_ATTEMPTS,
+				finalError: lastError ? {
+					name: lastError.name,
+					message: lastError.message,
+					code: lastError.code,
+					statusCode: lastError.$metadata?.httpStatusCode,
+				} : null,
+			},
+			`SES email send failed after ${MAX_RETRY_ATTEMPTS} attempts`
+		);
 
 		return {
 			error: createGenericError(

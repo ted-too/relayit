@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { openAPISpecs } from "hono-openapi";
+import { Scalar } from "@scalar/hono-api-reference";
 
 type Session = typeof auth.$Infer.Session.session;
 
@@ -47,6 +48,8 @@ export interface ApiKeyContext {
 
 const app = new Hono<NullableContext>();
 
+app.use("*", logger());
+
 app.route("/send", sendRouter);
 
 app.use(
@@ -60,8 +63,6 @@ app.use(
 		credentials: true,
 	}),
 );
-
-app.use("*", logger());
 
 app.get(
 	"/openapi",
@@ -92,6 +93,10 @@ app.get(
 		},
 	}),
 );
+
+if (process.env.NODE_ENV === "development") {
+	app.get("/reference", Scalar({ url: "/openapi" }));
+}
 
 app.on(["POST", "GET"], "/api/auth/*", authSessionMiddleware, (c) => {
 	return auth.handler(c.req.raw);
