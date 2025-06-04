@@ -123,8 +123,11 @@ export function DataTableFilterCheckbox<TData>({
 								<span className="ml-auto flex items-center justify-center font-mono text-xs">
 									{isLoading ? (
 										<Skeleton className="h-4 w-4" />
-									) : facetedValue?.has(option.value) ? (
-										formatCompactNumber(facetedValue.get(option.value) || 0)
+									) : option?.value &&
+										facetedValue?.has(option.value.toString()) ? (
+										formatCompactNumber(
+											facetedValue.get(option.value.toString()) || 0,
+										)
 									) : null}
 								</span>
 								<button

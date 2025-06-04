@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { ARRAY_DELIMITER } from "../constants/validations";
 
 export const basePaginationSchema = z.object({
 	limit: z.number().min(1).max(100).nullish(),
@@ -22,7 +23,15 @@ export function createTimeRangedPaginatedSchema<T extends z.ZodRawShape>(
 	extraFields: T,
 ) {
 	return timeRangeSchema.extend({
-		id: z.string().nullish(),
+		id: z.preprocess(
+			(val) => {
+				if (typeof val === "string") {
+					return val.split(ARRAY_DELIMITER);
+				}
+				return val;
+			},
+			z.array(z.string()).nullish(),
+		),
 		search: z.string().nullish(),
 		sort: z.array(z.string()).nullish(), // will be in the format of <column_id>:<asc|desc>
 		...basePaginationSchema.shape,

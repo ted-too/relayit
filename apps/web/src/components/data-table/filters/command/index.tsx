@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-
+import { Kbd } from "@/components/ui/kbd";
+import { useDataTable } from "@/components/data-table/provider";
 import {
 	Command,
 	CommandEmpty,
@@ -11,67 +11,58 @@ import {
 	CommandList,
 	CommandSeparator,
 } from "@/components/ui/command";
-import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-
-import { Kbd } from "@/components/ui/kbd";
-import type { DataTableFilterField } from "@/components/data-table/types";
-import { useDataTable } from "@/components/data-table/provider";
 import { Separator } from "@/components/ui/separator";
-import { useHotKey } from "@/hooks/use-hot-key";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { useLocalStorage } from "@/hooks/use-local-storage";
-import { useTableSearchParams } from "@/hooks/use-table-search-params";
 import { formatCompactNumber } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import type { ParserBuilder } from "nuqs";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DataTableFilterField } from "@/components/data-table/types";
 import {
-	deserialize,
+	columnFiltersParser,
 	getFieldOptions,
-	getFieldValueByType,
 	getFilterValue,
 	getWordByCaretPosition,
 	replaceInputByFieldType,
-	serializeSearchParams,
 } from "./utils";
-import type { BasePaginationParsers } from "@/components/tables/parsers";
+import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
+import { TABLE_COMMAND_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 
-interface DataTableFilterCommandProps<
-	TSchema,
-	R extends BasePaginationParsers,
-> {
-	schema: TSchema;
-	parsers: R;
+// FIXME: there is an issue on cmdk if I wanna only set a single slider value...
+
+interface DataTableFilterCommandProps {
+	// TODO: maybe use generics for the parser
+	searchParamsParser: Record<string, ParserBuilder<any>>;
+	className?: string;
 }
 
-export function DataTableFilterCommand<
-	TSchema,
-	R extends BasePaginationParsers,
->({ schema, parsers }: DataTableFilterCommandProps<TSchema, R>) {
+export function DataTableFilterCommand({
+	searchParamsParser,
+	className,
+}: DataTableFilterCommandProps) {
 	const {
 		table,
 		isLoading,
 		filterFields: _filterFields,
 		getFacetedUniqueValues,
 	} = useDataTable();
-
-	const { search, filterKeys, setSearch } = useTableSearchParams(
-		schema,
-		parsers,
-	);
-
+	const columnFilters = table.getState().columnFilters;
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [open, setOpen] = useState<boolean>(false);
 	const [currentWord, setCurrentWord] = useState<string>("");
-
 	const filterFields = useMemo(
 		() => _filterFields?.filter((i) => !i.commandDisabled),
 		[_filterFields],
 	);
-
-	// Generate input value directly from search params
-	const defaultInputValue = serializeSearchParams(search, filterFields);
-	const [inputValue, setInputValue] = useState<string>(defaultInputValue);
-
+	const columnParser = useMemo(
+		() => columnFiltersParser({ searchParamsParser, filterFields }),
+		[searchParamsParser, filterFields],
+	);
+	const [inputValue, setInputValue] = useState<string>(
+		columnParser.serialize(columnFilters),
+	);
 	const [lastSearches, setLastSearches] = useLocalStorage<
 		{
 			search: string;
@@ -79,119 +70,72 @@ export function DataTableFilterCommand<
 		}[]
 	>("data-table-command", []);
 
-	// Single hotkey handler to toggle command visibility
-	useHotKey(() => {
-		setOpen((open) => {
-			const newOpen = !open;
-			if (newOpen) {
-				// Focus input when opening
-				setTimeout(() => inputRef?.current?.focus(), 0);
-				// Reset input to current search state
-				setInputValue(serializeSearchParams(search, filterFields));
-			} else {
-				// Update search when closing
-				applySearch(inputValue);
-			}
-			return newOpen;
+	useEffect(() => {
+		// TODO: we could check for ARRAY_DELIMITER or SLIDER_DELIMITER to auto-set filter when typing
+		if (currentWord !== "" && open) return;
+		// reset
+		if (currentWord !== "" && !open) setCurrentWord("");
+		// avoid recursion
+		if (inputValue.trim() === "" && !open) return;
+
+		const searchParams = columnParser.parse(inputValue);
+
+		const currentFilters = table.getState().columnFilters;
+		const currentEnabledFilters = currentFilters.filter((filter) => {
+			const field = _filterFields?.find((field) => field.value === filter.id);
+			return !field?.commandDisabled;
 		});
-	}, "k");
+		const currentDisabledFilters = currentFilters.filter((filter) => {
+			const field = _filterFields?.find((field) => field.value === filter.id);
+			return field?.commandDisabled;
+		});
 
-	// TODO: Refactor this to be more readable and maintainable
-	// Function to handle search application
-	const applySearch = (input: string) => {
-		if (!input.trim()) return;
-
-		// Parse the search parameters from the input
-		const searchParams = deserialize(schema)(input);
-
-		if (searchParams.success) {
-			// Create a record of search parameters to update
-			const updatedSearchParams: Record<string, unknown> = {};
-
-			// Process each field in the parsed input
-			for (const key of Object.keys(searchParams.data)) {
-				// Skip any timestamp-related fields that might have passed through
-				if (key === "timestamp") continue;
-
-				const value = searchParams.data[key as keyof typeof searchParams.data];
-
-				// Find the corresponding filter field
-				const field = filterFields?.find((field) => field.value === key);
-
-				// Get the formatted value for this field type
-				const formattedValue = field
-					? getFieldValueByType({ field, value })
-					: value;
-
-				// Add to updated search params
-				updatedSearchParams[key] = formattedValue;
-			}
-
-			// Reset any filters not in the input (except timestamp)
-			for (const key of filterKeys) {
-				if (
-					!(key in updatedSearchParams) &&
-					key !== "timestamp" &&
-					key !== "start" &&
-					key !== "end"
-				) {
-					updatedSearchParams[key] = undefined;
-				}
-			}
-
-			// Preserve the timestamp-related fields from existing search
-			// DON'T reset or override timestamp, start, or end values
-			if (!("start" in updatedSearchParams) && search.start) {
-				updatedSearchParams.start = search.start;
-			}
-			if (!("end" in updatedSearchParams) && search.end) {
-				updatedSearchParams.end = search.end;
-			}
-
-			// Update search params
-			setSearch(updatedSearchParams);
-
-			// Save to search history
-			saveToHistory(input);
-		} else {
-			console.error("Schema validation failed:", searchParams.error.message);
-		}
-	};
-
-	// Function to save search to history
-	const saveToHistory = (input: string) => {
-		const searchText = input.trim();
-		if (!searchText) return;
-
-		const timestamp = Date.now();
-		const searchIndex = lastSearches.findIndex(
-			(item) => item.search === searchText,
+		const commandDisabledFilterKeys = currentDisabledFilters.reduce(
+			(prev, curr) => {
+				prev[curr.id] = curr.value;
+				return prev;
+			},
+			{} as Record<string, unknown>,
 		);
 
-		if (searchIndex !== -1) {
-			// Update existing entry timestamp
-			const updatedSearches = [...lastSearches];
-			updatedSearches[searchIndex].timestamp = timestamp;
-			setLastSearches(updatedSearches);
-		} else {
-			// Add new entry
-			setLastSearches([...lastSearches, { search: searchText, timestamp }]);
+		for (const key of Object.keys(searchParams)) {
+			const value = searchParams[key as keyof typeof searchParams];
+			table.getColumn(key)?.setFilterValue(value);
 		}
-	};
+		const currentFiltersToReset = currentEnabledFilters.filter((filter) => {
+			return !(filter.id in searchParams);
+		});
+		for (const filter of currentFiltersToReset) {
+			table.getColumn(filter.id)?.setFilterValue(undefined);
+		}
+
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [inputValue, open, currentWord]);
+
+	useEffect(() => {
+		// REMINDER: only update the input value if the command is closed (avoids jumps while open)
+		if (!open) {
+			setInputValue(columnParser.serialize(columnFilters));
+		}
+	}, [columnFilters, filterFields, open]);
+
+	useHotkeys(TABLE_COMMAND_KEYBOARD_SHORTCUT, () => setOpen((open) => !open));
+
+	useEffect(() => {
+		if (open) {
+			inputRef?.current?.focus();
+		}
+	}, [open]);
 
 	return (
-		<div>
+		<div className={cn(className)}>
 			<button
 				type="button"
 				className={cn(
 					"group flex w-full items-center rounded-lg border border-input bg-background px-3 text-muted-foreground ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-accent/50 hover:text-accent-foreground",
 					open ? "hidden" : "visible",
 				)}
-				onClick={() => {
-					setInputValue(serializeSearchParams(search, filterFields));
-					setOpen(true);
-					setTimeout(() => inputRef?.current?.focus(), 0);
-				}}
+				onClick={() => setOpen(true)}
 			>
 				{isLoading ? (
 					<LoaderCircleIcon className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground opacity-50 group-hover:text-popover-foreground" />
@@ -199,41 +143,52 @@ export function DataTableFilterCommand<
 					<SearchIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground opacity-50 group-hover:text-popover-foreground" />
 				)}
 				<span className="h-11 w-full max-w-sm truncate py-3 text-left text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 md:max-w-xl lg:max-w-4xl xl:max-w-5xl">
-					{defaultInputValue.trim() ? (
-						<span className="text-foreground">{defaultInputValue}</span>
+					{inputValue.trim() ? (
+						<span className="text-foreground">{inputValue}</span>
 					) : (
 						<span>Search data table...</span>
 					)}
 				</span>
-				<Kbd className="ml-auto text-muted-foreground group-hover:text-accent-foreground">
-					<span className="mr-1">⌘</span>
-					<span>K</span>
-				</Kbd>
+				<Kbd
+					className="ml-auto text-muted-foreground group-hover:text-accent-foreground"
+					shortcut={TABLE_COMMAND_KEYBOARD_SHORTCUT}
+				/>
 			</button>
 			<Command
 				className={cn(
-					"overflow-visible rounded-lg border border-border shadow-md dark:bg-muted/50 [&>div]:border-none",
+					"overflow-visible rounded-lg border border-border dark:bg-muted/50 [&>div]:border-none",
 					open ? "visible" : "hidden",
 				)}
 				filter={(value, search, keywords) =>
 					getFilterValue({ value, search, keywords, currentWord })
 				}
+				// loop
 			>
 				<CommandInput
 					ref={inputRef}
 					value={inputValue}
 					onValueChange={setInputValue}
 					onKeyDown={(e) => {
-						if (e.key === "Escape") {
-							inputRef?.current?.blur();
-							setOpen(false);
-						} else if (e.key === "Enter" && !e.shiftKey) {
-							applySearch(inputValue);
-						}
+						if (e.key === "Escape") inputRef?.current?.blur();
 					}}
 					onBlur={() => {
 						setOpen(false);
-						applySearch(inputValue);
+						// FIXME: doesnt reflect the jumps
+						// FIXME: will save non-existing searches
+						// TODO: extract into function
+						const search = inputValue.trim();
+						if (!search) return;
+						const timestamp = Date.now();
+						const searchIndex = lastSearches.findIndex(
+							(item) => item.search === search,
+						);
+						if (searchIndex !== -1) {
+							lastSearches[searchIndex].timestamp = timestamp;
+							setLastSearches(lastSearches);
+							return;
+						}
+						setLastSearches([...lastSearches, { search, timestamp }]);
+						return;
 					}}
 					onInput={(e) => {
 						const caretPosition = e.currentTarget?.selectionStart || -1;
@@ -252,6 +207,7 @@ export function DataTableFilterCommand<
 								{filterFields.map((field) => {
 									if (typeof field.value !== "string") return null;
 									if (inputValue.includes(`${field.value}:`)) return null;
+									// TBD: should we handle this in the component?
 									return (
 										<CommandItem
 											key={field.value}
@@ -266,6 +222,7 @@ export function DataTableFilterCommand<
 														const input = `${prev}${value}`;
 														return `${input}:`;
 													}
+													// lots of cheat
 													const isStarting = currentWord === prev;
 													const prefix = isStarting ? "" : " ";
 													const input = prev.replace(
@@ -297,7 +254,7 @@ export function DataTableFilterCommand<
 
 									const options = getFieldOptions({ field });
 
-									return options.map((optionValue: string) => {
+									return options.map((optionValue) => {
 										return (
 											<CommandItem
 												key={`${String(field.value)}:${optionValue}`}
@@ -320,10 +277,10 @@ export function DataTableFilterCommand<
 												}}
 											>
 												{`${optionValue}`}
-												{facetedValue?.has(optionValue) ? (
+												{facetedValue?.has(optionValue.toString()) ? (
 													<span className="ml-auto font-mono text-muted-foreground">
 														{formatCompactNumber(
-															facetedValue.get(optionValue) || 0,
+															facetedValue.get(optionValue.toString()) || 0,
 														)}
 													</span>
 												) : null}
@@ -368,6 +325,7 @@ export function DataTableFilterCommand<
 													onClick={(e) => {
 														e.preventDefault();
 														e.stopPropagation();
+														// TODO: extract into function
 														setLastSearches(
 															lastSearches.filter(
 																(i) => i.search !== item.search,
@@ -401,10 +359,10 @@ export function DataTableFilterCommand<
 								</span>
 								<Separator orientation="vertical" className="my-auto h-3" />
 								<span>
-									Union: <Kbd variant="outline">level:debug,info</Kbd>
+									Union: <Kbd variant="outline">status:a,b</Kbd>
 								</span>
 								<span>
-									Range: <Kbd variant="outline">status_code:200-300</Kbd>
+									Range: <Kbd variant="outline">duration:50-300</Kbd>
 								</span>
 							</div>
 							{lastSearches.length ? (
@@ -428,23 +386,36 @@ export function DataTableFilterCommand<
 	);
 }
 
+// function CommandItemType<TData>
+
 function CommandItemSuggestions<TData>({
 	field,
 }: {
 	field: DataTableFilterField<TData>;
 }) {
+	const { table, getFacetedMinMaxValues, getFacetedUniqueValues } =
+		useDataTable();
+	const value = field.value as string;
 	switch (field.type) {
 		case "checkbox": {
 			return (
 				<span className="ml-1 hidden truncate text-muted-foreground/80 group-aria-[selected=true]:block">
-					{field.options?.map(({ value }) => `[${value}]`).join(" ")}
+					{getFacetedUniqueValues
+						? Array.from(getFacetedUniqueValues(table, value)?.keys() || [])
+								.map((value) => `[${value}]`)
+								.join(" ")
+						: field.options?.map(({ value }) => `[${value}]`).join(" ")}
 				</span>
 			);
 		}
 		case "slider": {
+			const [min, max] = getFacetedMinMaxValues?.(table, value) || [
+				field.min,
+				field.max,
+			];
 			return (
 				<span className="ml-1 hidden truncate text-muted-foreground/80 group-aria-[selected=true]:block">
-					[{field.min} - {field.max}]
+					[{min} - {max}]
 				</span>
 			);
 		}

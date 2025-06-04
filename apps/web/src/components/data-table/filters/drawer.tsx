@@ -19,6 +19,7 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { FilterIcon } from "lucide-react";
 import { DataTableFilterControls } from "./controls";
+import { TABLE_SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 
 export function DataTableFilterControlsDrawer() {
 	return (
@@ -35,11 +36,10 @@ export function DataTableFilterControlsDrawer() {
 					<TooltipContent side="right">
 						<p>
 							Toggle controls with{" "}
-							<Kbd className="ml-1 text-muted-foreground group-hover:text-accent-foreground">
-								<span className="mr-1">⌘</span>
-								<span className="mr-1">Shift</span>
-								<span>S</span>
-							</Kbd>
+							<Kbd
+								className="ml-1 text-muted-foreground group-hover:text-accent-foreground"
+								shortcut={TABLE_SIDEBAR_KEYBOARD_SHORTCUT}
+							/>
 						</p>
 					</TooltipContent>
 				</Tooltip>

@@ -16,8 +16,7 @@ import {
 export const basePaginationParsers = {
 	start: parseAsInteger,
 	end: parseAsInteger,
-	id: parseAsString,
-	search: parseAsString,
+	id: parseAsArrayOf(parseAsString),
 	sort: parseAsArrayOf(parseAsString), // will be in the format of <column_id>.<asc|desc>
 };
 

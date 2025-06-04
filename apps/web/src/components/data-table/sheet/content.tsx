@@ -16,9 +16,6 @@ interface DataTableSheetContentProps<TData, TMeta>
 	table: Table<TData>;
 	fields: SheetField<TData, TMeta>[];
 	filterFields: DataTableFilterField<TData>[];
-	// totalRows: number;
-	// filterRows: number;
-	// totalRowsFetched: number;
 	metadata?: TMeta & {
 		totalRows: number;
 		filterRows: number;

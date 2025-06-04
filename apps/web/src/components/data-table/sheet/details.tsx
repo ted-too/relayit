@@ -21,12 +21,12 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
-import * as React from "react";
+import { type ReactNode, useCallback, useEffect, useMemo } from "react";
 
 export interface DataTableSheetDetailsProps {
 	title?: string;
 	titleClassName?: string;
-	children?: React.ReactNode;
+	children?: ReactNode;
 }
 
 export function DataTableSheetDetails({
@@ -38,7 +38,7 @@ export function DataTableSheetDetails({
 
 	const selectedRowKey = Object.keys(rowSelection)?.[0];
 
-	const selectedRow = React.useMemo(() => {
+	const selectedRow = useMemo(() => {
 		if (isLoading && !selectedRowKey) return;
 		return table
 			.getCoreRowModel()
@@ -49,25 +49,25 @@ export function DataTableSheetDetails({
 		.getCoreRowModel()
 		.flatRows.findIndex((row) => row.id === selectedRow?.id);
 
-	const nextId = React.useMemo(
+	const nextId = useMemo(
 		() => table.getCoreRowModel().flatRows[index + 1]?.id,
 		[index, isLoading],
 	);
 
-	const prevId = React.useMemo(
+	const prevId = useMemo(
 		() => table.getCoreRowModel().flatRows[index - 1]?.id,
 		[index, isLoading],
 	);
 
-	const onPrev = React.useCallback(() => {
+	const onPrev = useCallback(() => {
 		if (prevId) table.setRowSelection({ [prevId]: true });
 	}, [prevId, isLoading]);
 
-	const onNext = React.useCallback(() => {
+	const onNext = useCallback(() => {
 		if (nextId) table.setRowSelection({ [nextId]: true });
 	}, [nextId, isLoading]);
 
-	React.useEffect(() => {
+	useEffect(() => {
 		const down = (e: KeyboardEvent) => {
 			if (!selectedRowKey) return;
 

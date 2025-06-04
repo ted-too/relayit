@@ -8,7 +8,7 @@ import type {
 import { cn } from "@/lib/utils";
 import type { Message } from "@repo/db";
 import { format } from "date-fns";
-import { TabsObjectView } from "../tabs-object-view";
+import { TabsObjectView } from "../../data-table/cells/tabs-object-view";
 import {
 	AVAILABLE_MESSAGE_STATUSES,
 	type MessageStatus,

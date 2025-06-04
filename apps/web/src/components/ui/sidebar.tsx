@@ -24,14 +24,14 @@ import {
 import {
 	SIDEBAR_COOKIE_MAX_AGE,
 	SIDEBAR_COOKIE_NAME,
-	SIDEBAR_KEYBOARD_SHORTCUT,
 	SIDEBAR_WIDTH,
 	SIDEBAR_WIDTH_ICON,
 	SIDEBAR_WIDTH_MOBILE,
 } from "@/constants/sidebar";
-import { useHotKey } from "@/hooks/use-hot-key";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 
 type SidebarContextProps = {
 	state: "expanded" | "collapsed";
@@ -95,7 +95,7 @@ function SidebarProvider({
 	}, [isMobile, setOpen, setOpenMobile]);
 
 	// Adds a keyboard shortcut to toggle the sidebar.
-	useHotKey(() => toggleSidebar(), SIDEBAR_KEYBOARD_SHORTCUT);
+	useHotkeys(SIDEBAR_KEYBOARD_SHORTCUT, () => toggleSidebar());
 
 	// We add a state so that we can do data-state="expanded" or "collapsed".
 	// This makes it easier to style the sidebar with Tailwind classes.

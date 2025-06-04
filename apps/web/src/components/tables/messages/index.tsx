@@ -1,17 +1,22 @@
 "use client";
 
 import { DataTableInfinite } from "@/components/data-table";
-import { useResetFocus } from "@/hooks/use-hot-key";
-import { getFacetedMinMaxValues, getFacetedUniqueValues } from "@/lib/facets";
 import * as React from "react";
 import { columns } from "./columns";
 import { filterFields as defaultFilterFields, sheetFields } from "./fields";
 import { trpc } from "@/trpc/client";
 import { useQueryStates } from "nuqs";
 import { messagesQueryParsers } from "../parsers";
-import { getMessagesQuerySchema } from "@repo/shared";
+import type { Message } from "@repo/db";
+import { keepPreviousData } from "@tanstack/react-query";
 
-export function MessagesTable({ projectId }: { projectId?: string }) {
+export function MessagesTable({
+	projectId,
+	controlsOpen,
+}: {
+	projectId?: string;
+	controlsOpen?: boolean;
+}) {
 	const [searchParams] = useQueryStates(messagesQueryParsers);
 	const {
 		data,
@@ -24,6 +29,7 @@ export function MessagesTable({ projectId }: { projectId?: string }) {
 		{ ...searchParams, projectId },
 		{
 			getNextPageParam: (lastPage) => lastPage.nextCursor,
+			placeholderData: keepPreviousData,
 		},
 	);
 
@@ -31,7 +37,7 @@ export function MessagesTable({ projectId }: { projectId?: string }) {
 		const flatData = data?.pages?.flatMap((page) => page.items ?? []) ?? [];
 
 		return {
-			flatData,
+			flatData: flatData as Message[],
 			totalFetched: flatData.length,
 		};
 	}, [data?.pages]);
@@ -45,17 +51,6 @@ export function MessagesTable({ projectId }: { projectId?: string }) {
 		};
 	}, [data?.pages]);
 
-	useResetFocus();
-
-	// const lastPage = data?.pages?.[data?.pages.length - 1];
-	// const totalDBRowCount =
-	// 	(lastPage?.meta?.pagination?.totalRowCount ?? 0) + liveRows.length;
-	// const filterDBRowCount =
-	// 	(lastPage?.meta?.pagination?.totalFilteredRowCount ?? 0) + liveRows.length;
-	// const totalFetched = flatData?.length + liveRows.length;
-	// const combinedData = [...liveRows, ...flatData];
-
-	// const { sort, start, limit, end, interval, page, ...filter } = searchParams;
 
 	// REMINDER: this is currently needed for the cmdk search
 	const filterFields = React.useMemo(() => {
@@ -77,36 +72,23 @@ export function MessagesTable({ projectId }: { projectId?: string }) {
 
 	return (
 		<DataTableInfinite
-			schema={getMessagesQuerySchema}
-			parsers={messagesQueryParsers}
-			columns={columns}
-			getRowId={(row) => row.id}
 			data={flatData}
-			defaultColumnFilters={Object.entries(searchParams)
-				.map(([key, value]) => ({
-					id: key,
-					value,
-				}))
-				.filter(({ value }) => value ?? undefined)}
-			defaultRowSelection={
-				searchParams.id ? { [searchParams.id]: true } : undefined
-			}
-			defaultColumnVisibility={{
-				id: false,
-			}}
+			facets={facets}
+			columns={columns}
 			filterFields={filterFields}
 			sheetFields={sheetFields}
-			getFacetedUniqueValues={getFacetedUniqueValues(facets)}
-			getFacetedMinMaxValues={getFacetedMinMaxValues(facets)}
-			totalRows={totalRowCount}
-			filterRows={totalFilteredRowCount}
-			totalRowsFetched={totalFetched}
-			isFetching={isFetching}
-			isLoading={isLoading}
 			fetchNextPage={fetchNextPage}
 			fetchPreviousPage={fetchPreviousPage}
 			refetch={refetch}
-			sheetTitle="Message"
+			isFetching={isFetching}
+			isLoading={isLoading}
+			totalRows={totalRowCount}
+			filterRows={totalFilteredRowCount}
+			totalRowsFetched={totalFetched}
+			getRowId={(row) => row.id}
+			getRowSheetTitle="Message"
+			searchParamsParser={messagesQueryParsers}
+			controlsOpen={controlsOpen}
 		/>
 	);
 }

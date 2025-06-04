@@ -16,6 +16,7 @@ import {
 	ilike,
 	inArray,
 	lt,
+	or,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 
@@ -23,7 +24,8 @@ export const messagesRouter = router({
 	list: authdProcedureWithOrg
 		.input(getMessagesQuerySchema)
 		.query(async ({ ctx, input }) => {
-			const { direction, cursor, status, channel, search, projectId } = input;
+			const { direction, cursor, status, id, channel, search, projectId } =
+				input;
 
 			const limit = input.limit ?? 50;
 
@@ -47,6 +49,8 @@ export const messagesRouter = router({
 				? [eq(schema.message.projectId, projectId)]
 				: [];
 
+			const idCondition = id ? inArray(schema.message.id, id) : undefined;
+
 			if (cursor) {
 				try {
 					const cursorDate = new Date(cursor);
@@ -65,7 +69,7 @@ export const messagesRouter = router({
 					await db
 						.select({ total: count() })
 						.from(schema.message)
-						.where(and(...conditions))
+						.where(or(idCondition, and(...conditions)))
 				)?.[0]?.total ?? 0;
 
 			if (status) {
@@ -78,7 +82,7 @@ export const messagesRouter = router({
 				conditions.push(ilike(schema.message.recipient, `%${search}%`));
 			}
 
-			const whereCondition = and(...conditions);
+			const whereCondition = or(idCondition, and(...conditions));
 
 			const items = await db
 				.select()

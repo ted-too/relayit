@@ -1,34 +1,45 @@
 "use client";
 
+import { useLocalStorage } from "@/hooks/use-local-storage";
+import { type Facets, SORT_DELIMITER } from "@repo/shared";
 import type {
-	ColumnDef,
-	ColumnFiltersState,
-	OnChangeFn,
-	Row,
-	RowSelectionState,
-	SortingState,
-	Table as TTable,
-	TableOptions,
-	VisibilityState,
-} from "@tanstack/react-table";
+	FetchNextPageOptions,
+	FetchPreviousPageOptions,
+	RefetchOptions,
+} from "@tanstack/react-query";
 import {
-	flexRender,
+	type ColumnFiltersState,
+	type OnChangeFn,
+	type SortingState,
+	useReactTable,
+	type ColumnDef,
+	type VisibilityState,
+	type RowSelectionState,
+	type Table as TTable,
 	getCoreRowModel,
 	getFacetedRowModel,
-	getFacetedMinMaxValues as getTTableFacetedMinMaxValues,
-	getFacetedUniqueValues as getTTableFacetedUniqueValues,
-	useReactTable,
+	type Row,
+	flexRender,
 } from "@tanstack/react-table";
-import * as React from "react";
-import { DataTableProvider } from "@/components/data-table/provider";
-import { DataTableResetButton } from "@/components/data-table/reset-button";
-import { MemoizedDataTableSheetContent } from "@/components/data-table/sheet/content";
-import { DataTableSheetDetails } from "@/components/data-table/sheet/details";
-import { DataTableToolbar } from "@/components/data-table/toolbar";
-import type {
-	DataTableFilterField,
-	SheetField,
-} from "@/components/data-table/types";
+import {
+	parseAsArrayOf,
+	parseAsString,
+	type ParserBuilder,
+	useQueryState,
+	useQueryStates,
+} from "nuqs";
+import {
+	type CSSProperties,
+	Fragment,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type UIEvent,
+} from "react";
+import { arrSome, inDateRange } from "./filter-fns";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -38,58 +49,32 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { useHotKey } from "@/hooks/use-hot-key";
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import { arrSome, inDateRange, formatCompactNumber } from "@/lib/utils";
-import { cn } from "@/lib/utils";
-import { useControls } from "@/components/data-table/controls";
-import type {
-	FetchNextPageOptions,
-	FetchPreviousPageOptions,
-	RefetchOptions,
-} from "@tanstack/react-query";
+import { cn, formatCompactNumber } from "@/lib/utils";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
+import { useControls } from "./controls";
+import { DataTableSheetDetails } from "./sheet/details";
+import { MemoizedDataTableSheetContent } from "./sheet/content";
 import { LoaderCircleIcon } from "lucide-react";
-import { useTableSearchParams } from "@/hooks/use-table-search-params";
 import { RefreshButton } from "./refresh-button";
+import type { DataTableFilterField, SheetField } from "./types";
+import { DataTableProvider } from "./provider";
+import { DataTableResetButton } from "./reset-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
 import { DataTableFilterControls } from "./filters/controls";
-import type { BasePaginationParsers } from "../tables/parsers";
-import { SORT_DELIMITER } from "@repo/shared/constants/validations";
+import { DataTableToolbar } from "./toolbar";
+import { DataTableFilterCommand } from "./filters/command";
+import { RESET_TABLE_VIEW } from "@/constants/keybinds";
+import { Skeleton } from "../ui/skeleton";
 
-export interface DataTableInfiniteProps<
-	TFilterSchema,
-	TFilterParsers extends BasePaginationParsers,
-	TData,
-	TMeta,
-> {
-	schema: TFilterSchema;
-	parsers: TFilterParsers;
-	columns: ColumnDef<TData>[];
-	getRowClassName?: (row: Row<TData>) => string;
-	// REMINDER: make sure to pass the correct id to access the rows
-	getRowId: TableOptions<TData>["getRowId"];
+export type DataTableInfiniteProps<TData, TMeta> = {
 	data: TData[];
-	defaultColumnFilters?: ColumnFiltersState;
-	defaultColumnSorting?: SortingState;
-	defaultRowSelection?: RowSelectionState;
-	defaultColumnVisibility?: VisibilityState;
+	facets?: Facets;
+	columns: ColumnDef<TData>[];
+	meta?: TMeta;
 	filterFields?: DataTableFilterField<TData>[];
 	sheetFields?: SheetField<TData, TMeta>[];
-	// REMINDER: close to the same signature as the `getFacetedUniqueValues` of the `useReactTable`
-	getFacetedUniqueValues?: (
-		table: TTable<TData>,
-		columnId: string,
-	) => Map<string, number>;
-	getFacetedMinMaxValues?: (
-		table: TTable<TData>,
-		columnId: string,
-	) => undefined | [number, number];
-	totalRows?: number;
-	filterRows?: number;
-	totalRowsFetched?: number;
-	meta?: TMeta;
-	isFetching?: boolean;
-	isLoading?: boolean;
+	getRowId: (row: TData) => string;
 	fetchNextPage: (
 		options?: FetchNextPageOptions | undefined,
 	) => Promise<unknown>;
@@ -97,121 +82,60 @@ export interface DataTableInfiniteProps<
 		options?: FetchPreviousPageOptions | undefined,
 	) => Promise<unknown>;
 	refetch: (options?: RefetchOptions | undefined) => void;
-	sheetTitle?: string;
+	isFetching: boolean;
+	isLoading: boolean;
+	totalRows: number;
+	filterRows: number;
+	totalRowsFetched: number;
+	defaultColumnFilters?: ColumnFiltersState;
+	defaultColumnSorting?: SortingState;
+	defaultRowSelection?: RowSelectionState;
+	defaultColumnVisibility?: VisibilityState;
+	searchParamsParser: Record<string, ParserBuilder<any>>;
+	getRowSheetTitle: string | ((row: TData) => string);
+	controlsOpen?: boolean;
+};
+
+const qpFilter = (value: unknown) =>
+	value !== undefined && value !== "" && value !== null;
+
+// This is needed so empty params are not sent to the server
+function processQp<T = unknown>(value: T): T | null {
+	if (value === undefined || value === "" || value === null) return null;
+	if (Array.isArray(value)) {
+		const arrValue = value.filter(qpFilter) as T;
+		if ((arrValue as unknown as unknown[]).length === 0) return null;
+		return arrValue;
+	}
+	if (typeof value === "object" && Object.keys(value).length === 0) return null;
+	return value;
 }
 
-export function DataTableInfinite<
-	TFilterSchema,
-	TFilterParsers extends BasePaginationParsers,
-	TData,
-	TMeta,
->({
-	schema,
-	parsers,
-	columns,
-	getRowClassName,
-	getRowId,
+// TODO: This would probably be better virtualized
+export function DataTableInfinite<TData, TMeta>({
 	data,
+	facets = {} as Facets,
+	columns,
+	filterFields = [],
+	sheetFields = [],
+	meta = {} as TMeta,
+	getRowId,
+	totalRows,
+	filterRows,
+	totalRowsFetched,
+	isFetching,
+	isLoading,
+	fetchNextPage,
+	fetchPreviousPage,
+	refetch,
 	defaultColumnFilters = [],
 	defaultColumnSorting = [],
 	defaultRowSelection = {},
 	defaultColumnVisibility = {},
-	filterFields = [],
-	sheetFields = [],
-	getFacetedUniqueValues,
-	getFacetedMinMaxValues,
-	totalRows = 0,
-	filterRows = 0,
-	totalRowsFetched = 0,
-	meta = {} as TMeta,
-	isFetching,
-	isLoading,
-	fetchNextPage,
-	refetch,
-	sheetTitle = "Item",
-}: DataTableInfiniteProps<TFilterSchema, TFilterParsers, TData, TMeta>) {
-	const { search, filterKeys, setSearch } = useTableSearchParams(
-		schema,
-		parsers,
-	);
-
-	const rowSelection: RowSelectionState = search.id
-		? { [search.id]: true }
-		: {};
-	const setRowSelection: OnChangeFn<RowSelectionState> = (rowSelection) => {
-		let value: string | undefined;
-		if (typeof rowSelection === "function") {
-			value = Object.keys(rowSelection(defaultRowSelection))[0];
-		} else {
-			value = Object.keys(rowSelection)[0];
-		}
-
-		setSearch({ id: value ?? null });
-	};
-	const sorting: SortingState = search.sort
-		? search.sort.map((sort) => {
-				const [id, desc] = sort.split(SORT_DELIMITER);
-				return {
-					id,
-					desc: desc === "desc",
-				};
-			})
-		: defaultColumnSorting;
-	const setSorting: OnChangeFn<SortingState> = (sorting) => {
-		let value: SortingState | undefined;
-		if (typeof sorting === "function") {
-			value = sorting(defaultColumnSorting);
-		} else {
-			value = sorting;
-		}
-		if (value && value.length === 0) {
-			setSearch({
-				sort: null,
-			});
-			return;
-		}
-		setSearch({
-			sort: value?.map((sort) => `${sort.id}:${sort.desc ? "desc" : "asc"}`),
-		});
-	};
-
-	const columnFilters: ColumnFiltersState = filterKeys
-		.map((key) => {
-			if (key === "timestamp" && search.start && search.end) {
-				return {
-					id: key,
-					value: [new Date(search.start), new Date(search.end)],
-				};
-			}
-			const filterValue = search[key as keyof typeof search];
-			if (!filterValue) return { id: key, value: undefined };
-			return { id: key, value: filterValue };
-		})
-		.filter((filter) => filter.value !== undefined);
-	const setColumnFilters: OnChangeFn<ColumnFiltersState> = (columnFilters) => {
-		let value: ColumnFiltersState | undefined;
-		if (typeof columnFilters === "function") {
-			value = columnFilters(defaultColumnFilters);
-		} else {
-			value = columnFilters;
-		}
-
-		const search = filterKeys.reduce(
-			(prev, key) => {
-				const filter = value?.find((f) => f.id === key);
-				if (!filter || filter.value === undefined) {
-					prev[key] = null;
-				} else {
-					prev[key] = filter.value;
-				}
-				return prev;
-			},
-			{} as Record<string, unknown>,
-		);
-
-		setSearch(search);
-	};
-
+	searchParamsParser,
+	getRowSheetTitle,
+	controlsOpen,
+}: DataTableInfiniteProps<TData, TMeta>) {
 	const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
 		"data-table-column-order",
 		[],
@@ -222,12 +146,102 @@ export function DataTableInfinite<
 			defaultColumnVisibility,
 		);
 
-	const topBarRef = React.useRef<HTMLDivElement>(null);
-	const tableRef = React.useRef<HTMLTableElement>(null);
-	const [topBarHeight, setTopBarHeight] = React.useState(0);
+	const [columnFiltersQP, setColumnFiltersQP] =
+		useQueryStates(searchParamsParser);
 
-	const onScroll = React.useCallback(
-		(e: React.UIEvent<HTMLElement>) => {
+	const columnFilters: ColumnFiltersState = useMemo(() => {
+		return Object.entries(columnFiltersQP)
+			.filter(([_, value]) => qpFilter(value))
+			.map(([key, value]) => ({
+				id: key,
+				value,
+			}));
+	}, [columnFiltersQP]);
+
+	const setColumnFilters: OnChangeFn<ColumnFiltersState> = (columnFilters) => {
+		let value: ColumnFiltersState | undefined;
+		if (typeof columnFilters === "function") {
+			value = columnFilters(defaultColumnFilters);
+		} else {
+			value = columnFilters;
+		}
+
+		setColumnFiltersQP(
+			processQp(
+				Object.fromEntries(
+					value.map((filter) => [filter.id, filter.value]),
+				) as Partial<typeof columnFiltersQP>,
+			),
+		);
+	};
+
+	const [rowSortingQP, setRowSortingQP] = useQueryState(
+		"sort",
+		parseAsArrayOf(parseAsString),
+	);
+
+	const sorting: SortingState = useMemo(() => {
+		return (rowSortingQP ?? []).filter(qpFilter).map((sort) => {
+			const [id, dir] = sort.split(SORT_DELIMITER);
+			return {
+				id,
+				desc: dir === "desc",
+			};
+		});
+	}, [rowSortingQP]);
+
+	const setSorting: OnChangeFn<SortingState> = (sorting) => {
+		let value: SortingState | undefined;
+		if (typeof sorting === "function") {
+			value = sorting(defaultColumnSorting);
+		} else {
+			value = sorting;
+		}
+
+		setRowSortingQP(
+			processQp(
+				value?.map(
+					(sort) => `${sort.id}${SORT_DELIMITER}${sort.desc ? "desc" : "asc"}`,
+				),
+			),
+		);
+	};
+
+	const [rowSelectionQP, setRowSelectionQP] = useQueryState(
+		"id",
+		parseAsArrayOf(parseAsString),
+	);
+
+	const rowSelection: RowSelectionState = useMemo(() => {
+		return (rowSelectionQP ?? []).filter(qpFilter).reduce((acc, id) => {
+			acc[id] = true;
+			return acc;
+		}, {} as RowSelectionState);
+	}, [rowSelectionQP]);
+
+	const setRowSelection: OnChangeFn<RowSelectionState> = (rowSelection) => {
+		let value: RowSelectionState | undefined;
+		if (typeof rowSelection === "function") {
+			value = rowSelection(defaultRowSelection);
+		} else {
+			value = rowSelection;
+		}
+
+		setRowSelectionQP(
+			processQp(
+				Object.entries(value)
+					.filter(([_, selected]) => selected)
+					.map(([key]) => key),
+			),
+		);
+	};
+
+	const topBarRef = useRef<HTMLDivElement>(null);
+	const tableRef = useRef<HTMLTableElement>(null);
+	const [topBarHeight, setTopBarHeight] = useState(0);
+
+	const onScroll = useCallback(
+		(e: UIEvent<HTMLElement>) => {
 			const onPageBottom =
 				Math.ceil(e.currentTarget.scrollTop + e.currentTarget.clientHeight) >=
 				e.currentTarget.scrollHeight;
@@ -240,10 +254,11 @@ export function DataTableInfinite<
 				fetchNextPage();
 			}
 		},
-		[fetchNextPage, isFetching, filterRows, totalRowsFetched],
+		[fetchNextPage, isFetching, totalRowsFetched, filterRows],
 	);
 
-	React.useEffect(() => {
+	useEffect(() => {
+		// Keeps the top bar height updated and thus the table height
 		const observer = new ResizeObserver(() => {
 			const rect = topBarRef.current?.getBoundingClientRect();
 			if (rect) {
@@ -276,18 +291,19 @@ export function DataTableInfinite<
 		onRowSelectionChange: setRowSelection,
 		onSortingChange: setSorting,
 		onColumnOrderChange: setColumnOrder,
-		getCoreRowModel: getCoreRowModel(),
 		manualFiltering: true,
 		manualSorting: true,
+		getCoreRowModel: getCoreRowModel(),
 		getFacetedRowModel: getFacetedRowModel(),
-		getFacetedUniqueValues: getTTableFacetedUniqueValues(),
-		getFacetedMinMaxValues: getTTableFacetedMinMaxValues(),
+		getFacetedUniqueValues: (table, columnId) => () =>
+			getFacetedUniqueValues<TData>(facets)(table, columnId),
+		getFacetedMinMaxValues: (table, columnId) => () =>
+			getFacetedMinMaxValues<TData>(facets)(table, columnId),
 		filterFns: { inDateRange, arrSome },
 		debugAll: process.env.NEXT_PUBLIC_TABLE_DEBUG === "true",
-		meta: { getRowClassName },
 	});
 
-	const selectedRow = React.useMemo(() => {
+	const selectedRow = useMemo(() => {
 		if ((isLoading || isFetching) && !data.length) return;
 		const selectedRowKey = Object.keys(rowSelection)?.[0];
 		return table
@@ -302,7 +318,7 @@ export function DataTableInfinite<
 	 * we will calculate all column sizes at once at the root table level in a useMemo
 	 * and pass the column sizes down as CSS variables to the <table> element.
 	 */
-	const columnSizeVars = React.useMemo(() => {
+	const columnSizeVars = useMemo(() => {
 		const headers = table.getFlatHeaders();
 		const colSizes: { [key: string]: string } = {};
 		for (let i = 0; i < headers.length; i++) {
@@ -321,38 +337,40 @@ export function DataTableInfinite<
 		table.getState().columnVisibility,
 	]);
 
-	useHotKey(() => {
+	useHotkeys(RESET_TABLE_VIEW, () => {
 		setColumnOrder([]);
 		setColumnVisibility(defaultColumnVisibility);
-	}, "u");
+	});
 
 	return (
 		<DataTableProvider
 			table={table}
 			columns={columns}
+			facets={facets}
 			filterFields={filterFields}
 			columnFilters={columnFilters}
+			filterRows={filterRows}
+			totalRows={totalRows}
 			sorting={sorting}
 			rowSelection={rowSelection}
 			columnOrder={columnOrder}
 			columnVisibility={columnVisibility}
 			enableColumnOrdering={true}
 			isLoading={isFetching || isLoading}
-			getFacetedUniqueValues={getFacetedUniqueValues}
-			getFacetedMinMaxValues={getFacetedMinMaxValues}
+			controlsOpen={controlsOpen}
 		>
 			<div
-				className="flex h-full min-h-(--content-height) w-full flex-col sm:flex-row"
+				className="flex h-full min-h-(--tab-content-height) w-full flex-col sm:flex-row"
 				style={
 					{
 						"--top-bar-height": `${topBarHeight}px`,
 						...columnSizeVars,
-					} as React.CSSProperties
+					} as CSSProperties
 				}
 			>
 				<div
 					className={cn(
-						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--content-height) sm:min-h-(--content-height) sm:min-w-52 sm:max-w-52 sm:self-start md:min-w-72 md:max-w-72 sm:border-r",
+						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--tab-content-height) sm:min-h-(--tab-content-height) sm:min-w-52 sm:max-w-52 sm:self-start md:min-w-72 md:max-w-72 sm:border-r",
 						"group-data-[expanded=false]/controls:hidden",
 						"hidden sm:flex",
 					)}
@@ -371,6 +389,7 @@ export function DataTableInfinite<
 						<DataTableFilterControls />
 					</ScrollArea>
 				</div>
+
 				<div
 					className={cn(
 						"flex max-w-full flex-1 flex-col border-border",
@@ -381,11 +400,14 @@ export function DataTableInfinite<
 					<div
 						ref={topBarRef}
 						className={cn(
-							"flex flex-col gap-4 bg-background p-2 pr-4",
+							"flex items-center gap-4 bg-background p-2",
 							"sticky top-0 z-10 pb-4",
 						)}
 					>
-						{/* <DataTableFilterCommand schema={schema} parsers={parsers} /> */}
+						<DataTableFilterCommand
+							searchParamsParser={searchParamsParser}
+							className="grow"
+						/>
 						{/* TBD: better flexibility with compound components? */}
 						<DataTableToolbar
 							renderActions={() => [
@@ -399,7 +421,7 @@ export function DataTableInfinite<
 							onScroll={onScroll}
 							// REMINDER: https://stackoverflow.com/questions/50361698/border-style-do-not-work-with-sticky-position-element
 							className="border-separate border-spacing-0"
-							containerClassName="max-h-[calc(var(--content-height)_-_var(--top-bar-height))]"
+							containerClassName="max-h-[calc(var(--tab-content-height)_-_var(--top-bar-height))]"
 						>
 							<HeaderComponent table={table} />
 							<TableBody
@@ -413,17 +435,19 @@ export function DataTableInfinite<
 							>
 								{table.getRowModel().rows?.length ? (
 									table.getRowModel().rows.map((row) => (
-										<React.Fragment key={row.id}>
+										<Fragment key={row.id}>
 											<MemoizedRow
 												row={row}
 												table={table}
 												selected={row.getIsSelected()}
 												visibleColumns={columnVisibility}
 											/>
-										</React.Fragment>
+										</Fragment>
 									))
+								) : isLoading || isFetching ? (
+									<RowSkeleton columns={columns.length} rowCount={10} />
 								) : (
-									<React.Fragment>
+									<Fragment>
 										<TableRow>
 											<TableCell
 												colSpan={columns.length}
@@ -432,7 +456,7 @@ export function DataTableInfinite<
 												No results.
 											</TableCell>
 										</TableRow>
-									</React.Fragment>
+									</Fragment>
 								)}
 								<TableRow className="hover:bg-transparent data-[state=selected]:bg-transparent">
 									<TableCell colSpan={columns.length} className="text-center">
@@ -470,7 +494,16 @@ export function DataTableInfinite<
 					</div>
 				</div>
 			</div>
-			<DataTableSheetDetails title={sheetTitle} titleClassName="font-mono">
+			<DataTableSheetDetails
+				title={
+					typeof getRowSheetTitle === "function"
+						? selectedRow?.original
+							? getRowSheetTitle(selectedRow.original)
+							: undefined
+						: getRowSheetTitle
+				}
+				titleClassName="font-mono"
+			>
 				<MemoizedDataTableSheetContent
 					table={table}
 					data={selectedRow?.original}
@@ -482,7 +515,6 @@ export function DataTableInfinite<
 						totalRows,
 						filterRows,
 						totalRowsFetched,
-						// REMINDER: includes `currentPercentiles`
 						...meta,
 					}}
 				/>
@@ -541,7 +573,7 @@ function RowComponent<TData>({
 	);
 }
 
-const MemoizedRow = React.memo(RowComponent, (prev, next) => {
+const MemoizedRow = memo(RowComponent, (prev, next) => {
 	// Check if row ID and selection state are the same
 	const basicPropsEqual =
 		prev.row.id === next.row.id && prev.selected === next.selected;
@@ -560,6 +592,25 @@ const MemoizedRow = React.memo(RowComponent, (prev, next) => {
 
 	return basicPropsEqual && visibilityEqual;
 }) as typeof RowComponent;
+
+function RowSkeleton({
+	columns,
+	rowCount,
+}: { columns: number; rowCount: number }) {
+	return Array.from({ length: rowCount }).map((_, i) => (
+		<TableRow
+			className={cn(
+				"[&>:not(:last-child)]:border-r",
+				"-outline-offset-1 outline-primary/30 transition-colors focus-visible:bg-muted/50 focus-visible:outline data-[state=selected]:outline",
+			)}
+			key={`skeleton-row-${i}`}
+		>
+			<TableCell colSpan={columns} className="truncate border-b border-border">
+				<Skeleton className="h-5 w-full" />
+			</TableCell>
+		</TableRow>
+	));
+}
 
 function HeaderComponent<TData>({ table }: { table: TTable<TData> }) {
 	const { open } = useControls();

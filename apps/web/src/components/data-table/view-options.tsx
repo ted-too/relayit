@@ -1,7 +1,6 @@
 "use client";
 
 import { CheckIcon, GripVerticalIcon, Settings2Icon } from "lucide-react";
-
 import {
 	Sortable,
 	SortableDragHandle,
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
-
 import { useDataTable } from "@/components/data-table/provider";
 
 export function DataTableViewOptions() {

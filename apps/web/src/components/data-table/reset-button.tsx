@@ -8,13 +8,14 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHotKey } from "@/hooks/use-hot-key";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { XIcon } from "lucide-react";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
+import { RESET_TABLE_FILTERS } from "@/constants/keybinds";
 
 export function DataTableResetButton() {
 	const { table } = useDataTable();
-	useHotKey(table.resetColumnFilters, "Escape");
+	useHotkeys(RESET_TABLE_FILTERS, () => table.resetColumnFilters());
 
 	return (
 		<TooltipProvider>
@@ -32,10 +33,10 @@ export function DataTableResetButton() {
 				<TooltipContent side="left">
 					<p>
 						Reset filters with{" "}
-						<Kbd className="ml-1 text-muted-foreground group-hover:text-accent-foreground">
-							<span className="mr-1">⌘</span>
-							<span>Esc</span>
-						</Kbd>
+						<Kbd
+							className="ml-1 text-muted-foreground group-hover:text-accent-foreground"
+							shortcut={RESET_TABLE_FILTERS}
+						/>
 					</p>
 				</TooltipContent>
 			</Tooltip>

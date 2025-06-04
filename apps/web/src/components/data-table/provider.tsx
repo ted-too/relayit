@@ -10,11 +10,13 @@ import type {
 } from "@tanstack/react-table";
 import { createContext, useContext, useMemo } from "react";
 import { ControlsProvider } from "./controls";
+import type { Facets } from "@repo/shared";
+import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
 
 // REMINDER: read about how to move controlled state out of the useReactTable hook
 // https://github.com/TanStack/table/discussions/4005#discussioncomment-7303569
 
-interface DataTableStateContextType {
+interface DataTableStateContextType<TData> {
 	columnFilters: ColumnFiltersState;
 	sorting: SortingState;
 	rowSelection: RowSelectionState;
@@ -22,6 +24,11 @@ interface DataTableStateContextType {
 	columnVisibility: VisibilityState;
 	pagination: PaginationState;
 	enableColumnOrdering: boolean;
+	getFacetedUniqueValues: ReturnType<typeof getFacetedUniqueValues<TData>>;
+	getFacetedMinMaxValues: ReturnType<typeof getFacetedMinMaxValues<TData>>;
+	controlsOpen?: boolean;
+	filterRows: number;
+	totalRows: number;
 }
 
 interface DataTableBaseContextType<TData = unknown, TValue = unknown> {
@@ -29,18 +36,11 @@ interface DataTableBaseContextType<TData = unknown, TValue = unknown> {
 	filterFields: DataTableFilterField<TData>[];
 	columns: ColumnDef<TData, TValue>[];
 	isLoading?: boolean;
-	getFacetedUniqueValues?: (
-		table: Table<TData>,
-		columnId: string,
-	) => Map<string, number>;
-	getFacetedMinMaxValues?: (
-		table: Table<TData>,
-		columnId: string,
-	) => undefined | [number, number];
+	facets?: Facets;
 }
 
 interface DataTableContextType<TData = unknown, TValue = unknown>
-	extends DataTableStateContextType,
+	extends DataTableStateContextType<TData>,
 		DataTableBaseContextType<TData, TValue> {}
 
 export const DataTableContext = createContext<DataTableContextType<
@@ -51,13 +51,15 @@ export const DataTableContext = createContext<DataTableContextType<
 export function DataTableProvider<TData, TValue>({
 	children,
 	...props
-}: Partial<DataTableStateContextType> &
+}: Partial<DataTableStateContextType<TData>> &
 	DataTableBaseContextType<TData, TValue> & {
 		children: React.ReactNode;
 	}) {
 	const value = useMemo(
 		() => ({
 			...props,
+			getFacetedUniqueValues: getFacetedUniqueValues<TData>(props.facets),
+			getFacetedMinMaxValues: getFacetedMinMaxValues<TData>(props.facets),
 			columnFilters: props.columnFilters ?? [],
 			sorting: props.sorting ?? [],
 			rowSelection: props.rowSelection ?? {},
@@ -65,6 +67,8 @@ export function DataTableProvider<TData, TValue>({
 			columnVisibility: props.columnVisibility ?? {},
 			pagination: props.pagination ?? { pageIndex: 0, pageSize: 10 },
 			enableColumnOrdering: props.enableColumnOrdering ?? false,
+			filterRows: props.filterRows ?? 0,
+			totalRows: props.totalRows ?? 0,
 		}),
 		[
 			props.columnFilters,
@@ -78,14 +82,18 @@ export function DataTableProvider<TData, TValue>({
 			props.columns,
 			props.enableColumnOrdering,
 			props.isLoading,
-			props.getFacetedUniqueValues,
-			props.getFacetedMinMaxValues,
+			props.facets,
+			props.controlsOpen,
+			props.filterRows,
+			props.totalRows,
 		],
 	);
 
 	return (
 		<DataTableContext.Provider value={value}>
-			<ControlsProvider>{children}</ControlsProvider>
+			<ControlsProvider ssrOpen={props.controlsOpen}>
+				{children}
+			</ControlsProvider>
 		</DataTableContext.Provider>
 	);
 }

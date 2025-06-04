@@ -1,3 +1,4 @@
+import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@/constants/sidebar";
 import { createContext, useCallback, useContext, useState } from "react";
 
 interface ControlsContextType {
@@ -22,7 +23,7 @@ export function ControlsProvider({
 			_setOpen(openState);
 
 			// This sets the cookie to keep the controls state.
-			document.cookie = `controls-state=${openState}; path=/; max-age=31536000`;
+			document.cookie = `${SECONDARY_SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=31536000`;
 		},
 		[open],
 	);

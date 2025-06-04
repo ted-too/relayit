@@ -1,9 +1,5 @@
 import type { JSX } from "react";
 
-export type SearchParams = {
-	[key: string]: string | string[] | undefined;
-};
-
 export type DatePreset = {
 	label: string;
 	from: Date;
@@ -67,8 +63,6 @@ export type DataTableFilterField<TData> =
 	| DataTableSliderFilterField<TData>
 	| DataTableInputFilterField<TData>
 	| DataTableTimerangeFilterField<TData>;
-
-/** ----------------------------------------- */
 
 export type SheetField<TData, TMeta = Record<string, unknown>> = {
 	id: keyof TData;

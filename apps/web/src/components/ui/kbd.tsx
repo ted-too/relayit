@@ -1,6 +1,6 @@
 // Copy Pasta from: https://github.com/sadmann7/shadcn-table/blob/main/src/components/kbd.tsx#L54
 import { type VariantProps, cva } from "class-variance-authority";
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ export const kbdVariants = cva(
 	},
 );
 
-export interface KbdProps
+interface BaseKbdProps
 	extends React.ComponentPropsWithoutRef<"kbd">,
 		VariantProps<typeof kbdVariants> {
 	/**
@@ -31,25 +31,50 @@ export interface KbdProps
 	abbrTitle?: string;
 }
 
-const Kbd = React.forwardRef<HTMLUnknownElement, KbdProps>(
-	({ abbrTitle, children, className, variant, ...props }, ref) => {
-		return (
-			<kbd
-				className={cn(kbdVariants({ variant, className }))}
-				ref={ref}
-				{...props}
-			>
-				{abbrTitle ? (
-					<abbr title={abbrTitle} className="no-underline">
-						{children}
-					</abbr>
-				) : (
-					children
-				)}
-			</kbd>
-		);
-	},
-);
-Kbd.displayName = "Kbd";
+type KbdProps =
+	| (Omit<BaseKbdProps, "children"> & {
+			shortcut: string;
+			children?: null;
+	  })
+	| (Omit<BaseKbdProps, "children"> & {
+			shortcut?: null;
+			children: React.ReactNode;
+	  });
+
+function Kbd({
+	abbrTitle,
+	children,
+	className,
+	variant,
+	shortcut,
+	...props
+}: KbdProps) {
+	const text = shortcut
+		? shortcut
+				.split("+")
+				.map((s) => {
+					const v = s.replace("Meta", "⌘");
+					if (v.length > 1) return v;
+					return v.toUpperCase();
+				})
+				.map((v) => (
+					<span className="not-last:mr-1" key={v}>
+						{v}
+					</span>
+				))
+		: children;
+
+	return (
+		<kbd className={cn(kbdVariants({ variant, className }))} {...props}>
+			{abbrTitle ? (
+				<abbr title={abbrTitle} className="no-underline">
+					{text}
+				</abbr>
+			) : (
+				text
+			)}
+		</kbd>
+	);
+}
 
 export { Kbd };

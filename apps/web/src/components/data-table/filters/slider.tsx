@@ -6,7 +6,7 @@ import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableSliderFilterField } from "@/components/data-table/types";
 import { Label } from "@/components/ui/label";
 import { useBasicDebounce } from "@/hooks/use-debounce";
-import { isArrayOfNumbers } from "@/lib/utils";
+import { isArrayOfNumbers } from "@/components/data-table/filter-fns";
 import { useEffect, useState } from "react";
 
 function getFilter(filterValue: unknown) {

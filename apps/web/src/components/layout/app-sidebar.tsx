@@ -48,6 +48,7 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 import {
 	type Organization,
 	type OrganizationMember,
@@ -82,6 +83,8 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
 
 /**
  * Core types for sidebar navigation
@@ -244,11 +247,7 @@ function SidebarLogo({
 			>
 				<SidebarMenuItem className="w-full">
 					<DropdownMenu>
-						<DropdownMenuTrigger
-							disabled={isPending}
-							asChild
-							suppressHydrationWarning
-						>
+						<DropdownMenuTrigger disabled={isPending} asChild>
 							{isPending ? (
 								<Skeleton
 									className={cn(
@@ -270,7 +269,10 @@ function SidebarLogo({
 											state === "collapsed" && "justify-center",
 										)}
 									>
-										<div className="flex items-center justify-center transition-all rounded-full size-8">
+										<div
+											className="flex items-center justify-center transition-all rounded-full size-8"
+											suppressHydrationWarning={true}
+										>
 											<OrganizationLogo
 												logoUrl={activeOrganization?.logo}
 												orgMetadata={activeOrganization?.metadata}
@@ -554,22 +556,20 @@ interface AppSidebarProps {
 	children: React.ReactNode;
 	currentUserOrg: Organization;
 	currentUserOrgMember: OrganizationMember;
-	sidebarStates: {
-		sidebarState: boolean;
-	};
+	sidebarOpen: boolean;
 }
 
 export function AppSidebar({
 	children,
 	currentUserOrg,
 	currentUserOrgMember,
-	sidebarStates,
+	sidebarOpen,
 }: AppSidebarProps) {
 	const filteredMenu = filterMenuForUser(MENU, currentUserOrgMember);
 
 	return (
 		<SidebarProvider
-			defaultOpen={sidebarStates.sidebarState}
+			defaultOpen={sidebarOpen}
 			style={
 				{
 					"--sidebar-width": "19.5rem",
@@ -659,7 +659,20 @@ export function AppSidebar({
 				<SidebarFooter>
 					<SidebarMenu className="flex flex-col gap-2">
 						<SidebarNotifications />
-						<SidebarTrigger className="group-data-[collapsible=]:translate-x-0.5" />
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<SidebarTrigger className="group-data-[collapsible=]:translate-x-0.5" />
+							</TooltipTrigger>
+							<TooltipContent side="right">
+								<p>
+									Open with{" "}
+									<Kbd
+										className="ml-1 text-muted-foreground group-hover:text-accent-foreground"
+										shortcut={SIDEBAR_KEYBOARD_SHORTCUT}
+									/>
+								</p>
+							</TooltipContent>
+						</Tooltip>
 						<SidebarMenuItem className="min-h-12 flex items-center">
 							<SideBarUserNav />
 						</SidebarMenuItem>

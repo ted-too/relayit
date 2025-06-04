@@ -1,103 +1,12 @@
-import { isArrayOfDates } from "@/lib/utils";
 import {
 	ARRAY_DELIMITER,
 	RANGE_DELIMITER,
 	SLIDER_DELIMITER,
 } from "@repo/shared";
-import { z } from "zod/v4";
+import { isArrayOfDates } from "@/components/data-table/filter-fns";
+import type { ColumnFiltersState } from "@tanstack/react-table";
+import type { ParserBuilder } from "nuqs";
 import type { DataTableFilterField } from "@/components/data-table/types";
-
-/**
- * Deserializes a string input into an object using the provided schema
- */
-export function deserialize<T extends z.AnyZodObject>(schema: T) {
-	// The schema already handles conversion of strings to arrays via preprocess,
-	// so we just need to parse the input into key-value pairs
-	const castToSchema = z.preprocess((val) => {
-		if (typeof val !== "string") return val;
-
-		// Parse the input string into key-value pairs
-		const parsedInput = val
-			.trim()
-			.split(" ")
-			.reduce(
-				(prev, curr) => {
-					const [name, value] = curr.split(":");
-					if (!value || !name) return prev;
-
-					// Skip timestamp fields completely
-					if (name === "timestamp") return prev;
-
-					// Handle range values
-					if (value.includes(RANGE_DELIMITER)) {
-						prev[name] = value.split(RANGE_DELIMITER);
-					} else {
-						// Regular value - the schema will handle array coercion
-						prev[name] = value;
-					}
-
-					return prev;
-				},
-				{} as Record<string, unknown>,
-			);
-
-		return parsedInput;
-	}, schema);
-
-	return (value: string) => {
-		const result = castToSchema.safeParse(value);
-		if (!result.success) {
-			// Debug logging
-			console.error("Schema validation failed:", result.error.message);
-		}
-		return result;
-	};
-}
-
-/**
- * Serializes search params object to a command string format
- */
-export function serializeSearchParams<TData>(
-	searchParams: Record<string, unknown>,
-	filterFields?: DataTableFilterField<TData>[],
-) {
-	return Object.entries(searchParams).reduce((prev, [key, value]) => {
-		// Skip empty values and special keys
-		if (
-			value === undefined ||
-			value === null ||
-			key === "start" ||
-			key === "end" ||
-			key === "sort" ||
-			key === "id" ||
-			key === "tail" ||
-			key === "interval" ||
-			key === "timestamp" // Explicitly exclude timestamp
-		) {
-			return prev;
-		}
-
-		const field = filterFields?.find((field) => field.value === key);
-
-		// Skip command disabled fields
-		if (field?.commandDisabled) return prev;
-
-		// Handle array values - using the appropriate delimiter based on field type
-		if (Array.isArray(value)) {
-			if (field?.type === "slider") {
-				return `${prev}${key}:${value.join(SLIDER_DELIMITER)} `;
-			}
-			if (field?.type === "timerange") {
-				return `${prev}${key}:${value.join(RANGE_DELIMITER)} `;
-			}
-			// Default array handling with ARRAY_DELIMITER for all other array types
-			return `${prev}${key}:${value.join(ARRAY_DELIMITER)} `;
-		}
-
-		// Regular value
-		return `${prev}${key}:${value} `;
-	}, "");
-}
 
 /**
  * Extracts the word from the given string at the specified caret position.
@@ -119,9 +28,6 @@ export function getWordByCaretPosition({
 	return word;
 }
 
-/**
- * Replaces part of the input string based on field type and delimiter
- */
 export function replaceInputByFieldType<TData>({
 	prev,
 	currentWord,
@@ -131,11 +37,12 @@ export function replaceInputByFieldType<TData>({
 }: {
 	prev: string;
 	currentWord: string;
-	optionValue?: string | number | boolean | undefined;
+	optionValue?: string | number | boolean | undefined; // FIXME: use DataTableFilterField<TData>["options"][number];
 	value: string;
 	field: DataTableFilterField<TData>;
 }) {
 	switch (field.type) {
+		// biome-ignore lint/suspicious/noFallthroughSwitchClause: We want to fall through to the next case
 		case "checkbox": {
 			if (currentWord.includes(ARRAY_DELIMITER)) {
 				const words = currentWord.split(ARRAY_DELIMITER);
@@ -143,9 +50,8 @@ export function replaceInputByFieldType<TData>({
 				const input = prev.replace(currentWord, words.join(ARRAY_DELIMITER));
 				return `${input.trim()} `;
 			}
-			const input = prev.replace(currentWord, value);
-			return `${input.trim()} `;
 		}
+		// biome-ignore lint/suspicious/noFallthroughSwitchClause: We want to fall through to the next case
 		case "slider": {
 			if (currentWord.includes(SLIDER_DELIMITER)) {
 				const words = currentWord.split(SLIDER_DELIMITER);
@@ -153,9 +59,8 @@ export function replaceInputByFieldType<TData>({
 				const input = prev.replace(currentWord, words.join(SLIDER_DELIMITER));
 				return `${input.trim()} `;
 			}
-			const input = prev.replace(currentWord, value);
-			return `${input.trim()} `;
 		}
+		// biome-ignore lint/suspicious/noFallthroughSwitchClause: We want to fall through to the next case
 		case "timerange": {
 			if (currentWord.includes(RANGE_DELIMITER)) {
 				const words = currentWord.split(RANGE_DELIMITER);
@@ -163,8 +68,6 @@ export function replaceInputByFieldType<TData>({
 				const input = prev.replace(currentWord, words.join(RANGE_DELIMITER));
 				return `${input.trim()} `;
 			}
-			const input = prev.replace(currentWord, value);
-			return `${input.trim()} `;
 		}
 		default: {
 			const input = prev.replace(currentWord, value);
@@ -173,9 +76,6 @@ export function replaceInputByFieldType<TData>({
 	}
 }
 
-/**
- * Gets the options for a field based on its type
- */
 export function getFieldOptions<TData>({
 	field,
 }: {
@@ -199,9 +99,6 @@ export function getFieldOptions<TData>({
 	}
 }
 
-/**
- * Calculates a filter value score for command matching
- */
 export function getFilterValue({
 	value,
 	search,
@@ -212,21 +109,30 @@ export function getFilterValue({
 	keywords?: string[] | undefined;
 	currentWord: string;
 }): number {
-	// Handle suggestion items
+	/**
+	 * @example value "suggestion:public:true regions,ams,gru,fra"
+	 */
 	if (value.startsWith("suggestion:")) {
 		const rawValue = value.toLowerCase().replace("suggestion:", "");
 		if (rawValue.includes(search)) return 1;
 		return 0;
 	}
 
-	// Direct word match
+	/** */
 	if (value.toLowerCase().includes(currentWord.toLowerCase())) return 1;
 
-	// Handle field:value syntax
+	/**
+	 * @example checkbox [filter, query] = ["regions", "ams,gru,fra"]
+	 * @example slider [filter, query] = ["p95", "0-3000"]
+	 * @example input [filter, query] = ["name", "api"]
+	 */
 	const [filter, query] = currentWord.toLowerCase().split(":");
 	if (query && value.startsWith(`${filter}:`)) {
 		if (query.includes(ARRAY_DELIMITER)) {
-			// Handle array values (e.g. "regions:ams,gru,fra")
+			/**
+			 * array of n elements
+			 * @example queries = ["ams", "gru", "fra"]
+			 */
 			const queries = query.split(ARRAY_DELIMITER);
 			const rawValue = value.toLowerCase().replace(`${filter}:`, "");
 			if (
@@ -236,7 +142,10 @@ export function getFilterValue({
 			if (queries.some((item) => rawValue.includes(item))) return 1;
 		}
 		if (query.includes(SLIDER_DELIMITER)) {
-			// Handle range values (e.g. "p95:0-3000")
+			/**
+			 * range between 2 elements
+			 * @example queries = ["0", "3000"]
+			 */
 			const queries = query.split(SLIDER_DELIMITER);
 			const rawValue = value.toLowerCase().replace(`${filter}:`, "");
 
@@ -255,9 +164,6 @@ export function getFilterValue({
 	return 0;
 }
 
-/**
- * Formats a value based on field type for use in search params
- */
 export function getFieldValueByType<TData>({
 	field,
 	value,
@@ -267,7 +173,6 @@ export function getFieldValueByType<TData>({
 }) {
 	if (!field) return null;
 
-	// Regular field type handling
 	switch (field.type) {
 		case "slider": {
 			if (Array.isArray(value)) {
@@ -276,7 +181,13 @@ export function getFieldValueByType<TData>({
 			return value;
 		}
 		case "checkbox": {
-			// Return array as-is since the schema handles conversion
+			if (Array.isArray(value)) {
+				return value.join(ARRAY_DELIMITER);
+			}
+			// REMINER: inversed logic
+			if (typeof value === "string") {
+				return value.split(ARRAY_DELIMITER);
+			}
 			return value;
 		}
 		case "timerange": {
@@ -297,11 +208,60 @@ export function getFieldValueByType<TData>({
 	}
 }
 
-/**
- * Type guard for non-null values
- */
 export function notEmpty<TValue>(
 	value: TValue | null | undefined,
 ): value is TValue {
 	return value !== null && value !== undefined;
+}
+
+export function columnFiltersParser<TData>({
+	searchParamsParser,
+	filterFields,
+}: {
+	searchParamsParser: Record<string, ParserBuilder<any>>;
+	filterFields: DataTableFilterField<TData>[];
+}) {
+	return {
+		parse: (inputValue: string) => {
+			const values = inputValue
+				.trim()
+				.split(" ")
+				.reduce(
+					(prev, curr) => {
+						const [name, value] = curr.split(":");
+						if (!value || !name) return prev;
+						prev[name] = value;
+						return prev;
+					},
+					{} as Record<string, string>,
+				);
+
+			const searchParams = Object.entries(values).reduce(
+				(prev, [key, value]) => {
+					const parser = searchParamsParser[key];
+					if (!parser) return prev;
+
+					prev[key] = parser.parse(value);
+					return prev;
+				},
+				{} as Record<string, unknown>,
+			);
+
+			return searchParams;
+		},
+		serialize: (columnFilters: ColumnFiltersState) => {
+			const values = columnFilters.reduce((prev, curr) => {
+				const { commandDisabled } = filterFields?.find(
+					(field) => curr.id === field.value,
+				) || { commandDisabled: true }; // if column filter is not found, disable the command by default
+				const parser = searchParamsParser[curr.id];
+
+				if (commandDisabled || !parser) return prev;
+
+				return `${prev}${curr.id}:${parser.serialize(curr.value)} `;
+			}, "");
+
+			return values;
+		},
+	};
 }

@@ -1,7 +1,4 @@
-import { DeleteProjectDialogContent } from "@/components/projects/create";
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
-import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -15,7 +12,7 @@ import { trpc } from "@/trpc/server";
 import { dehydrate } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { SquareTerminalIcon, TrashIcon } from "lucide-react";
+import { SquareTerminalIcon } from "lucide-react";
 import { headers as headersFn } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -24,6 +21,7 @@ import { ActivityTab } from "./activity";
 import { ChannelsTab } from "./channels";
 import { GeneralTab } from "./general";
 import { WebhooksTab } from "./webhooks";
+import type { CSSProperties } from "react";
 
 const TABS = [
 	{
@@ -83,54 +81,20 @@ export default async function ProjectPage({
 					className="mx-auto max-w-none h-full"
 					wrapperProps={{ className: "h-full" }}
 				>
-					<CardHeader className="border-b flex flex-row items-center justify-between">
-						<div className="flex flex-col">
-							<CardTitle className="text-lg md:text-xl flex items-center gap-2">
-								{/* TODO: Add icon for project type based on language */}
-								<SquareTerminalIcon className="size-4" />
-								{project.name}
-							</CardTitle>
-							<CardDescription className="text-xs md:text-sm">
-								<CopyToClipboardContainer variant="no-button">
-									{project.slug}
-								</CopyToClipboardContainer>
-							</CardDescription>
-						</div>
-						<div className="flex gap-2 items-center">
-							{/* <Dialog>
-							<DialogTrigger asChild>
-								<Button variant="ghost" size="icon">
-									<SquarePenIcon />
-								</Button>
-							</DialogTrigger>
-							<DialogContent>
-								<DialogHeader>
-									<DialogTitle>Edit {project.name}</DialogTitle>
-									<DialogDescription>
-										Edit your project details
-									</DialogDescription>
-								</DialogHeader>
-								<CreateProjectForm
-									submitWrapper={DialogFooter}
-									initialData={project}
-								/>
-							</DialogContent>
-						</Dialog> */}
-							<AlertDialog>
-								<AlertDialogTrigger asChild>
-									<Button variant="ghost" size="icon">
-										<TrashIcon />
-									</Button>
-								</AlertDialogTrigger>
-								<DeleteProjectDialogContent
-									project={project}
-									onSuccess="redirect"
-								/>
-							</AlertDialog>
-						</div>
-					</CardHeader>
-					<CardContent className="pt-6">
-						<Tabs defaultValue={path.join("/")}>
+					<Tabs defaultValue={path.join("/")} className="gap-0">
+						<CardHeader className="flex flex-row items-center justify-between">
+							<div className="flex items-center gap-2">
+								<CardTitle className="text-lg md:text-xl flex items-center gap-2">
+									{/* TODO: Add icon for project type based on language */}
+									<SquareTerminalIcon className="size-4" />
+									{project.name}
+								</CardTitle>
+								<CardDescription className="text-xs md:text-sm">
+									<CopyToClipboardContainer variant="no-button">
+										{project.slug}
+									</CopyToClipboardContainer>
+								</CardDescription>
+							</div>
 							<TabsList>
 								{TABS.map(({ label, path }) => (
 									<TabsTrigger
@@ -145,17 +109,26 @@ export default async function ProjectPage({
 									</TabsTrigger>
 								))}
 							</TabsList>
+						</CardHeader>
+						<CardContent>
 							{TABS.map(({ path, Component }) => (
 								<TabsContent
 									key={`content-${path.join("/")}`}
 									value={path.join("/")}
-									className="mt-2.5"
+									className="mt-2"
+									style={
+										{
+											// TBH Don't ask me why this works, but it does.
+											// We need to prevent overflow of the content.
+											"--tab-content-height": "calc(var(--content-height) - 5.25rem - 0.5rem - 1.25rem - calc(0.625rem*2) - 1.5rem )",
+										} as CSSProperties
+									}
 								>
 									<Component project={project} allProviders={allProviders} />
 								</TabsContent>
 							))}
-						</Tabs>
-					</CardContent>
+						</CardContent>
+					</Tabs>
 				</Card>
 			</HydrationBoundary>
 		);
