@@ -51,7 +51,6 @@ export function MessagesTable({
 		};
 	}, [data?.pages]);
 
-
 	// REMINDER: this is currently needed for the cmdk search
 	const filterFields = React.useMemo(() => {
 		return defaultFilterFields.map((field) => {
@@ -72,9 +71,17 @@ export function MessagesTable({
 
 	return (
 		<DataTableInfinite
+			tableId={`messages-table-${projectId ?? "all"}`}
 			data={flatData}
 			facets={facets}
 			columns={columns}
+			defaultColumnVisibility={
+				projectId
+					? {
+							project: false,
+						}
+					: undefined
+			}
 			filterFields={filterFields}
 			sheetFields={sheetFields}
 			fetchNextPage={fetchNextPage}

@@ -1,4 +1,9 @@
-import { apikey, organization, project } from "@repo/db/schema/auth";
+import {
+	apikey,
+	organization,
+	type Project,
+	project,
+} from "@repo/db/schema/auth";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
@@ -184,7 +189,9 @@ export const message = pgTable(
 	],
 );
 
-export type Message = InferSelectModel<typeof message>;
+export type Message = InferSelectModel<typeof message> & {
+	project: Pick<Project, "name">;
+};
 
 /**
  * Defines relationships for the message table.

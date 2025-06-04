@@ -120,6 +120,7 @@ export default async function ProjectPage({
 										{
 											// TBH Don't ask me why this works, but it does.
 											// We need to prevent overflow of the content.
+											// FIXME: This is a hack and needs to be fixed.
 											"--tab-content-height": "calc(var(--content-height) - 5.25rem - 0.5rem - 1.25rem - calc(0.625rem*2) - 1.5rem )",
 										} as CSSProperties
 									}

@@ -84,12 +84,24 @@ export const messagesRouter = router({
 
 			const whereCondition = or(idCondition, and(...conditions));
 
-			const items = await db
-				.select()
-				.from(schema.message)
-				.where(whereCondition)
-				.orderBy(desc(schema.message.createdAt))
-				.limit(limit);
+			// const items = await db
+			// 	.select()
+			// 	.from(schema.message)
+			// 	.where(whereCondition)
+			// 	.orderBy(desc(schema.message.createdAt))
+			// 	.limit(limit);
+			const items = await db.query.message.findMany({
+				where: whereCondition,
+				orderBy: desc(schema.message.createdAt),
+				limit,
+				with: {
+					project: {
+						columns: {
+							name: true,
+						},
+					},
+				},
+			});
 
 			const totalFilteredRowCount =
 				(

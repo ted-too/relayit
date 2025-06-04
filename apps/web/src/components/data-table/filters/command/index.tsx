@@ -36,11 +36,13 @@ interface DataTableFilterCommandProps {
 	// TODO: maybe use generics for the parser
 	searchParamsParser: Record<string, ParserBuilder<any>>;
 	className?: string;
+	tableId: string;
 }
 
 export function DataTableFilterCommand({
 	searchParamsParser,
 	className,
+	tableId,
 }: DataTableFilterCommandProps) {
 	const {
 		table,
@@ -68,7 +70,7 @@ export function DataTableFilterCommand({
 			search: string;
 			timestamp: number;
 		}[]
-	>("data-table-command", []);
+	>(`command-${tableId}`, []);
 
 	useEffect(() => {
 		// TODO: we could check for ARRAY_DELIMITER or SLIDER_DELIMITER to auto-set filter when typing

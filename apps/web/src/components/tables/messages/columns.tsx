@@ -162,4 +162,20 @@ export const columns: ColumnDef<Message>[] = [
 				"min-w-(--header-providerType-size) w-(--header-providerType-size)",
 		},
 	},
+	{
+		id: "project",
+		accessorFn: (row) => row.project.name,
+		header: ({ column }) => (
+			<DataTableColumnHeader column={column} title="Project" />
+		),
+		enableSorting: false,
+		size: 69,
+		minSize: 69,
+		meta: {
+			cellClassName:
+				"font-mono w-(--col-project-size) max-w-(--col-project-size)",
+			headerClassName:
+				"min-w-(--header-project-size) w-(--header-project-size)",
+		},
+	},
 ];

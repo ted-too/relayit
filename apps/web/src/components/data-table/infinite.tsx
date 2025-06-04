@@ -68,6 +68,7 @@ import { RESET_TABLE_VIEW } from "@/constants/keybinds";
 import { Skeleton } from "../ui/skeleton";
 
 export type DataTableInfiniteProps<TData, TMeta> = {
+	tableId: string;
 	data: TData[];
 	facets?: Facets;
 	columns: ColumnDef<TData>[];
@@ -113,6 +114,7 @@ function processQp<T = unknown>(value: T): T | null {
 
 // TODO: This would probably be better virtualized
 export function DataTableInfinite<TData, TMeta>({
+	tableId,
 	data,
 	facets = {} as Facets,
 	columns,
@@ -137,12 +139,12 @@ export function DataTableInfinite<TData, TMeta>({
 	controlsOpen,
 }: DataTableInfiniteProps<TData, TMeta>) {
 	const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
-		"data-table-column-order",
+		`column-order-${tableId}`,
 		[],
 	);
 	const [columnVisibility, setColumnVisibility] =
 		useLocalStorage<VisibilityState>(
-			"data-table-visibility",
+			`visibility-${tableId}`,
 			defaultColumnVisibility,
 		);
 
@@ -363,7 +365,8 @@ export function DataTableInfinite<TData, TMeta>({
 				className="flex h-full min-h-(--available-height) w-full flex-col sm:flex-row"
 				style={
 					{
-						"--available-height": "var(--tab-content-height, var(--content-height))",
+						"--available-height":
+							"var(--tab-content-height, var(--content-height))",
 						"--top-bar-height": `${topBarHeight}px`,
 						...columnSizeVars,
 					} as CSSProperties
@@ -401,13 +404,14 @@ export function DataTableInfinite<TData, TMeta>({
 					<div
 						ref={topBarRef}
 						className={cn(
-							"flex items-center gap-4 bg-background p-2",
+							"flex items-center gap-4 bg-background",
 							"sticky top-0 z-10 pb-4",
 						)}
 					>
 						<DataTableFilterCommand
 							searchParamsParser={searchParamsParser}
 							className="grow"
+							tableId={tableId}
 						/>
 						{/* TBD: better flexibility with compound components? */}
 						<DataTableToolbar
