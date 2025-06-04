@@ -8,7 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { desc } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import { and } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const webhookRouter = router({
 	create: authdProcedureWithOrg

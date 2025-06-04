@@ -2,7 +2,7 @@ import {
 	ORGANIZATION_LOGO_GRADIENTS,
 	type OrganizationLogoGradientKey,
 } from "@repo/shared";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const signUpSchema = z.object({
 	name: z.string(),

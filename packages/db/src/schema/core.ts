@@ -184,6 +184,8 @@ export const message = pgTable(
 	],
 );
 
+export type Message = InferSelectModel<typeof message>;
+
 /**
  * Defines relationships for the message table.
  * Each message belongs to a team, an API key (optionally), and provider credentials.

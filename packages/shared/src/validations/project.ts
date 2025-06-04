@@ -1,5 +1,11 @@
-import { AVAILABLE_CHANNELS, AVAILABLE_MESSAGE_STATUSES } from "@repo/shared";
-import { z } from "zod";
+import {
+	ARRAY_DELIMITER,
+	AVAILABLE_CHANNELS,
+	AVAILABLE_MESSAGE_STATUSES,
+	AVAILABLE_PROVIDER_TYPES,
+} from "@repo/shared";
+import { z } from "zod/v4";
+import { createTimeRangedPaginatedSchema } from "./pagination";
 
 export const createProjectSchema = z.object({
 	name: z.string().min(1, "Name cannot be empty").optional(),
@@ -19,15 +25,35 @@ export const updateProjectSchema = createProjectSchema.partial();
 
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
-export const getProjectMessagesQuerySchema = z.object({
-	projectId: z.string().optional(),
-	page: z.coerce.number().int().positive().optional().default(1),
-	limit: z.coerce.number().int().positive().max(100).optional().default(20),
-	status: z.enum(AVAILABLE_MESSAGE_STATUSES).optional(),
-	channel: z.enum(AVAILABLE_CHANNELS).optional(),
-	search: z.string().optional(),
+export const messageFilterSchema = z.object({
+	projectId: z.string().nullish(),
+	recipient: z.string().nullish(),
+	status: z.preprocess(
+		// Convert string to array using ARRAY_DELIMITER
+		(val) => {
+			if (typeof val === "string") {
+				return val.split(ARRAY_DELIMITER);
+			}
+			return val;
+		},
+		z.array(z.enum(AVAILABLE_MESSAGE_STATUSES)).nullish(),
+	),
+	channel: z.preprocess((val) => {
+		if (typeof val === "string") {
+			return val.split(ARRAY_DELIMITER);
+		}
+		return val;
+	}, z.array(z.enum(AVAILABLE_CHANNELS)).nullish()),
+	provider: z.preprocess((val) => {
+		if (typeof val === "string") {
+			return val.split(ARRAY_DELIMITER);
+		}
+		return val;
+	}, z.array(z.enum(AVAILABLE_PROVIDER_TYPES)).nullish()),
 });
 
-export type GetProjectMessagesQueryInput = z.infer<
-	typeof getProjectMessagesQuerySchema
->;
+export const getMessagesQuerySchema = createTimeRangedPaginatedSchema(
+	messageFilterSchema.shape,
+);
+
+export type GetMessagesQueryInput = z.infer<typeof getMessagesQuerySchema>;

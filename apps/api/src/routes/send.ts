@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { resolver, validator as zValidator } from "hono-openapi/zod";
 import { HTTPException } from "hono/http-exception";
-import z from "zod";
+import z from "zod/v4";
 import { errorResponseSchema } from "@repo/api/lib/error-response";
 
 export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(

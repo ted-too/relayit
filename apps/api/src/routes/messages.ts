@@ -1,14 +1,31 @@
 import { authdProcedureWithOrg, router } from "@repo/api/trpc";
 import { db, schema } from "@repo/db";
-import { getProjectMessagesQuerySchema } from "@repo/shared";
-import { type SQL, and, count, desc, eq, ilike } from "drizzle-orm";
+import {
+	getFacetsFromData,
+	getMessagesQuerySchema,
+	messageFilterSchema,
+	zodKeys,
+} from "@repo/shared";
+import {
+	type SQL,
+	and,
+	count,
+	desc,
+	eq,
+	gt,
+	ilike,
+	inArray,
+	lt,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 
 export const messagesRouter = router({
 	list: authdProcedureWithOrg
-		.input(getProjectMessagesQuerySchema)
+		.input(getMessagesQuerySchema)
 		.query(async ({ ctx, input }) => {
-			const { page, limit, status, channel, search, projectId } = input;
+			const { direction, cursor, status, channel, search, projectId } = input;
+
+			const limit = input.limit ?? 50;
 
 			if (projectId) {
 				const project = await db.query.project.findFirst({
@@ -26,17 +43,36 @@ export const messagesRouter = router({
 				}
 			}
 
-			const offset = (page - 1) * limit;
-
 			const conditions: SQL[] = projectId
 				? [eq(schema.message.projectId, projectId)]
 				: [];
 
+			if (cursor) {
+				try {
+					const cursorDate = new Date(cursor);
+					conditions.push(
+						direction === "backward"
+							? lt(schema.message.createdAt, cursorDate)
+							: gt(schema.message.createdAt, cursorDate),
+					);
+				} catch (error) {
+					console.warn("Invalid cursor", error);
+				}
+			}
+
+			const totalRowCount =
+				(
+					await db
+						.select({ total: count() })
+						.from(schema.message)
+						.where(and(...conditions))
+				)?.[0]?.total ?? 0;
+
 			if (status) {
-				conditions.push(eq(schema.message.status, status));
+				conditions.push(inArray(schema.message.status, status));
 			}
 			if (channel) {
-				conditions.push(eq(schema.message.channel, channel));
+				conditions.push(inArray(schema.message.channel, channel));
 			}
 			if (search) {
 				conditions.push(ilike(schema.message.recipient, `%${search}%`));
@@ -44,30 +80,48 @@ export const messagesRouter = router({
 
 			const whereCondition = and(...conditions);
 
-			const messages = await db
+			const items = await db
 				.select()
 				.from(schema.message)
 				.where(whereCondition)
 				.orderBy(desc(schema.message.createdAt))
-				.limit(limit)
-				.offset(offset);
+				.limit(limit);
 
-			const totalResult = await db
-				.select({ total: count() })
-				.from(schema.message)
-				.where(whereCondition);
+			const totalFilteredRowCount =
+				(
+					await db
+						.select({ total: count() })
+						.from(schema.message)
+						.where(whereCondition)
+				)?.[0]?.total ?? 0;
 
-			const totalItems = totalResult[0]?.total ?? 0;
-			const totalPages = Math.ceil(totalItems / limit);
+			let nextCursor: typeof cursor | undefined = undefined;
+			if (items.length > limit) {
+				const nextItem = items.pop();
+				nextCursor = nextItem!.createdAt.getTime();
+			}
+
+			const facets = getFacetsFromData(items, zodKeys(messageFilterSchema));
 
 			return {
-				data: messages,
-				pagination: {
-					totalItems,
-					totalPages,
-					currentPage: page,
-					pageSize: limit,
-				},
+				items,
+				facets,
+				nextCursor,
+				totalRowCount,
+				totalFilteredRowCount,
 			};
+
+			// const totalItems = totalResult[0]?.total ?? 0;
+			// const totalPages = Math.ceil(totalItems / limit);
+
+			// return {
+			// 	data: messages,
+			// 	pagination: {
+			// 		totalItems,
+			// 		totalPages,
+			// 		currentPage: page,
+			// 		pageSize: limit,
+			// 	},
+			// };
 		}),
 });

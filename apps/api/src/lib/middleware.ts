@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { createFactory } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
-import z from "zod";
+import z from "zod/v4";
 
 const factory = createFactory<NullableContext>();
 

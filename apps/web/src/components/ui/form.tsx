@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { createFormHook, createFormHookContexts } from "@tanstack/react-form";
 import { HashIcon, RefreshCwIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import type { ZodError } from "zod";
+import type { ZodError } from "zod/v4";
 
 export const { fieldContext, formContext, useFieldContext, useFormContext } =
 	createFormHookContexts();

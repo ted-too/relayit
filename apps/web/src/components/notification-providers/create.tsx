@@ -20,7 +20,7 @@ import {
 } from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
 import { Fragment, useCallback } from "react";
-import { ZodFirstPartyTypeKind, type z } from "zod";
+import type { z } from "zod/v4";
 
 interface CreateProviderFormProps {
 	submitWrapper?: typeof DialogFooter;
@@ -235,7 +235,7 @@ const DynamicSchemaFields = withForm({
 	defaultValues: undefined as any,
 	props: {} as {
 		basePath: string;
-		schemaToRender: z.ZodTypeAny;
+		schemaToRender: z.ZodType;
 		isFieldDisabled?: (
 			path: string,
 			oneTimeFields?: Record<string, any> | boolean,
@@ -256,7 +256,7 @@ const DynamicSchemaFields = withForm({
 	}) {
 		const renderField = (
 			currentPath: string,
-			schema: z.ZodTypeAny,
+			schema: z.ZodType,
 			currentOneTimeFieldsDef?: Record<string, any> | boolean,
 		) => {
 			const fullPath = basePath ? `${basePath}.${currentPath}` : currentPath;
@@ -274,7 +274,7 @@ const DynamicSchemaFields = withForm({
 				.toLowerCase()
 				.replace(/^./, (str) => str.toUpperCase());
 
-			if (schema._def?.typeName === ZodFirstPartyTypeKind.ZodObject) {
+			if (schema._def?.typeName === z.ZodObject) {
 				return (
 					<Fragment key={currentPath}>
 						{Object.entries((schema as z.ZodObject<any>).shape).map(
@@ -286,7 +286,7 @@ const DynamicSchemaFields = withForm({
 										: undefined;
 								return renderField(
 									currentPath ? `${currentPath}.${key}` : key,
-									value as z.ZodTypeAny,
+									value as z.ZodType,
 									nextOneTimeFieldsDef,
 								);
 							},
@@ -295,7 +295,7 @@ const DynamicSchemaFields = withForm({
 				);
 			}
 
-			if (schema._def?.typeName === ZodFirstPartyTypeKind.ZodEnum) {
+			if (schema._def?.typeName === z.ZodEnum) {
 				return (
 					<form.AppField
 						key={fullPath}
@@ -321,9 +321,9 @@ const DynamicSchemaFields = withForm({
 
 			// Default to TextField for other ZodString, ZodNumber, etc.
 			if (
-				schema._def?.typeName === ZodFirstPartyTypeKind.ZodString ||
-				schema._def?.typeName === ZodFirstPartyTypeKind.ZodNumber ||
-				schema._def?.typeName === ZodFirstPartyTypeKind.ZodBoolean // Booleans can also be text fields if not handled by CheckboxField specifically elsewhere
+				schema._def?.typeName === z.ZodString ||
+				schema._def?.typeName === z.ZodNumber ||
+				schema._def?.typeName === z.ZodBoolean // Booleans can also be text fields if not handled by CheckboxField specifically elsewhere
 			) {
 				return (
 					<form.AppField
@@ -351,7 +351,7 @@ const DynamicSchemaFields = withForm({
 
 		if (
 			schemaToRender &&
-			schemaToRender._def?.typeName === ZodFirstPartyTypeKind.ZodObject
+			schemaToRender._def?.typeName === z.ZodObject
 		) {
 			// Pass the top-level oneTimeFieldsDefinition here
 			return renderField("", schemaToRender, oneTimeFieldsDefinition);

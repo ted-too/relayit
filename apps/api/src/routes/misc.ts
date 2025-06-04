@@ -3,7 +3,7 @@ import { generateOrganizationSlug } from "@repo/api/lib/slugs";
 import { authdProcedure, authdProcedureWithOrg, router } from "@repo/api/trpc";
 import { db, schema } from "@repo/db";
 import { and, desc, eq } from "drizzle-orm";
-import z from "zod";
+import z from "zod/v4";
 
 export const miscRouter = router({
 	initOrganization: authdProcedure.mutation(async ({ ctx }) => {

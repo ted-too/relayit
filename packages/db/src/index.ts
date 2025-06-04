@@ -26,6 +26,7 @@ export type { ParsedApiKey, Project, ProjectDetails } from "./schema/auth";
 export type {
 	NotificationProvider,
 	ProjectProviderAssociation,
+	Message,
 } from "./schema/core";
 
 export * from "./lib/crypto";

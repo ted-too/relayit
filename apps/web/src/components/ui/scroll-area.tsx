@@ -1,24 +1,29 @@
 "use client";
 
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
-import type * as React from "react";
+import type { ComponentProps, UIEventHandler } from "react";
 
 import { cn } from "@/lib/utils";
+
+export interface ScrollAreaProps
+	extends ComponentProps<typeof ScrollAreaPrimitive.Root> {
+	onViewportScroll?: UIEventHandler<HTMLDivElement> | undefined;
+}
 
 function ScrollArea({
 	className,
 	children,
+	onViewportScroll,
 	...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: ScrollAreaProps) {
 	return (
 		<ScrollAreaPrimitive.Root
-			data-slot="scroll-area"
-			className={cn("relative", className)}
+			className={cn("relative overflow-hidden", className)}
 			{...props}
 		>
 			<ScrollAreaPrimitive.Viewport
-				data-slot="scroll-area-viewport"
-				className="size-full rounded-[inherit]"
+				onScroll={onViewportScroll}
+				className="h-full w-full rounded-[inherit]"
 			>
 				{children}
 			</ScrollAreaPrimitive.Viewport>
@@ -32,25 +37,21 @@ function ScrollBar({
 	className,
 	orientation = "vertical",
 	...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
+}: ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
 	return (
 		<ScrollAreaPrimitive.ScrollAreaScrollbar
-			data-slot="scroll-area-scrollbar"
 			orientation={orientation}
 			className={cn(
-				"flex touch-none select-none",
+				"flex touch-none select-none transition-colors",
 				orientation === "vertical" &&
-					"h-full w-2.5 border-l border-l-transparent p-px",
+					"h-full w-2 border-l border-l-transparent p-[1px]",
 				orientation === "horizontal" &&
-					"h-2.5 flex-col border-t border-t-transparent p-px",
+					"h-2 flex-col border-t border-t-transparent p-[1px]",
 				className,
 			)}
 			{...props}
 		>
-			<ScrollAreaPrimitive.ScrollAreaThumb
-				data-slot="scroll-area-thumb"
-				className="bg-border relative flex-1 rounded-full"
-			/>
+			<ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-border" />
 		</ScrollAreaPrimitive.ScrollAreaScrollbar>
 	);
 }

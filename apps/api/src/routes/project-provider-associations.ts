@@ -7,7 +7,7 @@ import {
 } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
 import { type SQL, and, desc, eq } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 // TODO: Potentially add a middleware to check if the user has permission to access this resource
 

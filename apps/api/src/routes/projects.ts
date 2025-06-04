@@ -5,7 +5,7 @@ import type { ProjectDetails } from "@repo/db";
 import { createProjectSchema, updateProjectSchema } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const projectRouter = router({
 	list: authdProcedureWithOrg.query(async ({ ctx }) => {

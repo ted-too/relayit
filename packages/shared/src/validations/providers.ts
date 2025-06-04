@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 import type { ChannelType, ProviderType } from "../constants/providers";
 import { getProviderConfig } from "../constants/providers";
 
