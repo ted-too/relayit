@@ -20,7 +20,7 @@ import { ProjectsPage } from "../landing";
 import { ActivityTab } from "./activity";
 import { ChannelsTab } from "./channels";
 import { GeneralTab } from "./general";
-import { WebhooksTab } from "./webhooks";
+// import { WebhooksTab } from "./webhooks";
 import type { CSSProperties } from "react";
 
 const TABS = [
@@ -39,11 +39,11 @@ const TABS = [
 		path: ["channels"],
 		Component: ChannelsTab,
 	},
-	{
-		label: "Webhooks",
-		path: ["webhooks"],
-		Component: WebhooksTab,
-	},
+	// {
+	// 	label: "Webhooks",
+	// 	path: ["webhooks"],
+	// 	Component: WebhooksTab,
+	// },
 ];
 
 // This is outside the component to avoid re-creating the query client on every render/switch of tabs
@@ -82,7 +82,7 @@ export default async function ProjectPage({
 					wrapperProps={{ className: "h-full" }}
 				>
 					<Tabs defaultValue={path.join("/")} className="gap-0">
-						<CardHeader className="flex flex-row items-center justify-between">
+						<CardHeader className="flex flex-row items-center justify-between space-y-0">
 							<div className="flex items-center gap-2">
 								<CardTitle className="text-lg md:text-xl flex items-center gap-2">
 									{/* TODO: Add icon for project type based on language */}

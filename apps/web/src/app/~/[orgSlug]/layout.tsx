@@ -19,6 +19,7 @@ export default async function OrgLayout({
 	const headers = await headersFn();
 	const cookieStore = await cookies();
 
+	// TODO: Handle case where user is not a member of any organization
 	const currentUserOrg = await queryClient.ensureQueryData(
 		activeOrganizationQueryOptions({ headers }),
 	);

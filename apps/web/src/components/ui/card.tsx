@@ -21,7 +21,7 @@ function Card({
 					<div
 						{...wrapperProps}
 						className={cn(
-							"rounded-xl bg-background shadow-md flex flex-col",
+							"rounded-xl bg-background shadow-md flex flex-col w-full",
 							wrapperClassName,
 						)}
 					>
@@ -33,7 +33,7 @@ function Card({
 	return (
 		<div
 			className={cn(
-				"rounded-xl border bg-card text-card-foreground shadow max-w-5xl",
+				"rounded-xl border bg-card text-card-foreground shadow max-w-5xl w-full",
 				variant === "shadow" && "p-2.5 pb-3 bg-sidebar border shadow-sm",
 				className,
 			)}
@@ -71,6 +71,19 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
+function CardAction({ className, ...props }: React.ComponentProps<"div">) {
+	return (
+		<div
+			data-slot="card-action"
+			className={cn(
+				"col-start-2 row-span-2 row-start-1 self-start justify-self-end",
+				className,
+			)}
+			{...props}
+		/>
+	);
+}
+
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
 	return <div className={cn("p-6 pt-0", className)} {...props} />;
 }
@@ -88,4 +101,5 @@ export {
 	CardTitle,
 	CardDescription,
 	CardContent,
+	CardAction,
 };

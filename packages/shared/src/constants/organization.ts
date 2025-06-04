@@ -21,3 +21,6 @@ export function getOrganizationLogoGradient(
 ): string {
 	return ORGANIZATION_LOGO_GRADIENTS[key];
 }
+
+export const MEMBER_ROLES = ["owner", "admin", "member"] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];

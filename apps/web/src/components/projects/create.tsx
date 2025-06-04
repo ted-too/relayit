@@ -20,7 +20,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAppForm } from "@/components/ui/form";
-import { getChangedFields } from "@/lib/utils";
+import { cn, getChangedFields } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
 import type { Project } from "@repo/db";
@@ -34,12 +34,14 @@ interface CreateProjectFormProps {
 	onSuccess?: (data: { id: string; slug: string }) => void;
 	submitWrapper?: typeof DialogFooter;
 	initialData?: Project;
+	className?: { root?: string; submit?: string };
 }
 
 export function CreateProjectForm({
 	submitWrapper,
 	onSuccess,
 	initialData,
+	className,
 }: CreateProjectFormProps) {
 	const utils = trpc.useUtils();
 	const { mutateAsync: createProject } = trpc.projects.create.useMutation({
@@ -106,7 +108,7 @@ export function CreateProjectForm({
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="grid gap-4 w-full"
+			className={cn("grid gap-4 w-full", className?.root)}
 		>
 			<form.AppField
 				name="name"
@@ -132,16 +134,13 @@ export function CreateProjectForm({
 						label="Project Slug"
 						isLoading={isGeneratingSlug}
 						regenerate={generateSlug}
-						className={{
-							root: "col-span-full",
-						}}
 					/>
 				)}
 			/>
 
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-6" size="lg">
+					<form.SubmitButton className={cn("w-full mt-6", className?.submit)} size="lg">
 						{initialData ? "Update Project" : "Create Project"}
 					</form.SubmitButton>
 				</form.AppForm>

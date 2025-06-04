@@ -6,5 +6,5 @@ export default async function DashboardPage({
 	params: Promise<{ orgSlug: string }>;
 }) {
 	const { orgSlug } = await params;
-	throw redirect(`/~/${orgSlug}/messages`);
+	throw redirect(`/~/${orgSlug}/projects`);
 }

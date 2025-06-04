@@ -65,18 +65,15 @@ import { Category2, type IconProps } from "iconsax-react";
 import {
 	BellIcon,
 	BookIcon,
-	BuildingIcon,
 	ChevronRightIcon,
 	ChevronsUpDownIcon,
 	FolderIcon,
 	KeyRoundIcon,
-	LineChartIcon,
 	type LucideIcon,
 	MessagesSquareIcon,
 	PlugZapIcon,
 	PlusIcon,
-	ScrollTextIcon,
-	WebhookIcon,
+	SettingsIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -120,27 +117,27 @@ type Menu = {
 const MENU: Menu = {
 	activity: [
 		{
-			title: "Messages",
-			url: "/messages", // Central place to view message status and history
-			icon: MessagesSquareIcon,
-		},
-		{
 			title: "Projects",
 			url: "/projects", // Central place to view projects
 			icon: FolderIcon,
 		},
 		{
-			title: "Logs",
-			url: "/logs", // For more detailed logs (API requests, processing)
-			icon: ScrollTextIcon,
-			isAvailable: false, // Mark as future feature if not implemented
+			title: "Messages",
+			url: "/messages", // Central place to view message status and history
+			icon: MessagesSquareIcon,
 		},
-		{
-			title: "Metrics",
-			url: "/metrics", // High-level performance overview
-			icon: LineChartIcon,
-			isAvailable: false,
-		},
+		// {
+		// 	title: "Logs",
+		// 	url: "/logs", // For more detailed logs (API requests, processing)
+		// 	icon: ScrollTextIcon,
+		// 	isAvailable: false,
+		// },
+		// {
+		// 	title: "Metrics",
+		// 	url: "/metrics", // High-level performance overview
+		// 	icon: LineChartIcon,
+		// 	isAvailable: false,
+		// },
 	],
 
 	settings: [
@@ -150,22 +147,23 @@ const MENU: Menu = {
 			icon: PlugZapIcon,
 		},
 		{
-			title: "Webhooks",
-			url: "/webhooks", // Configure endpoints for status updates
-			icon: WebhookIcon,
-		},
-		{
 			title: "API Keys",
 			url: "/api-keys", // Manage keys for sending messages
 			icon: KeyRoundIcon,
 		},
 		{
-			title: "Organization Settings",
-			url: "/settings/organization", // Manage org members, invites, etc.
-			icon: BuildingIcon,
+			title: "Settings",
+			url: "/settings", // Manage org members, invites, etc.
+			icon: SettingsIcon,
 			isEnabled: (userMembership) =>
 				["admin", "owner"].includes(userMembership.role),
 		},
+		// {
+		// 	title: "Webhooks",
+		// 	url: "/webhooks", // Configure endpoints for status updates
+		// 	icon: WebhookIcon,
+		// 	isAvailable: false,
+		// },
 	],
 	help: [
 		{
@@ -682,7 +680,7 @@ export function AppSidebar({
 			</Sidebar>
 			<SidebarInset>
 				<div
-					className="flex flex-col size-full pl-2 py-4"
+					className="flex flex-col size-full pl-2 pr-3 py-4"
 					style={
 						{
 							"--content-height": "calc(100svh - 1rem)",

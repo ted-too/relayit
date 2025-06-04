@@ -360,9 +360,10 @@ export function DataTableInfinite<TData, TMeta>({
 			controlsOpen={controlsOpen}
 		>
 			<div
-				className="flex h-full min-h-(--tab-content-height) w-full flex-col sm:flex-row"
+				className="flex h-full min-h-(--available-height) w-full flex-col sm:flex-row"
 				style={
 					{
+						"--available-height": "var(--tab-content-height, var(--content-height))",
 						"--top-bar-height": `${topBarHeight}px`,
 						...columnSizeVars,
 					} as CSSProperties
@@ -370,7 +371,7 @@ export function DataTableInfinite<TData, TMeta>({
 			>
 				<div
 					className={cn(
-						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--tab-content-height) sm:min-h-(--tab-content-height) sm:min-w-52 sm:max-w-52 sm:self-start md:min-w-72 md:max-w-72 sm:border-r",
+						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--available-height) sm:min-h-(--available-height) sm:min-w-52 sm:max-w-52 sm:self-start md:min-w-72 md:max-w-72 sm:border-r",
 						"group-data-[expanded=false]/controls:hidden",
 						"hidden sm:flex",
 					)}
@@ -421,7 +422,7 @@ export function DataTableInfinite<TData, TMeta>({
 							onScroll={onScroll}
 							// REMINDER: https://stackoverflow.com/questions/50361698/border-style-do-not-work-with-sticky-position-element
 							className="border-separate border-spacing-0"
-							containerClassName="max-h-[calc(var(--tab-content-height)_-_var(--top-bar-height))]"
+							containerClassName="max-h-[calc(var(--available-height)_-_var(--top-bar-height))]"
 						>
 							<HeaderComponent table={table} />
 							<TableBody

@@ -19,7 +19,8 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { authClient } from "@/lib/auth-client";
+import { authClient, type Organization } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
 import { usersOrganizationsQueryKey } from "@/trpc/queries/auth";
@@ -45,13 +46,17 @@ import { Fragment, useCallback } from "react";
 import { toast } from "sonner";
 
 interface CreateOrganizationFormProps {
-	onSuccess: (data: { id: string; slug: string }) => void;
+	onSuccess?: (data: { id: string; slug: string }) => void;
 	submitWrapper?: typeof DialogFooter;
+	initialData?: Organization;
+	className?: { root?: string; submit?: string };
 }
 
 export function CreateOrganizationForm({
 	onSuccess,
 	submitWrapper,
+	initialData,
+	className,
 }: CreateOrganizationFormProps) {
 	const queryClient = useQueryClient();
 	const { mutateAsync: generateSlugFn, isPending: isGeneratingSlug } =
@@ -59,21 +64,25 @@ export function CreateOrganizationForm({
 
 	const form = useAppForm({
 		defaultValues: {
-			name: "",
-			slug: "",
+			name: initialData?.name ?? "",
+			slug: initialData?.slug ?? "",
 			metadata: {
-				logoBgKey: "sky",
-				logoEmoji: "",
+				logoBgKey: initialData?.metadata.logoBgKey ?? "sky",
+				logoEmoji: initialData?.metadata.logoEmoji ?? "",
 			},
 		} as CreateOrganizationRequest,
 		validators: {
 			onSubmit: createOrganizationSchema,
 		},
 		onSubmit: async ({ value }) => {
-			const { data, error } = await authClient.organization.create({
-				...value,
-				keepCurrentActiveOrganization: false,
-			});
+			const { data, error } = await (initialData
+				? authClient.organization.update({
+						data: value,
+					})
+				: authClient.organization.create({
+						...value,
+						keepCurrentActiveOrganization: false,
+					}));
 
 			if (error) return toast.error(error?.message);
 
@@ -109,7 +118,7 @@ export function CreateOrganizationForm({
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="grid gap-4 w-full"
+			className={cn("grid gap-4 w-full", className?.root)}
 		>
 			<div className="flex items-center gap-4">
 				<form.AppField
@@ -236,8 +245,11 @@ export function CreateOrganizationForm({
 
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-6" size="lg">
-						Create Organization
+					<form.SubmitButton
+						className={cn("w-full mt-6", className?.submit)}
+						size="lg"
+					>
+						{initialData ? "Update Organization" : "Create Organization"}
 					</form.SubmitButton>
 				</form.AppForm>
 			</SubmitWrapper>

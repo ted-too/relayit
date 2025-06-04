@@ -2,7 +2,7 @@ import { initialUserSetup } from "@repo/api/lib/auth";
 import { generateOrganizationSlug } from "@repo/api/lib/slugs";
 import { authdProcedure, authdProcedureWithOrg, router } from "@repo/api/trpc";
 import { db, schema } from "@repo/db";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import z from "zod/v4";
 
 export const miscRouter = router({
@@ -33,6 +33,42 @@ export const miscRouter = router({
 
 		return await initialUserSetup(user.id);
 	}),
+	listMembers: authdProcedureWithOrg.query(async ({ ctx }) => {
+		const data = await db.query.member.findMany({
+			where: eq(schema.member.organizationId, ctx.session.activeOrganizationId),
+			with: {
+				user: {
+					columns: {
+						id: true,
+						name: true,
+						image: true,
+						email: true,
+					},
+				},
+			},
+			columns: { id: true },
+		});
+
+		return data;
+	}),
+	listOrgInvitations: authdProcedureWithOrg.query(async ({ ctx }) => {
+		const data = await db.query.invitation.findMany({
+			where: and(
+				eq(schema.invitation.organizationId, ctx.session.activeOrganizationId),
+				inArray(schema.invitation.status, ["pending", "rejected"]),
+			),
+			with: {
+				inviter: {
+					columns: {
+						id: true,
+						name: true,
+					},
+				},
+			},
+		});
+
+		return data;
+	}),
 	listInvitations: authdProcedureWithOrg.query(async ({ ctx }) => {
 		const { user } = ctx;
 
@@ -46,6 +82,12 @@ export const miscRouter = router({
 					columns: {
 						name: true,
 						logo: true,
+					},
+				},
+				inviter: {
+					columns: {
+						id: true,
+						name: true,
 					},
 				},
 			},
