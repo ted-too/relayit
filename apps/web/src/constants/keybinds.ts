@@ -1,4 +1,3 @@
-export const SIDEBAR_KEYBOARD_SHORTCUT = "Meta+b";
 export const TABLE_SIDEBAR_KEYBOARD_SHORTCUT = "Meta+Shift+S";
 export const TABLE_COMMAND_KEYBOARD_SHORTCUT = "Meta+K";
 

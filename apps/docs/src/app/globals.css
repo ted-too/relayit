@@ -5,6 +5,5 @@
 @source "../../../../apps/**/**/*.{ts,tsx}";
 @source "../../../../packages/**/*.{ts,tsx}";
 @source "../../../../packages/**/**/*.{ts,tsx}";
-@source "../../../../node_modules/@ferrucc-io/emoji-picker";
 
 
