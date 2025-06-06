@@ -4,7 +4,7 @@ import type {
 	DataTableFilterField,
 	SheetField,
 } from "@/components/data-table/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import type { Table } from "@tanstack/react-table";
 import * as React from "react";
 import { DataTableSheetRowAction } from "./row-action";

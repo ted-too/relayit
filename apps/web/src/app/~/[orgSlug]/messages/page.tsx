@@ -5,8 +5,8 @@ import {
 	CardTitle,
 	CardHeader,
 	CardContent,
-} from "@/components/ui/card";
-import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@/constants/sidebar";
+} from "@repo/ui/components/shadcn/card";
+import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
 import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
 

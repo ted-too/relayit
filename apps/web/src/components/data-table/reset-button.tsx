@@ -1,16 +1,16 @@
 "use client";
 
-import { Kbd } from "@/components/ui/kbd";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import { useDataTable } from "@/components/data-table/provider";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@repo/ui/components/shadcn/tooltip";
 import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { XIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import { RESET_TABLE_FILTERS } from "@/constants/keybinds";
 
 export function DataTableResetButton() {

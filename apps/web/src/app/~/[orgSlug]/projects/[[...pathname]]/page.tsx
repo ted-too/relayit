@@ -5,8 +5,8 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@repo/ui/components/shadcn/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
 import { getQueryClient } from "@/trpc/server";
 import { trpc } from "@/trpc/server";
 import { dehydrate } from "@tanstack/react-query";

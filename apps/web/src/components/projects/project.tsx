@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertDialog, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertDialog, AlertDialogTrigger } from "@repo/ui/components/shadcn/alert-dialog";
+import { Button } from "@repo/ui/components/shadcn/button";
+import { Card, CardFooter, CardHeader, CardTitle } from "@repo/ui/components/shadcn/card";
 import {
 	Dialog,
 	DialogContent,
@@ -11,7 +11,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@repo/ui/components/shadcn/dropdown-menu";
 import type { Project } from "@repo/db";
 import { formatDistanceToNowStrict } from "date-fns";
 import {

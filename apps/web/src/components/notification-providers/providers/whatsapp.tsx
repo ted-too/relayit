@@ -1,6 +1,6 @@
 import { Whatsapp } from "@/components/icons";
 import { ComingSoon } from "@/components/shared/comming-soon";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -8,7 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import type { NotificationProviderButtonProps } from ".";
 
 export function WhatsappProvider({

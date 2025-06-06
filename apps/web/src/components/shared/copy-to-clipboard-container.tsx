@@ -1,14 +1,14 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { composeRefs } from "@/lib/compose-refs";
-import { cn } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/tooltip";
+import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
+import { composeRefs } from "@repo/ui/lib/compose-refs";
+import { cn } from "@repo/ui/lib/utils";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import * as React from "react";
 

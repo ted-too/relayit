@@ -2,8 +2,8 @@
 
 import { type BaseApiKey, authClient } from "@/lib/auth-client";
 
-import { ActionButton } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { ActionButton } from "@repo/ui/components/shadcn/button";
+import { Card } from "@repo/ui/components/shadcn/card";
 import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeyIcon } from "lucide-react";

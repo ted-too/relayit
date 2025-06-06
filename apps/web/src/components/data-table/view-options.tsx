@@ -5,8 +5,8 @@ import {
 	Sortable,
 	SortableDragHandle,
 	SortableItem,
-} from "@/components/ui/sortable";
-import { Button } from "@/components/ui/button";
+} from "@repo/ui/components/shadcn/sortable";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Command,
 	CommandEmpty,
@@ -14,13 +14,13 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
-} from "@/components/ui/command";
+} from "@repo/ui/components/shadcn/command";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/popover";
+import { cn } from "@repo/ui/lib/utils";
 import { useMemo, useState } from "react";
 import { useDataTable } from "@/components/data-table/provider";
 

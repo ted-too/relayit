@@ -5,7 +5,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@/components/ui/card";
+} from "@repo/ui/components/shadcn/card";
 import type { Project } from "@repo/db";
 
 export function GeneralTab({ project }: { project: Project }) {

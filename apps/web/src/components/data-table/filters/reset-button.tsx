@@ -2,7 +2,7 @@
 
 import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableFilterField } from "@/components/data-table/types";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import { XIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
 

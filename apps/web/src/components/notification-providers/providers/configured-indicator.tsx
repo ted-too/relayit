@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import { CircleAlertIcon, CircleCheckIcon, CircleXIcon } from "lucide-react";
 
 export type ConfiguredIndicatorType =

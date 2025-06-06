@@ -1,6 +1,6 @@
 import { Email } from "@/components/icons";
 import { CreateProviderForm } from "@/components/notification-providers/create";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -9,7 +9,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
 export function EmailProvider({ configured }: NotificationProviderButtonProps) {

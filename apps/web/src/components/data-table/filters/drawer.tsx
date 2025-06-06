@@ -1,5 +1,5 @@
-import { Kbd } from "@/components/ui/kbd";
-import { Button } from "@/components/ui/button";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Drawer,
 	DrawerClose,
@@ -9,13 +9,13 @@ import {
 	DrawerHeader,
 	DrawerTitle,
 	DrawerTrigger,
-} from "@/components/ui/drawer";
+} from "@repo/ui/components/shadcn/drawer";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@repo/ui/components/shadcn/tooltip";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { FilterIcon } from "lucide-react";
 import { DataTableFilterControls } from "./controls";

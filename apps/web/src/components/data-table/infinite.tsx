@@ -1,6 +1,6 @@
 "use client";
 
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
 import { type Facets, SORT_DELIMITER } from "@repo/shared";
 import type {
 	FetchNextPageOptions,
@@ -40,7 +40,7 @@ import {
 	type UIEvent,
 } from "react";
 import { arrSome, inDateRange } from "./filter-fns";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Table,
 	TableBody,
@@ -48,8 +48,8 @@ import {
 	TableHead,
 	TableHeader,
 	TableRow,
-} from "@/components/ui/table";
-import { cn, formatCompactNumber } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/table";
+import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
 import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { useControls } from "./controls";
 import { DataTableSheetDetails } from "./sheet/details";
@@ -59,13 +59,13 @@ import { RefreshButton } from "./refresh-button";
 import type { DataTableFilterField, SheetField } from "./types";
 import { DataTableProvider } from "./provider";
 import { DataTableResetButton } from "./reset-button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@repo/ui/components/shadcn/scroll-area";
 import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
 import { DataTableFilterControls } from "./filters/controls";
 import { DataTableToolbar } from "./toolbar";
 import { DataTableFilterCommand } from "./filters/command";
 import { RESET_TABLE_VIEW } from "@/constants/keybinds";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 
 export type DataTableInfiniteProps<TData, TMeta> = {
 	tableId: string;

@@ -1,16 +1,16 @@
 "use client";
 
-import { Kbd } from "@/components/ui/kbd";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import { useDataTable } from "@/components/data-table/provider";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@repo/ui/components/shadcn/tooltip";
 import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { formatCompactNumber } from "@/lib/utils";
+import { formatCompactNumber } from "@repo/ui/lib/utils";
 import { useControls } from "../data-table/controls";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { DataTableFilterControlsDrawer } from "./filters/drawer";

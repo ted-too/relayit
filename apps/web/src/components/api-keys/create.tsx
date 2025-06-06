@@ -2,7 +2,7 @@
 import { Fragment, useState } from "react";
 
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogClose,
@@ -12,10 +12,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
-import { useAppForm } from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@repo/ui/components/shadcn/dialog";
+import { useAppForm } from "@repo/ui/components/shadcn/form";
+import { Label } from "@repo/ui/components/shadcn/label";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 import { type CreatedApiKey, authClient } from "@/lib/auth-client";
 import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";

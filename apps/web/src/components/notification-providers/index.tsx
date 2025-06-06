@@ -2,8 +2,8 @@
 
 import { NotificationProviderCard } from "@/components/notification-providers/card";
 import { EmailProvider } from "@/components/notification-providers/providers/email";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@repo/ui/components/shadcn/card";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 import { trpc } from "@/trpc/client";
 import { DiscordProvider } from "./providers/discord";
 import { SmsProvider } from "./providers/sms";

@@ -8,8 +8,8 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button, type ButtonProps } from "@/components/ui/button";
+} from "@repo/ui/components/shadcn/alert-dialog";
+import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -18,9 +18,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
-import { useAppForm } from "@/components/ui/form";
-import { cn, getChangedFields } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/dialog";
+import { useAppForm } from "@repo/ui/components/shadcn/form";
+import { cn } from "@repo/ui/lib/utils";
+import { getChangedFields } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
 import type { Project } from "@repo/db";

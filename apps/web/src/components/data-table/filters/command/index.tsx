@@ -1,6 +1,6 @@
 "use client";
 
-import { Kbd } from "@/components/ui/kbd";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import { useDataTable } from "@/components/data-table/provider";
 import {
 	Command,
@@ -10,12 +10,12 @@ import {
 	CommandItem,
 	CommandList,
 	CommandSeparator,
-} from "@/components/ui/command";
-import { Separator } from "@/components/ui/separator";
+} from "@repo/ui/components/shadcn/command";
+import { Separator } from "@repo/ui/components/shadcn/separator";
 import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import { formatCompactNumber } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
+import { formatCompactNumber } from "@repo/ui/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import type { ParserBuilder } from "nuqs";
 import { useEffect, useMemo, useRef, useState } from "react";

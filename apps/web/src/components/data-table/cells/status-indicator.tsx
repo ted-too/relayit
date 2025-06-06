@@ -1,5 +1,5 @@
 import { getStatusColor } from "@/lib/colors";
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import type { MessageStatus } from "@repo/shared";
 
 // TODO: Make generic for any status type

@@ -1,6 +1,6 @@
 import type { SheetField } from "@/components/data-table/types";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { cn } from "@repo/ui/lib/utils";
 
 interface SheetDetailsContentSkeletonProps<TData, TMeta> {
 	fields: SheetField<TData, TMeta>[];

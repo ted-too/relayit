@@ -1,8 +1,8 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/ui/dark-mode-toggle";
+import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/shadcn/avatar";
+import { Button } from "@repo/ui/components/shadcn/button";
+import { ModeToggle } from "@repo/ui/components/shadcn/dark-mode-toggle";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -11,16 +11,16 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SidebarMenuButton } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@repo/ui/components/shadcn/dropdown-menu";
+import { SidebarMenuButton } from "@repo/ui/components/shadcn/sidebar";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@repo/ui/components/shadcn/tooltip";
 import { authClient } from "@/lib/auth-client";
-import { cn, getInitials } from "@/lib/utils";
+import { cn, getInitials } from "@repo/ui/lib/utils";
 import { sessionQueryOptions } from "@/trpc/queries/auth";
 import {
 	ORGANIZATION_LOGO_GRADIENTS,

@@ -1,6 +1,6 @@
 "use client";
 import { CombinedLogo } from "@/components/shared/logo";
-import { useAppForm } from "@/components/ui/form";
+import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { type User, authClient } from "@/lib/auth-client";
 import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { useRouter } from "next/navigation";

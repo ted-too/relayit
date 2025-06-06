@@ -10,7 +10,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@/components/ui/card";
+} from "@repo/ui/components/shadcn/card";
 import type {
 	NotificationProvider,
 	ProjectDetails,

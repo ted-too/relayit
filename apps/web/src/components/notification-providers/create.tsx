@@ -1,7 +1,7 @@
 "use client";
 
-import type { DialogFooter } from "@/components/ui/dialog";
-import { useAppForm, withForm } from "@/components/ui/form";
+import type { DialogFooter } from "@repo/ui/components/shadcn/dialog";
+import { useAppForm, withForm } from "@repo/ui/components/shadcn/form";
 import { getChangedFields } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";

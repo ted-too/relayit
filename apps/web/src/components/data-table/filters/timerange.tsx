@@ -1,6 +1,6 @@
 "use client";
 
-import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
+import { DatePickerWithRange } from "@/components/shared/date-picker-with-range";
 import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableTimerangeFilterField } from "@/components/data-table/types";
 import { isArrayOfDates } from "@/components/data-table/filter-fns";

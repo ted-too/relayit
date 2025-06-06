@@ -13,7 +13,7 @@ type Icon = (props: IconProps | TablerIconProps) => React.ReactNode;
 
 export interface ChannelCardProps {
 	name: string;
-	description?: string;
+	description: string;
 	providers: string[];
 	Icon: Icon;
 	status: "live" | "coming-soon";
@@ -22,22 +22,6 @@ export interface ChannelCardProps {
 		icon?: string;
 		iconContainer?: string;
 	};
-}
-
-function DescriptionWrapper({
-	children,
-	providers,
-	description,
-}: { children: React.ReactNode; providers: string[]; description?: string }) {
-	if (description) return children;
-	return (
-		<Tooltip>
-			<TooltipTrigger>{children}</TooltipTrigger>
-			<TooltipContent>
-				<p>{providers.join(", ")}</p>
-			</TooltipContent>
-		</Tooltip>
-	);
 }
 
 export function ChannelCard(props: ChannelCardProps) {
@@ -51,7 +35,6 @@ export function ChannelCard(props: ChannelCardProps) {
 		>
 			<CardContent className="flex items-center p-4">
 				<div className="flex items-center space-x-3 mr-4">
-					{/* Primary provider */}
 					<div
 						className={cn(
 							"w-10 h-10 rounded-lg flex items-center justify-center",
@@ -96,14 +79,16 @@ export function ChannelCard(props: ChannelCardProps) {
 							{props.status.replaceAll("-", " ")}
 						</Badge>
 					</div>
-					<DescriptionWrapper
-						providers={props.providers}
-						description={props.description}
-					>
-						<p className="text-[0.8rem] text-muted-foreground leading-tight">
-							{props.description ?? `${props.providers.length} providers`}
-						</p>
-					</DescriptionWrapper>
+					<Tooltip>
+						<TooltipTrigger>
+							<p className="text-[0.8rem] text-muted-foreground leading-tight">
+								{props.description}
+							</p>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p>{props.providers.join(", ")}</p>
+						</TooltipContent>
+					</Tooltip>
 				</div>
 			</CardContent>
 		</Card>

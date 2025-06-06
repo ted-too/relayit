@@ -1,7 +1,7 @@
 "use client";
 
-import type { ButtonProps } from "@/components/ui/button";
-import { Button } from "@/components/ui/button";
+import type { ButtonProps } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -10,17 +10,17 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
-import { FormErrorMessage, useAppForm } from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
+} from "@repo/ui/components/shadcn/dialog";
+import { FormErrorMessage, useAppForm } from "@repo/ui/components/shadcn/form";
+import { Label } from "@repo/ui/components/shadcn/label";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@/components/ui/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@repo/ui/components/shadcn/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
 import { authClient, type Organization } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import { trpc } from "@/trpc/client";
 import { noThrow } from "@/trpc/no-throw";
 import { usersOrganizationsQueryKey } from "@/trpc/queries/auth";

@@ -1,16 +1,16 @@
-import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { DropdownMenu } from "@repo/ui/components/shadcn/dropdown-menu";
 import {
 	DropdownMenuContent,
 	DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+} from "@repo/ui/components/shadcn/dropdown-menu";
 import {
 	DropdownMenuGroup,
 	DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+} from "@repo/ui/components/shadcn/dropdown-menu";
 import type { DataTableFilterField } from "@/components/data-table/types";
-import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { cn } from "@/lib/utils";
+import { DropdownMenuTrigger } from "@repo/ui/components/shadcn/dropdown-menu";
+import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
+import { cn } from "@repo/ui/lib/utils";
 import type { Table } from "@tanstack/react-table";
 import { startOfDay } from "date-fns";
 import { startOfHour } from "date-fns";

@@ -1,5 +1,5 @@
 import { CreateProviderForm } from "@/components/notification-providers/create";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -8,7 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import { MessageText } from "iconsax-react";
 import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 

@@ -4,9 +4,9 @@ import {
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { cn } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/hover-card";
+import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
+import { cn } from "@repo/ui/lib/utils";
 import { UTCDate } from "@date-fns/utc";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { format, formatDistanceToNowStrict } from "date-fns";

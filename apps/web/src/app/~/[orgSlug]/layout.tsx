@@ -1,7 +1,7 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import {
 	SIDEBAR_COOKIE_NAME,
-} from "@/constants/sidebar";
+} from "@repo/ui/constants";
 import {
 	activeOrganizationQueryOptions,
 	currentMemberQueryOptions,

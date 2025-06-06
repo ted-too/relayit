@@ -1,8 +1,8 @@
 "use client";
 
 import { CombinedLogo } from "@/components/shared/logo";
-import { Button } from "@/components/ui/button";
-import { useAppForm } from "@/components/ui/form";
+import { Button } from "@repo/ui/components/shadcn/button";
+import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { authClient } from "@/lib/auth-client";
 import { usersOrganizationsQueryOptions } from "@/trpc/queries/auth";
 import { type SignUpRequest, signUpSchema } from "@repo/shared";

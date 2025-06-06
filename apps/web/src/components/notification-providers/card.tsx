@@ -11,9 +11,9 @@ import {
 	CreateProjectProviderAssociationForm,
 	CreateProviderForm,
 } from "@/components/notification-providers/create";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Badge } from "@repo/ui/components/shadcn/badge";
+import { Button } from "@repo/ui/components/shadcn/button";
+import { Card } from "@repo/ui/components/shadcn/card";
 import {
 	Dialog,
 	DialogContent,
@@ -22,12 +22,12 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@repo/ui/components/shadcn/tooltip";
 import type { NotificationProvider, ProjectDetails } from "@repo/db";
 import type { ProjectProviderAssociation } from "@repo/db";
 import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";

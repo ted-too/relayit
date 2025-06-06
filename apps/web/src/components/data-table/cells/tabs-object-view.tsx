@@ -1,5 +1,5 @@
 import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
 import { BracesIcon } from "lucide-react";
 
 interface TabsObjectViewProps {

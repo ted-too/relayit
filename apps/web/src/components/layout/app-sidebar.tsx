@@ -3,12 +3,12 @@
 import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@repo/ui/components/shadcn/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -17,7 +17,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@repo/ui/components/shadcn/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -27,7 +27,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@repo/ui/components/shadcn/dropdown-menu";
 import {
 	Sidebar,
 	SidebarContent,
@@ -46,15 +46,15 @@ import {
 	SidebarRail,
 	SidebarTrigger,
 	useSidebar,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
+} from "@repo/ui/components/shadcn/sidebar";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { SIDEBAR_KEYBOARD_SHORTCUT } from "@repo/ui/constants";
 import {
 	type Organization,
 	type OrganizationMember,
 	authClient,
 } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import { trpc } from "@/trpc/client";
 import {
 	activeOrganizationQueryKey,
@@ -80,8 +80,8 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
 import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { Kbd } from "@/components/ui/kbd";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/shadcn/tooltip";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 
 /**
  * Core types for sidebar navigation

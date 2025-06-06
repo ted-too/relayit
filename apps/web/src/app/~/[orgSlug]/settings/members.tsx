@@ -4,18 +4,18 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@/components/ui/card";
+} from "@repo/ui/components/shadcn/card";
 import type { Organization } from "@/lib/auth-client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/shadcn/avatar";
+import { Badge } from "@repo/ui/components/shadcn/badge";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+} from "@repo/ui/components/shadcn/dropdown-menu";
+import { Button } from "@repo/ui/components/shadcn/button";
 import { MoreHorizontalIcon } from "lucide-react";
 import {
 	CancelInvitationAction,

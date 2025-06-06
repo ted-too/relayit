@@ -3,8 +3,8 @@ import {
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@repo/ui/components/shadcn/tooltip";
+import { cn } from "@repo/ui/lib/utils";
 import { TooltipPortal } from "@radix-ui/react-tooltip";
 import { useEffect, useRef, useState } from "react";
 

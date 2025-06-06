@@ -1,5 +1,5 @@
 import { useDataTable } from "@/components/data-table/provider";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/components/shadcn/button";
 import { LoaderCircleIcon, RefreshCcwIcon } from "lucide-react";
 
 interface RefreshButtonProps {

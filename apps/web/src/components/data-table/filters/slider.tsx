@@ -1,11 +1,11 @@
 "use client";
 
-import { InputWithAddons } from "@/components/ui/input-with-addons";
-import { Slider } from "@/components/ui/slider";
+import { InputWithAddons } from "@repo/ui/components/shadcn/input-with-addons";
+import { Slider } from "@repo/ui/components/shadcn/slider";
 import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableSliderFilterField } from "@/components/data-table/types";
-import { Label } from "@/components/ui/label";
-import { useBasicDebounce } from "@/hooks/use-debounce";
+import { Label } from "@repo/ui/components/shadcn/label";
+import { useBasicDebounce } from "@repo/ui/hooks/use-debounce";
 import { isArrayOfNumbers } from "@/components/data-table/filter-fns";
 import { useEffect, useState } from "react";
 

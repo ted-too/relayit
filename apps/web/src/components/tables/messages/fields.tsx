@@ -5,7 +5,7 @@ import type {
 	Option,
 	SheetField,
 } from "@/components/data-table/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@repo/ui/lib/utils";
 import type { Message } from "@repo/db";
 import { format } from "date-fns";
 import { TabsObjectView } from "../../data-table/cells/tabs-object-view";
