@@ -15,8 +15,16 @@ export type SESProjectProviderConfig = z.infer<
 >;
 
 export const snsProjectProviderConfigSchema = z.object({
-	senderId: z.string(),
+	senderName: z.string(),
 });
+
+export const whatsappProjectProviderConfigSchema = z.object({
+	phoneNumberId: z.string(),
+});
+
+export type WhatsAppProjectProviderConfig = z.infer<
+	typeof whatsappProjectProviderConfigSchema
+>;
 
 export type SNSProjectProviderConfig = z.infer<
 	typeof snsProjectProviderConfigSchema
@@ -24,7 +32,8 @@ export type SNSProjectProviderConfig = z.infer<
 
 export type ProjectProviderConfig =
 	| SESProjectProviderConfig
-	| SNSProjectProviderConfig;
+	| SNSProjectProviderConfig
+	| WhatsAppProjectProviderConfig;
 
 export function isSESProjectProviderConfig(
 	config: ProjectProviderConfig,
@@ -35,7 +44,13 @@ export function isSESProjectProviderConfig(
 export function isSNSProjectProviderConfig(
 	config: ProjectProviderConfig,
 ): config is SNSProjectProviderConfig {
-	return "senderId" in config;
+	return "senderName" in config;
+}
+
+export function isWhatsAppProjectProviderConfig(
+	config: ProjectProviderConfig,
+): config is WhatsAppProjectProviderConfig {
+	return "phoneNumberId" in config;
 }
 
 export const baseProjectProviderAssociationSchema = z.object({

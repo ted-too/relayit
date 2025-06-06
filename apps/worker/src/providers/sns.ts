@@ -1,23 +1,23 @@
 import {
-	SESClient,
-	SendEmailCommand,
-	type SendEmailCommandInput,
-	type SendEmailCommandOutput,
-} from "@aws-sdk/client-ses";
+	SNSClient,
+	PublishCommand,
+	type PublishCommandInput,
+	type PublishCommandOutput,
+} from "@aws-sdk/client-sns";
 import { decryptRecord } from "@repo/db";
 import type {
 	AWSProviderCredentials,
 	ProjectProviderConfig,
 	ProviderCredentials,
 	Result,
-	EmailPayload,
+	SMSPayload,
 } from "@repo/shared";
 import {
 	awsCredentialsSchema,
 	createGenericError,
 	isAWSProviderCredentials,
-	isSESProjectProviderConfig,
-	sesProjectProviderConfigSchema,
+	isSNSProjectProviderConfig,
+	snsProjectProviderConfigSchema,
 } from "@repo/shared";
 import {
 	BASE_RETRY_DELAY_MS,
@@ -29,10 +29,10 @@ import type {
 	ProviderSendResult,
 } from "@repo/worker/providers/interface";
 
-export class SESProvider implements INotificationProvider {
+export class SNSProvider implements INotificationProvider {
 	async send(
 		encryptedCredentials: ProviderCredentials,
-		messagePayload: EmailPayload,
+		messagePayload: SMSPayload,
 		config: ProjectProviderConfig,
 		recipient: string,
 	): Promise<Result<ProviderSendResult>> {
@@ -40,53 +40,45 @@ export class SESProvider implements INotificationProvider {
 
 		// Create a structured context for this send operation
 		const logContext: Record<string, any> = {
-			provider: "ses",
+			provider: "sns",
 			recipient,
 			messageType: messagePayload.type,
-			hasSubject: !!messagePayload.subject,
 		};
 
-		logger.debug(logContext, "Starting SES email send operation");
+		logger.debug(logContext, "Starting SNS SMS send operation");
+
 		if (!isAWSProviderCredentials(encryptedCredentials)) {
 			logger.error(
 				logContext,
-				"Invalid SES credentials structure (pre-decrypt)",
+				"Invalid SNS credentials structure (pre-decrypt)",
 			);
 			return {
 				error: createGenericError(
-					"Invalid SES credentials structure (pre-decrypt)",
+					"Invalid SNS credentials structure (pre-decrypt)",
 				),
 				data: null,
 			};
 		}
 
-		if (!isSESProjectProviderConfig(config)) {
-			logger.error(logContext, "Invalid SES config structure");
+		if (!isSNSProjectProviderConfig(config)) {
+			logger.error(logContext, "Invalid SNS config structure");
 			return {
-				error: createGenericError("Invalid SES config structure"),
+				error: createGenericError("Invalid SNS config structure"),
 				data: null,
 			};
 		}
 
-		const configParseResult = sesProjectProviderConfigSchema.safeParse(config);
+		const configParseResult = snsProjectProviderConfigSchema.safeParse(config);
 		if (!configParseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: configParseResult.error },
-				"Invalid SES config content",
+				"Invalid SNS config content",
 			);
 			return {
 				error: createGenericError(
-					"Invalid SES config content",
+					"Invalid SNS config content",
 					configParseResult.error,
 				),
-				data: null,
-			};
-		}
-
-		if (!messagePayload.subject) {
-			logger.error(logContext, "Subject is required for SES");
-			return {
-				error: createGenericError("Subject is required for SES"),
 				data: null,
 			};
 		}
@@ -97,26 +89,27 @@ export class SESProvider implements INotificationProvider {
 		if (decryptResult.error) {
 			logger.error(
 				{ ...logContext, error: decryptResult.error },
-				"Failed to decrypt SES credentials",
+				"Failed to decrypt SNS credentials",
 			);
 			return {
 				error: createGenericError(
-					"Failed to decrypt SES credentials",
+					"Failed to decrypt SNS credentials",
 					decryptResult.error.details,
 				),
 				data: null,
 			};
 		}
+
 		const decryptedCreds = decryptResult.data;
 		const parseResult = awsCredentialsSchema.safeParse(decryptedCreds);
 		if (!parseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: parseResult.error },
-				"Invalid decrypted SES credentials format",
+				"Invalid decrypted SNS credentials format",
 			);
 			return {
 				error: createGenericError(
-					"Invalid decrypted SES credentials format",
+					"Invalid decrypted SNS credentials format",
 					parseResult.error,
 				),
 				data: null,
@@ -127,7 +120,7 @@ export class SESProvider implements INotificationProvider {
 		// Add region to log context now that we have credentials
 		logContext.region = credentials.unencrypted.region;
 
-		const sesClient = new SESClient({
+		const snsClient = new SNSClient({
 			region: credentials.unencrypted.region,
 			credentials: {
 				accessKeyId: credentials.accessKeyId,
@@ -135,25 +128,39 @@ export class SESProvider implements INotificationProvider {
 			},
 		});
 
-		const params: SendEmailCommandInput = {
-			Source: configParseResult.data.senderEmail,
-			Destination: { ToAddresses: [recipient] },
-			Message: {
-				Subject: { Data: messagePayload.subject, Charset: "UTF-8" },
-				Body:
-					messagePayload.type === "html"
-						? { Html: { Data: messagePayload.body, Charset: "UTF-8" } }
-						: { Text: { Data: messagePayload.body, Charset: "UTF-8" } },
-			},
+		const params: PublishCommandInput = {
+			PhoneNumber: recipient,
+			Message: messagePayload.body,
 		};
+
+		// Add optional SMS attributes if configured
+		if (configParseResult.data.senderName) {
+			params.MessageAttributes = {
+				"AWS.SNS.SMS.SenderID": {
+					DataType: "String",
+					StringValue: configParseResult.data.senderName,
+				},
+			};
+		}
+
+		// Set SMS type from payload if provided (defaults to Promotional if not specified)
+		if (messagePayload.smsType) {
+			if (!params.MessageAttributes) {
+				params.MessageAttributes = {};
+			}
+			params.MessageAttributes["AWS.SNS.SMS.SMSType"] = {
+				DataType: "String",
+				StringValue: messagePayload.smsType,
+			};
+		}
 
 		let lastError: any = null;
 		for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
 			const attemptStartTime = Date.now();
 
 			try {
-				const command = new SendEmailCommand(params);
-				const data: SendEmailCommandOutput = await sesClient.send(command);
+				const command = new PublishCommand(params);
+				const data: PublishCommandOutput = await snsClient.send(command);
 
 				const duration = Date.now() - startTime;
 				logger.info(
@@ -164,7 +171,7 @@ export class SESProvider implements INotificationProvider {
 						duration,
 						success: true,
 					},
-					"SES email sent successfully",
+					"SNS SMS sent successfully",
 				);
 
 				return {
@@ -203,13 +210,13 @@ export class SESProvider implements INotificationProvider {
 					const delayMs = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
 					logger.warn(
 						{ ...errorContext, retryDelayMs: delayMs },
-						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`,
+						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`,
 					);
 					await delay(delayMs);
 				} else {
 					logger.error(
 						errorContext,
-						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`,
+						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`,
 					);
 					break;
 				}
@@ -231,12 +238,12 @@ export class SESProvider implements INotificationProvider {
 						}
 					: null,
 			},
-			`SES email send failed after ${MAX_RETRY_ATTEMPTS} attempts`,
+			`SNS SMS send failed after ${MAX_RETRY_ATTEMPTS} attempts`,
 		);
 
 		return {
 			error: createGenericError(
-				`Failed to send email via SES after ${MAX_RETRY_ATTEMPTS} attempt(s)`,
+				`Failed to send SMS via SNS after ${MAX_RETRY_ATTEMPTS} attempt(s)`,
 				lastError,
 			),
 			data: null,

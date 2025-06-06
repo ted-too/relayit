@@ -14,7 +14,6 @@ export const awsCredentialsSchema = z.object({
 
 export type AWSProviderCredentials = z.infer<typeof awsCredentialsSchema>;
 
-// TODO: Make this a real schema
 export const whatsappCredentialsSchema = z.object({
 	accessToken: z.string().min(1, "Access Token is required"),
 });
@@ -23,9 +22,9 @@ export type WhatsappProviderCredentials = z.infer<
 	typeof whatsappCredentialsSchema
 >;
 
-// TODO: Make this a real schema
 export const discordCredentialsSchema = z.object({
-	accessToken: z.string().min(1, "Access Token is required"),
+	clientId: z.string().min(1, "Client ID is required"),
+	clientSecret: z.string().min(1, "Client Secret is required"),
 });
 
 export type DiscordProviderCredentials = z.infer<
@@ -57,5 +56,5 @@ export function isWhatsappProviderCredentials(
 export function isDiscordProviderCredentials(
 	credentials: ProviderCredentials,
 ): credentials is DiscordProviderCredentials {
-	return "accessToken" in credentials;
+	return "clientId" in credentials && "clientSecret" in credentials;
 }
