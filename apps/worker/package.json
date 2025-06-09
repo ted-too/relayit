@@ -2,7 +2,7 @@
 	"name": "@repo/worker",
 	"scripts": {
 		"dev": "PINO_LOG_LEVEL=debug NODE_ENV=development bun run --hot src/index.ts",
-		"build": "bun build ./src/index.ts --outdir ./build --target bun"
+		"build": "bun build ./src/index.ts --outdir ./build --target bun --external=pino --external=thread-stream --external=real-require"
 	},
 	"dependencies": {
 		"@aws-sdk/client-ses": "^3.803.0",

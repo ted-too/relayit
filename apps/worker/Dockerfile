@@ -28,15 +28,20 @@ RUN bun run build
 FROM base AS runner
 WORKDIR /app
 
+# Create a minimal package.json for runtime dependencies
+RUN echo '{"dependencies":{"pino":"^9.7.0","pino-pretty":"^13.0.0"}}' > package.json
+
+# Install only the external dependencies
+RUN bun install --production
+
 # Don't run production as root
 RUN addgroup --system --gid 1003 nodejs
 RUN adduser --system --uid 1003 honojs
-USER honojs
 
-# This is needed for pino to work
-COPY --from=installer /app/node_modules/thread-stream ./node_modules/thread-stream
-COPY --from=installer /app/node_modules/pino ./node_modules/pino
-COPY --from=installer /app/node_modules/pino-pretty ./node_modules/pino-pretty
+# Fix ownership of node_modules
+RUN chown -R honojs:nodejs node_modules
+
+USER honojs
 
 COPY --from=installer --chown=honojs:nodejs /app/apps/worker/build ./
 
