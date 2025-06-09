@@ -142,6 +142,7 @@
         "@repo/db": "workspace:*",
         "@repo/shared": "workspace:*",
         "drizzle-orm": "^0.43.1",
+        "pg": "^8.15.6",
         "pino": "^9.7.0",
         "typeid-js": "^1.2.0",
       },
