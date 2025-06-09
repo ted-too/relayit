@@ -11,13 +11,12 @@
 		"check-types": "turbo run check-types"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "1.9.4",
 		"turbo": "^2.5.2",
 		"typescript": "5.8.2"
 	},
 	"engines": {
 		"node": ">=18"
 	},
-	"packageManager": "bun@1.2.4",
+	"packageManager": "bun@1.2.12",
 	"workspaces": ["apps/*", "packages/*"]
 }
