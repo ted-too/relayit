@@ -22,6 +22,8 @@
   "trustedDependencies": [
     "@repo/docs",
     "@tailwindcss/oxide",
-    "core-js"
+    "core-js",
+    "esbuild",
+    "sharp"
   ]
 }
