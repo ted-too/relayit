@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "whois": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bharathvaj/whois-mcp@latest"
+      ]
+    }
+  }
+}

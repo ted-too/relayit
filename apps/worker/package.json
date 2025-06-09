@@ -2,7 +2,8 @@
 	"name": "@repo/worker",
 	"private": true,
 	"scripts": {
-		"dev": "PINO_LOG_LEVEL=debug NODE_ENV=development bun run --hot src/index.ts"
+		"dev": "PINO_LOG_LEVEL=debug NODE_ENV=development bun run --hot src/index.ts",
+		"build": "bun build ./src/index.ts --outdir ./build --target bun"
 	},
 	"dependencies": {
 		"@aws-sdk/client-ses": "^3.803.0",

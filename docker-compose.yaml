@@ -1,0 +1,114 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    expose:
+      - 3005
+    environment:
+      - PORT=3005
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${API_URL:-http://localhost:3005}
+      - FRONTEND_URL=${WEB_URL:-http://localhost:3000}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-relayit}
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - relayit-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${API_URL:-http://localhost:3005}
+      - FRONTEND_URL=${WEB_URL:-http://localhost:3000}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-relayit}
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - relayit-network
+
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      args:
+        - API_URL=${API_URL:-http://localhost:3005}
+        - WEB_URL=${WEB_URL:-http://localhost:3000}
+        - DOCS_URL=${DOCS_URL:-http://localhost:3002}
+    expose:
+      - 3000
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+    networks:
+      - relayit-network
+
+  docs:
+    build:
+      context: .
+      dockerfile: ./apps/docs/Dockerfile
+      args:
+        - API_URL=${API_URL:-http://localhost:3005}
+        - WEB_URL=${WEB_URL:-http://localhost:3000}
+        - DOCS_URL=${DOCS_URL:-http://localhost:3002}
+    expose:
+      - 3002
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+    networks:
+      - relayit-network
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-relayit}
+    volumes:
+      - relayit_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-relayit}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - relayit-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - relayit-network
+
+networks:
+  relayit-network:
+    driver: bridge
+
+volumes:
+  relayit_postgres_data:
+  redis_data:
