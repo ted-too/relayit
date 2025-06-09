@@ -17,7 +17,9 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=builder /app/out/json .
-RUN bun install --frozen-lockfile
+# FIXME: There is currently a bug with turbo prune for bun where the lockfile is not updated.
+# Will investigate this further.
+RUN bun install --force
 
 ENV NODE_ENV=production
 
