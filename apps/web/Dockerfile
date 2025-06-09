@@ -1,4 +1,4 @@
-FROM imbios/bun-node:1.2.4-20-alpine AS base
+FROM imbios/bun-node:1.2.12-20-alpine AS base
 WORKDIR /usr/src/app
 
 FROM base AS builder
