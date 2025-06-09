@@ -16,11 +16,6 @@ RUN apk update
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY --from=builder /app/out/json .
-# FIXME: There is currently a bug with turbo prune for bun where the lockfile is not updated.
-# Will investigate this further.
-RUN bun install --force
-
 ENV NODE_ENV=production
 
 ARG API_URL
@@ -32,6 +27,9 @@ ENV NEXT_PUBLIC_FRONTEND_URL=$WEB_URL
 ENV NEXT_PUBLIC_WWW_URL=$DOCS_URL
 
 COPY --from=builder /app/out/full/ .
+# FIXME: There is currently a bug with turbo prune for bun where the lockfile is not updated.
+# Will investigate this further.
+RUN bun install --force
 RUN bun run build
 
 FROM base AS runner
