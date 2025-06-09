@@ -67,8 +67,8 @@ export function CreateOrganizationForm({
 			name: initialData?.name ?? "",
 			slug: initialData?.slug ?? "",
 			metadata: {
-				logoBgKey: initialData?.metadata.logoBgKey ?? "sky",
-				logoEmoji: initialData?.metadata.logoEmoji ?? "",
+				logoBgKey: initialData?.metadata?.logoBgKey ?? "sky",
+				logoEmoji: initialData?.metadata?.logoEmoji ?? "",
 			},
 		} as CreateOrganizationRequest,
 		validators: {
