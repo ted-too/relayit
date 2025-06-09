@@ -35,11 +35,5 @@ USER honojs
 
 COPY --from=installer --chown=honojs:nodejs /app/apps/api/build ./
 
-COPY --from=installer /app/node_modules/sharp ./node_modules/sharp
-COPY --from=installer /app/node_modules/semver ./node_modules/semver
-COPY --from=installer /app/node_modules/color ./node_modules/color
-COPY --from=installer /app/node_modules/detect-libc ./node_modules/detect-libc
-COPY --from=installer /app/node_modules/@img ./node_modules/@img
-
 # Run migration then start the app. Exit immediately if migration fails.
 CMD ["/bin/sh", "-c", "set -e; bun run migrate.js; bun run index.js"]
