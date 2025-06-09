@@ -33,6 +33,11 @@ RUN addgroup --system --gid 1003 nodejs
 RUN adduser --system --uid 1003 honojs
 USER honojs
 
+# This is needed for pino to work
+COPY --from=installer /app/node_modules/thread-stream ./node_modules/thread-stream
+COPY --from=installer /app/node_modules/pino ./node_modules/pino
+COPY --from=installer /app/node_modules/pino-pretty ./node_modules/pino-pretty
+
 COPY --from=installer --chown=honojs:nodejs /app/apps/worker/build ./
 
 # Run migration then start the app. Exit immediately if migration fails.
