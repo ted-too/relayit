@@ -137,7 +137,13 @@ export const auth = betterAuth({
 		cookiePrefix: "relayit",
 		crossSubDomainCookies: {
 			enabled: true,
-			domain: `.${new URL(process.env.FRONTEND_URL!).hostname.split('.').slice(-2).join('.')}`,
+			domain: `.${new URL(process.env.FRONTEND_URL!).hostname.split(".").slice(-2).join(".")}`,
+		},
+		defaultCookieAttributes: {
+			secure: true,
+			httpOnly: true,
+			sameSite: "none", // Allows CORS-based cookie sharing across subdomains
+			partitioned: true, // New browser standards will mandate this for foreign cookies
 		},
 		generateId: false,
 	},
