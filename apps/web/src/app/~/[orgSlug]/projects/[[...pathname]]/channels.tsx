@@ -87,7 +87,7 @@ export async function ChannelsTab({
 						/>
 					</div>
 				</CardHeader>
-				<CardContent>
+				<CardContent className="flex flex-col gap-4">
 					{projectConfiguredProviders.length > 0 && (
 						<div className="flex flex-col gap-2">
 							<span className="text-sm font-medium">Configured Channels</span>

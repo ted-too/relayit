@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { openAPISpecs } from "hono-openapi";
+// @ts-expect-error - Scalar is not a module
 import { Scalar } from "@scalar/hono-api-reference";
 
 type Session = typeof auth.$Infer.Session.session;
@@ -55,7 +56,7 @@ app.route("/send", sendRouter);
 app.use(
 	"*",
 	cors({
-		origin: [process.env.FRONTEND_URL],
+		origin: [process.env.FRONTEND_URL, process.env.DOCS_URL],
 		allowHeaders: ["Content-Type", "Authorization"],
 		allowMethods: ["POST", "PUT", "DELETE", "GET", "OPTIONS"],
 		exposeHeaders: ["Content-Length"],

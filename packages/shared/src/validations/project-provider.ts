@@ -54,7 +54,7 @@ export function isWhatsAppProjectProviderConfig(
 }
 
 export const baseProjectProviderAssociationSchema = z.object({
-	priority: z.number().default(0),
+	priority: z.coerce.number().default(0),
 });
 
 export function createProjectProviderSchema(

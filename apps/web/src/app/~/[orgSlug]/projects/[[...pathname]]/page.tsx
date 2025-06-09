@@ -46,15 +46,14 @@ const TABS = [
 	// },
 ];
 
-// This is outside the component to avoid re-creating the query client on every render/switch of tabs
-const queryClient = getQueryClient();
-
 export default async function ProjectPage({
 	params,
 }: {
 	params: Promise<{ pathname: string[] | undefined; orgSlug: string }>;
 }) {
 	const { pathname, orgSlug } = await params;
+
+	const queryClient = getQueryClient();
 
 	if (!pathname) return <ProjectsPage params={params} />;
 

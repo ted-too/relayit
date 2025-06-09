@@ -21,6 +21,7 @@ import {
 import { useStore } from "@tanstack/react-form";
 import { Fragment, useCallback } from "react";
 import type { z } from "zod/v4";
+import { useRouter } from "next/navigation";
 
 interface CreateProviderFormProps {
 	submitWrapper?: typeof DialogFooter;
@@ -349,10 +350,7 @@ const DynamicSchemaFields = withForm({
 			return <></>;
 		};
 
-		if (
-			schemaToRender &&
-			schemaToRender.def.type === "object"
-		) {
+		if (schemaToRender && schemaToRender.def.type === "object") {
 			// Pass the top-level oneTimeFieldsDefinition here
 			return renderField("", schemaToRender, oneTimeFieldsDefinition);
 		}
@@ -376,6 +374,7 @@ export function CreateProjectProviderAssociationForm({
 	initialData,
 }: CreateProjectProviderAssociationFormProps) {
 	const utils = trpc.useUtils();
+	const router = useRouter();
 
 	const { mutateAsync: createAssociation } =
 		trpc.projectProviderAssociations.create.useMutation({
@@ -434,7 +433,11 @@ export function CreateProjectProviderAssociationForm({
 				success: initialData
 					? "Configuration updated successfully"
 					: "Configuration created successfully",
-				onSuccess,
+				onSuccess: () => {
+					// FIXME: This is a hack to refresh the page, we should use a better solution
+					router.refresh();
+					onSuccess?.();
+				},
 			};
 
 			if (initialData) {
@@ -456,6 +459,9 @@ export function CreateProjectProviderAssociationForm({
 					noThrowConfig,
 				);
 			}
+		},
+		onSubmitInvalid: ({ formApi }) => {
+			console.log(formApi.state.errors);
 		},
 	});
 
