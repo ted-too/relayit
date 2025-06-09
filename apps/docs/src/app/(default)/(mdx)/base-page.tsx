@@ -15,10 +15,6 @@ import { Button } from "@repo/ui/components/shadcn/button";
 import { DocsSidebar } from "@/components/docs-sidebar";
 import { SidebarProvider } from "@repo/ui/components/shadcn/sidebar";
 
-export const revalidate = false;
-export const dynamic = "force-static";
-export const dynamicParams = false;
-
 export function internalGenerateStaticParams(_props: {
 	baseUrl: string;
 }) {
