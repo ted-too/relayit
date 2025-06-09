@@ -147,5 +147,7 @@ export const auth = betterAuth({
 		},
 		generateId: false,
 	},
-	trustedOrigins: [process.env.FRONTEND_UR!, "https://dev.relayit.io"],
+	trustedOrigins: [
+		`*.${new URL(process.env.FRONTEND_URL!).hostname.split(".").slice(-2).join(".")}`,
+	],
 });
