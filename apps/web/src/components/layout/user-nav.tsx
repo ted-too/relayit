@@ -1,6 +1,10 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/shadcn/avatar";
+import {
+	Avatar,
+	AvatarFallback,
+	AvatarImage,
+} from "@repo/ui/components/shadcn/avatar";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { ModeToggle } from "@repo/ui/components/shadcn/dark-mode-toggle";
 import {
@@ -186,7 +190,9 @@ export function OrganizationLogo({
 					: undefined,
 			}}
 		>
-			<span className={cn({ sm: "text-base", md: "text-xl" }[size])}>
+			<span
+				className={cn({ sm: "text-base", md: "text-lg" }[size], "leading-none")}
+			>
 				{orgMetadata.logoEmoji}
 			</span>
 		</div>

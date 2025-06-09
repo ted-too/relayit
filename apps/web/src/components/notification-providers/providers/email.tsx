@@ -15,14 +15,14 @@ import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 export function EmailProvider({ configured }: NotificationProviderButtonProps) {
 	return (
 		<Dialog>
-			<DialogTrigger asChild>
-				<ButtonWrapper configured={configured}>
+			<ButtonWrapper configured={configured}>
+				<DialogTrigger asChild>
 					<Button variant="secondary" size="lg" className="font-semibold">
 						<Email />
 						<span>Email</span>
 					</Button>
-				</ButtonWrapper>
-			</DialogTrigger>
+				</DialogTrigger>
+			</ButtonWrapper>
 			<DialogContent className="sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Email</DialogTitle>

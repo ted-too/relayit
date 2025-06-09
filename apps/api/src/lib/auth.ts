@@ -148,6 +148,11 @@ export const auth = betterAuth({
 		generateId: false,
 	},
 	trustedOrigins: [
-		`*.${new URL(process.env.FRONTEND_URL!).hostname.split(".").slice(-2).join(".")}`,
+		(() => {
+			const hostname = new URL(process.env.FRONTEND_URL!).hostname;
+			return hostname === "localhost" || hostname.startsWith("127.") || hostname.startsWith("192.168.") 
+				? process.env.FRONTEND_URL!
+				: `*.${hostname.split(".").slice(-2).join(".")}`;
+		})(),
 	],
 });

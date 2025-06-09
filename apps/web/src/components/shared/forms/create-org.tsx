@@ -149,7 +149,7 @@ export function CreateOrganizationForm({
 										<PopoverTrigger asChild>
 											<Button
 												variant="outline"
-												className="rounded-full size-9 text-2xl"
+												className="rounded-full size-9 text-lg"
 												size="icon"
 												style={{
 													background: logoBgKey
