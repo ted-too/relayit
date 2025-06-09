@@ -12,6 +12,7 @@ services:
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - BETTER_AUTH_URL=${API_URL:-http://localhost:3005}
       - FRONTEND_URL=${WEB_URL:-http://localhost:3000}
+      - DOCS_URL=${DOCS_URL:-http://localhost:3002}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
