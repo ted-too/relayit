@@ -108,14 +108,14 @@ export const generateDefaultFromShape = (shape: z.ZodRawShape) => {
 		} else if (value instanceof z.ZodNumber) {
 			defaults[key] = 0;
 		} else if (value instanceof z.ZodDefault) {
-			defaults[key] = value._def.defaultValue();
+			defaults[key] = value.def.defaultValue;
 		} else if (value instanceof z.ZodObject) {
 			defaults[key] = generateDefaultFromShape(value.shape);
 		} else if (value instanceof z.ZodOptional) {
 			// For optional fields, still provide a default
-			const innerType = value._def.innerType;
+			const innerType = value.def.innerType;
 			if (innerType instanceof z.ZodDefault) {
-				defaults[key] = innerType._def.defaultValue();
+				defaults[key] = innerType.def.defaultValue;
 			} else if (innerType instanceof z.ZodString) {
 				defaults[key] = "";
 			} else if (innerType instanceof z.ZodBoolean) {

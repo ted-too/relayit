@@ -274,7 +274,7 @@ const DynamicSchemaFields = withForm({
 				.toLowerCase()
 				.replace(/^./, (str) => str.toUpperCase());
 
-			if (schema._def?.typeName === z.ZodObject) {
+			if (schema.def.type === "object") {
 				return (
 					<Fragment key={currentPath}>
 						{Object.entries((schema as z.ZodObject<any>).shape).map(
@@ -295,7 +295,7 @@ const DynamicSchemaFields = withForm({
 				);
 			}
 
-			if (schema._def?.typeName === z.ZodEnum) {
+			if (schema.def.type === "enum") {
 				return (
 					<form.AppField
 						key={fullPath}
@@ -321,9 +321,9 @@ const DynamicSchemaFields = withForm({
 
 			// Default to TextField for other ZodString, ZodNumber, etc.
 			if (
-				schema._def?.typeName === z.ZodString ||
-				schema._def?.typeName === z.ZodNumber ||
-				schema._def?.typeName === z.ZodBoolean // Booleans can also be text fields if not handled by CheckboxField specifically elsewhere
+				schema.def.type === "string" ||
+				schema.def.type === "number" ||
+				schema.def.type === "boolean" // Booleans can also be text fields if not handled by CheckboxField specifically elsewhere
 			) {
 				return (
 					<form.AppField
@@ -351,7 +351,7 @@ const DynamicSchemaFields = withForm({
 
 		if (
 			schemaToRender &&
-			schemaToRender._def?.typeName === z.ZodObject
+			schemaToRender.def.type === "object"
 		) {
 			// Pass the top-level oneTimeFieldsDefinition here
 			return renderField("", schemaToRender, oneTimeFieldsDefinition);

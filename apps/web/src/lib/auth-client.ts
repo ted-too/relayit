@@ -10,11 +10,6 @@ export const authClient = createAuthClient({
 	plugins: [apiKeyClient(), organizationClient(), passkeyClient()],
 });
 
-export const COOKIE_NAMES = [
-	"relayit.session_token",
-	"__Secure-relayit.session_token",
-];
-
 export type Session = typeof authClient.$Infer.Session;
 export type User = Session["user"];
 export type Organization = typeof authClient.$Infer.Organization;

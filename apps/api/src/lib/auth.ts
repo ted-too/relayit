@@ -137,9 +137,9 @@ export const auth = betterAuth({
 		cookiePrefix: "relayit",
 		crossSubDomainCookies: {
 			enabled: true,
-			domain: `.${new URL(process.env.FRONTEND_URL).hostname}`,
+			domain: `.${new URL(process.env.FRONTEND_URL!).hostname}`,
 		},
 		generateId: false,
 	},
-	trustedOrigins: [process.env.FRONTEND_URL, "https://dev.relayit.io"],
+	trustedOrigins: [process.env.FRONTEND_UR!, "https://dev.relayit.io"],
 });

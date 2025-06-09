@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAMES } from "./lib/auth-client";
+
+export const COOKIE_NAMES = [
+	"relayit.session_token",
+	"__Secure-relayit.session_token",
+];
 
 export async function middleware(request: NextRequest) {
 	let sessionCookie = null;

@@ -43,9 +43,9 @@ export const PROVIDER_CONFIG = {
 			label: "WhatsApp",
 			credentialsSchema: whatsappCredentialsSchema,
 			configSchema: whatsappProjectProviderConfigSchema,
-			oneTimeFields: {
-				accessToken: true,
-			} satisfies OneTimeFieldsFromSchema<typeof whatsappCredentialsSchema>,
+			oneTimeFields: {} satisfies OneTimeFieldsFromSchema<
+				typeof whatsappCredentialsSchema
+			>,
 		},
 	],
 	discord: [
@@ -54,9 +54,9 @@ export const PROVIDER_CONFIG = {
 			label: "Discord",
 			credentialsSchema: discordCredentialsSchema,
 			configSchema: null,
-			oneTimeFields: {
-				accessToken: true,
-			} satisfies OneTimeFieldsFromSchema<typeof discordCredentialsSchema>,
+			oneTimeFields: {} satisfies OneTimeFieldsFromSchema<
+				typeof discordCredentialsSchema
+			>,
 		},
 	],
 } as const;
@@ -79,16 +79,27 @@ export type ProviderType =
 	(typeof PROVIDER_CONFIG)[keyof typeof PROVIDER_CONFIG][number]["type"];
 
 // Channel-specific provider types
-export type EmailProviderType = (typeof PROVIDER_CONFIG)["email"][number]["type"];
+export type EmailProviderType =
+	(typeof PROVIDER_CONFIG)["email"][number]["type"];
 export type SMSProviderType = (typeof PROVIDER_CONFIG)["sms"][number]["type"];
-export type WhatsAppProviderType = (typeof PROVIDER_CONFIG)["whatsapp"][number]["type"];
-export type DiscordProviderType = (typeof PROVIDER_CONFIG)["discord"][number]["type"];
+export type WhatsAppProviderType =
+	(typeof PROVIDER_CONFIG)["whatsapp"][number]["type"];
+export type DiscordProviderType =
+	(typeof PROVIDER_CONFIG)["discord"][number]["type"];
 
 // Channel-specific available provider arrays
-export const AVAILABLE_EMAIL_PROVIDER_TYPES = PROVIDER_CONFIG.email.map(p => p.type) as [EmailProviderType, ...EmailProviderType[]];
-export const AVAILABLE_SMS_PROVIDER_TYPES = PROVIDER_CONFIG.sms.map(p => p.type) as [SMSProviderType, ...SMSProviderType[]];
-export const AVAILABLE_WHATSAPP_PROVIDER_TYPES = PROVIDER_CONFIG.whatsapp.map(p => p.type) as [WhatsAppProviderType, ...WhatsAppProviderType[]];
-export const AVAILABLE_DISCORD_PROVIDER_TYPES = PROVIDER_CONFIG.discord.map(p => p.type) as [DiscordProviderType, ...DiscordProviderType[]];
+export const AVAILABLE_EMAIL_PROVIDER_TYPES = PROVIDER_CONFIG.email.map(
+	(p) => p.type,
+) as [EmailProviderType, ...EmailProviderType[]];
+export const AVAILABLE_SMS_PROVIDER_TYPES = PROVIDER_CONFIG.sms.map(
+	(p) => p.type,
+) as [SMSProviderType, ...SMSProviderType[]];
+export const AVAILABLE_WHATSAPP_PROVIDER_TYPES = PROVIDER_CONFIG.whatsapp.map(
+	(p) => p.type,
+) as [WhatsAppProviderType, ...WhatsAppProviderType[]];
+export const AVAILABLE_DISCORD_PROVIDER_TYPES = PROVIDER_CONFIG.discord.map(
+	(p) => p.type,
+) as [DiscordProviderType, ...DiscordProviderType[]];
 
 export const AVAILABLE_PROVIDER_TYPES = [
 	...new Set(

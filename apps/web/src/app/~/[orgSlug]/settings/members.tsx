@@ -22,7 +22,7 @@ import {
 	CopyInvitationLinkAction,
 	InviteMembersForm,
 } from "@/components/shared/forms/members-settings";
-import { getInitials } from "@/lib/utils";
+import { getInitials } from "@repo/ui/lib/utils";
 import { Fragment } from "react";
 import type { InvitationStatus } from "@repo/db/schema/auth";
 
