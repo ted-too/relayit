@@ -1,22 +1,27 @@
 {
-	"name": "relayit",
-	"private": true,
-	"scripts": {
-		"build": "turbo run build",
-		"dev": "turbo run dev",
-		"lint": "turbo run lint",
-		"format": "biome format . --write",
-		"format-and-lint": "biome check .",
-		"format-and-lint:fix": "biome check . --write",
-		"check-types": "turbo run check-types"
-	},
-	"devDependencies": {
-		"turbo": "^2.4.4",
-		"typescript": "5.8.2"
-	},
-	"engines": {
-		"node": ">=18"
-	},
-	"packageManager": "bun@1.2.12",
-	"workspaces": ["apps/*", "packages/*"]
+  "name": "relayit",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "biome format . --write",
+    "format-and-lint": "biome check .",
+    "format-and-lint:fix": "biome check . --write",
+    "check-types": "turbo run check-types"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.4",
+    "typescript": "5.8.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "bun@1.2.12",
+  "workspaces": ["apps/*", "packages/*"],
+  "trustedDependencies": [
+    "@repo/docs",
+    "@tailwindcss/oxide",
+    "core-js"
+  ]
 }
