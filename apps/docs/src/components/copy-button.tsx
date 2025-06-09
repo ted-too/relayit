@@ -35,6 +35,7 @@ export function CopyButton({
 	relative?: boolean;
 	align?: "top" | "center" | "bottom";
 	offset?: number;
+	src?: string;
 }) {
 	const [hasCopied, setHasCopied] = React.useState(false);
 
