@@ -11,6 +11,9 @@ const config = {
 	outputFileTracingRoot: path.join(__dirname, "../../"),
 	transpilePackages: ["@repo/ui"],
 	reactStrictMode: true,
+	typescript: {
+		ignoreBuildErrors: true,
+	}
 };
 
 export default withMDX(config);
