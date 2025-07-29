@@ -140,9 +140,9 @@ jobs:
           build-args: |
             TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
             TURBO_TEAM=${{ secrets.TURBO_TEAM }}
-            ${{ matrix.app == 'docs' && format('API_URL={0}', vars.API_URL) || '' }}
-            ${{ matrix.app == 'docs' && format('WEB_URL={0}', vars.WEB_URL) || '' }}
-            ${{ matrix.app == 'docs' && format('DOCS_URL={0}', vars.DOCS_URL) || '' }}
+            ${{ (matrix.app == 'docs' || matrix.app == 'web') && format('API_URL={0}', vars.API_URL) || '' }}
+            ${{ (matrix.app == 'docs' || matrix.app == 'web') && format('WEB_URL={0}', vars.WEB_URL) || '' }}
+            ${{ (matrix.app == 'docs' || matrix.app == 'web') && format('DOCS_URL={0}', vars.DOCS_URL) || '' }}
 
       - name: Output image details
         if: steps.check-changes.outputs.skip == 'false'
