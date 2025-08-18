@@ -1,8 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: ./apps/api/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-api:${IMAGE_TAG:-latest}
     expose:
       - 3005
     environment:
@@ -25,9 +23,7 @@ services:
       - relayit-network
 
   worker:
-    build:
-      context: .
-      dockerfile: ./apps/worker/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-worker:${IMAGE_TAG:-latest}
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
@@ -46,34 +42,13 @@ services:
       - relayit-network
 
   web:
-    build:
-      context: .
-      dockerfile: ./apps/web/Dockerfile
-      args:
-        - API_URL=${API_URL:-http://localhost:3005}
-        - WEB_URL=${WEB_URL:-http://localhost:3000}
-        - DOCS_URL=${DOCS_URL:-http://localhost:3002}
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-web:${IMAGE_TAG:-latest}
     expose:
       - 3000
     environment:
       - NODE_ENV=production
-    depends_on:
-      - api
-    networks:
-      - relayit-network
-
-  docs:
-    build:
-      context: .
-      dockerfile: ./apps/docs/Dockerfile
-      args:
-        - API_URL=${API_URL:-http://localhost:3005}
-        - WEB_URL=${WEB_URL:-http://localhost:3000}
-        - DOCS_URL=${DOCS_URL:-http://localhost:3002}
-    expose:
-      - 3002
-    environment:
-      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:3005}
+      - NEXT_PUBLIC_FRONTEND_URL=${WEB_URL:-http://localhost:3000}
     depends_on:
       - api
     networks:

@@ -153,4 +153,57 @@ jobs:
         run: |
           echo "🚀 Built and pushed ${{ steps.tags.outputs.repo-name }}"
           echo "📦 Tags: ${{ steps.tags.outputs.tags }}"
-          echo "🔗 Registry: ${{ env.REGISTRY }}" 
+          echo "🔗 Registry: ${{ env.REGISTRY }}"
+
+      - name: Trigger Dokploy deployment
+        if: steps.check-changes.outputs.skip == 'false' && github.ref_name == 'main'
+        continue-on-error: true
+        run: |
+          # Get the appropriate Dokploy application ID for this app
+          APPLICATION_ID=""
+          case "${{ matrix.app }}" in
+            "api")
+              APPLICATION_ID="${{ secrets.DOKPLOY_APP_ID_API }}"
+              ;;
+            "worker")
+              APPLICATION_ID="${{ secrets.DOKPLOY_APP_ID_WORKER }}"
+              ;;
+            "web")
+              APPLICATION_ID="${{ secrets.DOKPLOY_APP_ID_WEB }}"
+              ;;
+            "docs")
+              APPLICATION_ID="${{ secrets.DOKPLOY_APP_ID_DOCS }}"
+              ;;
+          esac
+          
+          # Only trigger deployment if application ID is configured
+          if [ ! -z "$APPLICATION_ID" ] && [ ! -z "${{ secrets.DOKPLOY_TOKEN }}" ] && [ ! -z "${{ secrets.DOKPLOY_URL }}" ]; then
+            echo "🚀 Triggering Dokploy deployment for ${{ matrix.app }} (ID: $APPLICATION_ID)"
+            
+            # Trigger deployment using Dokploy API
+            RESPONSE=$(curl -X POST "${{ secrets.DOKPLOY_URL }}/api/application.deploy" \
+              -H "accept: application/json" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.DOKPLOY_TOKEN }}" \
+              -d "{\"applicationId\": \"$APPLICATION_ID\"}" \
+              --max-time 30 \
+              --retry 2 \
+              --fail-with-body \
+              --write-out "HTTPSTATUS:%{http_code}" \
+              --silent)
+            
+            HTTP_CODE=$(echo $RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+            HTTP_BODY=$(echo $RESPONSE | sed -e 's/HTTPSTATUS:.*//g')
+            
+            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+              echo "✅ Dokploy deployment triggered successfully for ${{ matrix.app }}"
+              echo "📋 Response: $HTTP_BODY"
+            else
+              echo "❌ Failed to trigger Dokploy deployment for ${{ matrix.app }}"
+              echo "📋 HTTP Code: $HTTP_CODE"
+              echo "📋 Response: $HTTP_BODY"
+            fi
+          else
+            echo "ℹ️  Missing Dokploy configuration for ${{ matrix.app }}, skipping deployment trigger"
+            echo "    Required: DOKPLOY_TOKEN, DOKPLOY_URL, and DOKPLOY_APP_ID_$(echo ${{ matrix.app }} | tr '[:lower:]' '[:upper:]')"
+          fi 
