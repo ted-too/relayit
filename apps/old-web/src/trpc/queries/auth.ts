@@ -1,6 +1,6 @@
+import { queryOptions } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { getOrganizationMetadata } from "@/lib/utils";
-import { queryOptions } from "@tanstack/react-query";
 
 export type QueryOpts<T = void> = {
 	headers?: Headers;
@@ -21,9 +21,11 @@ export const sessionQueryOptions = (opts?: QueryOpts) =>
 								headers: Object.fromEntries(opts.headers ?? []),
 							},
 						}
-					: undefined,
+					: undefined
 			);
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 			return data;
 		},
 		staleTime: 15 * 60 * 1000,
@@ -43,9 +45,11 @@ export const activeOrganizationQueryOptions = (opts?: QueryOpts) =>
 					fetchOptions: {
 						headers: Object.fromEntries(opts?.headers ?? []),
 					},
-				},
+				}
 			);
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 
 			return {
 				...data,
@@ -70,7 +74,9 @@ export const apiKeysListQueryOptions = (opts?: QueryOpts) =>
 					headers: Object.fromEntries(opts?.headers ?? []),
 				},
 			});
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 			return data;
 		},
 		retry: opts?.retry,
@@ -91,7 +97,9 @@ export const currentMemberQueryOptions = (opts?: QueryOpts) =>
 					headers: Object.fromEntries(opts?.headers ?? []),
 				},
 			});
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 			return data;
 		},
 		retry: opts?.retry,
@@ -112,7 +120,9 @@ export const usersOrganizationsQueryOptions = (opts?: QueryOpts) =>
 					headers: Object.fromEntries(opts?.headers ?? []),
 				},
 			});
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 
 			return data.map((org) => ({
 				...org,
@@ -130,7 +140,9 @@ export const userInvitationQueryOptions = (opts?: QueryOpts<{ id: string }>) =>
 	queryOptions({
 		queryKey: userInvitationQueryKey(opts?.query?.id),
 		queryFn: async () => {
-			if (!opts?.query?.id) throw new Error("Invitation ID is required");
+			if (!opts?.query?.id) {
+				throw new Error("Invitation ID is required");
+			}
 
 			const { data, error } = await authClient.organization.getInvitation({
 				query: {
@@ -141,7 +153,9 @@ export const userInvitationQueryOptions = (opts?: QueryOpts<{ id: string }>) =>
 				},
 			});
 
-			if (error) return Promise.reject(error);
+			if (error) {
+				return Promise.reject(error);
+			}
 
 			return data;
 		},

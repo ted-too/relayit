@@ -14,7 +14,7 @@ function Table({
 }: TableProps) {
 	return (
 		<ScrollArea
-			className={cn("w-full h-full", containerClassName)}
+			className={cn("h-full w-full", containerClassName)}
 			onViewportScroll={onScroll}
 		>
 			<table
@@ -45,8 +45,8 @@ function TableFooter({ className, ...props }: TableFooterProps) {
 	return (
 		<tfoot
 			className={cn(
-				"bg-primary text-primary-foreground font-medium",
-				className,
+				"bg-primary font-medium text-primary-foreground",
+				className
 			)}
 			{...props}
 		/>
@@ -59,8 +59,8 @@ function TableRow({ className, ...props }: TableRowProps) {
 	return (
 		<tr
 			className={cn(
-				"hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
-				className,
+				"border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+				className
 			)}
 			{...props}
 		/>
@@ -73,8 +73,8 @@ function TableHead({ className, ...props }: TableHeadProps) {
 	return (
 		<th
 			className={cn(
-				"text-muted-foreground h-10 px-2 text-left align-middle font-medium [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-				className,
+				"h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+				className
 			)}
 			{...props}
 		/>
@@ -88,7 +88,7 @@ function TableCell({ className, ...props }: TableCellProps) {
 		<td
 			className={cn(
 				"p-2 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-				className,
+				className
 			)}
 			{...props}
 		/>
@@ -100,7 +100,7 @@ type TableCaptionProps = React.HTMLAttributes<HTMLTableCaptionElement>;
 function TableCaption({ className, ...props }: TableCaptionProps) {
 	return (
 		<caption
-			className={cn("text-muted-foreground mt-4 text-sm", className)}
+			className={cn("mt-4 text-muted-foreground text-sm", className)}
 			{...props}
 		/>
 	);

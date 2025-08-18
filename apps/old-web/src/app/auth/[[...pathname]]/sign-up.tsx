@@ -1,15 +1,15 @@
 "use client";
 
-import { CombinedLogo } from "@/components/shared/logo";
+import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { useAppForm } from "@repo/ui/components/shadcn/form";
-import { authClient } from "@/lib/auth-client";
-import { usersOrganizationsQueryOptions } from "@/trpc/queries/auth";
-import { type SignUpRequest, signUpSchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CombinedLogo } from "@/components/shared/logo";
+import { authClient } from "@/lib/auth-client";
+import { usersOrganizationsQueryOptions } from "@/trpc/queries/auth";
 
 export function SignUpForm({
 	email,
@@ -46,7 +46,7 @@ export function SignUpForm({
 			toast.success("Signed up successfully");
 
 			const userOrgs = await queryClient.ensureQueryData(
-				usersOrganizationsQueryOptions(),
+				usersOrganizationsQueryOptions()
 			);
 
 			const defaultOrg = userOrgs[0];
@@ -62,37 +62,37 @@ export function SignUpForm({
 
 	return (
 		<form
+			className="flex w-full max-w-md flex-col"
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="w-full max-w-md flex flex-col"
 		>
 			{!noTitle && (
-				<h1 className="text-3xl font-bold mb-1 text-center">Sign up</h1>
+				<h1 className="mb-1 text-center font-bold text-3xl">Sign up</h1>
 			)}
 			{!noDescription && (
-				<p className="text-center text-muted-foreground mb-6">
+				<p className="mb-6 text-center text-muted-foreground">
 					Sign up to continue
 				</p>
 			)}
-			<div className="flex flex-col sm:flex-row items-center gap-4 w-full mb-6">
+			<div className="mb-6 flex w-full flex-col items-center gap-4 sm:flex-row">
 				<Button
-					variant="outline"
-					size="lg"
 					className="h-12 grow"
-					type="button"
 					onClick={() => {
 						authClient.signIn.social({
 							provider: "google",
 						});
 					}}
+					size="lg"
+					type="button"
+					variant="outline"
 				>
 					<svg
-						xmlns="http://www.w3.org/2000/svg"
 						height="24"
 						viewBox="0 0 24 24"
 						width="24"
+						xmlns="http://www.w3.org/2000/svg"
 					>
 						<path
 							d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -125,30 +125,30 @@ export function SignUpForm({
 					Apple ID
 				</Button> */}
 			</div>
-			<span className="relative text-sm text-muted-foreground mb-6 flex items-center justify-center before:content-[''] before:flex-1 before:border-t before:border-muted-foreground/20 before:mr-2 before:self-center after:content-[''] after:flex-1 after:border-t after:border-muted-foreground/20 after:ml-2 after:self-center">
+			<span className="relative mb-6 flex items-center justify-center text-muted-foreground text-sm before:mr-2 before:flex-1 before:self-center before:border-muted-foreground/20 before:border-t before:content-[''] after:ml-2 after:flex-1 after:self-center after:border-muted-foreground/20 after:border-t after:content-['']">
 				Or continue with email address
 			</span>
 			<div className="flex flex-col gap-4">
-				<div className="grid-cols-2 grid gap-4">
+				<div className="grid grid-cols-2 gap-4">
 					<form.AppField
+						children={(field) => <field.TextField label="Name" type="text" />}
 						name="name"
-						children={(field) => <field.TextField type="text" label="Name" />}
 					/>
 					<form.AppField
-						name="email"
 						children={(field) => (
-							<field.TextField type="email" label="Email" disabled={!!email} />
+							<field.TextField disabled={!!email} label="Email" type="email" />
 						)}
+						name="email"
 					/>
 				</div>
 				<form.AppField
-					name="password"
 					children={(field) => (
-						<field.TextField type="password" label="Password" />
+						<field.TextField label="Password" type="password" />
 					)}
+					name="password"
 				/>
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-4" size="lg">
+					<form.SubmitButton className="mt-4 w-full" size="lg">
 						Sign up
 					</form.SubmitButton>
 				</form.AppForm>
@@ -159,14 +159,14 @@ export function SignUpForm({
 
 export function SignUp() {
 	return (
-		<div className="relative grow flex items-center justify-center w-full h-full">
-			<div className="flex items-center w-full justify-between absolute top-0 right-1/2 lg:translate-x-0 translate-x-1/2 lg:right-0 text-sm text-muted-foreground">
+		<div className="relative flex h-full w-full grow items-center justify-center">
+			<div className="absolute top-0 right-1/2 flex w-full translate-x-1/2 items-center justify-between text-muted-foreground text-sm lg:right-0 lg:translate-x-0">
 				<CombinedLogo />
 				<span>
 					Already have an account?{"  "}
 					<Link
-						href="/auth/sign-in"
 						className="font-medium text-caribbean hover:underline"
+						href="/auth/sign-in"
 					>
 						Sign In
 					</Link>

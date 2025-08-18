@@ -13,7 +13,7 @@ export const createProjectSchema = z.object({
 		.string()
 		.regex(
 			/^[a-zA-Z0-9-]+$/,
-			"Only alphanumeric characters and hyphens are allowed",
+			"Only alphanumeric characters and hyphens are allowed"
 		)
 		.optional(),
 	metadata: z.record(z.string(), z.any()).optional().nullable(),
@@ -36,7 +36,7 @@ export const messageFilterSchema = z.object({
 			}
 			return val;
 		},
-		z.array(z.enum(AVAILABLE_MESSAGE_STATUSES)).nullish(),
+		z.array(z.enum(AVAILABLE_MESSAGE_STATUSES)).nullish()
 	),
 	channel: z.preprocess((val) => {
 		if (typeof val === "string") {
@@ -53,7 +53,7 @@ export const messageFilterSchema = z.object({
 });
 
 export const getMessagesQuerySchema = createTimeRangedPaginatedSchema(
-	messageFilterSchema.shape,
+	messageFilterSchema.shape
 );
 
 export type GetMessagesQueryInput = z.infer<typeof getMessagesQuerySchema>;

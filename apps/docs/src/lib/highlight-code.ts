@@ -1,5 +1,5 @@
-import { codeToHtml } from "shiki";
 import type { ShikiTransformer } from "shiki";
+import { codeToHtml } from "shiki";
 
 export const transformers = [] as ShikiTransformer[];
 

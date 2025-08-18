@@ -7,7 +7,7 @@ export function getFacetedUniqueValues<TData>(facets?: Facets) {
 			facets?.[columnId]?.rows?.map(({ value, total }) => [
 				value.toString(),
 				total,
-			]) || [],
+			]) || []
 		);
 	};
 }
@@ -16,16 +16,24 @@ export function getFacetedMinMaxValues<TData>(facets?: Facets) {
 	return (_: TTable<TData>, columnId: string): [number, number] | undefined => {
 		const min = facets?.[columnId]?.min;
 		const max = facets?.[columnId]?.max;
-		if (min && max) return [min, max];
-		if (min) return [min, min];
-		if (max) return [max, max];
-		return undefined;
+		if (min && max) {
+			return [min, max];
+		}
+		if (min) {
+			return [min, min];
+		}
+		if (max) {
+			return [max, max];
+		}
+		return;
 	};
 }
 
 export function combineFacets(facets: Facets[]): Facets {
 	// If no facets provided, return empty object
-	if (!facets.length) return {};
+	if (!facets.length) {
+		return {};
+	}
 
 	// Combine all facet keys
 	const allKeys = new Set(facets.flatMap((f) => Object.keys(f)));
@@ -33,7 +41,9 @@ export function combineFacets(facets: Facets[]): Facets {
 	return Array.from(allKeys).reduce((combined, key) => {
 		const relevantFacets = facets.filter((f) => key in f).map((f) => f[key]);
 
-		if (!relevantFacets.length) return combined;
+		if (!relevantFacets.length) {
+			return combined;
+		}
 
 		// Combine rows by merging value maps
 		const valueMap = new Map<any, number>();
@@ -46,8 +56,12 @@ export function combineFacets(facets: Facets[]): Facets {
 				valueMap.set(row.value, currentTotal + row.total);
 
 				if (typeof row.value === "number") {
-					if (!min || row.value < min) min = row.value;
-					if (!max || row.value > max) max = row.value;
+					if (!min || row.value < min) {
+						min = row.value;
+					}
+					if (!max || row.value > max) {
+						max = row.value;
+					}
 				}
 			}
 		}

@@ -1,6 +1,10 @@
 "use client";
 
 import {
+	ORGANIZATION_LOGO_GRADIENTS,
+	type OrganizationMetadata,
+} from "@repo/shared";
+import {
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
@@ -23,19 +27,14 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
-import { authClient } from "@/lib/auth-client";
 import { cn, getInitials } from "@repo/ui/lib/utils";
-import { sessionQueryOptions } from "@/trpc/queries/auth";
-import {
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationMetadata,
-} from "@repo/shared";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDownIcon } from "lucide-react";
-import { LogOutIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
+import { sessionQueryOptions } from "@/trpc/queries/auth";
 
 export function LogoutButton({
 	size = "md",
@@ -51,12 +50,11 @@ export function LogoutButton({
 			<TooltipTrigger asChild>
 				<Button
 					className={cn(
-						"h-max p-0! w-max",
+						"h-max w-max p-0!",
 						size === "sm" && "[&_svg:not([class*='size-'])]:size-3",
 						size === "md" && "[&_svg:not([class*='size-'])]:size-4",
-						className,
+						className
 					)}
-					variant="link"
 					onClick={async () => {
 						const { error } = await authClient.signOut();
 						if (error) {
@@ -65,6 +63,7 @@ export function LogoutButton({
 						}
 						router.refresh();
 					}}
+					variant="link"
 				>
 					<LogOutIcon />
 				</Button>
@@ -79,7 +78,7 @@ export function LogoutButton({
 export function SideBarUserNav({ orgSlug }: { orgSlug?: string }) {
 	const router = useRouter();
 	const { data: session, isPending: sessionPending } = useQuery(
-		sessionQueryOptions(),
+		sessionQueryOptions()
 	);
 
 	return (
@@ -89,13 +88,13 @@ export function SideBarUserNav({ orgSlug }: { orgSlug?: string }) {
 					<Skeleton className="h-8 w-8 rounded-lg" />
 				) : (
 					<SidebarMenuButton
-						size="lg"
 						className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+						size="lg"
 					>
 						<Avatar className="h-8 w-8 rounded-lg">
 							<AvatarImage
-								src={session.user.image || ""}
 								alt={session.user.image || ""}
+								src={session.user.image || ""}
 							/>
 							<AvatarFallback className="rounded-lg">
 								{getInitials(session.user.name)}
@@ -112,15 +111,15 @@ export function SideBarUserNav({ orgSlug }: { orgSlug?: string }) {
 				)}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
+				align="end"
 				className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
 				side="right"
-				align="end"
 				sideOffset={4}
 			>
 				<div className="flex items-center justify-between px-2 py-1.5">
 					<DropdownMenuLabel className="flex flex-col">
 						My account
-						<span className="text-xs font-normal text-muted-foreground">
+						<span className="font-normal text-muted-foreground text-xs">
 							{session?.user.email}
 						</span>
 					</DropdownMenuLabel>
@@ -128,7 +127,7 @@ export function SideBarUserNav({ orgSlug }: { orgSlug?: string }) {
 				</div>
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
-					<DropdownMenuItem className="cursor-pointer" asChild>
+					<DropdownMenuItem asChild className="cursor-pointer">
 						<Link href={`/~/${orgSlug}/settings/profile`}>Profile</Link>
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
@@ -162,27 +161,28 @@ export function OrganizationLogo({
 	name: string;
 	size?: "sm" | "md";
 }) {
-	if (logoUrl || !orgMetadata?.logoEmoji)
+	if (logoUrl || !orgMetadata?.logoEmoji) {
 		return (
 			<Avatar
 				className={cn(
 					"shrink-0",
 					size === "sm" && "size-6 text-xs",
-					size === "md" && "size-8",
+					size === "md" && "size-8"
 				)}
 			>
-				<AvatarImage src={logoUrl ?? undefined} alt={name} />
+				<AvatarImage alt={name} src={logoUrl ?? undefined} />
 				<AvatarFallback>{getInitials(name)}</AvatarFallback>
 			</Avatar>
 		);
+	}
 
 	return (
 		<div
 			className={cn(
-				"shrink-0 flex items-center justify-center rounded-full",
+				"flex shrink-0 items-center justify-center rounded-full",
 				!orgMetadata?.logoBgKey && "bg-muted",
 				size === "sm" && "size-6",
-				size === "md" && "size-8",
+				size === "md" && "size-8"
 			)}
 			style={{
 				background: orgMetadata?.logoBgKey

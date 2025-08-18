@@ -9,7 +9,7 @@ export const baseProviderSchema = z.object({
 		.string()
 		.regex(
 			/^[a-zA-Z0-9-]+$/,
-			"Only alphanumeric characters and hyphens are allowed",
+			"Only alphanumeric characters and hyphens are allowed"
 		)
 		.optional(),
 });
@@ -17,13 +17,14 @@ export const baseProviderSchema = z.object({
 // Helper to create a provider config schema
 export function createProviderSchema(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	const config = getProviderConfig(channelType, providerType);
-	if (!config)
+	if (!config) {
 		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`,
+			`Invalid provider configuration: ${channelType}/${providerType}`
 		);
+	}
 
 	return baseProviderSchema
 		.extend({
@@ -37,13 +38,14 @@ export function createProviderSchema(
 // Create an update schema that excludes one-time fields and makes all fields optional
 export function updateProviderSchema(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	const config = getProviderConfig(channelType, providerType);
-	if (!config)
+	if (!config) {
 		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`,
+			`Invalid provider configuration: ${channelType}/${providerType}`
 		);
+	}
 
 	// Get the base schema without one-time fields
 	const baseUpdateSchema = baseProviderSchema.partial();
@@ -51,11 +53,15 @@ export function updateProviderSchema(
 	// Helper to check if a field path is one-time
 	const isOneTimeField = (
 		path: string[],
-		obj: Record<string, any>,
+		obj: Record<string, any>
 	): boolean => {
 		const [first, ...rest] = path;
-		if (!first) return false;
-		if (obj[first] === true) return true;
+		if (!first) {
+			return false;
+		}
+		if (obj[first] === true) {
+			return true;
+		}
 		if (typeof obj[first] === "object" && rest.length > 0) {
 			return isOneTimeField(rest, obj[first]);
 		}
@@ -70,14 +76,14 @@ export function updateProviderSchema(
 
 			for (const [key, value] of Object.entries(data)) {
 				const path = key.split(".");
-				if (!isOneTimeField(path, config.oneTimeFields)) {
-					result[key] = value;
-				} else {
+				if (isOneTimeField(path, config.oneTimeFields)) {
 					ctx.addIssue({
 						code: z.ZodIssueCode.custom,
 						message: `Cannot update one-time field: ${key}`,
 						path: [key],
 					});
+				} else {
+					result[key] = value;
 				}
 			}
 
@@ -90,7 +96,7 @@ export function updateProviderSchema(
 				credentials: updateCredentialsSchema.optional(),
 				providerType: z.literal(providerType),
 				channelType: z.literal(channelType),
-			}),
+			})
 		)
 		.strict();
 }
@@ -137,12 +143,12 @@ export const generateDefaultFromShape = (shape: z.ZodRawShape) => {
 // Helper to generate default values for a provider schema
 export function getProviderDefaults(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	const config = getProviderConfig(channelType, providerType);
 	if (!config) {
 		throw new Error(
-			`No provider configuration found for channel: ${channelType} and type: ${providerType}`,
+			`No provider configuration found for channel: ${channelType} and type: ${providerType}`
 		);
 	}
 

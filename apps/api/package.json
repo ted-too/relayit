@@ -1,47 +1,48 @@
 {
-	"name": "@repo/api",
-	"exports": {
-		".": {
-			"import": "./src/routes/index.ts",
-			"types": "./src/routes/index.ts"
-		},
-		"./trpc": {
-			"import": "./src/trpc.ts",
-			"types": "./src/trpc.ts"
-		}
-	},
-	"scripts": {
-		"dev": "NODE_ENV=development bun run --hot src/index.ts",
-		"build": "bun build ./src/index.ts --outdir ./build --target bun; cp -r ./drizzle ./build/drizzle; bun build ./src/migrate.ts --outdir ./build --target bun;",
-		"check-types": "tsc --noEmit",
-		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio"
-	},
-	"dependencies": {
-		"@hono/trpc-server": "^0.3.4",
-		"@hono/zod-validator": "^0.5.0",
-		"@repo/db": "workspace:*",
-		"@repo/shared": "workspace:*",
-		"better-auth": "^1.2.7",
-		"better-auth-harmony": "^1.2.4",
-		"drizzle-orm": "^0.43.1",
-		"hono": "^4.7.7",
-		"hono-openapi": "^0.4.8",
-		"pg": "^8.15.6",
-		"slugify": "^1.6.6",
-		"superjson": "^1.13.3",
-		"typeid-js": "^1.2.0",
-		"zod": "^3.25.20",
-		"zod-openapi": "^4.2.4"
-	},
-	"devDependencies": {
-		"@scalar/hono-api-reference": "^0.9.1",
-		"@types/bun": "latest",
-		"@types/pg": "^8.11.14",
-		"@types/validator": "^13.15.0",
-		"postgres": "^3.4.5",
-		"drizzle-kit": "^0.31.0",
-		"tsx": "^4.19.3"
-	}
+  "name": "@repo/api",
+  "exports": {
+    ".": {
+      "import": "./src/routes/index.ts",
+      "types": "./src/routes/index.ts"
+    },
+    "./trpc": {
+      "import": "./src/trpc.ts",
+      "types": "./src/trpc.ts"
+    }
+  },
+  "scripts": {
+    "dev": "NODE_ENV=development bun run --hot src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./build --target bun; cp -r ./drizzle ./build/drizzle; bun build ./src/migrate.ts --outdir ./build --target bun;",
+    "check-types": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/trpc-server": "^0.4.0",
+    "@hono/zod-validator": "^0.5.0",
+    "@repo/db": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "better-auth": "^1.3.7",
+    "better-auth-harmony": "^1.2.5",
+    "drizzle-orm": "^0.43.1",
+    "hono": "^4.7.7",
+    "hono-openapi": "^0.4.8",
+    "pg": "^8.15.6",
+    "slugify": "^1.6.6",
+    "superjson": "^1.13.3",
+    "typeid-js": "^1.2.0",
+    "zod": "^3.25.20",
+    "zod-openapi": "^4.2.4"
+  },
+  "devDependencies": {
+    "@scalar/hono-api-reference": "^0.9.1",
+    "@types/bun": "latest",
+    "@types/pg": "^8.11.14",
+    "@trpc/server": "^11.4.4",
+    "@types/validator": "^13.15.0",
+    "postgres": "^3.4.5",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.3"
+  }
 }

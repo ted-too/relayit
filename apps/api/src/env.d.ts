@@ -1,5 +1,5 @@
 declare module "bun" {
-	interface Env {
+	type Env = {
 		PORT: string;
 		DATABASE_URL: string;
 		REDIS_URL: string;
@@ -8,5 +8,5 @@ declare module "bun" {
 		FRONTEND_URL: string;
 		DOCS_URL: string;
 		CREDENTIAL_ENCRYPTION_KEY: string;
-	}
+	};
 }

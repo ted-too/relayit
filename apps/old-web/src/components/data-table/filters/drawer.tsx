@@ -1,4 +1,4 @@
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Drawer,
@@ -10,16 +10,16 @@ import {
 	DrawerTitle,
 	DrawerTrigger,
 } from "@repo/ui/components/shadcn/drawer";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { FilterIcon } from "lucide-react";
-import { DataTableFilterControls } from "./controls";
 import { TABLE_SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
+import { DataTableFilterControls } from "./controls";
 
 export function DataTableFilterControlsDrawer() {
 	return (
@@ -28,8 +28,8 @@ export function DataTableFilterControlsDrawer() {
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<DrawerTrigger asChild>
-							<Button variant="ghost" size="icon" className="h-9 w-9">
-								<FilterIcon className="w-4 h-4" />
+							<Button className="h-9 w-9" size="icon" variant="ghost">
+								<FilterIcon className="h-4 w-4" />
 							</Button>
 						</DrawerTrigger>
 					</TooltipTrigger>
@@ -51,12 +51,12 @@ export function DataTableFilterControlsDrawer() {
 						<DrawerDescription>Adjust your table filters</DrawerDescription>
 					</DrawerHeader>
 				</VisuallyHidden>
-				<div className="px-4 flex-1 overflow-y-auto">
+				<div className="flex-1 overflow-y-auto px-4">
 					<DataTableFilterControls />
 				</div>
 				<DrawerFooter>
 					<DrawerClose asChild>
-						<Button variant="outline" className="w-full">
+						<Button className="w-full" variant="outline">
 							Close
 						</Button>
 					</DrawerClose>

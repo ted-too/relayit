@@ -1,9 +1,9 @@
-import type { Session, User } from "@/lib/auth-client";
-import { sessionQueryOptions } from "@/trpc/queries/auth";
-import { getQueryClient } from "@/trpc/server";
 import { headers } from "next/headers";
 import Image, { type StaticImageData } from "next/image";
 import { notFound, redirect } from "next/navigation";
+import type { Session, User } from "@/lib/auth-client";
+import { sessionQueryOptions } from "@/trpc/queries/auth";
+import { getQueryClient } from "@/trpc/server";
 import authImage1 from "../../../../public/auth-1.svg";
 import authImage2 from "../../../../public/auth-2.svg";
 import authImage3 from "../../../../public/auth-3.svg";
@@ -78,16 +78,20 @@ const authPathnames = ["sign-in", "sign-up"];
 
 export default async function AuthPage({
 	params,
-}: { params: Promise<{ pathname: string[] }> }) {
+}: {
+	params: Promise<{ pathname: string[] }>;
+}) {
 	const { pathname } = await params;
 
 	const path = pathname.join("/");
 
 	const pageData = PATHS.find(({ pathname: p, catchAll }) =>
-		catchAll ? path.startsWith(p) : p === path,
+		catchAll ? path.startsWith(p) : p === path
 	);
 
-	if (!pageData) throw notFound();
+	if (!pageData) {
+		throw notFound();
+	}
 
 	const queryClient = getQueryClient();
 
@@ -95,37 +99,40 @@ export default async function AuthPage({
 
 	try {
 		session = await queryClient.ensureQueryData(
-			sessionQueryOptions({ headers: await headers() }),
+			sessionQueryOptions({ headers: await headers() })
 		);
-	} catch (error) {
-		if (!authPathnames.includes(pageData.pathname))
+	} catch (_error) {
+		if (!authPathnames.includes(pageData.pathname)) {
 			throw redirect("/auth/sign-in");
+		}
 	}
 
-	if (!session && !authPathnames.includes(pageData.pathname))
+	if (!(session || authPathnames.includes(pageData.pathname))) {
 		throw redirect("/auth/sign-in");
+	}
 
-	if (session && authPathnames.includes(pageData.pathname))
+	if (session && authPathnames.includes(pageData.pathname)) {
 		throw redirect("/auth/setup-organization");
+	}
 
 	return (
-		<div className="h-svh w-full flex flex-col md:flex-row items-center justify-between p-4 md:p-8 gap-8">
-			<div className="relative hidden lg:block md:h-full rounded-2xl md:w-[48svw] shrink-0 overflow-hidden">
+		<div className="flex h-svh w-full flex-col items-center justify-between gap-8 p-4 md:flex-row md:p-8">
+			<div className="relative hidden shrink-0 overflow-hidden rounded-2xl md:h-full md:w-[48svw] lg:block">
 				<Image
-					src={pageData.image}
-					className="object-cover size-full"
 					alt="Auth background"
+					className="size-full object-cover"
+					src={pageData.image}
 				/>
 				<a
+					className="absolute right-6 bottom-6 z-20 font-light text-sm text-white/60 hover:underline"
 					href={pageData.imageCredit.href}
-					className="absolute bottom-6 right-6 text-white/60 text-sm font-light z-20 hover:underline"
-					target="_blank"
 					rel="noreferrer"
+					target="_blank"
 				>
 					{pageData.imageCredit.author}
 				</a>
 			</div>
-			<pageData.component pathname={pathname} initialData={session?.user} />
+			<pageData.component initialData={session?.user} pathname={pathname} />
 		</div>
 	);
 }

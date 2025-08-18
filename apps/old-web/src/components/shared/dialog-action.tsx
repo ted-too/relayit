@@ -10,14 +10,14 @@ import {
 	AlertDialogTrigger,
 } from "@repo/ui/components/shadcn/alert-dialog";
 
-interface Props {
+type Props = {
 	title?: string | React.ReactNode;
 	description?: string | React.ReactNode;
 	onClick: () => void;
 	children?: React.ReactNode;
 	disabled?: boolean;
 	type?: "default" | "destructive";
-}
+};
 
 export const DialogAction = ({
 	onClick,

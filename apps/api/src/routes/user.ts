@@ -33,7 +33,7 @@ export const userRouter = router({
 		const invitations = await db.query.invitation.findMany({
 			where: and(
 				eq(schema.invitation.email, ctx.user.email),
-				eq(schema.invitation.status, "pending"),
+				eq(schema.invitation.status, "pending")
 			),
 			with: {
 				organization: {

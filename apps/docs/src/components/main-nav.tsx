@@ -1,32 +1,31 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-import { cn } from "@repo/ui/lib/utils"
-import { Button } from "@repo/ui/components/shadcn/button"
+import { Button } from "@repo/ui/components/shadcn/button";
+import { cn } from "@repo/ui/lib/utils";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function MainNav({
-  items,
-  className,
-  ...props
+	items,
+	className,
+	...props
 }: React.ComponentProps<"nav"> & {
-  items: { href: string; label: string }[]
+	items: { href: string; label: string }[];
 }) {
-  const pathname = usePathname()
+	const pathname = usePathname();
 
-  return (
-    <nav className={cn("items-center gap-0.5", className)} {...props}>
-      {items.map((item) => (
-        <Button key={item.href} variant="ghost" asChild size="sm">
-          <Link
-            href={item.href}
-            className={cn(pathname === item.href && "text-primary")}
-          >
-            {item.label}
-          </Link>
-        </Button>
-      ))}
-    </nav>
-  )
+	return (
+		<nav className={cn("items-center gap-0.5", className)} {...props}>
+			{items.map((item) => (
+				<Button asChild key={item.href} size="sm" variant="ghost">
+					<Link
+						className={cn(pathname === item.href && "text-primary")}
+						href={item.href}
+					>
+						{item.label}
+					</Link>
+				</Button>
+			))}
+		</nav>
+	);
 }

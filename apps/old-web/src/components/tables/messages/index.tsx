@@ -1,14 +1,14 @@
 "use client";
 
-import { DataTableInfinite } from "@/components/data-table";
-import * as React from "react";
-import { columns } from "./columns";
-import { filterFields as defaultFilterFields, sheetFields } from "./fields";
-import { trpc } from "@/trpc/client";
-import { useQueryStates } from "nuqs";
-import { messagesQueryParsers } from "../parsers";
 import type { Message } from "@repo/db";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
+import * as React from "react";
+import { DataTableInfinite } from "@/components/data-table";
+import { trpc } from "@/trpc/client";
+import { messagesQueryParsers } from "../parsers";
+import { columns } from "./columns";
+import { filterFields as defaultFilterFields, sheetFields } from "./fields";
 
 export function MessagesTable({
 	projectId,
@@ -30,7 +30,7 @@ export function MessagesTable({
 		{
 			getNextPageParam: (lastPage) => lastPage.nextCursor,
 			placeholderData: keepPreviousData,
-		},
+		}
 	);
 
 	const { flatData, totalFetched } = React.useMemo(() => {
@@ -55,8 +55,12 @@ export function MessagesTable({
 	const filterFields = React.useMemo(() => {
 		return defaultFilterFields.map((field) => {
 			const facetsField = facets?.[field.value];
-			if (!facetsField) return field;
-			if (field.options && field.options.length > 0) return field;
+			if (!facetsField) {
+				return field;
+			}
+			if (field.options && field.options.length > 0) {
+				return field;
+			}
 
 			const options = facetsField.rows.map(({ value }) => {
 				return {
@@ -71,10 +75,9 @@ export function MessagesTable({
 
 	return (
 		<DataTableInfinite
-			tableId={`messages-table-${projectId ?? "all"}`}
-			data={flatData}
-			facets={facets}
 			columns={columns}
+			controlsOpen={controlsOpen}
+			data={flatData}
 			defaultColumnVisibility={
 				projectId
 					? {
@@ -82,20 +85,21 @@ export function MessagesTable({
 						}
 					: undefined
 			}
-			filterFields={filterFields}
-			sheetFields={sheetFields}
+			facets={facets}
 			fetchNextPage={fetchNextPage}
 			fetchPreviousPage={fetchPreviousPage}
-			refetch={refetch}
-			isFetching={isFetching}
-			isLoading={isLoading}
-			totalRows={totalRowCount}
+			filterFields={filterFields}
 			filterRows={totalFilteredRowCount}
-			totalRowsFetched={totalFetched}
 			getRowId={(row) => row.id}
 			getRowSheetTitle="Message"
+			isFetching={isFetching}
+			isLoading={isLoading}
+			refetch={refetch}
 			searchParamsParser={messagesQueryParsers}
-			controlsOpen={controlsOpen}
+			sheetFields={sheetFields}
+			tableId={`messages-table-${projectId ?? "all"}`}
+			totalRows={totalRowCount}
+			totalRowsFetched={totalFetched}
 		/>
 	);
 }

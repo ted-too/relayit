@@ -1,4 +1,3 @@
-import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	Card,
 	CardContent,
@@ -6,22 +5,26 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
-import { getQueryClient } from "@/trpc/server";
-import { trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "@repo/ui/components/shadcn/tabs";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { SquareTerminalIcon } from "lucide-react";
 import { headers as headersFn } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+// import { WebhooksTab } from "./webhooks";
+import type { CSSProperties } from "react";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { getQueryClient, trpc } from "@/trpc/server";
 import { ProjectsPage } from "../landing";
 import { ActivityTab } from "./activity";
 import { ChannelsTab } from "./channels";
 import { GeneralTab } from "./general";
-// import { WebhooksTab } from "./webhooks";
-import type { CSSProperties } from "react";
 
 const TABS = [
 	{
@@ -55,7 +58,9 @@ export default async function ProjectPage({
 
 	const queryClient = getQueryClient();
 
-	if (!pathname) return <ProjectsPage params={params} />;
+	if (!pathname) {
+		return <ProjectsPage params={params} />;
+	}
 
 	const [slug, ...path] = pathname;
 
@@ -66,24 +71,26 @@ export default async function ProjectPage({
 			queryClient.ensureQueryData(
 				trpc(headers).projects.getBySlug.queryOptions({
 					slug,
-				}),
+				})
 			),
 			queryClient.ensureQueryData(trpc(headers).providers.list.queryOptions()),
 		]);
 
-		if (!project) throw notFound();
+		if (!project) {
+			throw notFound();
+		}
 
 		return (
 			<HydrationBoundary state={dehydrate(queryClient)}>
 				<Card
+					className="mx-auto h-full max-w-none"
 					variant="shadow"
-					className="mx-auto max-w-none h-full"
 					wrapperProps={{ className: "h-full" }}
 				>
-					<Tabs defaultValue={path.join("/")} className="gap-0">
+					<Tabs className="gap-0" defaultValue={path.join("/")}>
 						<CardHeader className="flex flex-row items-center justify-between space-y-0">
 							<div className="flex items-center gap-2">
-								<CardTitle className="text-lg md:text-xl flex items-center gap-2">
+								<CardTitle className="flex items-center gap-2 text-lg md:text-xl">
 									{/* TODO: Add icon for project type based on language */}
 									<SquareTerminalIcon className="size-4" />
 									{project.name}
@@ -112,19 +119,20 @@ export default async function ProjectPage({
 						<CardContent>
 							{TABS.map(({ path, Component }) => (
 								<TabsContent
-									key={`content-${path.join("/")}`}
-									value={path.join("/")}
 									className="mt-2"
+									key={`content-${path.join("/")}`}
 									style={
 										{
 											// TBH Don't ask me why this works, but it does.
 											// We need to prevent overflow of the content.
 											// FIXME: This is a hack and needs to be fixed.
-											"--tab-content-height": "calc(var(--content-height) - 5.25rem - 0.5rem - 1.25rem - calc(0.625rem*2) - 1.5rem )",
+											"--tab-content-height":
+												"calc(var(--content-height) - 5.25rem - 0.5rem - 1.25rem - calc(0.625rem*2) - 1.5rem )",
 										} as CSSProperties
 									}
+									value={path.join("/")}
 								>
-									<Component project={project} allProviders={allProviders} />
+									<Component allProviders={allProviders} project={project} />
 								</TabsContent>
 							))}
 						</CardContent>

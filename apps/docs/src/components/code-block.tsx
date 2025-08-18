@@ -1,9 +1,5 @@
 "use client";
 
-import * as React from "react";
-import { CheckIcon, ClipboardIcon, TerminalIcon } from "lucide-react";
-
-import { copyToClipboardWithMeta } from "@/components/copy-button";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Tabs,
@@ -17,6 +13,9 @@ import {
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
 import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
+import { CheckIcon, ClipboardIcon, TerminalIcon } from "lucide-react";
+import * as React from "react";
+import { copyToClipboardWithMeta } from "@/components/copy-button";
 import type { Config, SupportedLanguages } from "@/types";
 
 export function CodeBlockCommand({
@@ -72,7 +71,6 @@ export function CodeBlockCommand({
 	return (
 		<div className="overflow-x-auto">
 			<Tabs
-				value={codeLanguage}
 				className="gap-0"
 				onValueChange={(value) => {
 					setConfig({
@@ -80,18 +78,19 @@ export function CodeBlockCommand({
 						codeLanguage: value as SupportedLanguages,
 					});
 				}}
+				value={codeLanguage}
 			>
-				<div className="border-border/50 flex items-center gap-2 border-b px-3 py-1">
-					<div className="bg-foreground flex size-4 items-center justify-center rounded-[1px] opacity-70">
-						<TerminalIcon className="text-code size-3" />
+				<div className="flex items-center gap-2 border-border/50 border-b px-3 py-1">
+					<div className="flex size-4 items-center justify-center rounded-[1px] bg-foreground opacity-70">
+						<TerminalIcon className="size-3 text-code" />
 					</div>
 					<TabsList className="rounded-none bg-transparent p-0">
 						{Object.entries(tabs).map(([key]) => {
 							return (
 								<TabsTrigger
+									className="h-7 border border-transparent pt-0.5 data-[state=active]:border-input data-[state=active]:bg-accent data-[state=active]:shadow-none"
 									key={key}
 									value={key}
-									className="data-[state=active]:bg-accent data-[state=active]:border-input h-7 border border-transparent pt-0.5 data-[state=active]:shadow-none"
 								>
 									{key}
 								</TabsTrigger>
@@ -102,7 +101,7 @@ export function CodeBlockCommand({
 				<div className="no-scrollbar overflow-x-auto">
 					{Object.entries(tabs).map(([key, value]) => {
 						return (
-							<TabsContent key={key} value={key} className="mt-0 px-4 py-3.5">
+							<TabsContent className="mt-0 px-4 py-3.5" key={key} value={key}>
 								<pre>
 									<code
 										className="relative font-mono text-sm leading-none"
@@ -119,11 +118,11 @@ export function CodeBlockCommand({
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<Button
+						className="absolute top-2 right-2 z-10 size-7 opacity-70 hover:opacity-100 focus-visible:opacity-100"
 						data-slot="copy-button"
+						onClick={copyCommand}
 						size="icon"
 						variant="ghost"
-						className="absolute top-2 right-2 z-10 size-7 opacity-70 hover:opacity-100 focus-visible:opacity-100"
-						onClick={copyCommand}
 					>
 						<span className="sr-only">Copy</span>
 						{hasCopied ? <CheckIcon /> : <ClipboardIcon />}

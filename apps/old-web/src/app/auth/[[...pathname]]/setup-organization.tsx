@@ -1,7 +1,7 @@
-import { authClient } from "@/lib/auth-client";
-import { trpcClient } from "@/trpc/server";
 import { headers as headersFn } from "next/headers";
 import { redirect } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
+import { trpcClient } from "@/trpc/server";
 
 export async function SetupOrganization() {
 	const headers = await headersFn();

@@ -1,4 +1,4 @@
-import { CreateProjectForm } from "@/components/projects/create";
+import type { Project } from "@repo/db";
 import {
 	Card,
 	CardContent,
@@ -6,7 +6,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import type { Project } from "@repo/db";
+import { CreateProjectForm } from "@/components/projects/create";
 
 export function GeneralTab({ project }: { project: Project }) {
 	return (
@@ -22,11 +22,11 @@ export function GeneralTab({ project }: { project: Project }) {
 				</CardHeader>
 				<CardContent>
 					<CreateProjectForm
-						initialData={project}
 						className={{
 							root: "grid-cols-2",
-							submit: "col-span-2 w-max ml-auto",
+							submit: "col-span-2 ml-auto w-max",
 						}}
+						initialData={project}
 					/>
 				</CardContent>
 			</Card>

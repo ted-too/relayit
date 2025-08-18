@@ -7,7 +7,6 @@ import {
 	zodKeys,
 } from "@repo/shared";
 import {
-	type SQL,
 	and,
 	count,
 	desc,
@@ -17,6 +16,7 @@ import {
 	inArray,
 	lt,
 	or,
+	type SQL,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 
@@ -33,7 +33,7 @@ export const messagesRouter = router({
 				const project = await db.query.project.findFirst({
 					where: and(
 						eq(schema.project.id, projectId),
-						eq(schema.project.organizationId, ctx.session.activeOrganizationId),
+						eq(schema.project.organizationId, ctx.session.activeOrganizationId)
 					),
 					columns: {
 						id: true,
@@ -57,11 +57,9 @@ export const messagesRouter = router({
 					conditions.push(
 						direction === "backward"
 							? lt(schema.message.createdAt, cursorDate)
-							: gt(schema.message.createdAt, cursorDate),
+							: gt(schema.message.createdAt, cursorDate)
 					);
-				} catch (error) {
-					console.warn("Invalid cursor", error);
-				}
+				} catch (_error) {}
 			}
 
 			const totalRowCount =
@@ -111,10 +109,10 @@ export const messagesRouter = router({
 						.where(whereCondition)
 				)?.[0]?.total ?? 0;
 
-			let nextCursor: typeof cursor | undefined = undefined;
+			let nextCursor: typeof cursor | undefined;
 			if (items.length > limit) {
 				const nextItem = items.pop();
-				nextCursor = nextItem!.createdAt.getTime();
+				nextCursor = nextItem?.createdAt.getTime();
 			}
 
 			const facets = getFacetsFromData(items, zodKeys(messageFilterSchema));

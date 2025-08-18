@@ -1,16 +1,16 @@
 import {
-	IconBraces,
-	IconDownload,
-	type IconProps as TablerIconProps,
-} from "@tabler/icons-react";
-import { Icons, type IconProps } from "./icons";
-import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
 } from "@repo/ui/components/shadcn/tabs";
+import {
+	IconBraces,
+	IconDownload,
+	type IconProps as TablerIconProps,
+} from "@tabler/icons-react";
 import { ComponentSource } from "./component-source";
+import { type IconProps, Icons } from "./icons";
 
 type Icon = (props: IconProps | TablerIconProps) => React.ReactNode;
 
@@ -47,15 +47,15 @@ const EXAMPLES = [
 
 export function IntegrationExamples() {
 	return (
-		<Tabs defaultValue={EXAMPLES[0].platform} className="w-full">
-			<TabsList className="mx-auto flex w-full max-w-xs bg-transparent gap-4">
+		<Tabs className="w-full" defaultValue={EXAMPLES[0].platform}>
+			<TabsList className="mx-auto flex w-full max-w-xs gap-4 bg-transparent">
 				{EXAMPLES.map((example) => (
 					<TabsTrigger
-						value={example.platform}
+						className="group w-16 flex-col gap-2 p-0 text-xs data-[state=active]:shadow-none"
 						key={`trigger-${example.platform}`}
-						className="group gap-2 flex-col p-0 text-xs data-[state=active]:shadow-none w-16"
+						value={example.platform}
 					>
-						<div className="flex h-14 w-[4rem] items-center justify-center rounded-2xl border group-data-[state=active]:border-accent-foreground transition duration-200 ease-in-out group-data-[state=active]:bg-gradient-to-b group-data-[state=active]:from-white/[3%]">
+						<div className="flex h-14 w-[4rem] items-center justify-center rounded-2xl border transition duration-200 ease-in-out group-data-[state=active]:border-accent-foreground group-data-[state=active]:bg-gradient-to-b group-data-[state=active]:from-white/[3%]">
 							<example.Icon className="size-6" />
 						</div>
 						{example.platform}
@@ -64,15 +64,15 @@ export function IntegrationExamples() {
 			</TabsList>
 			{EXAMPLES.map((example) => (
 				<TabsContent
-					value={example.platform}
+					className="mt-3"
 					key={`content-${example.platform}`}
-          className="mt-3"
+					value={example.platform}
 				>
 					<IntegrationCodeBlock
 						defaultIcon={example.Icon}
+						examples={example.examples}
 						language={example.language}
 						platform={example.platform}
-						examples={example.examples}
 					/>
 				</TabsContent>
 			))}
@@ -92,18 +92,19 @@ async function IntegrationCodeBlock({
 	examples: { framework: string; code: string; Icon?: Icon }[];
 }) {
 	return (
-		<div className="overflow-x-auto bg-secondary/50 p-1 rounded-lg">
+		<div className="overflow-x-auto rounded-lg bg-secondary/50 p-1">
 			<Tabs defaultValue={examples[0].framework}>
-				<TabsList className="bg-transparent w-full justify-between">
+				<TabsList className="w-full justify-between bg-transparent">
 					<div className="flex items-center gap-2">
 						{examples.map((example) => {
 							const Icon = example.Icon ?? defaultIcon;
-              const label = example.framework === "default" ? platform : example.framework;
+							const label =
+								example.framework === "default" ? platform : example.framework;
 							return (
 								<TabsTrigger
+									className="gap-1.5 data-[state=active]:bg-muted data-[state=active]:shadow-none"
 									key={`${platform}-trigger-${example.framework}`}
 									value={example.framework}
-									className="data-[state=active]:bg-muted data-[state=active]:shadow-none gap-1.5"
 								>
 									<Icon className="size-3" />
 									{label}
@@ -115,9 +116,9 @@ async function IntegrationCodeBlock({
 				{examples.map((example) => {
 					return (
 						<TabsContent
+							className="relative mt-0 px-4 pb-3.5 text-left"
 							key={`${platform}-content-${example.framework}`}
 							value={example.framework}
-							className="text-left mt-0 px-4 pb-3.5 relative"
 						>
 							<ComponentSource language={language} src={example.code} />
 						</TabsContent>

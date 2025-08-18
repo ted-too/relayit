@@ -1,12 +1,12 @@
 import { authdProcedureWithOrg, router, verifyProject } from "@repo/api/trpc";
 import { db, deepMerge, schema } from "@repo/db";
 import {
-	type UpdateProjectProviderConfig,
 	createProjectProviderSchema,
+	type UpdateProjectProviderConfig,
 	updateProjectProviderSchema,
 } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
-import { type SQL, and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 
 // TODO: Potentially add a middleware to check if the user has permission to access this resource
@@ -19,7 +19,7 @@ export const projectProviderAssociationRouter = router({
 				.object({
 					providerCredentialId: z.string(),
 				})
-				.passthrough(),
+				.passthrough()
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { organization, project } = ctx;
@@ -29,7 +29,7 @@ export const projectProviderAssociationRouter = router({
 				columns: { id: true, channelType: true, providerType: true },
 				where: and(
 					eq(schema.providerCredential.id, providerCredentialId),
-					eq(schema.providerCredential.organizationId, organization.id),
+					eq(schema.providerCredential.organizationId, organization.id)
 				),
 			});
 
@@ -43,10 +43,8 @@ export const projectProviderAssociationRouter = router({
 
 			const specificProviderSchema = createProjectProviderSchema(
 				orgProvider.channelType,
-				orgProvider.providerType,
+				orgProvider.providerType
 			);
-
-			console.log(baseConfig);
 
 			const validatedDataResult = specificProviderSchema.safeParse(baseConfig);
 
@@ -84,7 +82,6 @@ export const projectProviderAssociationRouter = router({
 							"This provider credential is already associated with this project.",
 					});
 				}
-				console.error("Error creating project provider association:", error);
 				throw new TRPCError({
 					code: "INTERNAL_SERVER_ERROR",
 					message: "An unexpected error occurred.",
@@ -131,7 +128,7 @@ export const projectProviderAssociationRouter = router({
 			const association = await db.query.projectProviderAssociation.findFirst({
 				where: and(
 					eq(schema.projectProviderAssociation.id, associationId),
-					eq(schema.projectProviderAssociation.projectId, project.id),
+					eq(schema.projectProviderAssociation.projectId, project.id)
 				),
 				with: {
 					providerCredential: {
@@ -153,7 +150,7 @@ export const projectProviderAssociationRouter = router({
 			const validatedDataResult = updateProjectProviderSchema(
 				association.providerCredential.channelType,
 				association.providerCredential.providerType,
-				association.config !== null,
+				association.config !== null
 			).safeParse(validatedData);
 
 			if (validatedDataResult.error) {
@@ -184,8 +181,8 @@ export const projectProviderAssociationRouter = router({
 				.where(
 					and(
 						eq(schema.projectProviderAssociation.id, associationId),
-						eq(schema.projectProviderAssociation.projectId, project.id),
-					),
+						eq(schema.projectProviderAssociation.projectId, project.id)
+					)
 				)
 				.returning();
 
@@ -210,8 +207,8 @@ export const projectProviderAssociationRouter = router({
 				.where(
 					and(
 						eq(schema.projectProviderAssociation.id, associationId),
-						eq(schema.projectProviderAssociation.projectId, project.id),
-					),
+						eq(schema.projectProviderAssociation.projectId, project.id)
+					)
 				);
 
 			if (rowCount === 0) {

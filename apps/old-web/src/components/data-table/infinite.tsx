@@ -1,46 +1,10 @@
 "use client";
 
-import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { type Facets, SORT_DELIMITER } from "@repo/shared";
-import type {
-	FetchNextPageOptions,
-	FetchPreviousPageOptions,
-	RefetchOptions,
-} from "@tanstack/react-query";
-import {
-	type ColumnFiltersState,
-	type OnChangeFn,
-	type SortingState,
-	useReactTable,
-	type ColumnDef,
-	type VisibilityState,
-	type RowSelectionState,
-	type Table as TTable,
-	getCoreRowModel,
-	getFacetedRowModel,
-	type Row,
-	flexRender,
-} from "@tanstack/react-table";
-import {
-	parseAsArrayOf,
-	parseAsString,
-	type ParserBuilder,
-	useQueryState,
-	useQueryStates,
-} from "nuqs";
-import {
-	type CSSProperties,
-	Fragment,
-	memo,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	type UIEvent,
-} from "react";
-import { arrSome, inDateRange } from "./filter-fns";
 import { Button } from "@repo/ui/components/shadcn/button";
+import { ScrollArea } from "@repo/ui/components/shadcn/scroll-area";
+import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 import {
 	Table,
 	TableBody,
@@ -49,23 +13,59 @@ import {
 	TableHeader,
 	TableRow,
 } from "@repo/ui/components/shadcn/table";
+import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
 import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
-import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { useControls } from "./controls";
-import { DataTableSheetDetails } from "./sheet/details";
-import { MemoizedDataTableSheetContent } from "./sheet/content";
+import type {
+	FetchNextPageOptions,
+	FetchPreviousPageOptions,
+	RefetchOptions,
+} from "@tanstack/react-query";
+import {
+	type ColumnDef,
+	type ColumnFiltersState,
+	flexRender,
+	getCoreRowModel,
+	getFacetedRowModel,
+	type OnChangeFn,
+	type Row,
+	type RowSelectionState,
+	type SortingState,
+	type Table as TTable,
+	useReactTable,
+	type VisibilityState,
+} from "@tanstack/react-table";
 import { LoaderCircleIcon } from "lucide-react";
-import { RefreshButton } from "./refresh-button";
-import type { DataTableFilterField, SheetField } from "./types";
-import { DataTableProvider } from "./provider";
-import { DataTableResetButton } from "./reset-button";
-import { ScrollArea } from "@repo/ui/components/shadcn/scroll-area";
-import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
-import { DataTableFilterControls } from "./filters/controls";
-import { DataTableToolbar } from "./toolbar";
-import { DataTableFilterCommand } from "./filters/command";
+import {
+	type ParserBuilder,
+	parseAsArrayOf,
+	parseAsString,
+	useQueryState,
+	useQueryStates,
+} from "nuqs";
+import {
+	type CSSProperties,
+	Fragment,
+	memo,
+	type UIEvent,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { RESET_TABLE_VIEW } from "@/constants/keybinds";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { useControls } from "./controls";
+import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
+import { arrSome, inDateRange } from "./filter-fns";
+import { DataTableFilterCommand } from "./filters/command";
+import { DataTableFilterControls } from "./filters/controls";
+import { DataTableProvider } from "./provider";
+import { RefreshButton } from "./refresh-button";
+import { DataTableResetButton } from "./reset-button";
+import { MemoizedDataTableSheetContent } from "./sheet/content";
+import { DataTableSheetDetails } from "./sheet/details";
+import { DataTableToolbar } from "./toolbar";
+import type { DataTableFilterField, SheetField } from "./types";
 
 export type DataTableInfiniteProps<TData, TMeta> = {
 	tableId: string;
@@ -77,10 +77,10 @@ export type DataTableInfiniteProps<TData, TMeta> = {
 	sheetFields?: SheetField<TData, TMeta>[];
 	getRowId: (row: TData) => string;
 	fetchNextPage: (
-		options?: FetchNextPageOptions | undefined,
+		options?: FetchNextPageOptions | undefined
 	) => Promise<unknown>;
 	fetchPreviousPage?: (
-		options?: FetchPreviousPageOptions | undefined,
+		options?: FetchPreviousPageOptions | undefined
 	) => Promise<unknown>;
 	refetch: (options?: RefetchOptions | undefined) => void;
 	isFetching: boolean;
@@ -102,13 +102,19 @@ const qpFilter = (value: unknown) =>
 
 // This is needed so empty params are not sent to the server
 function processQp<T = unknown>(value: T): T | null {
-	if (value === undefined || value === "" || value === null) return null;
+	if (value === undefined || value === "" || value === null) {
+		return null;
+	}
 	if (Array.isArray(value)) {
 		const arrValue = value.filter(qpFilter) as T;
-		if ((arrValue as unknown as unknown[]).length === 0) return null;
+		if ((arrValue as unknown as unknown[]).length === 0) {
+			return null;
+		}
 		return arrValue;
 	}
-	if (typeof value === "object" && Object.keys(value).length === 0) return null;
+	if (typeof value === "object" && Object.keys(value).length === 0) {
+		return null;
+	}
 	return value;
 }
 
@@ -140,12 +146,12 @@ export function DataTableInfinite<TData, TMeta>({
 }: DataTableInfiniteProps<TData, TMeta>) {
 	const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
 		`column-order-${tableId}`,
-		[],
+		[]
 	);
 	const [columnVisibility, setColumnVisibility] =
 		useLocalStorage<VisibilityState>(
 			`visibility-${tableId}`,
-			defaultColumnVisibility,
+			defaultColumnVisibility
 		);
 
 	const [columnFiltersQP, setColumnFiltersQP] =
@@ -171,15 +177,15 @@ export function DataTableInfinite<TData, TMeta>({
 		setColumnFiltersQP(
 			processQp(
 				Object.fromEntries(
-					value.map((filter) => [filter.id, filter.value]),
-				) as Partial<typeof columnFiltersQP>,
-			),
+					value.map((filter) => [filter.id, filter.value])
+				) as Partial<typeof columnFiltersQP>
+			)
 		);
 	};
 
 	const [rowSortingQP, setRowSortingQP] = useQueryState(
 		"sort",
-		parseAsArrayOf(parseAsString),
+		parseAsArrayOf(parseAsString)
 	);
 
 	const sorting: SortingState = useMemo(() => {
@@ -203,15 +209,15 @@ export function DataTableInfinite<TData, TMeta>({
 		setRowSortingQP(
 			processQp(
 				value?.map(
-					(sort) => `${sort.id}${SORT_DELIMITER}${sort.desc ? "desc" : "asc"}`,
-				),
-			),
+					(sort) => `${sort.id}${SORT_DELIMITER}${sort.desc ? "desc" : "asc"}`
+				)
+			)
 		);
 	};
 
 	const [rowSelectionQP, setRowSelectionQP] = useQueryState(
 		"id",
-		parseAsArrayOf(parseAsString),
+		parseAsArrayOf(parseAsString)
 	);
 
 	const rowSelection: RowSelectionState = useMemo(() => {
@@ -233,8 +239,8 @@ export function DataTableInfinite<TData, TMeta>({
 			processQp(
 				Object.entries(value)
 					.filter(([_, selected]) => selected)
-					.map(([key]) => key),
-			),
+					.map(([key]) => key)
+			)
 		);
 	};
 
@@ -256,7 +262,7 @@ export function DataTableInfinite<TData, TMeta>({
 				fetchNextPage();
 			}
 		},
-		[fetchNextPage, isFetching, totalRowsFetched, filterRows],
+		[fetchNextPage, isFetching, totalRowsFetched, filterRows]
 	);
 
 	useEffect(() => {
@@ -269,11 +275,13 @@ export function DataTableInfinite<TData, TMeta>({
 		});
 
 		const topBar = topBarRef.current;
-		if (!topBar) return;
+		if (!topBar) {
+			return;
+		}
 
 		observer.observe(topBar);
 		return () => observer.unobserve(topBar);
-	}, [topBarRef]);
+	}, []);
 
 	const table = useReactTable({
 		data,
@@ -306,7 +314,9 @@ export function DataTableInfinite<TData, TMeta>({
 	});
 
 	const selectedRow = useMemo(() => {
-		if ((isLoading || isFetching) && !data.length) return;
+		if ((isLoading || isFetching) && !data.length) {
+			return;
+		}
 		const selectedRowKey = Object.keys(rowSelection)?.[0];
 		return table
 			.getCoreRowModel()
@@ -325,7 +335,9 @@ export function DataTableInfinite<TData, TMeta>({
 		const colSizes: { [key: string]: string } = {};
 		for (let i = 0; i < headers.length; i++) {
 			const header = headers[i];
-			if (!header) continue;
+			if (!header) {
+				continue;
+			}
 			// REMINDER: replace "." with "-" to avoid invalid CSS variable name (e.g. "timing.dns" -> "timing-dns")
 			colSizes[`--header-${header.id.replace(".", "-")}-size`] =
 				`${header.getSize()}px`;
@@ -333,11 +345,7 @@ export function DataTableInfinite<TData, TMeta>({
 				`${header.column.getSize()}px`;
 		}
 		return colSizes;
-	}, [
-		table.getState().columnSizingInfo,
-		table.getState().columnSizing,
-		table.getState().columnVisibility,
-	]);
+	}, [table.getFlatHeaders]);
 
 	useHotkeys(RESET_TABLE_VIEW, () => {
 		setColumnOrder([]);
@@ -346,20 +354,20 @@ export function DataTableInfinite<TData, TMeta>({
 
 	return (
 		<DataTableProvider
-			table={table}
+			columnFilters={columnFilters}
+			columnOrder={columnOrder}
 			columns={columns}
+			columnVisibility={columnVisibility}
+			controlsOpen={controlsOpen}
+			enableColumnOrdering={true}
 			facets={facets}
 			filterFields={filterFields}
-			columnFilters={columnFilters}
 			filterRows={filterRows}
-			totalRows={totalRows}
-			sorting={sorting}
-			rowSelection={rowSelection}
-			columnOrder={columnOrder}
-			columnVisibility={columnVisibility}
-			enableColumnOrdering={true}
 			isLoading={isFetching || isLoading}
-			controlsOpen={controlsOpen}
+			rowSelection={rowSelection}
+			sorting={sorting}
+			table={table}
+			totalRows={totalRows}
 		>
 			<div
 				className="flex h-full min-h-(--available-height) w-full flex-col sm:flex-row"
@@ -374,12 +382,12 @@ export function DataTableInfinite<TData, TMeta>({
 			>
 				<div
 					className={cn(
-						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--available-height) sm:min-h-(--available-height) sm:min-w-52 sm:max-w-52 sm:self-start md:min-w-72 md:max-w-72 sm:border-r",
+						"h-full w-full flex-col sm:sticky sm:top-0 sm:max-h-(--available-height) sm:min-h-(--available-height) sm:min-w-52 sm:max-w-52 sm:self-start sm:border-r md:min-w-72 md:max-w-72",
 						"group-data-[expanded=false]/controls:hidden",
-						"hidden sm:flex",
+						"hidden sm:flex"
 					)}
 				>
-					<div className="border-b border-border bg-background p-2 pl-0 md:sticky md:top-0">
+					<div className="border-border border-b bg-background p-2 pl-0 md:sticky md:top-0">
 						<div className="flex h-[46px] items-center justify-between gap-3">
 							<p className="px-2 font-medium text-foreground">Filters</p>
 							<div>
@@ -398,19 +406,19 @@ export function DataTableInfinite<TData, TMeta>({
 					className={cn(
 						"flex max-w-full flex-1 flex-col border-border",
 						// Chrome issue
-						"group-data-[expanded=true]/controls:sm:max-w-[calc(100vw_-_208px)] group-data-[expanded=true]/controls:md:max-w-[calc(100vw_-_288px)]",
+						"group-data-[expanded=true]/controls:sm:max-w-[calc(100vw_-_208px)] group-data-[expanded=true]/controls:md:max-w-[calc(100vw_-_288px)]"
 					)}
 				>
 					<div
-						ref={topBarRef}
 						className={cn(
 							"flex items-center gap-4 bg-background",
-							"sticky top-0 z-10 pb-4",
+							"sticky top-0 z-10 pb-4"
 						)}
+						ref={topBarRef}
 					>
 						<DataTableFilterCommand
-							searchParamsParser={searchParamsParser}
 							className="grow"
+							searchParamsParser={searchParamsParser}
 							tableId={tableId}
 						/>
 						{/* TBD: better flexibility with compound components? */}
@@ -422,29 +430,29 @@ export function DataTableInfinite<TData, TMeta>({
 					</div>
 					<div className="z-0 grow">
 						<Table
-							ref={tableRef}
-							onScroll={onScroll}
-							// REMINDER: https://stackoverflow.com/questions/50361698/border-style-do-not-work-with-sticky-position-element
 							className="border-separate border-spacing-0"
 							containerClassName="max-h-[calc(var(--available-height)_-_var(--top-bar-height))]"
+							// REMINDER: https://stackoverflow.com/questions/50361698/border-style-do-not-work-with-sticky-position-element
+							onScroll={onScroll}
+							ref={tableRef}
 						>
 							<HeaderComponent table={table} />
 							<TableBody
 								id="content"
-								tabIndex={-1}
-								// className="outline-1 -outline-offset-1 outline-primary transition-colors focus-visible:outline"
-								// REMINDER: avoids scroll (skipping the table header) when using skip to content
 								style={{
 									scrollMarginTop: "calc(var(--top-bar-height) + 40px)",
 								}}
+								// className="outline-1 -outline-offset-1 outline-primary transition-colors focus-visible:outline"
+								// REMINDER: avoids scroll (skipping the table header) when using skip to content
+								tabIndex={-1}
 							>
 								{table.getRowModel().rows?.length ? (
 									table.getRowModel().rows.map((row) => (
 										<Fragment key={row.id}>
 											<MemoizedRow
 												row={row}
-												table={table}
 												selected={row.getIsSelected()}
+												table={table}
 												visibleColumns={columnVisibility}
 											/>
 										</Fragment>
@@ -452,19 +460,17 @@ export function DataTableInfinite<TData, TMeta>({
 								) : isLoading || isFetching ? (
 									<RowSkeleton columns={columns.length} rowCount={10} />
 								) : (
-									<Fragment>
-										<TableRow>
-											<TableCell
-												colSpan={columns.length}
-												className="h-24 text-center"
-											>
-												No results.
-											</TableCell>
-										</TableRow>
-									</Fragment>
+									<TableRow>
+										<TableCell
+											className="h-24 text-center"
+											colSpan={columns.length}
+										>
+											No results.
+										</TableCell>
+									</TableRow>
 								)}
 								<TableRow className="hover:bg-transparent data-[state=selected]:bg-transparent">
-									<TableCell colSpan={columns.length} className="text-center">
+									<TableCell className="text-center" colSpan={columns.length}>
 										{(totalRowsFetched < filterRows ||
 											!table.getCoreRowModel().rows?.length) &&
 										filterRows !== 0 ? (
@@ -480,13 +486,13 @@ export function DataTableInfinite<TData, TMeta>({
 												Load More
 											</Button>
 										) : (
-											<p className="text-sm text-muted-foreground">
+											<p className="text-muted-foreground text-sm">
 												No more data to load (
-												<span className="font-mono font-medium">
+												<span className="font-medium font-mono">
 													{formatCompactNumber(filterRows)}
 												</span>{" "}
 												of{" "}
-												<span className="font-mono font-medium">
+												<span className="font-medium font-mono">
 													{formatCompactNumber(totalRows)}
 												</span>{" "}
 												rows)
@@ -510,18 +516,18 @@ export function DataTableInfinite<TData, TMeta>({
 				titleClassName="font-mono"
 			>
 				<MemoizedDataTableSheetContent
-					table={table}
 					data={selectedRow?.original}
-					filterFields={filterFields}
 					fields={sheetFields}
-					// TODO: check if we should memoize this
-					// REMINDER: this is used to pass additional data like the `InfiniteQueryMeta`
+					filterFields={filterFields}
 					metadata={{
 						totalRows,
 						filterRows,
 						totalRowsFetched,
 						...meta,
 					}}
+					// TODO: check if we should memoize this
+					// REMINDER: this is used to pass additional data like the `InfiniteQueryMeta`
+					table={table}
 				/>
 			</DataTableSheetDetails>
 		</DataTableProvider>
@@ -547,9 +553,13 @@ function RowComponent<TData>({
 }) {
 	return (
 		<TableRow
-			id={row.id}
-			tabIndex={0}
+			className={cn(
+				"[&>:not(:last-child)]:border-r",
+				"-outline-offset-1 outline-primary/30 transition-colors focus-visible:bg-muted/50 focus-visible:outline data-[state=selected]:outline",
+				table.options.meta?.getRowClassName?.(row)
+			)}
 			data-state={selected && "selected"}
+			id={row.id}
 			onClick={() => row.toggleSelected()}
 			onKeyDown={(event) => {
 				if (event.key === "Enter") {
@@ -557,19 +567,15 @@ function RowComponent<TData>({
 					row.toggleSelected();
 				}
 			}}
-			className={cn(
-				"[&>:not(:last-child)]:border-r",
-				"-outline-offset-1 outline-primary/30 transition-colors focus-visible:bg-muted/50 focus-visible:outline data-[state=selected]:outline",
-				table.options.meta?.getRowClassName?.(row),
-			)}
+			tabIndex={0}
 		>
 			{row.getVisibleCells().map((cell) => (
 				<TableCell
-					key={cell.id}
 					className={cn(
-						"truncate border-b border-border",
-						cell.column.columnDef.meta?.cellClassName,
+						"truncate border-border border-b",
+						cell.column.columnDef.meta?.cellClassName
 					)}
+					key={cell.id}
 				>
 					{flexRender(cell.column.columnDef.cell, cell.getContext())}
 				</TableCell>
@@ -592,7 +598,7 @@ const MemoizedRow = memo(RowComponent, (prev, next) => {
 		prevVisibleColumnsKeys.every(
 			(colId) =>
 				nextVisibleColumnsKeys.includes(colId) &&
-				prev.visibleColumns[colId] === next.visibleColumns[colId],
+				prev.visibleColumns[colId] === next.visibleColumns[colId]
 		);
 
 	return basicPropsEqual && visibilityEqual;
@@ -601,16 +607,19 @@ const MemoizedRow = memo(RowComponent, (prev, next) => {
 function RowSkeleton({
 	columns,
 	rowCount,
-}: { columns: number; rowCount: number }) {
+}: {
+	columns: number;
+	rowCount: number;
+}) {
 	return Array.from({ length: rowCount }).map((_, i) => (
 		<TableRow
 			className={cn(
 				"[&>:not(:last-child)]:border-r",
-				"-outline-offset-1 outline-primary/30 transition-colors focus-visible:bg-muted/50 focus-visible:outline data-[state=selected]:outline",
+				"-outline-offset-1 outline-primary/30 transition-colors focus-visible:bg-muted/50 focus-visible:outline data-[state=selected]:outline"
 			)}
 			key={`skeleton-row-${i}`}
 		>
-			<TableCell colSpan={columns} className="truncate border-b border-border">
+			<TableCell className="truncate border-border border-b" colSpan={columns}>
 				<Skeleton className="h-5 w-full" />
 			</TableCell>
 		</TableRow>
@@ -623,21 +632,15 @@ function HeaderComponent<TData>({ table }: { table: TTable<TData> }) {
 		<TableHeader className={cn("sticky top-0 z-20 bg-background")}>
 			{table.getHeaderGroups().map((headerGroup) => (
 				<TableRow
-					key={headerGroup.id}
 					className={cn(
 						"bg-muted/50 hover:bg-muted/50",
-						"[&>*]:border-t [&>:not(:last-child)]:border-r",
+						"[&>*]:border-t [&>:not(:last-child)]:border-r"
 					)}
+					key={headerGroup.id}
 				>
 					{headerGroup.headers.map((header) => {
 						return (
 							<TableHead
-								key={header.id}
-								className={cn(
-									"relative select-none truncate border-b border-border [&>.cursor-col-resize]:last:opacity-0",
-									!open && "first:border-l last:border-r",
-									header.column.columnDef.meta?.headerClassName,
-								)}
 								aria-sort={
 									header.column.getIsSorted() === "asc"
 										? "ascending"
@@ -645,22 +648,28 @@ function HeaderComponent<TData>({ table }: { table: TTable<TData> }) {
 											? "descending"
 											: "none"
 								}
+								className={cn(
+									"relative select-none truncate border-border border-b [&>.cursor-col-resize]:last:opacity-0",
+									!open && "first:border-l last:border-r",
+									header.column.columnDef.meta?.headerClassName
+								)}
+								key={header.id}
 							>
 								{header.isPlaceholder
 									? null
 									: flexRender(
 											header.column.columnDef.header,
-											header.getContext(),
+											header.getContext()
 										)}
 								{header.column.getCanResize() && (
 									<div
+										className={cn(
+											"user-select-none -right-2 absolute top-0 z-10 flex h-full w-4 cursor-col-resize touch-none justify-center",
+											"before:absolute before:inset-y-0 before:w-px before:translate-x-px before:bg-border"
+										)}
 										onDoubleClick={() => header.column.resetSize()}
 										onMouseDown={header.getResizeHandler()}
 										onTouchStart={header.getResizeHandler()}
-										className={cn(
-											"user-select-none absolute -right-2 top-0 z-10 flex h-full w-4 cursor-col-resize touch-none justify-center",
-											"before:absolute before:inset-y-0 before:w-px before:translate-x-px before:bg-border",
-										)}
 									/>
 								)}
 							</TableHead>

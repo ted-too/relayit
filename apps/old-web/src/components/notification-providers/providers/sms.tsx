@@ -1,6 +1,5 @@
 "use client";
 
-import { CreateProviderForm } from "@/components/notification-providers/create";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
@@ -12,17 +11,18 @@ import {
 	DialogTrigger,
 } from "@repo/ui/components/shadcn/dialog";
 import { MessageText } from "iconsax-react";
-import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 import { useState } from "react";
+import { CreateProviderForm } from "@/components/notification-providers/create";
+import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
 export function SmsProvider({ configured }: NotificationProviderButtonProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog onOpenChange={setIsOpen} open={isOpen}>
 			<ButtonWrapper configured={configured}>
 				<DialogTrigger asChild>
-					<Button variant="secondary" size="lg" className="font-semibold">
-						<MessageText variant="Bold" color="currentColor" />
+					<Button className="font-semibold" size="lg" variant="secondary">
+						<MessageText color="currentColor" variant="Bold" />
 						<span>SMS</span>
 					</Button>
 				</DialogTrigger>
@@ -35,9 +35,9 @@ export function SmsProvider({ configured }: NotificationProviderButtonProps) {
 					</DialogDescription>
 				</DialogHeader>
 				<CreateProviderForm
-					submitWrapper={DialogFooter}
 					channelType="sms"
 					onSuccess={() => setIsOpen(false)}
+					submitWrapper={DialogFooter}
 				/>
 			</DialogContent>
 		</Dialog>

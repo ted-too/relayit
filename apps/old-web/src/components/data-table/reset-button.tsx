@@ -1,16 +1,16 @@
 "use client";
 
+import useHotkeys from "@reecelucas/react-use-hotkeys";
+import { Button } from "@repo/ui/components/shadcn/button";
 import { Kbd } from "@repo/ui/components/shadcn/kbd";
-import { useDataTable } from "@/components/data-table/provider";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
-import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { XIcon } from "lucide-react";
-import { Button } from "@repo/ui/components/shadcn/button";
+import { useDataTable } from "@/components/data-table/provider";
 import { RESET_TABLE_FILTERS } from "@/constants/keybinds";
 
 export function DataTableResetButton() {
@@ -22,9 +22,9 @@ export function DataTableResetButton() {
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<Button
-						variant="ghost"
-						size="sm"
 						onClick={() => table.resetColumnFilters()}
+						size="sm"
+						variant="ghost"
 					>
 						<XIcon className="mr-2 h-4 w-4" />
 						Reset

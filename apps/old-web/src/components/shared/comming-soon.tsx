@@ -15,16 +15,18 @@ export function ComingSoon({
 	side?: React.ComponentProps<typeof TooltipContent>["side"];
 	align?: React.ComponentProps<typeof TooltipContent>["align"];
 }) {
-	if (!enabled) return children;
+	if (!enabled) {
+		return children;
+	}
 
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<span className="text-sidebar-foreground/50" aria-disabled>
+				<span aria-disabled className="text-sidebar-foreground/50">
 					{children}
 				</span>
 			</TooltipTrigger>
-			<TooltipContent side={side} align={align}>
+			<TooltipContent align={align} side={side}>
 				Coming soon
 			</TooltipContent>
 		</Tooltip>

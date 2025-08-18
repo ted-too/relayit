@@ -1,6 +1,6 @@
-import { getStatusColor } from "@/lib/colors";
-import { cn } from "@repo/ui/lib/utils";
 import type { MessageStatus } from "@repo/shared";
+import { cn } from "@repo/ui/lib/utils";
+import { getStatusColor } from "@/lib/colors";
 
 // TODO: Make generic for any status type
 

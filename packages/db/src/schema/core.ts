@@ -4,6 +4,7 @@ import {
 	type Project,
 	project,
 } from "@repo/db/schema/auth";
+import type { ProviderCredentials } from "@repo/shared";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_MESSAGE_STATUSES,
@@ -11,7 +12,6 @@ import {
 	type ProjectProviderConfig,
 	type SendMessagePayload,
 } from "@repo/shared";
-import type { ProviderCredentials } from "@repo/shared";
 import { type InferEnum, type InferSelectModel, relations } from "drizzle-orm";
 import {
 	boolean,
@@ -36,7 +36,7 @@ export const channelEnum = pgEnum("channel", AVAILABLE_CHANNELS);
  */
 export const messageStatusEnum = pgEnum(
 	"message_status",
-	AVAILABLE_MESSAGE_STATUSES,
+	AVAILABLE_MESSAGE_STATUSES
 );
 
 export type MessageStatus = InferEnum<typeof messageStatusEnum>;
@@ -46,7 +46,7 @@ export type MessageStatus = InferEnum<typeof messageStatusEnum>;
  */
 export const providerTypeEnum = pgEnum(
 	"provider_type",
-	AVAILABLE_PROVIDER_TYPES,
+	AVAILABLE_PROVIDER_TYPES
 );
 
 /**
@@ -74,16 +74,16 @@ export const providerCredential = pgTable(
 	(t) => [
 		uniqueIndex("provider_credential_org_slug_unique_idx").on(
 			t.organizationId,
-			t.slug,
+			t.slug
 		),
 		uniqueIndex("provider_credential_org_default_unique_idx").on(
 			t.organizationId,
 			t.channelType,
 			t.providerType,
-			t.orgDefault,
+			t.orgDefault
 		),
 		index("provider_credential_organization_idx").on(t.organizationId),
-	],
+	]
 );
 
 export type NotificationProvider = InferSelectModel<typeof providerCredential>;
@@ -100,7 +100,7 @@ export const providerCredentialRelations = relations(
 			references: [organization.id],
 		}),
 		projectAssociations: many(projectProviderAssociation),
-	}),
+	})
 );
 
 /**
@@ -127,11 +127,11 @@ export const projectProviderAssociation = pgTable(
 	(t) => [
 		uniqueIndex("proj_provider_assoc_unique_idx").on(
 			t.projectId,
-			t.providerCredentialId,
+			t.providerCredentialId
 		),
 		index("ppa_project_idx").on(t.projectId),
 		index("ppa_provider_idx").on(t.providerCredentialId),
-	],
+	]
 );
 
 export type ProjectProviderAssociation = InferSelectModel<
@@ -153,7 +153,7 @@ export const projectProviderAssociationRelations = relations(
 			fields: [projectProviderAssociation.providerCredentialId],
 			references: [providerCredential.id],
 		}),
-	}),
+	})
 );
 
 /**
@@ -186,7 +186,7 @@ export const message = pgTable(
 	(t) => [
 		index("message_project_status_idx").on(t.projectId, t.status),
 		index("message_api_key_idx").on(t.apiKeyId),
-	],
+	]
 );
 
 export type Message = InferSelectModel<typeof message> & {
@@ -227,7 +227,7 @@ export const messageEvent = pgTable(
 		details: jsonb("details"),
 		occurredAt: timestamp("occurred_at").defaultNow().notNull(),
 	},
-	(t) => [index("message_event_message_idx").on(t.messageId)],
+	(t) => [index("message_event_message_idx").on(t.messageId)]
 );
 
 /**
@@ -261,7 +261,7 @@ export const webhookEndpoint = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 	},
-	(t) => [index("webhook_endpoint_project_idx").on(t.projectId)],
+	(t) => [index("webhook_endpoint_project_idx").on(t.projectId)]
 );
 
 /**
@@ -275,5 +275,5 @@ export const webhookEndpointRelations = relations(
 			fields: [webhookEndpoint.projectId],
 			references: [project.id],
 		}),
-	}),
+	})
 );

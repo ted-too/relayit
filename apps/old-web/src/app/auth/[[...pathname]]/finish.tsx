@@ -1,10 +1,10 @@
 "use client";
-import { CombinedLogo } from "@/components/shared/logo";
-import { useAppForm } from "@repo/ui/components/shadcn/form";
-import { type User, authClient } from "@/lib/auth-client";
 import { type SignUpRequest, signUpSchema } from "@repo/shared";
+import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CombinedLogo } from "@/components/shared/logo";
+import { authClient, type User } from "@/lib/auth-client";
 
 export function FinishSocialSignUpForm({
 	initialData,
@@ -30,10 +30,11 @@ export function FinishSocialSignUpForm({
 				name: value.name,
 			});
 
-			if (error)
+			if (error) {
 				return toast.error("Failed to complete sign up", {
 					description: "A user with this phone number already exists",
 				});
+			}
 
 			toast.success("Sign up completed successfully");
 
@@ -43,42 +44,42 @@ export function FinishSocialSignUpForm({
 
 	return (
 		<form
+			className="flex w-full max-w-md flex-col"
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="w-full max-w-md flex flex-col"
 		>
 			{!noTitle && (
-				<h1 className="text-3xl font-bold mb-1 text-center">
+				<h1 className="mb-1 text-center font-bold text-3xl">
 					Complete your Sign Up
 				</h1>
 			)}
 			{!noDescription && (
-				<p className="text-center text-muted-foreground mb-6">
+				<p className="mb-6 text-center text-muted-foreground">
 					Just a few more details to get started.
 				</p>
 			)}
 			<div className="flex flex-col gap-4">
 				<form.AppField
+					children={(field) => <field.TextField label="Name" type="text" />}
 					name="name"
-					children={(field) => <field.TextField type="text" label="Name" />}
 				/>
 				{/* <div className="grid-cols-2 grid gap-4"> */}
 				<form.AppField
-					name="email"
 					children={(field) => (
 						<field.TextField
-							type="email"
-							label="Email"
 							disabled={!!initialData?.email}
+							label="Email"
+							type="email"
 						/>
 					)}
+					name="email"
 				/>
 				{/* </div> */}
 
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-4" size="lg">
+					<form.SubmitButton className="mt-4 w-full" size="lg">
 						Complete Sign Up
 					</form.SubmitButton>
 				</form.AppForm>
@@ -91,8 +92,8 @@ export function FinishSocialSignUp({ initialData }: { initialData?: User }) {
 	const router = useRouter();
 
 	return (
-		<div className="relative grow flex items-center justify-center w-full h-full">
-			<div className="flex items-center w-full justify-between absolute top-0 right-1/2 lg:translate-x-0 translate-x-1/2 lg:right-0 text-sm text-muted-foreground">
+		<div className="relative flex h-full w-full grow items-center justify-center">
+			<div className="absolute top-0 right-1/2 flex w-full translate-x-1/2 items-center justify-between text-muted-foreground text-sm lg:right-0 lg:translate-x-0">
 				<CombinedLogo />
 				{/* Optional: Link to cancel or go back */}
 			</div>

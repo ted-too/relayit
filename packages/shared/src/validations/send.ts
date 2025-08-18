@@ -1,9 +1,9 @@
 import z from "zod/v3"; // We will leave this as v3 for now see https://github.com/rhinobase/hono-openapi/issues/97
 import {
+	AVAILABLE_DISCORD_PROVIDER_TYPES,
 	AVAILABLE_EMAIL_PROVIDER_TYPES,
 	AVAILABLE_SMS_PROVIDER_TYPES,
 	AVAILABLE_WHATSAPP_PROVIDER_TYPES,
-	AVAILABLE_DISCORD_PROVIDER_TYPES,
 	type ChannelType,
 } from "../constants/providers";
 

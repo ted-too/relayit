@@ -1,5 +1,5 @@
 export type SupportedLanguages = "tsx" | "curl";
 
-export interface Config {
+export type Config = {
 	codeLanguage: SupportedLanguages;
-}
+};

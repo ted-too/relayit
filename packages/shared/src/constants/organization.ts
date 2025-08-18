@@ -17,7 +17,7 @@ export type OrganizationLogoGradientKey =
 	keyof typeof ORGANIZATION_LOGO_GRADIENTS;
 
 export function getOrganizationLogoGradient(
-	key: OrganizationLogoGradientKey,
+	key: OrganizationLogoGradientKey
 ): string {
 	return ORGANIZATION_LOGO_GRADIENTS[key];
 }

@@ -1,9 +1,8 @@
-import { ProjectNotificationProviderCard } from "@/components/notification-providers/card";
-import type { ConfiguredIndicatorType } from "@/components/notification-providers/providers/configured-indicator";
-import { DiscordProvider } from "@/components/notification-providers/providers/discord";
-import { EmailProvider } from "@/components/notification-providers/providers/email";
-import { SmsProvider } from "@/components/notification-providers/providers/sms";
-import { WhatsappProvider } from "@/components/notification-providers/providers/whatsapp";
+import type {
+	NotificationProvider,
+	ProjectDetails,
+	ProjectProviderAssociation,
+} from "@repo/db";
 import {
 	Card,
 	CardContent,
@@ -11,11 +10,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import type {
-	NotificationProvider,
-	ProjectDetails,
-	ProjectProviderAssociation,
-} from "@repo/db";
+import { ProjectNotificationProviderCard } from "@/components/notification-providers/card";
+import type { ConfiguredIndicatorType } from "@/components/notification-providers/providers/configured-indicator";
+import { DiscordProvider } from "@/components/notification-providers/providers/discord";
+import { EmailProvider } from "@/components/notification-providers/providers/email";
+import { SmsProvider } from "@/components/notification-providers/providers/sms";
+import { WhatsappProvider } from "@/components/notification-providers/providers/whatsapp";
 
 export async function ChannelsTab({
 	project,
@@ -40,7 +40,9 @@ export async function ChannelsTab({
 	}
 
 	for (const provider of allProviders) {
-		if (configurationMap[provider.channelType] !== "not-configured") continue;
+		if (configurationMap[provider.channelType] !== "not-configured") {
+			continue;
+		}
 		configurationMap[provider.channelType] = "default";
 	}
 
@@ -53,7 +55,7 @@ export async function ChannelsTab({
 
 	for (const provider of allProviders) {
 		const config = project.providerAssociations.find(
-			(pa) => pa.providerCredentialId === provider.id,
+			(pa) => pa.providerCredentialId === provider.id
 		);
 		if (config) {
 			projectConfiguredProviders.push({ provider, config });
@@ -63,11 +65,11 @@ export async function ChannelsTab({
 	}
 
 	return (
-		<div className="flex flex-col gap-4 w-full">
+		<div className="flex w-full flex-col gap-4">
 			<Card className="max-w-none">
 				<CardHeader className="flex flex-row items-center justify-between">
 					<div className="flex flex-col">
-						<CardTitle className="font-semibold tracking-tight text-xl">
+						<CardTitle className="font-semibold text-xl tracking-tight">
 							Channels
 						</CardTitle>
 						<CardDescription>
@@ -90,14 +92,14 @@ export async function ChannelsTab({
 				<CardContent className="flex flex-col gap-4">
 					{projectConfiguredProviders.length > 0 && (
 						<div className="flex flex-col gap-2">
-							<span className="text-sm font-medium">Configured Channels</span>
+							<span className="font-medium text-sm">Configured Channels</span>
 							<div className="flex flex-col gap-4">
 								{projectConfiguredProviders.map(({ provider, config }) => (
 									<ProjectNotificationProviderCard
-										key={provider.id}
-										provider={provider}
 										config={config}
+										key={provider.id}
 										project={project}
+										provider={provider}
 									/>
 								))}
 							</div>
@@ -105,21 +107,21 @@ export async function ChannelsTab({
 					)}
 					{restProviders.length > 0 && (
 						<div className="flex flex-col gap-2">
-							<span className="text-sm font-medium">Available Channels</span>
+							<span className="font-medium text-sm">Available Channels</span>
 							<div className="flex flex-col gap-4">
 								{restProviders.map((provider) => (
 									<ProjectNotificationProviderCard
 										key={provider.id}
-										provider={provider}
 										project={project}
+										provider={provider}
 									/>
 								))}
 							</div>
 						</div>
 					)}
 					{allProviders.length === 0 && (
-						<Card className="h-17.5 flex max-w-none items-center p-4 rounded-lg">
-							<span className="text-sm text-muted-foreground">
+						<Card className="flex h-17.5 max-w-none items-center rounded-lg p-4">
+							<span className="text-muted-foreground text-sm">
 								No providers configured. To set up a provider click on any of
 								the providers above
 							</span>

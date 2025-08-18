@@ -1,8 +1,8 @@
-import { type Transaction, db, schema } from "@repo/db";
+import { db, schema, type Transaction } from "@repo/db";
 import {
+	createGenericError,
 	type MessageStatus,
 	type Result,
-	createGenericError,
 } from "@repo/shared";
 import { eq } from "drizzle-orm";
 
@@ -25,7 +25,7 @@ export type MessageWithRelations = typeof schema.message.$inferSelect & {
  * @returns A Result object containing the message details with relations, or an error.
  */
 export async function fetchMessageDetails(
-	messageId: string,
+	messageId: string
 ): Promise<Result<MessageWithRelations>> {
 	// TODO: Add a check to see the status of the provider so we can choose a different one if available and primary failed
 	try {
@@ -44,7 +44,7 @@ export async function fetchMessageDetails(
 			await db.query.projectProviderAssociation.findMany({
 				where: eq(
 					schema.projectProviderAssociation.projectId,
-					messageDetails.projectId,
+					messageDetails.projectId
 				),
 				with: {
 					providerCredential: true,
@@ -54,7 +54,7 @@ export async function fetchMessageDetails(
 			.filter(
 				(ppa) =>
 					ppa.providerCredential.channelType === messageDetails.channel &&
-					ppa.providerCredential.providerType === messageDetails.providerType,
+					ppa.providerCredential.providerType === messageDetails.providerType
 			)
 			.sort((a, b) => a.priority - b.priority);
 
@@ -62,7 +62,7 @@ export async function fetchMessageDetails(
 		if (!projectProviderAssociation) {
 			return {
 				error: createGenericError(
-					`No project provider association found for message ${messageId}`,
+					`No project provider association found for message ${messageId}`
 				),
 				data: null,
 			};
@@ -97,13 +97,13 @@ export async function updateMessageStatus(
 	tx: Transaction | typeof db,
 	messageId: string,
 	status: MessageStatus,
-	reason?: string,
+	reason?: string
 ): Promise<Result<void>> {
 	try {
 		await tx
 			.update(schema.message)
 			.set({
-				status: status,
+				status,
 				statusReason: reason ?? null,
 				lastStatusAt: new Date(),
 				updatedAt: new Date(), // Also update the general updated timestamp
@@ -133,12 +133,12 @@ export async function logMessageEvent(
 	tx: Transaction | typeof db,
 	messageId: string,
 	status: MessageStatus,
-	details?: any,
+	details?: any
 ): Promise<Result<void>> {
 	try {
 		await tx.insert(schema.messageEvent).values({
-			messageId: messageId,
-			status: status,
+			messageId,
+			status,
 			details: details ?? null,
 		});
 		// Return success result

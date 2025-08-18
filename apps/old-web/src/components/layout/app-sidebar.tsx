@@ -1,8 +1,5 @@
 "use client";
 
-import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
-import { DialogAction } from "@/components/shared/dialog-action";
-import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Collapsible,
@@ -28,6 +25,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@repo/ui/components/shadcn/dropdown-menu";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import {
 	Sidebar,
 	SidebarContent,
@@ -48,18 +46,13 @@ import {
 	useSidebar,
 } from "@repo/ui/components/shadcn/sidebar";
 import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@repo/ui/components/shadcn/tooltip";
 import { SIDEBAR_KEYBOARD_SHORTCUT } from "@repo/ui/constants";
-import {
-	type Organization,
-	type OrganizationMember,
-	authClient,
-} from "@/lib/auth-client";
 import { cn } from "@repo/ui/lib/utils";
-import { trpc } from "@/trpc/client";
-import {
-	activeOrganizationQueryKey,
-	usersOrganizationsQueryOptions,
-} from "@/trpc/queries/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Category2, type IconProps } from "iconsax-react";
 import {
@@ -76,12 +69,22 @@ import {
 	SettingsIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
 import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/shadcn/tooltip";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { OrganizationLogo, SideBarUserNav } from "@/components/layout/user-nav";
+import { DialogAction } from "@/components/shared/dialog-action";
+import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
+import {
+	authClient,
+	type Organization,
+	type OrganizationMember,
+} from "@/lib/auth-client";
+import { trpc } from "@/trpc/client";
+import {
+	activeOrganizationQueryKey,
+	usersOrganizationsQueryOptions,
+} from "@/trpc/queries/auth";
 
 /**
  * Core types for sidebar navigation
@@ -179,17 +182,17 @@ const MENU: Menu = {
  */
 function filterMenuForUser(
 	menu: Menu,
-	userMembership: OrganizationMember,
+	userMembership: OrganizationMember
 ): Menu {
 	return {
 		activity: menu.activity.filter((item) =>
-			!item.isEnabled ? true : item.isEnabled(userMembership),
+			item.isEnabled ? item.isEnabled(userMembership) : true
 		),
 		settings: menu.settings.filter((item) =>
-			!item.isEnabled ? true : item.isEnabled(userMembership),
+			item.isEnabled ? item.isEnabled(userMembership) : true
 		),
 		help: menu.help.filter((item) =>
-			!item.isEnabled ? true : item.isEnabled(userMembership),
+			item.isEnabled ? item.isEnabled(userMembership) : true
 		),
 	};
 }
@@ -199,13 +202,19 @@ function filterMenuForUser(
  * TODO: Fix sub menu items
  */
 function isActiveRoute(itemUrl: string, pathname: string): boolean {
-	if (!pathname) return false;
+	if (!pathname) {
+		return false;
+	}
 
 	const pathnameParts = `/${pathname.split("/").slice(3).join("/")}`;
 
-	if (itemUrl === "/") return pathname === pathnameParts;
+	if (itemUrl === "/") {
+		return pathname === pathnameParts;
+	}
 
-	if (pathnameParts.startsWith(itemUrl)) return true;
+	if (pathnameParts.startsWith(itemUrl)) {
+		return true;
+	}
 
 	return false;
 }
@@ -213,11 +222,7 @@ function isActiveRoute(itemUrl: string, pathname: string): boolean {
 /**
  * Organization logo and selector component
  */
-function SidebarLogo({
-	currentUserOrg,
-}: {
-	currentUserOrg: Organization;
-}) {
+function SidebarLogo({ currentUserOrg }: { currentUserOrg: Organization }) {
 	const { state, isMobile } = useSidebar();
 	const router = useRouter();
 	const pathname = usePathname();
@@ -226,11 +231,11 @@ function SidebarLogo({
 	const queryClient = useQueryClient();
 
 	const { data: userOrgs, isPending } = useQuery(
-		usersOrganizationsQueryOptions(),
+		usersOrganizationsQueryOptions()
 	);
 
 	const activeOrganization = userOrgs?.find(
-		(org) => org.id === currentUserOrg.id,
+		(org) => org.id === currentUserOrg.id
 	);
 
 	return (
@@ -240,48 +245,48 @@ function SidebarLogo({
 					"flex gap-2",
 					state === "collapsed"
 						? "flex-col"
-						: "flex-row justify-between items-center",
+						: "flex-row items-center justify-between"
 				)}
 			>
 				<SidebarMenuItem className="w-full">
 					<DropdownMenu>
-						<DropdownMenuTrigger disabled={isPending} asChild>
+						<DropdownMenuTrigger asChild disabled={isPending}>
 							{isPending ? (
 								<Skeleton
 									className={cn(
 										"h-12 w-full",
-										state === "collapsed" && "size-8 rounded-full",
+										state === "collapsed" && "size-8 rounded-full"
 									)}
 								/>
 							) : (
 								<SidebarMenuButton
-									size="lg"
 									className={cn(
 										"data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
-										state === "collapsed" && "h-10 w-10 rounded-full",
+										state === "collapsed" && "h-10 w-10 rounded-full"
 									)}
+									size="lg"
 								>
 									<div
 										className={cn(
-											"flex items-center gap-2  min-w-0",
-											state === "collapsed" && "justify-center",
+											"flex min-w-0 items-center gap-2",
+											state === "collapsed" && "justify-center"
 										)}
 									>
 										<div
-											className="flex items-center justify-center transition-all rounded-full size-8"
+											className="flex size-8 items-center justify-center rounded-full transition-all"
 											suppressHydrationWarning={true}
 										>
 											<OrganizationLogo
 												logoUrl={activeOrganization?.logo}
-												orgMetadata={activeOrganization?.metadata}
 												name={activeOrganization?.name ?? ""}
+												orgMetadata={activeOrganization?.metadata}
 												size="sm"
 											/>
 										</div>
 										<div
 											className={cn(
-												"text-sm font-medium leading-none truncate",
-												state === "collapsed" && "hidden",
+												"truncate font-medium text-sm leading-none",
+												state === "collapsed" && "hidden"
 											)}
 										>
 											{activeOrganization?.name ?? "Select Organization"}
@@ -294,16 +299,15 @@ function SidebarLogo({
 							)}
 						</DropdownMenuTrigger>
 						<DropdownMenuContent
-							className="rounded-lg w-56"
 							align="start"
+							className="w-56 rounded-lg"
 							side={isMobile ? "bottom" : "right"}
 							sideOffset={4}
 						>
-							<DropdownMenuLabel className="text-xs text-muted-foreground">
+							<DropdownMenuLabel className="text-muted-foreground text-xs">
 								Organizations
 							</DropdownMenuLabel>
 							<DropdownMenuRadioGroup
-								value={currentUserOrg.slug}
 								onValueChange={async (value) => {
 									const { error } = await authClient.organization.setActive({
 										organizationSlug: value,
@@ -311,7 +315,7 @@ function SidebarLogo({
 
 									if (error) {
 										toast.error(
-											error.message || "Error setting active organization",
+											error.message || "Error setting active organization"
 										);
 									}
 
@@ -321,18 +325,19 @@ function SidebarLogo({
 
 									router.push(`/~/${value}/${activePage}`);
 								}}
+								value={currentUserOrg.slug}
 							>
 								{userOrgs?.map((org) => (
 									<DropdownMenuRadioItem
+										className="min-w-0 justify-between"
 										key={org.id}
 										value={org.slug}
-										className="justify-between min-w-0"
 									>
 										<span className="truncate">{org.name}</span>
 										<OrganizationLogo
 											logoUrl={org.logo}
-											orgMetadata={org.metadata}
 											name={org.name}
+											orgMetadata={org.metadata}
 											size="sm"
 										/>
 									</DropdownMenuRadioItem>
@@ -386,39 +391,19 @@ function NavItemComponent({
 
 	return (
 		<Collapsible
-			key={item.title}
 			asChild
-			defaultOpen={isActive}
 			className="group/collapsible"
+			defaultOpen={isActive}
+			key={item.title}
 		>
 			<SidebarMenuItem>
-				{!hasSubitems ? (
-					<SidebarMenuButton
-						isAvailable={item.isAvailable}
-						asChild
-						tooltip={item.title}
-					>
-						<Link
-							href={`/~/${orgSlug}${item.url}`}
-							data-active={isActive}
-							className="flex w-full items-center gap-2"
-						>
-							{item.icon && (
-								<item.icon
-									className={cn(isActive && "text-secondary-foreground")}
-									color="currentColor"
-								/>
-							)}
-							<span>{item.title}</span>
-						</Link>
-					</SidebarMenuButton>
-				) : (
+				{hasSubitems ? (
 					<>
 						<CollapsibleTrigger asChild>
 							<SidebarMenuButton
+								isActive={isActive}
 								isAvailable={item.isAvailable}
 								tooltip={item.title}
-								isActive={isActive}
 							>
 								{item.icon && <item.icon color="currentColor" />}
 
@@ -434,16 +419,16 @@ function NavItemComponent({
 									<SidebarMenuSubItem key={subItem.title}>
 										<SidebarMenuSubButton asChild>
 											<Link
-												href={`/~/${orgSlug}${subItem.url}`}
-												data-active={isActiveRoute(subItem.url, pathname)}
 												className="flex w-full items-center"
+												data-active={isActiveRoute(subItem.url, pathname)}
+												href={`/~/${orgSlug}${subItem.url}`}
 											>
 												{subItem.icon && (
 													<span className="mr-2">
 														<subItem.icon
 															className={cn(
 																"h-4 w-4 text-muted-foreground",
-																isActive && "text-secondary-foreground",
+																isActive && "text-secondary-foreground"
 															)}
 														/>
 													</span>
@@ -456,6 +441,26 @@ function NavItemComponent({
 							</SidebarMenuSub>
 						</CollapsibleContent>
 					</>
+				) : (
+					<SidebarMenuButton
+						asChild
+						isAvailable={item.isAvailable}
+						tooltip={item.title}
+					>
+						<Link
+							className="flex w-full items-center gap-2"
+							data-active={isActive}
+							href={`/~/${orgSlug}${item.url}`}
+						>
+							{item.icon && (
+								<item.icon
+									className={cn(isActive && "text-secondary-foreground")}
+									color="currentColor"
+								/>
+							)}
+							<span>{item.title}</span>
+						</Link>
+					</SidebarMenuButton>
 				)}
 			</SidebarMenuItem>
 		</Collapsible>
@@ -467,7 +472,7 @@ function SidebarNotifications() {
 		trpc.misc.listInvitations.useQuery();
 
 	const { refetch: refetchUserOrgs } = useQuery(
-		usersOrganizationsQueryOptions(),
+		usersOrganizationsQueryOptions()
 	);
 
 	return (
@@ -475,25 +480,25 @@ function SidebarNotifications() {
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
 					<Button
-						variant="ghost"
+						className="relative mx-auto h-8 w-8 p-1.5"
 						size="icon"
-						className="relative h-8 w-8 p-1.5 mx-auto"
+						variant="ghost"
 					>
 						<BellIcon className="size-4" />
 						{invitations && invitations.length > 0 && (
-							<span className="absolute -top-0 -right-0 flex size-4 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
+							<span className="-top-0 -right-0 absolute flex size-4 items-center justify-center rounded-full bg-blue-500 text-white text-xs">
 								{invitations.length}
 							</span>
 						)}
 					</Button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="start" side="right" className="w-80">
+				<DropdownMenuContent align="start" className="w-80" side="right">
 					<DropdownMenuLabel>Pending Invitations</DropdownMenuLabel>
 					{/* TODO: Add a loading state */}
 					<div className="flex flex-col gap-2">
 						{invitations && invitations.length > 0 ? (
 							invitations.map((invitation) => (
-								<div key={invitation.id} className="flex flex-col gap-2">
+								<div className="flex flex-col gap-2" key={invitation.id}>
 									<DropdownMenuItem
 										className="flex flex-col items-start gap-1 p-3"
 										onSelect={(e) => e.preventDefault()}
@@ -501,17 +506,15 @@ function SidebarNotifications() {
 										<div className="font-medium">
 											{invitation?.organization?.name}
 										</div>
-										<div className="text-xs text-muted-foreground">
+										<div className="text-muted-foreground text-xs">
 											Expires: {new Date(invitation.expiresAt).toLocaleString()}
 										</div>
-										<div className="text-xs text-muted-foreground">
+										<div className="text-muted-foreground text-xs">
 											Role: {invitation.role}
 										</div>
 									</DropdownMenuItem>
 									<DialogAction
-										title="Accept Invitation"
 										description="Are you sure you want to accept this invitation?"
-										type="default"
 										onClick={async () => {
 											const { error } =
 												await authClient.organization.acceptInvitation({
@@ -520,7 +523,7 @@ function SidebarNotifications() {
 
 											if (error) {
 												toast.error(
-													error.message || "Error accepting invitation",
+													error.message || "Error accepting invitation"
 												);
 											} else {
 												toast.success("Invitation accepted successfully");
@@ -528,6 +531,8 @@ function SidebarNotifications() {
 												await refetchUserOrgs();
 											}
 										}}
+										title="Accept Invitation"
+										type="default"
 									>
 										<Button size="sm" variant="secondary">
 											Accept Invitation
@@ -550,12 +555,12 @@ function SidebarNotifications() {
 /**
  * Main sidebar component
  */
-interface AppSidebarProps {
+type AppSidebarProps = {
 	children: React.ReactNode;
 	currentUserOrg: Organization;
 	currentUserOrgMember: OrganizationMember;
 	sidebarOpen: boolean;
-}
+};
 
 export function AppSidebar({
 	children,
@@ -585,14 +590,14 @@ export function AppSidebar({
 					<SidebarGroup>
 						<SidebarMenu>
 							<SidebarMenuButton
-								isAvailable={false}
 								asChild
+								isAvailable={false}
 								tooltip="Dashboard"
 							>
 								<Link
-									href={`/~/${currentUserOrg.slug}`}
-									data-active={isActiveRoute(`/~/${currentUserOrg.slug}`, "/")}
 									className="flex w-full items-center gap-2"
+									data-active={isActiveRoute(`/~/${currentUserOrg.slug}`, "/")}
+									href={`/~/${currentUserOrg.slug}`}
 								>
 									<Category2 color="currentColor" />
 									<span>Dashboard</span>
@@ -607,8 +612,8 @@ export function AppSidebar({
 						<SidebarMenu>
 							{filteredMenu.activity.map((item) => (
 								<NavItemComponent
-									key={item.title}
 									item={item}
+									key={item.title}
 									orgSlug={currentUserOrg.slug}
 								/>
 							))}
@@ -621,8 +626,8 @@ export function AppSidebar({
 						<SidebarMenu className="gap-1">
 							{filteredMenu.settings.map((item) => (
 								<NavItemComponent
-									key={item.title}
 									item={item}
+									key={item.title}
 									orgSlug={currentUserOrg.slug}
 								/>
 							))}
@@ -635,12 +640,12 @@ export function AppSidebar({
 						<SidebarMenu>
 							{filteredMenu.help.map((item) => (
 								<SidebarMenuItem key={item.name}>
-									<SidebarMenuButton isAvailable={item.isAvailable} asChild>
+									<SidebarMenuButton asChild isAvailable={item.isAvailable}>
 										<a
-											href={item.url}
-											target="_blank"
-											rel="noopener noreferrer"
 											className="flex w-full items-center gap-2"
+											href={item.url}
+											rel="noopener noreferrer"
+											target="_blank"
 										>
 											<span className="mr-2">
 												<item.icon className="h-4 w-4" />
@@ -671,7 +676,7 @@ export function AppSidebar({
 								</p>
 							</TooltipContent>
 						</Tooltip>
-						<SidebarMenuItem className="min-h-12 flex items-center">
+						<SidebarMenuItem className="flex min-h-12 items-center">
 							<SideBarUserNav />
 						</SidebarMenuItem>
 					</SidebarMenu>
@@ -680,7 +685,7 @@ export function AppSidebar({
 			</Sidebar>
 			<SidebarInset>
 				<div
-					className="flex flex-col size-full pl-2 pr-3 py-4"
+					className="flex size-full flex-col py-4 pr-3 pl-2"
 					style={
 						{
 							"--content-height": "calc(100svh - 1rem)",

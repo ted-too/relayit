@@ -21,8 +21,8 @@ function Card({
 					<div
 						{...wrapperProps}
 						className={cn(
-							"rounded-xl bg-background shadow-md flex flex-col w-full h-full",
-							wrapperClassName,
+							"flex h-full w-full flex-col rounded-xl bg-background shadow-md",
+							wrapperClassName
 						)}
 					>
 						{children}
@@ -33,9 +33,9 @@ function Card({
 	return (
 		<div
 			className={cn(
-				"rounded-xl border bg-card text-card-foreground shadow max-w-5xl w-full",
-				variant === "shadow" && "p-2.5 pb-3 bg-sidebar border shadow-sm",
-				className,
+				"w-full max-w-5xl rounded-xl border bg-card text-card-foreground shadow",
+				variant === "shadow" && "border bg-sidebar p-2.5 pb-3 shadow-sm",
+				className
 			)}
 			{...props}
 		>
@@ -65,7 +65,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
-			className={cn("text-sm text-muted-foreground", className)}
+			className={cn("text-muted-foreground text-sm", className)}
 			{...props}
 		/>
 	);
@@ -74,11 +74,11 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
 function CardAction({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
-			data-slot="card-action"
 			className={cn(
 				"col-start-2 row-span-2 row-start-1 self-start justify-self-end",
-				className,
+				className
 			)}
+			data-slot="card-action"
 			{...props}
 		/>
 	);

@@ -1,10 +1,10 @@
 import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
 import { createContext, useCallback, useContext, useState } from "react";
 
-interface ControlsContextType {
+type ControlsContextType = {
 	open: boolean;
 	setOpen: React.Dispatch<React.SetStateAction<boolean>>;
-}
+};
 
 export const ControlsContext = createContext<ControlsContextType | null>(null);
 
@@ -25,7 +25,7 @@ export function ControlsProvider({
 			// This sets the cookie to keep the controls state.
 			document.cookie = `${SECONDARY_SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=31536000`;
 		},
-		[open],
+		[open]
 	);
 
 	return (

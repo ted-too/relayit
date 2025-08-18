@@ -12,10 +12,9 @@ export function useCopyToClipboard() {
 			{ timeout, withToast }: { timeout?: number; withToast?: boolean } = {
 				timeout: 3000,
 				withToast: false,
-			},
+			}
 		) => {
 			if (!navigator?.clipboard) {
-				console.warn("Clipboard not supported");
 				return false;
 			}
 
@@ -34,13 +33,12 @@ export function useCopyToClipboard() {
 				}
 
 				return true;
-			} catch (error) {
-				console.warn("Copy failed", error);
+			} catch (_error) {
 				setText(null);
 				return false;
 			}
 		},
-		[],
+		[]
 	);
 
 	return { text, copy, isCopied: text !== null };

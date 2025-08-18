@@ -1,6 +1,8 @@
 "use client";
 
+import { Button } from "@repo/ui/components/shadcn/button";
 import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { Separator } from "@repo/ui/components/shadcn/separator";
 import {
 	Sheet,
 	SheetClose,
@@ -9,9 +11,6 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "@repo/ui/components/shadcn/sheet";
-import { useDataTable } from "@/components/data-table/provider";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Separator } from "@repo/ui/components/shadcn/separator";
 import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
 import {
 	Tooltip,
@@ -22,12 +21,13 @@ import {
 import { cn } from "@repo/ui/lib/utils";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo } from "react";
+import { useDataTable } from "@/components/data-table/provider";
 
-export interface DataTableSheetDetailsProps {
+export type DataTableSheetDetailsProps = {
 	title?: string;
 	titleClassName?: string;
 	children?: ReactNode;
-}
+};
 
 export function DataTableSheetDetails({
 	title,
@@ -39,11 +39,13 @@ export function DataTableSheetDetails({
 	const selectedRowKey = Object.keys(rowSelection)?.[0];
 
 	const selectedRow = useMemo(() => {
-		if (isLoading && !selectedRowKey) return;
+		if (isLoading && !selectedRowKey) {
+			return;
+		}
 		return table
 			.getCoreRowModel()
 			.flatRows.find((row) => row.id === selectedRowKey);
-	}, [selectedRowKey, isLoading]);
+	}, [selectedRowKey, isLoading, table.getCoreRowModel]);
 
 	const index = table
 		.getCoreRowModel()
@@ -51,31 +53,39 @@ export function DataTableSheetDetails({
 
 	const nextId = useMemo(
 		() => table.getCoreRowModel().flatRows[index + 1]?.id,
-		[index, isLoading],
+		[index, table.getCoreRowModel]
 	);
 
 	const prevId = useMemo(
 		() => table.getCoreRowModel().flatRows[index - 1]?.id,
-		[index, isLoading],
+		[index, table.getCoreRowModel]
 	);
 
 	const onPrev = useCallback(() => {
-		if (prevId) table.setRowSelection({ [prevId]: true });
-	}, [prevId, isLoading]);
+		if (prevId) {
+			table.setRowSelection({ [prevId]: true });
+		}
+	}, [prevId, table.setRowSelection]);
 
 	const onNext = useCallback(() => {
-		if (nextId) table.setRowSelection({ [nextId]: true });
-	}, [nextId, isLoading]);
+		if (nextId) {
+			table.setRowSelection({ [nextId]: true });
+		}
+	}, [nextId, table.setRowSelection]);
 
 	useEffect(() => {
 		const down = (e: KeyboardEvent) => {
-			if (!selectedRowKey) return;
+			if (!selectedRowKey) {
+				return;
+			}
 
 			// REMINDER: prevent dropdown navigation inside of sheet to change row selection
 			const activeElement = document.activeElement;
 			const isMenuActive = activeElement?.closest('[role="menu"]');
 
-			if (isMenuActive) return;
+			if (isMenuActive) {
+				return;
+			}
 
 			if (e.key === "ArrowUp") {
 				e.preventDefault();
@@ -93,7 +103,6 @@ export function DataTableSheetDetails({
 
 	return (
 		<Sheet
-			open={!!selectedRowKey}
 			onOpenChange={() => {
 				// REMINDER: focus back to the row that was selected
 				// We need to manually focus back due to missing Trigger component
@@ -106,6 +115,7 @@ export function DataTableSheetDetails({
 				// We need a minimal delay to allow the sheet to close before focusing back to the row
 				setTimeout(() => el?.focus(), 0);
 			}}
+			open={!!selectedRowKey}
 		>
 			<SheetContent
 				// onCloseAutoFocus={(e) => e.preventDefault()}
@@ -126,11 +136,11 @@ export function DataTableSheetDetails({
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
-											size="icon"
-											variant="ghost"
 											className="h-7 w-7"
 											disabled={!prevId}
 											onClick={onPrev}
+											size="icon"
+											variant="ghost"
 										>
 											<ChevronUpIcon className="h-5 w-5" />
 											<span className="sr-only">Previous</span>
@@ -147,11 +157,11 @@ export function DataTableSheetDetails({
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
-											size="icon"
-											variant="ghost"
 											className="h-7 w-7"
 											disabled={!nextId}
 											onClick={onNext}
+											size="icon"
+											variant="ghost"
 										>
 											<ChevronDownIcon className="h-5 w-5" />
 											<span className="sr-only">Next</span>
@@ -164,9 +174,9 @@ export function DataTableSheetDetails({
 									</TooltipContent>
 								</Tooltip>
 							</TooltipProvider>
-							<Separator orientation="vertical" className="mx-1" />
-							<SheetClose autoFocus={true} asChild>
-								<Button size="icon" variant="ghost" className="h-7 w-7">
+							<Separator className="mx-1" orientation="vertical" />
+							<SheetClose asChild autoFocus={true}>
+								<Button className="h-7 w-7" size="icon" variant="ghost">
 									<XIcon className="h-5 w-5" />
 									<span className="sr-only">Close</span>
 								</Button>

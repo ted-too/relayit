@@ -1,6 +1,3 @@
-import { ApiKeysCardContent } from "@/components/api-keys";
-import { CreateApiKeyDialog } from "@/components/api-keys/create";
-import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	Card,
 	CardDescription,
@@ -8,15 +5,17 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import { headers as headersFn } from "next/headers";
+import { notFound } from "next/navigation";
+import { ApiKeysCardContent } from "@/components/api-keys";
+import { CreateApiKeyDialog } from "@/components/api-keys/create";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	apiKeysListQueryOptions,
 	currentMemberQueryOptions,
 } from "@/trpc/queries/auth";
 import { getQueryClient } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
-import { headers as headersFn } from "next/headers";
-import { notFound } from "next/navigation";
 
 export default async function ApiKeysPage({
 	params,
@@ -31,12 +30,12 @@ export default async function ApiKeysPage({
 
 	try {
 		const currentMember = await queryClient.ensureQueryData(
-			currentMemberQueryOptions({ headers }),
+			currentMemberQueryOptions({ headers })
 		);
 
 		return (
 			<HydrationBoundary state={dehydrate(queryClient)}>
-				<Card variant="shadow" className="mx-auto">
+				<Card className="mx-auto" variant="shadow">
 					<CardHeader className="flex flex-row items-center justify-between">
 						<div>
 							<CardTitle className="text-lg md:text-xl">API Keys</CardTitle>
@@ -48,12 +47,12 @@ export default async function ApiKeysPage({
 					</CardHeader>
 					<ApiKeysCardContent organizationId={currentMember.organizationId} />
 					<CardFooter className="rounded-b-xl border-t bg-muted p-6 dark:bg-transparent">
-						<CardDescription className="text-xs md:text-sm h-max flex items-center gap-2">
+						<CardDescription className="flex h-max items-center gap-2 text-xs md:text-sm">
 							Organization Slug:
 							<CopyToClipboardContainer
 								align="horizontal"
-								side="right"
 								inset="outside"
+								side="right"
 								sideOffset={32}
 							>
 								{orgSlug}
@@ -63,8 +62,7 @@ export default async function ApiKeysPage({
 				</Card>
 			</HydrationBoundary>
 		);
-	} catch (error) {
-		console.error(error);
+	} catch (_error) {
 		throw notFound();
 	}
 }

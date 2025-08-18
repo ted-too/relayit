@@ -1,14 +1,14 @@
 import type { Context } from "@repo/api/index";
+import { errorResponseSchema } from "@repo/api/lib/error-response";
 import { apiKeyMiddleware } from "@repo/api/lib/middleware";
 import { db, queueMessage, schema } from "@repo/db";
 import { sendMessageSchema } from "@repo/shared";
 import { and, asc, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { describeRoute } from "hono-openapi";
 import { resolver, validator as zValidator } from "hono-openapi/zod";
-import { HTTPException } from "hono/http-exception";
 import z from "zod/v3"; // We will leave this as v3 for now see https://github.com/rhinobase/hono-openapi/issues/97
-import { errorResponseSchema } from "@repo/api/lib/error-response";
 
 export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 	"/",
@@ -23,7 +23,7 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 							z.object({
 								id: z.string(),
 								status: z.enum(["queued", "sent", "failed"]),
-							}),
+							})
 						),
 					},
 				},
@@ -60,13 +60,10 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 		const apiKey = c.get("apiKey");
 		const organization = c.get("organization");
 
-		console.log(apiKey);
-		console.log(organization);
-
 		const project = await db.query.project.findFirst({
 			where: and(
 				eq(schema.project.slug, body.projectSlug),
-				eq(schema.project.organizationId, organization.id),
+				eq(schema.project.organizationId, organization.id)
 			),
 		});
 
@@ -82,7 +79,7 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 
 		if (body.providerType) {
 			providerConditions.push(
-				eq(schema.providerCredential.providerType, body.providerType),
+				eq(schema.providerCredential.providerType, body.providerType)
 			);
 		}
 
@@ -99,7 +96,7 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 				{
 					error: "No active provider found for the specified channel",
 				},
-				400,
+				400
 			);
 		}
 
@@ -129,14 +126,13 @@ export const sendRouter = new Hono<Context>().use(apiKeyMiddleware).post(
 					id: newMessage.id,
 					status: "queued",
 				},
-				201,
+				201
 			);
 		} catch (error) {
-			console.error("Error processing /send request:", error);
 			throw new HTTPException(500, {
 				message: `Failed to process send request: ${error instanceof Error ? error.message : "Unknown error"}`,
 				cause: error,
 			});
 		}
-	},
+	}
 );

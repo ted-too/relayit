@@ -1,5 +1,3 @@
-import { Discord } from "@/components/icons";
-import { ComingSoon } from "@/components/shared/comming-soon";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
@@ -9,6 +7,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@repo/ui/components/shadcn/dialog";
+import { Discord } from "@/components/icons";
+import { ComingSoon } from "@/components/shared/comming-soon";
 import type { NotificationProviderButtonProps } from ".";
 
 export function DiscordProvider({
@@ -19,10 +19,10 @@ export function DiscordProvider({
 			<DialogTrigger asChild>
 				<ComingSoon>
 					<Button
-						variant="secondary"
-						size="lg"
-						className="font-semibold bg-[#5865F2] hover:bg-[#5865F2]/90 text-white relative"
+						className="relative bg-[#5865F2] font-semibold text-white hover:bg-[#5865F2]/90"
 						disabled
+						size="lg"
+						variant="secondary"
 					>
 						<Discord />
 						<span>Discord</span>

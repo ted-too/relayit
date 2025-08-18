@@ -1,14 +1,9 @@
 "use client";
 
-import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
-import * as React from "react";
-import type { DateRange } from "react-day-picker";
-import { kbdVariants } from "@repo/ui/components/shadcn/kbd";
-import type { DatePreset } from "@/components/data-table/types";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { Calendar } from "@repo/ui/components/shadcn/calendar";
 import { Input } from "@repo/ui/components/shadcn/input";
+import { kbdVariants } from "@repo/ui/components/shadcn/kbd";
 import { Label } from "@repo/ui/components/shadcn/label";
 import {
 	Popover,
@@ -25,8 +20,13 @@ import {
 	SelectValue,
 } from "@repo/ui/components/shadcn/select";
 import { Separator } from "@repo/ui/components/shadcn/separator";
-import { presets as defaultPresets } from "@/constants/date-preset";
 import { cn } from "@repo/ui/lib/utils";
+import { format } from "date-fns";
+import { CalendarIcon } from "lucide-react";
+import * as React from "react";
+import type { DateRange } from "react-day-picker";
+import type { DatePreset } from "@/components/data-table/types";
+import { presets as defaultPresets } from "@/constants/date-preset";
 
 interface DatePickerWithRangeProps
 	extends React.HTMLAttributes<HTMLDivElement> {
@@ -44,7 +44,7 @@ export function DatePickerWithRange({
 	React.useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const matchingPreset = presets.find(
-				(preset) => preset.shortcut === e.key,
+				(preset) => preset.shortcut === e.key
 			);
 			if (matchingPreset) {
 				setDate({ from: matchingPreset.from, to: matchingPreset.to });
@@ -65,13 +65,13 @@ export function DatePickerWithRange({
 			<Popover modal={true}>
 				<PopoverTrigger asChild>
 					<Button
-						id="timestamp"
-						variant="outline"
-						size="sm"
 						className={cn(
 							"max-w-full justify-start truncate text-left font-normal hover:bg-muted/50",
-							!date && "text-muted-foreground",
+							!date && "text-muted-foreground"
 						)}
+						id="timestamp"
+						size="sm"
+						variant="outline"
 					>
 						<CalendarIcon className="mr-2 h-4 w-4" />
 						{date?.from ? (
@@ -88,30 +88,30 @@ export function DatePickerWithRange({
 						)}
 					</Button>
 				</PopoverTrigger>
-				<PopoverContent className="w-auto p-0" align="start">
+				<PopoverContent align="start" className="w-auto p-0">
 					<div className="flex flex-col justify-between sm:flex-row">
 						<div className="hidden sm:block">
 							<DatePresets
 								onSelect={setDate}
-								selected={date}
 								presets={presets}
+								selected={date}
 							/>
 						</div>
-						<div className="block sm:hidden p-3">
+						<div className="block p-3 sm:hidden">
 							<DatePresetsSelect
 								onSelect={setDate}
-								selected={date}
 								presets={presets}
+								selected={date}
 							/>
 						</div>
-						<Separator orientation="vertical" className="h-auto w-px" />
+						<Separator className="h-auto w-px" orientation="vertical" />
 						<Calendar
+							defaultMonth={date?.from}
 							initialFocus
 							mode="range"
-							defaultMonth={date?.from}
-							selected={date}
-							onSelect={setDate}
 							numberOfMonths={1}
+							onSelect={setDate}
+							selected={date}
 						/>
 					</div>
 					<Separator />
@@ -133,20 +133,20 @@ function DatePresets({
 }) {
 	return (
 		<div className="flex flex-col gap-2 p-3">
-			<p className="mx-3 text-xs uppercase text-muted-foreground">Date Range</p>
+			<p className="mx-3 text-muted-foreground text-xs uppercase">Date Range</p>
 			<div className="grid gap-1">
 				{presets.map(({ label, shortcut, from, to }) => {
 					const isActive = selected?.from === from && selected?.to === to;
 					return (
 						<Button
-							key={label}
-							variant={isActive ? "outline" : "ghost"}
-							size="sm"
-							onClick={() => onSelect({ from, to })}
 							className={cn(
 								"flex items-center justify-between gap-6",
-								!isActive && "border border-transparent",
+								!isActive && "border border-transparent"
 							)}
+							key={label}
+							onClick={() => onSelect({ from, to })}
+							size="sm"
+							variant={isActive ? "outline" : "ghost"}
 						>
 							<span className="mr-auto">{label}</span>
 							<span className={cn(kbdVariants(), "uppercase")}>{shortcut}</span>
@@ -175,13 +175,13 @@ function DatePresetsSelect({
 
 	return (
 		<Select
-			value={currentPresetValue}
 			onValueChange={(v) => {
 				const preset = presets.find((p) => p.shortcut === v);
 				if (preset) {
 					onSelect({ from: preset.from, to: preset.to });
 				}
 			}}
+			value={currentPresetValue}
 		>
 			<SelectTrigger>
 				<SelectValue placeholder="Date Presets" />
@@ -192,15 +192,15 @@ function DatePresetsSelect({
 					{presets.map(({ label, shortcut }) => {
 						return (
 							<SelectItem
+								className="flex items-center justify-between [&>span:last-child]:flex [&>span:last-child]:w-full [&>span:last-child]:justify-between"
 								key={label}
 								value={shortcut}
-								className="flex items-center justify-between [&>span:last-child]:w-full [&>span:last-child]:flex [&>span:last-child]:justify-between"
 							>
 								<span>{label}</span>
 								<span
 									className={cn(
 										kbdVariants(),
-										"uppercase ml-2 h-5 leading-snug",
+										"ml-2 h-5 uppercase leading-snug"
 									)}
 								>
 									{shortcut}
@@ -224,20 +224,24 @@ function CustomDateRange({
 	// Format date for input value
 	const formatDateForInput = React.useCallback(
 		(date: Date | undefined): string => {
-			if (!date) return "";
+			if (!date) {
+				return "";
+			}
 			const utcDate = new Date(
-				date.getTime() - date.getTimezoneOffset() * 60000,
+				date.getTime() - date.getTimezoneOffset() * 60_000
 			);
 			return utcDate.toISOString().slice(0, 16);
 		},
-		[],
+		[]
 	);
 
 	// Handle direct input changes
 	const handleFromChange = React.useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
 			const newDate = new Date(e.target.value);
-			if (Number.isNaN(newDate.getTime())) return;
+			if (Number.isNaN(newDate.getTime())) {
+				return;
+			}
 
 			// Create new range with the updated from date
 			onSelect({
@@ -245,13 +249,15 @@ function CustomDateRange({
 				to: selected?.to,
 			});
 		},
-		[onSelect, selected?.to],
+		[onSelect, selected?.to]
 	);
 
 	const handleToChange = React.useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
 			const newDate = new Date(e.target.value);
-			if (Number.isNaN(newDate.getTime())) return;
+			if (Number.isNaN(newDate.getTime())) {
+				return;
+			}
 
 			// Only update if we have a from date
 			if (selected?.from) {
@@ -261,33 +267,33 @@ function CustomDateRange({
 				});
 			}
 		},
-		[onSelect, selected?.from],
+		[onSelect, selected?.from]
 	);
 
 	return (
 		<div className="flex flex-col gap-2 p-3">
-			<p className="text-xs uppercase text-muted-foreground">Custom Range</p>
-			<div className="grid sm:grid-cols-2 gap-2">
+			<p className="text-muted-foreground text-xs uppercase">Custom Range</p>
+			<div className="grid gap-2 sm:grid-cols-2">
 				<div className="grid w-full gap-1.5">
 					<Label htmlFor="from">Start</Label>
 					<Input
-						type="datetime-local"
+						disabled={!selected?.from}
 						id="from"
 						name="from"
-						value={formatDateForInput(selected?.from)}
 						onChange={handleFromChange}
-						disabled={!selected?.from}
+						type="datetime-local"
+						value={formatDateForInput(selected?.from)}
 					/>
 				</div>
 				<div className="grid w-full gap-1.5">
 					<Label htmlFor="to">End</Label>
 					<Input
-						type="datetime-local"
+						disabled={!selected?.to}
 						id="to"
 						name="to"
-						value={formatDateForInput(selected?.to)}
 						onChange={handleToChange}
-						disabled={!selected?.to}
+						type="datetime-local"
+						value={formatDateForInput(selected?.to)}
 					/>
 				</div>
 			</div>

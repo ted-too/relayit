@@ -1,9 +1,9 @@
 import { db, schema } from "@repo/db";
 import { betterAuth } from "better-auth";
-import { emailHarmony } from "better-auth-harmony";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, organization } from "better-auth/plugins";
 import { passkey } from "better-auth/plugins/passkey";
+import { emailHarmony } from "better-auth-harmony";
 import { redis } from "bun";
 import { desc, eq } from "drizzle-orm";
 import { generateOrganizationSlug } from "./slugs";
@@ -56,6 +56,9 @@ export async function initialUserSetup(userId: string) {
 }
 
 export const auth = betterAuth({
+	telemetry: {
+		enabled: false,
+	},
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema,
@@ -69,7 +72,9 @@ export const auth = betterAuth({
 			if (ttl) {
 				await redis.set(key, value);
 				await redis.expire(key, ttl);
-			} else await redis.set(key, value);
+			} else {
+				await redis.set(key, value);
+			}
 		},
 		delete: async (key) => {
 			await redis.del(key);
@@ -150,7 +155,9 @@ export const auth = betterAuth({
 	trustedOrigins: [
 		(() => {
 			const hostname = new URL(process.env.FRONTEND_URL!).hostname;
-			return hostname === "localhost" || hostname.startsWith("127.") || hostname.startsWith("192.168.") 
+			return hostname === "localhost" ||
+				hostname.startsWith("127.") ||
+				hostname.startsWith("192.168.")
 				? process.env.FRONTEND_URL!
 				: `*.${hostname.split(".").slice(-2).join(".")}`;
 		})(),

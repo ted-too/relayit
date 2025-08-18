@@ -5,9 +5,7 @@ import {
 	updateWebhookEndpointSchema,
 } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
-import { desc } from "drizzle-orm";
-import { eq } from "drizzle-orm";
-import { and } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 
 export const webhookRouter = router({
@@ -83,7 +81,7 @@ export const webhookRouter = router({
 			const webhook = await db.query.webhookEndpoint.findFirst({
 				where: and(
 					eq(schema.webhookEndpoint.id, webhookId),
-					eq(schema.webhookEndpoint.projectId, project.id),
+					eq(schema.webhookEndpoint.projectId, project.id)
 				),
 			});
 
@@ -104,7 +102,7 @@ export const webhookRouter = router({
 	update: authdProcedureWithOrg
 		.concat(verifyProject)
 		.input(
-			z.object({ webhookId: z.string() }).merge(updateWebhookEndpointSchema),
+			z.object({ webhookId: z.string() }).merge(updateWebhookEndpointSchema)
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { project } = ctx;
@@ -114,7 +112,7 @@ export const webhookRouter = router({
 				columns: { id: true },
 				where: and(
 					eq(schema.webhookEndpoint.id, webhookId),
-					eq(schema.webhookEndpoint.projectId, project.id),
+					eq(schema.webhookEndpoint.projectId, project.id)
 				),
 			});
 
@@ -127,11 +125,15 @@ export const webhookRouter = router({
 
 			const updatePayload: Partial<typeof schema.webhookEndpoint.$inferInsert> =
 				{};
-			if (validatedData.url) updatePayload.url = validatedData.url;
-			if (validatedData.eventTypes)
+			if (validatedData.url) {
+				updatePayload.url = validatedData.url;
+			}
+			if (validatedData.eventTypes) {
 				updatePayload.eventTypes = validatedData.eventTypes;
-			if (validatedData.isActive !== undefined)
+			}
+			if (validatedData.isActive !== undefined) {
 				updatePayload.isActive = validatedData.isActive;
+			}
 
 			if (validatedData.secret !== undefined) {
 				if (validatedData.secret === null || validatedData.secret === "") {
@@ -170,8 +172,8 @@ export const webhookRouter = router({
 				.where(
 					and(
 						eq(schema.webhookEndpoint.id, webhookId),
-						eq(schema.webhookEndpoint.projectId, project.id),
-					),
+						eq(schema.webhookEndpoint.projectId, project.id)
+					)
 				)
 				.returning();
 
@@ -201,8 +203,8 @@ export const webhookRouter = router({
 				.where(
 					and(
 						eq(schema.webhookEndpoint.id, webhookId),
-						eq(schema.webhookEndpoint.projectId, project.id),
-					),
+						eq(schema.webhookEndpoint.projectId, project.id)
+					)
 				);
 
 			if (rowCount === 0) {

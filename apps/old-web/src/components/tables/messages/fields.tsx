@@ -1,23 +1,23 @@
 "use client";
 
+import type { Message } from "@repo/db";
+import {
+	AVAILABLE_MESSAGE_STATUSES,
+	type MessageStatus,
+} from "@repo/shared/constants/core";
+import {
+	AVAILABLE_CHANNELS,
+	AVAILABLE_PROVIDER_TYPES,
+} from "@repo/shared/constants/providers";
+import { cn } from "@repo/ui/lib/utils";
+import { format } from "date-fns";
 import type {
 	DataTableFilterField,
 	Option,
 	SheetField,
 } from "@/components/data-table/types";
-import { cn } from "@repo/ui/lib/utils";
-import type { Message } from "@repo/db";
-import { format } from "date-fns";
-import { TabsObjectView } from "../../data-table/cells/tabs-object-view";
-import {
-	AVAILABLE_MESSAGE_STATUSES,
-	type MessageStatus,
-} from "@repo/shared/constants/core";
 import { getStatusColor } from "@/lib/colors";
-import {
-	AVAILABLE_CHANNELS,
-	AVAILABLE_PROVIDER_TYPES,
-} from "@repo/shared/constants/providers";
+import { TabsObjectView } from "../../data-table/cells/tabs-object-view";
 
 // instead of filterFields, maybe just 'fields' with a filterDisabled prop?
 // that way, we could have 'message' or 'headers' field with label and value as well as type!
@@ -42,18 +42,18 @@ export const filterFields = [
 			// TODO: type `Option` with `options` values via Generics
 			const value = props.value as MessageStatus;
 			return (
-				<div className="flex grow items-center gap-2 max-w-28 font-mono">
-					<span className="capitalize min-w-16 text-foreground/70 group-hover:text-accent-foreground">
+				<div className="flex max-w-28 grow items-center gap-2 font-mono">
+					<span className="min-w-16 text-foreground/70 capitalize group-hover:text-accent-foreground">
 						{props.label}
 					</span>
 					<div className="flex items-center gap-2">
 						<div
 							className={cn(
 								"h-2.5 w-2.5 rounded-[2px]",
-								getStatusColor(value).bg,
+								getStatusColor(value).bg
 							)}
 						/>
-						<span className="text-xs text-muted-foreground/70">{value}</span>
+						<span className="text-muted-foreground/70 text-xs">{value}</span>
 					</div>
 				</div>
 			);
@@ -136,10 +136,12 @@ export const sheetFields = [
 		label: "Payload",
 		type: "readonly",
 		component: (props) => {
-			if (!props.payload) return null;
+			if (!props.payload) {
+				return null;
+			}
 			return (
 				// REMINDER: negative margin to make it look like the header is on the same level of the tab triggers
-				<TabsObjectView data={props.payload} className="-mt-[22px]" />
+				<TabsObjectView className="-mt-[22px]" data={props.payload} />
 			);
 		},
 		className: "flex-col items-start w-full gap-1",

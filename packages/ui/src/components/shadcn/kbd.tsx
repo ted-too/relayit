@@ -1,11 +1,11 @@
 // Copy Pasta from: https://github.com/sadmann7/shadcn-table/blob/main/src/components/kbd.tsx#L54
-import { type VariantProps, cva } from "class-variance-authority";
-import type * as React from "react";
 
 import { cn } from "@repo/ui/lib/utils";
+import { cva, type VariantProps } from "class-variance-authority";
+import type * as React from "react";
 
 export const kbdVariants = cva(
-	"select-none rounded border px-1.5 py-px font-mono text-[0.7rem] font-normal font-mono shadow-sm disabled:opacity-50",
+	"select-none rounded border px-1.5 py-px font-mono font-mono font-normal text-[0.7rem] shadow-sm disabled:opacity-50",
 	{
 		variants: {
 			variant: {
@@ -16,7 +16,7 @@ export const kbdVariants = cva(
 		defaultVariants: {
 			variant: "default",
 		},
-	},
+	}
 );
 
 interface BaseKbdProps
@@ -54,7 +54,9 @@ function Kbd({
 				.split("+")
 				.map((s) => {
 					const v = s.replace("Meta", "⌘");
-					if (v.length > 1) return v;
+					if (v.length > 1) {
+						return v;
+					}
 					return v.toUpperCase();
 				})
 				.map((v) => (
@@ -67,7 +69,7 @@ function Kbd({
 	return (
 		<kbd className={cn(kbdVariants({ variant, className }))} {...props}>
 			{abbrTitle ? (
-				<abbr title={abbrTitle} className="no-underline">
+				<abbr className="no-underline" title={abbrTitle}>
 					{text}
 				</abbr>
 			) : (

@@ -1,7 +1,5 @@
 "use client";
-import { Fragment, useState } from "react";
-
-import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";
 import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
@@ -16,17 +14,18 @@ import {
 import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { Label } from "@repo/ui/components/shadcn/label";
 import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { type CreatedApiKey, authClient } from "@/lib/auth-client";
-import { apiKeysListQueryKey } from "@/trpc/queries/auth";
-import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
+import { Fragment, useState } from "react";
 import { toast } from "sonner";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { authClient, type CreatedApiKey } from "@/lib/auth-client";
+import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 
-interface CreateApiKeyFormProps {
+type CreateApiKeyFormProps = {
 	submitWrapper?: typeof DialogFooter;
 	organizationId: string;
-}
+};
 
 export function CreateApiKeyForm({
 	submitWrapper,
@@ -34,7 +33,7 @@ export function CreateApiKeyForm({
 }: CreateApiKeyFormProps) {
 	const queryClient = useQueryClient();
 	const [createdApiKey, setCreatedApiKey] = useState<CreatedApiKey | null>(
-		null,
+		null
 	);
 
 	const form = useAppForm({
@@ -53,7 +52,9 @@ export function CreateApiKeyForm({
 				},
 			});
 
-			if (error) return toast.error(error?.message);
+			if (error) {
+				return toast.error(error?.message);
+			}
 
 			setCreatedApiKey(data);
 
@@ -69,26 +70,26 @@ export function CreateApiKeyForm({
 
 	return (
 		<form
+			className="grid w-full gap-4"
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="grid gap-4 w-full"
 		>
 			<form.AppField
-				name="name"
 				children={(field) => (
 					<field.TextField
-						label="Key Name"
 						description="Make sure to copy your API key now. For security reasons, we don't
 						store the full key and you won't be able to see it again."
+						label="Key Name"
 						placeholder="e.g., 2labs"
 					/>
 				)}
+				name="name"
 			/>
 
 			{form.state.isSubmitting && !createdApiKey && (
-				<Skeleton className="w-full h-10" />
+				<Skeleton className="h-10 w-full" />
 			)}
 
 			{createdApiKey && (
@@ -105,20 +106,20 @@ export function CreateApiKeyForm({
 					{submitWrapper ? (
 						createdApiKey !== null ? (
 							<DialogClose asChild>
-								<Button className="w-full mt-6" size="lg" type="button">
+								<Button className="mt-6 w-full" size="lg" type="button">
 									Done
 								</Button>
 							</DialogClose>
 						) : (
-							<form.SubmitButton className="w-full mt-6" size="lg">
+							<form.SubmitButton className="mt-6 w-full" size="lg">
 								Create
 							</form.SubmitButton>
 						)
 					) : (
 						<form.SubmitButton
-							className="w-full mt-6"
-							size="lg"
+							className="mt-6 w-full"
 							disabled={!!createdApiKey}
+							size="lg"
 						>
 							Create
 						</form.SubmitButton>
@@ -152,9 +153,9 @@ export function CreateApiKeyDialog({
 			<DialogTrigger asChild>
 				{children ?? (
 					<Button
-						variant={button.variant}
 						className={button.className}
 						size={button.size}
+						variant={button.variant}
 					>
 						<PlusIcon />
 						{button.label}
@@ -169,8 +170,8 @@ export function CreateApiKeyDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<CreateApiKeyForm
-					submitWrapper={DialogFooter}
 					organizationId={organizationId}
+					submitWrapper={DialogFooter}
 				/>
 			</DialogContent>
 		</Dialog>

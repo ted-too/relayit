@@ -1,7 +1,7 @@
 import type { MessageStatus } from "@repo/shared";
 
 export function getStatusColor(
-	value: MessageStatus,
+	value: MessageStatus
 ): Record<"text" | "bg" | "border", string> {
 	switch (value) {
 		case "queued":
@@ -13,7 +13,7 @@ export function getStatusColor(
 		case "processing":
 			return {
 				text: "text-blue-500",
-				bg: "bg-blue-500/10", 
+				bg: "bg-blue-500/10",
 				border: "border-blue-500/20",
 			};
 		case "sent":

@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBER_ROLES, type MemberRole } from "@repo/shared";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Card,
@@ -9,17 +10,16 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
+import { DropdownMenuItem } from "@repo/ui/components/shadcn/dropdown-menu";
 import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { authClient } from "@/lib/auth-client";
 import { cn } from "@repo/ui/lib/utils";
-import { MEMBER_ROLES, type MemberRole } from "@repo/shared";
 import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
-import { DropdownMenuItem } from "@repo/ui/components/shadcn/dropdown-menu";
+import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/trpc/client";
-import { useRouter } from "next/navigation";
 
 const inviteMemberSchema = z.object({
 	email: z.string().email("Invalid email address"),
@@ -50,7 +50,7 @@ export function InviteMembersForm() {
 				authClient.organization.inviteMember({
 					email: invitation.email,
 					role: invitation.role,
-				}),
+				})
 			);
 
 			const results = await Promise.allSettled(promises);
@@ -95,33 +95,32 @@ export function InviteMembersForm() {
 				form.handleSubmit();
 			}}
 		>
-			<Card className="pb-0 gap-0">
+			<Card className="gap-0 pb-0">
 				<CardHeader>
 					<CardTitle>Invite Members</CardTitle>
 				</CardHeader>
-				<form.Field name="invitations" mode="array">
+				<form.Field mode="array" name="invitations">
 					{(field) => (
 						<>
-							<CardContent className="grid gap-6 mb-6 mt-3">
+							<CardContent className="mt-3 mb-6 grid gap-6">
 								{field.state.value.map((_, index) => (
-									<div key={index} className="flex items-center gap-4">
+									<div className="flex items-center gap-4" key={index}>
 										<form.AppField
-											name={`invitations[${index}].email`}
 											children={(field) => (
 												<field.TextField
-													label="Email Address"
-													placeholder="jane@example.com"
-													type="email"
-													required
 													className={{
 														root: "grow",
 													}}
+													label="Email Address"
+													placeholder="jane@example.com"
+													required
+													type="email"
 												/>
 											)}
+											name={`invitations[${index}].email`}
 										/>
 										<div className="flex items-center gap-4">
 											<form.AppField
-												name={`invitations[${index}].role`}
 												children={(field) => (
 													<field.SelectField
 														label="Role"
@@ -137,18 +136,19 @@ export function InviteMembersForm() {
 														}}
 													/>
 												)}
+												name={`invitations[${index}].role`}
 											/>
 											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
+												aria-label="Remove invitation"
 												className={cn(
 													"mt-5.5",
-													field.state.value.length === 1 && "invisible",
+													field.state.value.length === 1 && "invisible"
 												)}
-												onClick={() => field.removeValue(index)}
 												disabled={field.state.value.length === 1}
-												aria-label="Remove invitation"
+												onClick={() => field.removeValue(index)}
+												size="icon"
+												type="button"
+												variant="ghost"
 											>
 												<TrashIcon className="size-4" />
 											</Button>
@@ -156,11 +156,11 @@ export function InviteMembersForm() {
 									</div>
 								))}
 								<Button
-									type="button"
-									variant="secondary"
-									size="sm"
 									className="w-max"
 									onClick={() => field.pushValue({ email: "", role: "member" })}
+									size="sm"
+									type="button"
+									variant="secondary"
 								>
 									<PlusIcon className="mr-2 size-4" />
 									Add more
@@ -169,12 +169,12 @@ export function InviteMembersForm() {
 						</>
 					)}
 				</form.Field>
-				<CardFooter className="py-4 bg-secondary justify-between">
+				<CardFooter className="justify-between bg-secondary py-4">
 					<CardDescription>
 						Invite new members to your household by email address.
 					</CardDescription>
 					<form.AppForm>
-						<form.SubmitButton size="sm" className="w-36">
+						<form.SubmitButton className="w-36" size="sm">
 							Send Invitations
 						</form.SubmitButton>
 					</form.AppForm>
@@ -192,7 +192,7 @@ export function InviteMembersFormSkeleton() {
 				<Skeleton className="h-4 w-96" />
 			</CardHeader>
 			<CardContent className="grid gap-6">
-				<div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end">
+				<div className="grid grid-cols-[1fr_auto_auto] items-end gap-4">
 					<div className="space-y-2">
 						<Skeleton className="h-4 w-24" />
 						<Skeleton className="h-10 w-full" />
@@ -207,7 +207,7 @@ export function InviteMembersFormSkeleton() {
 					<Skeleton className="h-9 w-28" />
 				</div>
 			</CardContent>
-			<CardFooter className="border-t pt-6 justify-end">
+			<CardFooter className="justify-end border-t pt-6">
 				<Skeleton className="h-9 w-36" />
 			</CardFooter>
 		</Card>
@@ -238,7 +238,7 @@ export function CancelInvitationAction({
 	};
 
 	return (
-		<DropdownMenuItem variant="destructive" onSelect={handleAction}>
+		<DropdownMenuItem onSelect={handleAction} variant="destructive">
 			<TrashIcon /> Cancel Invitation
 		</DropdownMenuItem>
 	);

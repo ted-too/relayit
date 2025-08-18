@@ -7,13 +7,13 @@ import type {
 	UniqueIdentifier,
 } from "@dnd-kit/core";
 import {
+	closestCenter,
 	DndContext,
 	DragOverlay,
+	defaultDropAnimationSideEffects,
 	KeyboardSensor,
 	MouseSensor,
 	TouchSensor,
-	closestCenter,
-	defaultDropAnimationSideEffects,
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
@@ -23,20 +23,19 @@ import {
 	restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
 import {
-	SortableContext,
-	type SortableContextProps,
 	arrayMove,
 	horizontalListSortingStrategy,
+	SortableContext,
+	type SortableContextProps,
 	useSortable,
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Slot, type SlotProps } from "@radix-ui/react-slot";
-import * as React from "react";
-
 import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
 import { composeRefs } from "@repo/ui/lib/compose-refs";
 import { cn } from "@repo/ui/lib/utils";
+import * as React from "react";
 import { createPortal } from "react-dom";
 
 const orientationConfig = {
@@ -143,18 +142,18 @@ function Sortable<TData extends { id: UniqueIdentifier }>({
 	const sensors = useSensors(
 		useSensor(MouseSensor),
 		useSensor(TouchSensor),
-		useSensor(KeyboardSensor),
+		useSensor(KeyboardSensor)
 	);
 
 	const config = orientationConfig[orientation];
 
 	return (
 		<DndContext
+			collisionDetection={collisionDetection}
 			modifiers={modifiers ?? config.modifiers}
-			sensors={sensors}
-			onDragStart={(event) => {
-				setActiveId(event.active.id);
-				onDragStart?.(event);
+			onDragCancel={(event) => {
+				setActiveId?.(null);
+				onDragCancel?.(event);
 			}}
 			onDragEnd={(event) => {
 				const { active, over } = event;
@@ -171,11 +170,11 @@ function Sortable<TData extends { id: UniqueIdentifier }>({
 				setActiveId(null);
 				onDragEnd?.(event);
 			}}
-			onDragCancel={(event) => {
-				setActiveId?.(null);
-				onDragCancel?.(event);
+			onDragStart={(event) => {
+				setActiveId(event.active.id);
+				onDragStart?.(event);
 			}}
-			collisionDetection={collisionDetection}
+			sensors={sensors}
 			{...props}
 		>
 			<SortableContext items={value} strategy={strategy ?? config.strategy}>
@@ -185,7 +184,7 @@ function Sortable<TData extends { id: UniqueIdentifier }>({
 				? // https://docs.dndkit.com/api-documentation/draggable/drag-overlay#portals
 					createPortal(
 						<SortableOverlay activeId={activeId}>{overlay}</SortableOverlay>,
-						document.body,
+						document.body
 					)
 				: null}
 		</DndContext>
@@ -218,10 +217,10 @@ function SortableOverlay({
 		<DragOverlay dropAnimation={dropAnimation} {...props}>
 			{activeId ? (
 				<SortableItem
+					asChild
+					className="cursor-grabbing"
 					ref={ref}
 					value={activeId}
-					className="cursor-grabbing"
-					asChild
 				>
 					{children}
 				</SortableItem>
@@ -230,11 +229,11 @@ function SortableOverlay({
 	);
 }
 
-interface SortableItemContextProps {
+type SortableItemContextProps = {
 	attributes: React.HTMLAttributes<HTMLElement>;
 	listeners: DraggableSyntheticListeners | undefined;
 	isDragging?: boolean;
-}
+};
 
 const SortableItemContext = React.createContext<SortableItemContextProps>({
 	attributes: {},
@@ -298,7 +297,7 @@ function SortableItem({
 			listeners,
 			isDragging,
 		}),
-		[attributes, listeners, isDragging],
+		[attributes, listeners, isDragging]
 	);
 	const style: React.CSSProperties = {
 		opacity: isDragging ? 0.5 : 1,
@@ -311,12 +310,12 @@ function SortableItem({
 	return (
 		<SortableItemContext.Provider value={context}>
 			<Comp
-				data-state={isDragging ? "dragging" : undefined}
 				className={cn(
 					"data-[state=dragging]:cursor-grabbing",
 					{ "cursor-grab": !isDragging && asTrigger },
-					className,
+					className
 				)}
+				data-state={isDragging ? "dragging" : undefined}
 				ref={composeRefs(ref, setNodeRef as React.Ref<HTMLDivElement>)}
 				style={style}
 				{...(asTrigger ? attributes : {})}
@@ -341,12 +340,12 @@ function SortableDragHandle({
 
 	return (
 		<Button
-			ref={composeRefs(ref)}
-			data-state={isDragging ? "dragging" : undefined}
 			className={cn(
 				"cursor-grab data-[state=dragging]:cursor-grabbing",
-				className,
+				className
 			)}
+			data-state={isDragging ? "dragging" : undefined}
+			ref={composeRefs(ref)}
 			{...attributes}
 			{...listeners}
 			{...props}

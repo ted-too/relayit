@@ -55,7 +55,7 @@ export const miscRouter = router({
 		const data = await db.query.invitation.findMany({
 			where: and(
 				eq(schema.invitation.organizationId, ctx.session.activeOrganizationId),
-				inArray(schema.invitation.status, ["pending", "rejected"]),
+				inArray(schema.invitation.status, ["pending", "rejected"])
 			),
 			with: {
 				inviter: {
@@ -75,7 +75,7 @@ export const miscRouter = router({
 		const invitations = await db.query.invitation.findMany({
 			where: and(
 				eq(schema.invitation.email, user.email),
-				eq(schema.invitation.status, "pending"),
+				eq(schema.invitation.status, "pending")
 			),
 			with: {
 				organization: {

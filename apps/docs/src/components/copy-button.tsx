@@ -1,16 +1,15 @@
 "use client";
 
-import * as React from "react";
-import { CheckIcon, ClipboardIcon } from "lucide-react";
-
-import { type Event, trackEvent } from "@/lib/events";
-import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
+import { cn } from "@repo/ui/lib/utils";
+import { CheckIcon, ClipboardIcon } from "lucide-react";
+import * as React from "react";
+import { type Event, trackEvent } from "@/lib/events";
 
 export function copyToClipboardWithMeta(value: string, event?: Event) {
 	navigator.clipboard.writeText(value);
@@ -49,20 +48,33 @@ export function CopyButton({
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<Button
-					data-slot="copy-button"
-					size="icon"
-					variant={variant}
 					className={cn(
-						"bg-code size-7 hover:opacity-100 focus-visible:opacity-100",
+						"size-7 bg-code hover:opacity-100 focus-visible:opacity-100",
 						!relative &&
 							{
 								top: "absolute top-3 right-2 z-10",
 								center:
-									"absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10",
-								bottom: "absolute bottom-3 right-2 z-10",
+									"-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-10",
+								bottom: "absolute right-2 bottom-3 z-10",
 							}[align],
-						className,
+						className
 					)}
+					data-slot="copy-button"
+					onClick={() => {
+						copyToClipboardWithMeta(
+							value,
+							event
+								? {
+										name: event,
+										properties: {
+											code: value,
+										},
+									}
+								: undefined
+						);
+						setHasCopied(true);
+					}}
+					size="icon"
 					style={
 						{
 							...style,
@@ -76,20 +88,7 @@ export function CopyButton({
 									: undefined,
 						} as React.CSSProperties
 					}
-					onClick={() => {
-						copyToClipboardWithMeta(
-							value,
-							event
-								? {
-										name: event,
-										properties: {
-											code: value,
-										},
-									}
-								: undefined,
-						);
-						setHasCopied(true);
-					}}
+					variant={variant}
 					{...props}
 				>
 					<span className="sr-only">Copy</span>

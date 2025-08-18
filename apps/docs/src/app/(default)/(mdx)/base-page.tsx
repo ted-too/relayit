@@ -1,23 +1,21 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { mdxComponents } from "@/mdx-components";
+import { Badge } from "@repo/ui/components/shadcn/badge";
+import { Button } from "@repo/ui/components/shadcn/button";
+import { SidebarProvider } from "@repo/ui/components/shadcn/sidebar";
 import {
 	IconArrowLeft,
 	IconArrowRight,
 	IconArrowUpRight,
 } from "@tabler/icons-react";
 import { findNeighbour } from "fumadocs-core/server";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { DocsSidebar } from "@/components/docs-sidebar";
+import { DocsTableOfContents } from "@/components/docs-toc";
 import { source } from "@/lib/source";
 import { absoluteUrl } from "@/lib/utils";
-import { DocsTableOfContents } from "@/components/docs-toc";
-import { Badge } from "@repo/ui/components/shadcn/badge";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { DocsSidebar } from "@/components/docs-sidebar";
-import { SidebarProvider } from "@repo/ui/components/shadcn/sidebar";
+import { mdxComponents } from "@/mdx-components";
 
-export function internalGenerateStaticParams(_props: {
-	baseUrl: string;
-}) {
+export function internalGenerateStaticParams(_props: { baseUrl: string }) {
 	return () => {
 		const params = source.generateParams().map((param) => {
 			return {
@@ -29,9 +27,7 @@ export function internalGenerateStaticParams(_props: {
 	};
 }
 
-export function internalGenerateMetadata(_props: {
-	baseUrl: string;
-}) {
+export function internalGenerateMetadata(_props: { baseUrl: string }) {
 	return async (props: { params: Promise<{ slug?: string[] }> }) => {
 		const params = await props.params;
 		const slug = [_props.baseUrl, ...(params?.slug || [])];
@@ -43,7 +39,7 @@ export function internalGenerateMetadata(_props: {
 
 		const doc = page.data;
 
-		if (!doc.title || !doc.description) {
+		if (!(doc.title && doc.description)) {
 			notFound();
 		}
 
@@ -58,7 +54,7 @@ export function internalGenerateMetadata(_props: {
 				images: [
 					{
 						url: `/og?title=${encodeURIComponent(
-							doc.title,
+							doc.title
 						)}&description=${encodeURIComponent(doc.description)}`,
 					},
 				],
@@ -70,7 +66,7 @@ export function internalGenerateMetadata(_props: {
 				images: [
 					{
 						url: `/og?title=${encodeURIComponent(
-							doc.title,
+							doc.title
 						)}&description=${encodeURIComponent(doc.description)}`,
 					},
 				],
@@ -80,9 +76,7 @@ export function internalGenerateMetadata(_props: {
 	};
 }
 
-export function BasePage(_props: {
-	baseUrl: string;
-}) {
+export function BasePage(_props: { baseUrl: string }) {
 	return async (props: { params: Promise<{ slug?: string[] }> }) => {
 		const params = await props.params;
 		const slug = [_props.baseUrl, ...(params?.slug || [])];
@@ -110,29 +104,29 @@ export function BasePage(_props: {
 
 		return (
 			<div className="container-wrapper flex flex-1 flex-col px-2">
-				<SidebarProvider className="3xl:container 3xl:px-3 min-h-min flex-1 items-start px-0 [--sidebar-width:220px] [--top-spacing:0] lg:grid lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)] lg:[--sidebar-width:240px] lg:[--top-spacing:calc(var(--spacing)*4)]">
+				<SidebarProvider className="3xl:container min-h-min flex-1 items-start 3xl:px-3 px-0 [--sidebar-width:220px] [--top-spacing:0] lg:grid lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)] lg:[--sidebar-width:240px] lg:[--top-spacing:calc(var(--spacing)*4)]">
 					<DocsSidebar tree={filteredPageTree} />
 					<div className="h-full w-full">
 						<div
-							data-slot="docs"
 							className="flex items-stretch text-[1.05rem] sm:text-[15px] xl:w-full"
+							data-slot="docs"
 						>
 							<div className="flex min-w-0 flex-1 flex-col">
 								<div className="h-(--top-spacing) shrink-0" />
-								<div className="mx-auto flex w-full max-w-2xl min-w-0 flex-1 flex-col gap-8 px-4 py-6 text-neutral-800 md:px-0 lg:py-8 dark:text-neutral-300">
+								<div className="mx-auto flex w-full min-w-0 max-w-2xl flex-1 flex-col gap-8 px-4 py-6 text-neutral-800 md:px-0 lg:py-8 dark:text-neutral-300">
 									<div className="flex flex-col gap-2">
 										<div className="flex flex-col gap-2">
 											<div className="flex items-start justify-between">
-												<h1 className="scroll-m-20 text-4xl font-semibold tracking-tight sm:text-3xl xl:text-4xl">
+												<h1 className="scroll-m-20 font-semibold text-4xl tracking-tight sm:text-3xl xl:text-4xl">
 													{doc.title}
 												</h1>
 												<div className="flex items-center gap-2 pt-1.5">
 													{showNeighbours && neighbours.previous && (
 														<Button
-															variant="secondary"
-															size="icon"
-															className="extend-touch-target size-8 shadow-none md:size-7"
 															asChild
+															className="extend-touch-target size-8 shadow-none md:size-7"
+															size="icon"
+															variant="secondary"
 														>
 															<Link href={neighbours.previous.url}>
 																<IconArrowLeft />
@@ -142,10 +136,10 @@ export function BasePage(_props: {
 													)}
 													{showNeighbours && neighbours.next && (
 														<Button
-															variant="secondary"
-															size="icon"
-															className="extend-touch-target size-8 shadow-none md:size-7"
 															asChild
+															className="extend-touch-target size-8 shadow-none md:size-7"
+															size="icon"
+															variant="secondary"
 														>
 															<Link href={neighbours.next.url}>
 																<span className="sr-only">Next</span>
@@ -156,7 +150,7 @@ export function BasePage(_props: {
 												</div>
 											</div>
 											{doc.description && (
-												<p className="text-muted-foreground text-[1.05rem] text-balance sm:text-base">
+												<p className="text-balance text-[1.05rem] text-muted-foreground sm:text-base">
 													{doc.description}
 												</p>
 											)}
@@ -167,8 +161,8 @@ export function BasePage(_props: {
 													<Badge asChild variant="secondary">
 														<Link
 															href={links.doc}
-															target="_blank"
 															rel="noreferrer"
+															target="_blank"
 														>
 															Docs <IconArrowUpRight />
 														</Link>
@@ -178,8 +172,8 @@ export function BasePage(_props: {
 													<Badge asChild variant="secondary">
 														<Link
 															href={links.api}
-															target="_blank"
 															rel="noreferrer"
+															target="_blank"
 														>
 															API Reference <IconArrowUpRight />
 														</Link>
@@ -195,10 +189,10 @@ export function BasePage(_props: {
 								<div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-2 px-4 md:px-0">
 									{showNeighbours && neighbours.previous && (
 										<Button
-											variant="secondary"
-											size="sm"
 											asChild
 											className="shadow-none"
+											size="sm"
+											variant="secondary"
 										>
 											<Link href={neighbours.previous.url}>
 												<IconArrowLeft /> {neighbours.previous.name}
@@ -207,10 +201,10 @@ export function BasePage(_props: {
 									)}
 									{showNeighbours && neighbours.next && (
 										<Button
-											variant="secondary"
-											size="sm"
-											className="ml-auto shadow-none"
 											asChild
+											className="ml-auto shadow-none"
+											size="sm"
+											variant="secondary"
 										>
 											<Link href={neighbours.next.url}>
 												{neighbours.next.name} <IconArrowRight />

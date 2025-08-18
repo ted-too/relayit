@@ -3,9 +3,9 @@ import {
 	RANGE_DELIMITER,
 	SLIDER_DELIMITER,
 } from "@repo/shared";
-import { isArrayOfDates } from "@/components/data-table/filter-fns";
 import type { ColumnFiltersState } from "@tanstack/react-table";
 import type { ParserBuilder } from "nuqs";
+import { isArrayOfDates } from "@/components/data-table/filter-fns";
 import type { DataTableFilterField } from "@/components/data-table/types";
 
 /**
@@ -21,8 +21,12 @@ export function getWordByCaretPosition({
 	let start = caretPosition;
 	let end = caretPosition;
 
-	while (start > 0 && value[start - 1] !== " ") start--;
-	while (end < value.length && value[end] !== " ") end++;
+	while (start > 0 && value[start - 1] !== " ") {
+		start--;
+	}
+	while (end < value.length && value[end] !== " ") {
+		end++;
+	}
 
 	const word = value.substring(start, end);
 	return word;
@@ -90,7 +94,7 @@ export function getFieldOptions<TData>({
 						.filter(notEmpty)
 				: Array.from(
 						{ length: field.max - field.min + 1 },
-						(_, i) => field.min + i,
+						(_, i) => field.min + i
 					) || [];
 		}
 		default: {
@@ -114,12 +118,14 @@ export function getFilterValue({
 	 */
 	if (value.startsWith("suggestion:")) {
 		const rawValue = value.toLowerCase().replace("suggestion:", "");
-		if (rawValue.includes(search)) return 1;
+		if (rawValue.includes(search)) {
+			return 1;
+		}
 		return 0;
 	}
 
-	/** */
-	if (value.toLowerCase().includes(currentWord.toLowerCase())) return 1;
+	/*/
+	if (value.toLowerCase().includes(currentWord.toLowerCase())) { return 1; }
 
 	/**
 	 * @example checkbox [filter, query] = ["regions", "ams,gru,fra"]
@@ -137,9 +143,12 @@ export function getFilterValue({
 			const rawValue = value.toLowerCase().replace(`${filter}:`, "");
 			if (
 				queries.some((item, i) => item === rawValue && i !== queries.length - 1)
-			)
+			) {
 				return 0;
-			if (queries.some((item) => rawValue.includes(item))) return 1;
+			}
+			if (queries.some((item) => rawValue.includes(item))) {
+				return 1;
+			}
 		}
 		if (query.includes(SLIDER_DELIMITER)) {
 			/**
@@ -149,17 +158,21 @@ export function getFilterValue({
 			const queries = query.split(SLIDER_DELIMITER);
 			const rawValue = value.toLowerCase().replace(`${filter}:`, "");
 
-			const rawValueAsNumber = Number.parseInt(rawValue);
-			const queryAsNumber = Number.parseInt(queries[0]);
+			const rawValueAsNumber = Number.parseInt(rawValue, 10);
+			const queryAsNumber = Number.parseInt(queries[0], 10);
 
 			if (queryAsNumber < rawValueAsNumber) {
-				if (rawValue.includes(queries[1])) return 1;
+				if (rawValue.includes(queries[1])) {
+					return 1;
+				}
 				return 0;
 			}
 			return 0;
 		}
 		const rawValue = value.toLowerCase().replace(`${filter}:`, "");
-		if (rawValue.includes(query)) return 1;
+		if (rawValue.includes(query)) {
+			return 1;
+		}
 	}
 	return 0;
 }
@@ -171,7 +184,9 @@ export function getFieldValueByType<TData>({
 	field?: DataTableFilterField<TData>;
 	value: unknown;
 }) {
-	if (!field) return null;
+	if (!field) {
+		return null;
+	}
 
 	switch (field.type) {
 		case "slider": {
@@ -209,7 +224,7 @@ export function getFieldValueByType<TData>({
 }
 
 export function notEmpty<TValue>(
-	value: TValue | null | undefined,
+	value: TValue | null | undefined
 ): value is TValue {
 	return value !== null && value !== undefined;
 }
@@ -229,22 +244,26 @@ export function columnFiltersParser<TData>({
 				.reduce(
 					(prev, curr) => {
 						const [name, value] = curr.split(":");
-						if (!value || !name) return prev;
+						if (!(value && name)) {
+							return prev;
+						}
 						prev[name] = value;
 						return prev;
 					},
-					{} as Record<string, string>,
+					{} as Record<string, string>
 				);
 
 			const searchParams = Object.entries(values).reduce(
 				(prev, [key, value]) => {
 					const parser = searchParamsParser[key];
-					if (!parser) return prev;
+					if (!parser) {
+						return prev;
+					}
 
 					prev[key] = parser.parse(value);
 					return prev;
 				},
-				{} as Record<string, unknown>,
+				{} as Record<string, unknown>
 			);
 
 			return searchParams;
@@ -252,11 +271,13 @@ export function columnFiltersParser<TData>({
 		serialize: (columnFilters: ColumnFiltersState) => {
 			const values = columnFilters.reduce((prev, curr) => {
 				const { commandDisabled } = filterFields?.find(
-					(field) => curr.id === field.value,
+					(field) => curr.id === field.value
 				) || { commandDisabled: true }; // if column filter is not found, disable the command by default
 				const parser = searchParamsParser[curr.id];
 
-				if (commandDisabled || !parser) return prev;
+				if (commandDisabled || !parser) {
+					return prev;
+				}
 
 				return `${prev}${curr.id}:${parser.serialize(curr.value)} `;
 			}, "");

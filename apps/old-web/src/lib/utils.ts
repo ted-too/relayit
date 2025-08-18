@@ -1,11 +1,15 @@
 import { organizationMetadataSchema } from "@repo/shared";
 
 export function getOrganizationMetadata(metadata: string | null) {
-	if (!metadata) return null;
+	if (!metadata) {
+		return null;
+	}
 
 	const result = organizationMetadataSchema.safeParse(JSON.parse(metadata));
 
-	if (!result.success) return null;
+	if (!result.success) {
+		return null;
+	}
 
 	return result.data;
 }
@@ -24,13 +28,15 @@ export function getChangedFields<T extends Record<string, any>>(
 	initial: T,
 	opts?: {
 		alwaysKeep?: DeepPartialRecord<T, boolean>;
-	},
+	}
 ): Partial<T> {
 	const changes: Partial<T> = {};
 
 	for (const key in current) {
 		// Skip if key doesn't exist in both objects
-		if (!(key in initial)) continue;
+		if (!(key in initial)) {
+			continue;
+		}
 
 		const currentValue = current[key];
 		const initialValue = initial[key];

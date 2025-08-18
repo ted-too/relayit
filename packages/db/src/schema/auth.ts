@@ -1,3 +1,10 @@
+// Import relations from core schema
+import {
+	message,
+	type ProjectProviderAssociation,
+	projectProviderAssociation,
+} from "@repo/db/schema/core";
+import type { ChannelType, ProviderType } from "@repo/shared";
 import { type InferSelectModel, relations } from "drizzle-orm";
 import {
 	boolean,
@@ -9,14 +16,6 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-
-// Import relations from core schema
-import {
-	type ProjectProviderAssociation,
-	message,
-	projectProviderAssociation,
-} from "@repo/db/schema/core";
-import type { ChannelType, ProviderType } from "@repo/shared";
 
 /**
  * Represents users in the system.
@@ -329,7 +328,7 @@ export const project = pgTable(
 		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 		metadata: jsonb("metadata").$type<ProjectMetadata>(),
 	},
-	(t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)],
+	(t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)]
 );
 
 export type Project = InferSelectModel<typeof project> & {

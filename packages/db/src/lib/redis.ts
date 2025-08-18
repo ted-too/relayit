@@ -1,4 +1,4 @@
-import { type Result, createGenericError } from "@repo/shared";
+import { createGenericError, type Result } from "@repo/shared";
 import { redis } from "bun";
 
 export const MESSAGE_QUEUE_STREAM = "messageQueue";
@@ -22,7 +22,7 @@ export async function queueMessage(messageId: string): Promise<Result<string>> {
 		if (typeof streamEntryId !== "string") {
 			return {
 				error: createGenericError(
-					"Failed to queue message, invalid response from Redis.",
+					"Failed to queue message, invalid response from Redis."
 				),
 				data: null,
 			};
@@ -49,7 +49,7 @@ export async function queueMessage(messageId: string): Promise<Result<string>> {
  */
 export async function acknowledgeMessage(
 	streamId: string,
-	groupName: string,
+	groupName: string
 ): Promise<Result<number>> {
 	try {
 		const result = await redis.send("XACK", [
@@ -92,7 +92,7 @@ export async function claimPendingMessages(
 	groupName: string,
 	consumerName: string,
 	minIdleTimeMs: number,
-	count = 10,
+	count = 10
 ): Promise<Result<[string, string[]][]>> {
 	try {
 		// First, get pending messages to find which ones to claim
@@ -101,23 +101,23 @@ export async function claimPendingMessages(
 			return {
 				error: createGenericError(
 					`Failed to get pending messages before claiming: ${pendingResult.error.message}`,
-					pendingResult.error,
+					pendingResult.error
 				),
 				data: null,
 			};
 		}
 
 		const { details } = pendingResult.data;
-		
+
 		// Filter messages that are idle long enough and get their IDs
 		const messageIdsToClaim: string[] = [];
-		const now = Date.now();
-		
+		const _now = Date.now();
+
 		for (const messageInfo of details) {
 			if (Array.isArray(messageInfo) && messageInfo.length >= 4) {
 				const [messageId, , idleTime] = messageInfo;
 				// idleTime is in milliseconds
-				if (typeof idleTime === 'number' && idleTime >= minIdleTimeMs) {
+				if (typeof idleTime === "number" && idleTime >= minIdleTimeMs) {
 					messageIdsToClaim.push(messageId);
 				}
 			}
@@ -167,7 +167,7 @@ export async function claimPendingMessages(
  */
 export async function getPendingMessages(
 	groupName: string,
-	count = 10,
+	count = 10
 ): Promise<Result<any>> {
 	try {
 		// First get summary: XPENDING stream group

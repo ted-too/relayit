@@ -4,14 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 function getItemFromLocalStorage(key: string) {
 	const item = window?.localStorage.getItem(key);
-	if (item) return JSON.parse(item);
+	if (item) {
+		return JSON.parse(item);
+	}
 
 	return null;
 }
 
 export function useLocalStorage<T>(
 	key: string,
-	initialValue: T,
+	initialValue: T
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
 	const [storedValue, setStoredValue] = useState(initialValue);
 
@@ -19,7 +21,9 @@ export function useLocalStorage<T>(
 		// initialize
 		if (typeof window !== "undefined") {
 			const stored = getItemFromLocalStorage(key);
-			if (stored !== null) setStoredValue(stored);
+			if (stored !== null) {
+				setStoredValue(stored);
+			}
 		}
 	}, [key]);
 
@@ -39,7 +43,7 @@ export function useLocalStorage<T>(
 			}
 			return setStoredValue;
 		},
-		[key, setStoredValue],
+		[key]
 	);
 
 	return [storedValue, setValue];

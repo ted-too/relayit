@@ -1,4 +1,3 @@
-import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import {
 	Card,
 	CardContent,
@@ -6,11 +5,14 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
+import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import type { Organization } from "@/lib/auth-client";
 
 export function OrganizationSettings({
 	organization,
-}: { organization: Organization }) {
+}: {
+	organization: Organization;
+}) {
 	return (
 		<Card className="max-w-none">
 			<CardHeader>

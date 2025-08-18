@@ -1,3 +1,11 @@
+import type { InvitationStatus } from "@repo/db/schema/auth";
+import {
+	Avatar,
+	AvatarFallback,
+	AvatarImage,
+} from "@repo/ui/components/shadcn/avatar";
+import { Badge } from "@repo/ui/components/shadcn/badge";
+import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Card,
 	CardContent,
@@ -5,28 +13,28 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import type { Organization } from "@/lib/auth-client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/shadcn/avatar";
-import { Badge } from "@repo/ui/components/shadcn/badge";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@repo/ui/components/shadcn/dropdown-menu";
-import { Button } from "@repo/ui/components/shadcn/button";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "@repo/ui/components/shadcn/tabs";
+import { getInitials } from "@repo/ui/lib/utils";
 import { MoreHorizontalIcon } from "lucide-react";
 import {
 	CancelInvitationAction,
 	CopyInvitationLinkAction,
 	InviteMembersForm,
 } from "@/components/shared/forms/members-settings";
-import { getInitials } from "@repo/ui/lib/utils";
-import { Fragment } from "react";
-import type { InvitationStatus } from "@repo/db/schema/auth";
+import type { Organization } from "@/lib/auth-client";
 
-interface Member {
+type Member = {
 	id: string;
 	user: {
 		name: string;
@@ -34,9 +42,9 @@ interface Member {
 		id: string;
 		image: string | null;
 	};
-}
+};
 
-interface Invitation {
+type Invitation = {
 	expiresAt: Date;
 	organizationId: string;
 	role: string | null;
@@ -48,20 +56,20 @@ interface Invitation {
 		name: string;
 		id: string;
 	};
-}
+};
 
-interface MembersSettingsProps {
+type MembersSettingsProps = {
 	organization: Organization;
 	members: Member[];
 	invitations: Invitation[];
-}
+};
 
 export function MembersSettings({
 	members,
 	invitations,
 }: MembersSettingsProps) {
 	return (
-		<Fragment>
+		<>
 			<Card className="max-w-none">
 				<CardHeader>
 					<CardTitle
@@ -80,25 +88,28 @@ export function MembersSettings({
 							<TabsTrigger value="members">Members</TabsTrigger>
 							<TabsTrigger value="pending">Pending Invitations</TabsTrigger>
 						</TabsList>
-						<TabsContent value="members" className="mt-2">
+						<TabsContent className="mt-2" value="members">
 							<div className="grid gap-4">
 								{members.map((member) => (
-									<Card key={member.id} className="flex-row items-center p-2 flex">
+									<Card
+										className="flex flex-row items-center p-2"
+										key={member.id}
+									>
 										<div
+											className="flex h-full grow items-center gap-4"
 											data-slot="card-header"
-											className="grow flex gap-4 items-center h-full"
 										>
 											<Avatar>
 												<AvatarImage
-													src={member.user.image ?? ""}
 													alt={member.user.name}
+													src={member.user.image ?? ""}
 												/>
 												<AvatarFallback>
 													{getInitials(member.user.name)}
 												</AvatarFallback>
 											</Avatar>
 											<CardTitle>{member.user.name}</CardTitle>
-											<span className="text-sm text-muted-foreground">
+											<span className="text-muted-foreground text-sm">
 												{member.user.email}
 											</span>
 										</div>
@@ -118,35 +129,37 @@ export function MembersSettings({
 								))}
 							</div>
 						</TabsContent>
-						<TabsContent value="pending" className="mt-2">
+						<TabsContent className="mt-2" value="pending">
 							<div className="grid gap-4">
 								{invitations.map((invitation) => (
 									<Card
+										className="flex flex-row items-center gap-4 p-2"
 										key={invitation.id}
-										className="flex-row flex items-center p-2 gap-4"
 									>
 										<div
+											className="flex h-full w-full grow items-center gap-4"
 											data-slot="card-header"
-											className="grow flex gap-4 w-full items-center h-full"
 										>
 											<Badge
+												className="rounded-md px-2 py-1 text-xs"
 												variant={
 													invitation.status === "rejected"
 														? "destructive"
 														: "secondary"
 												}
-												className="text-xs px-2 py-1 rounded-md"
 											>
 												{invitation.status}
 											</Badge>
-											<CardTitle className="text-sm">{invitation.email}</CardTitle>
-											<span className="text-sm text-muted-foreground ml-auto">
+											<CardTitle className="text-sm">
+												{invitation.email}
+											</CardTitle>
+											<span className="ml-auto text-muted-foreground text-sm">
 												Invited by {invitation.inviter.name}
 											</span>
 										</div>
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
-												<Button variant="ghost" size="icon" className="size-8">
+												<Button className="size-8" size="icon" variant="ghost">
 													<MoreHorizontalIcon className="size-4" />
 													<span className="sr-only">Actions</span>
 												</Button>
@@ -167,6 +180,6 @@ export function MembersSettings({
 				</CardContent>
 			</Card>
 			<InviteMembersForm />
-		</Fragment>
+		</>
 	);
 }

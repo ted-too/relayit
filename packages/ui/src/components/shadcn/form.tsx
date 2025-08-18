@@ -1,14 +1,22 @@
 "use client";
 
-import { ActionButton, Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
+import {
+	ActionButton,
+	Button,
+	type ButtonProps,
+} from "@repo/ui/components/shadcn/button";
 import { Checkbox } from "@repo/ui/components/shadcn/checkbox";
 import type { Command } from "@repo/ui/components/shadcn/command";
-import { DatePickerWithRange } from "@repo/ui/components/shadcn/date-picker";
-import { DatePickerSingeWithMonths } from "@repo/ui/components/shadcn/date-picker";
-import { DatePickerSingle } from "@repo/ui/components/shadcn/date-picker";
+import {
+	DatePickerSingeWithMonths,
+	DatePickerSingle,
+	DatePickerWithRange,
+} from "@repo/ui/components/shadcn/date-picker";
 import { Input } from "@repo/ui/components/shadcn/input";
 import { Label } from "@repo/ui/components/shadcn/label";
-import MultipleSelector, { type Option } from "@repo/ui/components/shadcn/multiselect";
+import MultipleSelector, {
+	type Option,
+} from "@repo/ui/components/shadcn/multiselect";
 import {
 	RadioGroupItem,
 	RadioGroup as RadioGroupRoot,
@@ -33,7 +41,7 @@ import type { ZodError } from "zod/v4";
 export const { fieldContext, formContext, useFieldContext, useFormContext } =
 	createFormHookContexts();
 
-export interface BaseFieldProps {
+export type BaseFieldProps = {
 	label: string;
 	description?: string;
 	required?: boolean;
@@ -45,7 +53,7 @@ export interface BaseFieldProps {
 		message?: string;
 		description?: string;
 	};
-}
+};
 
 export function FormErrorMessage({
 	errors,
@@ -54,12 +62,14 @@ export function FormErrorMessage({
 	errors: ZodError[] | string[];
 	className?: string;
 }) {
-	if (!errors.length) return null;
+	if (!errors.length) {
+		return null;
+	}
 
 	return (
 		<p
-			data-slot="form-message"
 			className={cn("text-destructive text-sm", className)}
+			data-slot="form-message"
 		>
 			{errors
 				.map((error) => (typeof error === "string" ? error : error.message))
@@ -75,7 +85,9 @@ export function FormDescription({
 	description?: string;
 	className?: string;
 }) {
-	if (!description) return null;
+	if (!description) {
+		return null;
+	}
 
 	return (
 		<p className={cn("text-muted-foreground text-xs", className)}>
@@ -89,7 +101,7 @@ export function TextField(
 		type?: string;
 		placeholder?: string;
 		textarea?: boolean;
-	},
+	}
 ) {
 	const {
 		label,
@@ -105,26 +117,26 @@ export function TextField(
 	const Component = textarea ? Textarea : Input;
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<Component
-				id={field.name}
-				type={type}
-				value={field.state.value}
-				onChange={(e) => field.handleChange(e.target.value)}
 				className={cn("w-full", className.input)}
+				disabled={disabled}
+				id={field.name}
+				onChange={(e) => field.handleChange(e.target.value)}
 				placeholder={placeholder}
 				required={required}
-				disabled={disabled}
+				type={type}
+				value={field.state.value}
 			/>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -135,7 +147,7 @@ export function SlugField(
 		placeholder?: string;
 		regenerate?: () => void;
 		isLoading?: boolean;
-	},
+	}
 ) {
 	const {
 		label,
@@ -150,42 +162,42 @@ export function SlugField(
 	const field = useFieldContext<string>();
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<div className="relative">
 				<Input
-					id={field.name}
-					className={cn("w-full peer ps-9 pe-9", className.input)}
-					value={field.state.value}
-					placeholder={placeholder}
-					required={required}
+					className={cn("peer w-full ps-9 pe-9", className.input)}
 					disabled
+					id={field.name}
+					placeholder={placeholder}
 					readOnly
+					required={required}
+					value={field.state.value}
 				/>
-				<div className="text-muted-foreground/80 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+				<div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
 					<HashIcon size={16} />
 				</div>
 				<button
-					className="cursor-pointer text-muted-foreground/80 hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-md transition-[color,box-shadow] outline-none focus:z-10 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
 					aria-label="Submit search"
-					type="button"
+					className="absolute inset-y-0 end-0 flex h-full w-9 cursor-pointer items-center justify-center rounded-e-md text-muted-foreground/80 outline-none transition-[color,box-shadow] hover:text-foreground focus:z-10 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
 					onClick={regenerate}
+					type="button"
 				>
 					<RefreshCwIcon
-						size={16}
 						aria-hidden="true"
 						className={cn(isLoading && "animate-spin")}
+						size={16}
 					/>
 				</button>
 			</div>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -230,7 +242,7 @@ export function NumberField(
 
 		min?: number;
 		max?: number;
-	},
+	}
 ) {
 	const {
 		label,
@@ -244,27 +256,27 @@ export function NumberField(
 	const field = useFieldContext<number>();
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<Input
-				id={field.name}
-				value={field.state.value}
-				type="number"
-				onChange={(e) => field.handleChange(Number(e.target.value))}
 				className={cn("w-full", className.input)}
+				id={field.name}
+				max={max}
+				min={min}
+				onChange={(e) => field.handleChange(Number(e.target.value))}
 				placeholder={placeholder}
 				required={required}
-				min={min}
-				max={max}
+				type="number"
+				value={field.state.value}
 			/>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -288,39 +300,39 @@ export function RadioGroup(props: RadioGroupProps) {
 			className={cn(
 				"flex flex-col gap-2",
 				orientation === "horizontal-inline" && "flex-row",
-				className.root,
+				className.root
 			)}
 		>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<RadioGroupRoot
-				id={field.name}
 				className={cn(
 					"flex gap-2",
 					orientation === "vertical" && "flex-col",
-					className.input,
+					className.input
 				)}
-				value={field.state.value}
+				id={field.name}
 				onValueChange={(value) => field.handleChange(value)}
+				value={field.state.value}
 			>
 				{options.map((option) => (
 					<div
-						key={option.value}
 						className={cn(
 							"flex items-center gap-1.5 space-y-0",
-							className.itemRoot,
+							className.itemRoot
 						)}
+						key={option.value}
 					>
 						<RadioGroupItem
+							className={cn(className.itemInput)}
 							id={`${field.name}-${option.value}`}
 							type="button"
 							value={option.value}
-							className={cn(className.itemInput)}
 						/>
 						<Label
-							htmlFor={`${field.name}-${option.value}`}
 							className={cn("font-light", className.itemLabel)}
+							htmlFor={`${field.name}-${option.value}`}
 						>
 							{option.label}
 						</Label>
@@ -328,8 +340,8 @@ export function RadioGroup(props: RadioGroupProps) {
 				))}
 			</RadioGroupRoot>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -359,12 +371,12 @@ export function SelectField(props: SelectFieldProps) {
 	const field = useFieldContext<string>();
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<Select
-				value={field.state.value.toString()}
 				onValueChange={(value) => field.handleChange(value.toString())}
+				value={field.state.value.toString()}
 				{...primitiveProps}
 			>
 				{/* FIXME: Add scroll area to content */}
@@ -385,12 +397,12 @@ export function SelectField(props: SelectFieldProps) {
 				</SelectContent>
 			</Select>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -413,34 +425,34 @@ export function MultiSelectField(props: MultiSelectFieldProps) {
 	} = props;
 	const field = useFieldContext<string[]>();
 	const value = options.filter((option) =>
-		field.state.value?.includes(option.value),
+		field.state.value?.includes(option.value)
 	);
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<MultipleSelector
+				className={className.input}
 				commandProps={{
 					label: placeholder,
 					...commandProps,
 				}}
-				className={className.input}
-				value={value}
 				defaultOptions={options}
-				options={options}
-				onChange={(value) => field.handleChange(value.map((opt) => opt.value))}
-				placeholder={placeholder}
 				hideClearAllButton
 				hidePlaceholderWhenSelected
+				onChange={(value) => field.handleChange(value.map((opt) => opt.value))}
+				options={options}
+				placeholder={placeholder}
+				value={value}
 			/>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -462,33 +474,34 @@ export function MultipleCheckboxField(props: MultipleCheckboxFieldProps) {
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
 			<div className="flex items-center gap-4">
-				<Label htmlFor={field.name} className={className.label}>
+				<Label className={className.label} htmlFor={field.name}>
 					{label}
 				</Label>
 				{selectAllLabel && (
 					<Button
-						type="button"
-						variant="link"
 						className="h-max p-0 text-xs"
 						onClick={() => field.handleChange(options.map((opt) => opt.value))}
+						type="button"
+						variant="link"
 					>
 						{selectAllLabel}
 					</Button>
 				)}
 			</div>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<div className="flex flex-col gap-4">
 				{options.map((option) => (
 					<div
-						key={option.value}
 						className="flex flex-row items-center space-x-3 space-y-0"
+						key={option.value}
 					>
 						<Checkbox
-							id={`${field.name}-${option.value}`}
 							checked={field.state.value?.includes(option.value)}
+							className={cn("mt-1 rounded-lg", className.input)}
+							id={`${field.name}-${option.value}`}
 							onCheckedChange={(checked) => {
 								if (checked) {
 									field.handleChange([
@@ -498,29 +511,28 @@ export function MultipleCheckboxField(props: MultipleCheckboxFieldProps) {
 								} else {
 									field.handleChange(
 										field.state.value?.filter(
-											(value) => value !== option.value,
-										) || [],
+											(value) => value !== option.value
+										) || []
 									);
 								}
 							}}
-							className={cn("mt-1 rounded-lg", className.input)}
 						/>
 						<Label
+							className={cn("font-normal text-sm", className.label)}
 							htmlFor={`${field.name}-${option.value}`}
-							className={cn("text-sm font-normal", className.label)}
 						>
 							{option.label}
 						</Label>
 						<FormDescription
-							description={option.description}
 							className={className.description}
+							description={option.description}
 						/>
 					</div>
 				))}
 			</div>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -541,25 +553,25 @@ export function CheckboxField({
 		<div className={cn("space-y-2", className.root)}>
 			<div className="flex items-center space-x-2">
 				<Checkbox
-					id={field.name}
 					checked={field.state.value}
-					onCheckedChange={(checked) => field.handleChange(checked === true)}
 					className={cn(className.input)}
+					id={field.name}
+					onCheckedChange={(checked) => field.handleChange(checked === true)}
 				/>
 				<Label
+					className={cn("font-normal text-sm", className.label)}
 					htmlFor={field.name}
-					className={cn("text-sm font-normal", className.label)}
 				>
 					{label}
 				</Label>
 			</div>
 			<FormDescription
-				description={description}
 				className={className.description}
+				description={description}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -574,7 +586,7 @@ type DatePickerFieldProps = BaseFieldProps & {
 };
 
 export function DatePickerSingleField(
-	props: DatePickerFieldProps & { variant?: "default" | "withMonths" },
+	props: DatePickerFieldProps & { variant?: "default" | "withMonths" }
 ) {
 	const {
 		label,
@@ -593,25 +605,25 @@ export function DatePickerSingleField(
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
 			<Label
-				htmlFor={field.name}
-				className={className.label}
 				aria-required={required}
+				className={className.label}
+				htmlFor={field.name}
 			>
 				{label}
 			</Label>
 			<Component
-				date={field.state.value}
-				onDateChange={(date) => field.handleChange(date)}
-				disabled={dateDisabled}
-				startMonth={startMonth}
-				endMonth={endMonth}
-				defaultMonth={defaultMonth}
 				className={className.input}
+				date={field.state.value}
+				defaultMonth={defaultMonth}
+				disabled={dateDisabled}
+				endMonth={endMonth}
 				inDialog={inDialog}
+				onDateChange={(date) => field.handleChange(date)}
+				startMonth={startMonth}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -622,19 +634,19 @@ export function DatePickerRangeField(props: DatePickerFieldProps) {
 	const field = useFieldContext<DateRange | undefined>();
 	return (
 		<div className={cn("flex flex-col gap-2", className.root)}>
-			<Label htmlFor={field.name} className={className.label}>
+			<Label className={className.label} htmlFor={field.name}>
 				{label}
 			</Label>
 			<DatePickerWithRange
-				date={field.state.value}
-				onDateChange={(date) => field.handleChange(date)}
-				disabled={dateDisabled}
-				className={className.input}
 				aria-required={required}
+				className={className.input}
+				date={field.state.value}
+				disabled={dateDisabled}
+				onDateChange={(date) => field.handleChange(date)}
 			/>
 			<FormErrorMessage
-				errors={field.state.meta.errors}
 				className={className.message}
+				errors={field.state.meta.errors}
 			/>
 		</div>
 	);
@@ -677,9 +689,9 @@ export function SubmitButton({
 		>
 			{([isSubmitting, canSubmit, isDirty]) => (
 				<ActionButton
-					type="submit"
+					disabled={!(formOptional || (canSubmit && isDirty))}
 					isLoading={isSubmitting}
-					disabled={!formOptional && (!canSubmit || !isDirty)}
+					type="submit"
 					{...props}
 				/>
 			)}

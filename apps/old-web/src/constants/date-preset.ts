@@ -1,5 +1,5 @@
-import type { DatePreset } from "@/components/data-table/types";
 import { addDays, addHours, endOfDay, startOfDay } from "date-fns";
+import type { DatePreset } from "@/components/data-table/types";
 
 export const presets = [
 	{

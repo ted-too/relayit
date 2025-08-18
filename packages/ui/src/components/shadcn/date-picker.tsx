@@ -40,15 +40,15 @@ export function DatePickerSingle({
 }) {
 	const [open, setOpen] = useState(false);
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover onOpenChange={setOpen} open={open}>
 			<PopoverTrigger asChild>
 				<Button
-					variant={"outline"}
 					className={cn(
-						"w-full justify-start text-left font-normal truncate",
+						"w-full justify-start truncate text-left font-normal",
 						!date && "text-muted-foreground",
-						className,
+						className
 					)}
+					variant={"outline"}
 				>
 					<CalendarIcon />
 					{date ? (
@@ -60,14 +60,16 @@ export function DatePickerSingle({
 			</PopoverTrigger>
 			<PopoverContent className="w-auto" inDialog={inDialog}>
 				<Calendar
-					mode="single"
-					selected={date}
-					onSelect={(newDate) => {
-						onDateChange(newDate);
-						if (newDate) setOpen(false);
-					}}
 					autoFocus
 					disabled={disabled}
+					mode="single"
+					onSelect={(newDate) => {
+						onDateChange(newDate);
+						if (newDate) {
+							setOpen(false);
+						}
+					}}
+					selected={date}
 				/>
 			</PopoverContent>
 		</Popover>
@@ -94,7 +96,7 @@ export function DatePickerSingeWithMonths({
 	const [open, setOpen] = useState(false);
 	const handleCalendarChange = (
 		_value: string | number,
-		_e: React.ChangeEventHandler<HTMLSelectElement>,
+		_e: React.ChangeEventHandler<HTMLSelectElement>
 	) => {
 		const _event = {
 			target: {
@@ -104,15 +106,15 @@ export function DatePickerSingeWithMonths({
 		_e(_event);
 	};
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover onOpenChange={setOpen} open={open}>
 			<PopoverTrigger asChild>
 				<Button
-					variant={"outline"}
 					className={cn(
-						"w-full justify-start text-left font-normal truncate",
+						"w-full justify-start truncate text-left font-normal",
 						!date && "text-muted-foreground",
-						className,
+						className
 					)}
+					variant={"outline"}
 				>
 					<CalendarIcon />
 					{date ? (
@@ -125,22 +127,11 @@ export function DatePickerSingeWithMonths({
 			<PopoverContent className="w-auto p-0">
 				<Calendar
 					autoFocus
-					mode="single"
-					selected={date}
-					onSelect={(newDate) => {
-						onDateChange(newDate);
-						if (newDate) setOpen(false);
-					}}
+					captionLayout="dropdown"
 					className="rounded-md border p-2"
 					classNames={{
 						month_caption: "mx-0",
 					}}
-					captionLayout="dropdown"
-					defaultMonth={defaultMonth}
-					startMonth={startMonth}
-					endMonth={endMonth}
-					disabled={disabled}
-					hideNavigation
 					components={{
 						DropdownNav: (props: DropdownNavProps) => {
 							return (
@@ -152,12 +143,12 @@ export function DatePickerSingeWithMonths({
 						Dropdown: (props: DropdownProps) => {
 							return (
 								<Select
-									value={String(props.value)}
 									onValueChange={(value) => {
 										if (props.onChange) {
 											handleCalendarChange(value, props.onChange);
 										}
 									}}
+									value={String(props.value)}
 								>
 									<SelectTrigger className="h-8 w-fit font-medium first:grow">
 										<SelectValue />
@@ -165,9 +156,9 @@ export function DatePickerSingeWithMonths({
 									<SelectContent className="max-h-[min(26rem,var(--radix-select-content-available-height))]">
 										{props.options?.map((option) => (
 											<SelectItem
+												disabled={option.disabled}
 												key={option.value}
 												value={String(option.value)}
-												disabled={option.disabled}
 											>
 												{option.label}
 											</SelectItem>
@@ -177,6 +168,19 @@ export function DatePickerSingeWithMonths({
 							);
 						},
 					}}
+					defaultMonth={defaultMonth}
+					disabled={disabled}
+					endMonth={endMonth}
+					hideNavigation
+					mode="single"
+					onSelect={(newDate) => {
+						onDateChange(newDate);
+						if (newDate) {
+							setOpen(false);
+						}
+					}}
+					selected={date}
+					startMonth={startMonth}
 				/>
 			</PopoverContent>
 		</Popover>
@@ -199,13 +203,13 @@ export function DatePickerWithRange({
 		<Popover>
 			<PopoverTrigger asChild>
 				<Button
+					className={cn(
+						"w-full justify-start truncate text-left font-normal",
+						!date && "text-muted-foreground",
+						className
+					)}
 					id="date"
 					variant={"outline"}
-					className={cn(
-						"w-full justify-start text-left font-normal truncate",
-						!date && "text-muted-foreground",
-						className,
-					)}
 				>
 					<CalendarIcon />
 					{date?.from ? (
@@ -222,15 +226,15 @@ export function DatePickerWithRange({
 					)}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent className="w-auto p-0" align={align}>
+			<PopoverContent align={align} className="w-auto p-0">
 				<Calendar
 					autoFocus
-					mode="range"
 					defaultMonth={date?.from}
-					selected={date}
-					onSelect={onDateChange}
-					numberOfMonths={1}
 					disabled={disabled}
+					mode="range"
+					numberOfMonths={1}
+					onSelect={onDateChange}
+					selected={date}
 				/>
 			</PopoverContent>
 		</Popover>

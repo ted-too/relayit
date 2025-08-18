@@ -1,6 +1,3 @@
-import { ProjectsCardContent } from "@/components/projects";
-import { CreateProjectDialog } from "@/components/projects/create";
-import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
 import {
 	Card,
 	CardDescription,
@@ -8,10 +5,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import { getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
+import { ProjectsCardContent } from "@/components/projects";
+import { CreateProjectDialog } from "@/components/projects/create";
+import { CopyToClipboardContainer } from "@/components/shared/copy-to-clipboard-container";
+import { getQueryClient, trpc } from "@/trpc/server";
 
 export async function ProjectsPage({
 	params,
@@ -27,8 +26,8 @@ export async function ProjectsPage({
 	return (
 		<HydrationBoundary state={dehydrate(queryClient)}>
 			<Card
+				className="mx-auto h-full max-w-none"
 				variant="shadow"
-				className="mx-auto max-w-none h-full"
 				wrapperProps={{ className: "h-full" }}
 			>
 				<CardHeader className="flex flex-row items-center justify-between border-b">
@@ -42,12 +41,12 @@ export async function ProjectsPage({
 				</CardHeader>
 				<ProjectsCardContent />
 				<CardFooter className="mt-auto rounded-b-xl border-t bg-muted p-6 dark:bg-transparent">
-					<CardDescription className="text-xs md:text-sm h-max flex items-center gap-2">
+					<CardDescription className="flex h-max items-center gap-2 text-xs md:text-sm">
 						Organization Slug:
 						<CopyToClipboardContainer
 							align="horizontal"
-							side="right"
 							inset="outside"
+							side="right"
 							sideOffset={32}
 						>
 							{orgSlug}

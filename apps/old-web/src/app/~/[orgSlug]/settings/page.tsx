@@ -1,12 +1,11 @@
 import { Card, CardContent, CardTitle } from "@repo/ui/components/shadcn/card";
-import { getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
-import { OrganizationSettings } from "./organization";
-import Link from "next/link";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
+import Link from "next/link";
 import { activeOrganizationQueryOptions } from "@/trpc/queries/auth";
+import { getQueryClient, trpc } from "@/trpc/server";
 import { MembersSettings } from "./members";
+import { OrganizationSettings } from "./organization";
 
 const SECTIONS = [
 	{
@@ -42,44 +41,44 @@ export default async function SettingsPage({
 
 	const [currentUserOrg, members, invitations] = await Promise.all([
 		await queryClient.ensureQueryData(
-			activeOrganizationQueryOptions({ headers }),
+			activeOrganizationQueryOptions({ headers })
 		),
 		await queryClient.ensureQueryData(
-			trpc(headers).misc.listMembers.queryOptions(),
+			trpc(headers).misc.listMembers.queryOptions()
 		),
 		await queryClient.ensureQueryData(
-			trpc(headers).misc.listOrgInvitations.queryOptions(),
+			trpc(headers).misc.listOrgInvitations.queryOptions()
 		),
 	]);
 
 	return (
 		<HydrationBoundary state={dehydrate(queryClient)}>
 			<Card
+				className="mx-auto h-full max-w-none"
 				variant="shadow"
-				className="mx-auto max-w-none h-full"
 				wrapperProps={{ className: "h-full" }}
 			>
-				<CardContent className="flex w-full items-start gap-4 grow pt-6">
-					<div className="flex flex-col items-start w-full gap-2 max-w-64 border-r h-full">
-						<CardTitle className="text-lg md:text-xl flex items-center gap-2">
+				<CardContent className="flex w-full grow items-start gap-4 pt-6">
+					<div className="flex h-full w-full max-w-64 flex-col items-start gap-2 border-r">
+						<CardTitle className="flex items-center gap-2 text-lg md:text-xl">
 							Settings
 						</CardTitle>
 						{SECTIONS.map((section) => (
 							<Link
-								key={`link-${section.label}-${section.path}`}
 								href={section.path}
+								key={`link-${section.label}-${section.path}`}
 							>
 								{section.label}
 							</Link>
 						))}
 					</div>
-					<div className="flex flex-col gap-4 grow">
+					<div className="flex grow flex-col gap-4">
 						{SECTIONS.map((section) => (
 							<section.Component
-								key={`content-${section.label}-${section.path}`}
-								organization={currentUserOrg}
-								members={members}
 								invitations={invitations}
+								key={`content-${section.label}-${section.path}`}
+								members={members}
+								organization={currentUserOrg}
 							/>
 						))}
 					</div>

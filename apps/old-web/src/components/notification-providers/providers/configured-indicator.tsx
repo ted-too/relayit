@@ -12,40 +12,42 @@ export const ConfigurationType: Record<ConfiguredIndicatorType, string> = {
 	"not-configured": "No provider found",
 };
 
-export interface ConfiguredIndicatorProps {
+export type ConfiguredIndicatorProps = {
 	configured: ConfiguredIndicatorType;
 	className?: string;
-}
+};
 
 export function ConfiguredIndicator({
 	configured,
 	className,
 }: ConfiguredIndicatorProps) {
-	if (configured === "project-specific")
+	if (configured === "project-specific") {
 		return (
 			<CircleCheckIcon
 				className={cn(
-					"size-4 absolute -top-2 -right-2 text-green-500 fill-current stroke-background",
-					className,
+					"-top-2 -right-2 absolute size-4 fill-current stroke-background text-green-500",
+					className
 				)}
 			/>
 		);
+	}
 
-	if (configured === "default")
+	if (configured === "default") {
 		return (
 			<CircleAlertIcon
 				className={cn(
-					"size-4 absolute -top-2 -right-2 text-orange-500 fill-current stroke-background",
-					className,
+					"-top-2 -right-2 absolute size-4 fill-current stroke-background text-orange-500",
+					className
 				)}
 			/>
 		);
+	}
 
 	return (
 		<CircleXIcon
 			className={cn(
-				"size-4 absolute -top-2 -right-2 text-red-500 fill-current stroke-background",
-				className,
+				"-top-2 -right-2 absolute size-4 fill-current stroke-background text-red-500",
+				className
 			)}
 		/>
 	);

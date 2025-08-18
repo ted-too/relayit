@@ -1,4 +1,4 @@
-import type { DataTableFilterField } from "@/components/data-table/types";
+import type { Facets } from "@repo/shared";
 import type {
 	ColumnDef,
 	ColumnFiltersState,
@@ -9,14 +9,14 @@ import type {
 	VisibilityState,
 } from "@tanstack/react-table";
 import { createContext, useContext, useMemo } from "react";
+import type { DataTableFilterField } from "@/components/data-table/types";
 import { ControlsProvider } from "./controls";
-import type { Facets } from "@repo/shared";
 import { getFacetedMinMaxValues, getFacetedUniqueValues } from "./facets";
 
 // REMINDER: read about how to move controlled state out of the useReactTable hook
 // https://github.com/TanStack/table/discussions/4005#discussioncomment-7303569
 
-interface DataTableStateContextType<TData> {
+type DataTableStateContextType<TData> = {
 	columnFilters: ColumnFiltersState;
 	sorting: SortingState;
 	rowSelection: RowSelectionState;
@@ -29,15 +29,15 @@ interface DataTableStateContextType<TData> {
 	controlsOpen?: boolean;
 	filterRows: number;
 	totalRows: number;
-}
+};
 
-interface DataTableBaseContextType<TData = unknown, TValue = unknown> {
+type DataTableBaseContextType<TData = unknown, TValue = unknown> = {
 	table: Table<TData>;
 	filterFields: DataTableFilterField<TData>[];
 	columns: ColumnDef<TData, TValue>[];
 	isLoading?: boolean;
 	facets?: Facets;
-}
+};
 
 interface DataTableContextType<TData = unknown, TValue = unknown>
 	extends DataTableStateContextType<TData>,
@@ -86,7 +86,8 @@ export function DataTableProvider<TData, TValue>({
 			props.controlsOpen,
 			props.filterRows,
 			props.totalRows,
-		],
+			props,
+		]
 	);
 
 	return (

@@ -7,10 +7,10 @@ import {
 import { decryptRecord } from "@repo/db";
 import type {
 	AWSProviderCredentials,
+	EmailPayload,
 	ProjectProviderConfig,
 	ProviderCredentials,
 	Result,
-	EmailPayload,
 } from "@repo/shared";
 import {
 	awsCredentialsSchema,
@@ -34,7 +34,7 @@ export class SESProvider implements INotificationProvider {
 		encryptedCredentials: ProviderCredentials,
 		messagePayload: EmailPayload,
 		config: ProjectProviderConfig,
-		recipient: string,
+		recipient: string
 	): Promise<Result<ProviderSendResult>> {
 		const startTime = Date.now();
 
@@ -50,11 +50,11 @@ export class SESProvider implements INotificationProvider {
 		if (!isAWSProviderCredentials(encryptedCredentials)) {
 			logger.error(
 				logContext,
-				"Invalid SES credentials structure (pre-decrypt)",
+				"Invalid SES credentials structure (pre-decrypt)"
 			);
 			return {
 				error: createGenericError(
-					"Invalid SES credentials structure (pre-decrypt)",
+					"Invalid SES credentials structure (pre-decrypt)"
 				),
 				data: null,
 			};
@@ -72,12 +72,12 @@ export class SESProvider implements INotificationProvider {
 		if (!configParseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: configParseResult.error },
-				"Invalid SES config content",
+				"Invalid SES config content"
 			);
 			return {
 				error: createGenericError(
 					"Invalid SES config content",
-					configParseResult.error,
+					configParseResult.error
 				),
 				data: null,
 			};
@@ -97,12 +97,12 @@ export class SESProvider implements INotificationProvider {
 		if (decryptResult.error) {
 			logger.error(
 				{ ...logContext, error: decryptResult.error },
-				"Failed to decrypt SES credentials",
+				"Failed to decrypt SES credentials"
 			);
 			return {
 				error: createGenericError(
 					"Failed to decrypt SES credentials",
-					decryptResult.error.details,
+					decryptResult.error.details
 				),
 				data: null,
 			};
@@ -112,12 +112,12 @@ export class SESProvider implements INotificationProvider {
 		if (!parseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: parseResult.error },
-				"Invalid decrypted SES credentials format",
+				"Invalid decrypted SES credentials format"
 			);
 			return {
 				error: createGenericError(
 					"Invalid decrypted SES credentials format",
-					parseResult.error,
+					parseResult.error
 				),
 				data: null,
 			};
@@ -164,7 +164,7 @@ export class SESProvider implements INotificationProvider {
 						duration,
 						success: true,
 					},
-					"SES email sent successfully",
+					"SES email sent successfully"
 				);
 
 				return {
@@ -203,13 +203,13 @@ export class SESProvider implements INotificationProvider {
 					const delayMs = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
 					logger.warn(
 						{ ...errorContext, retryDelayMs: delayMs },
-						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`,
+						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`
 					);
 					await delay(delayMs);
 				} else {
 					logger.error(
 						errorContext,
-						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`,
+						`SES attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`
 					);
 					break;
 				}
@@ -231,13 +231,13 @@ export class SESProvider implements INotificationProvider {
 						}
 					: null,
 			},
-			`SES email send failed after ${MAX_RETRY_ATTEMPTS} attempts`,
+			`SES email send failed after ${MAX_RETRY_ATTEMPTS} attempts`
 		);
 
 		return {
 			error: createGenericError(
 				`Failed to send email via SES after ${MAX_RETRY_ATTEMPTS} attempt(s)`,
-				lastError,
+				lastError
 			),
 			data: null,
 		};

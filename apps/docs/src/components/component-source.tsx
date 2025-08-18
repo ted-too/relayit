@@ -1,11 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type * as React from "react";
-
-import { highlightCode } from "@/lib/highlight-code";
 import { cn } from "@repo/ui/lib/utils";
+import type * as React from "react";
 import { CopyButton } from "@/components/copy-button";
 import { getIconForLanguageExtension } from "@/components/icons";
+import { highlightCode } from "@/lib/highlight-code";
 
 export async function ComponentSource({
 	name,
@@ -21,7 +20,7 @@ export async function ComponentSource({
 	language?: string;
 	collapsible?: boolean;
 }) {
-	if (!name && !src) {
+	if (!(name || src)) {
 		return null;
 	}
 
@@ -79,18 +78,18 @@ function ComponentCode({
 	title: string | undefined;
 }) {
 	return (
-		<figure data-rehype-pretty-code-figure="" className="[&>pre]:max-h-96">
+		<figure className="[&>pre]:max-h-96" data-rehype-pretty-code-figure="">
 			{title && (
 				<figcaption
-					data-rehype-pretty-code-title=""
-					className="text-code-foreground [&_svg]:text-code-foreground flex items-center gap-2 [&_svg]:size-4 [&_svg]:opacity-70"
+					className="flex items-center gap-2 text-code-foreground [&_svg]:size-4 [&_svg]:text-code-foreground [&_svg]:opacity-70"
 					data-language={language}
+					data-rehype-pretty-code-title=""
 				>
 					{getIconForLanguageExtension(language)}
 					{title}
 				</figcaption>
 			)}
-			<CopyButton value={code} offset={0} />
+			<CopyButton offset={0} value={code} />
 			{/* biome-ignore lint/security/noDangerouslySetInnerHtml: this is safe */}
 			<div dangerouslySetInnerHTML={{ __html: highlightedCode }} />
 		</figure>

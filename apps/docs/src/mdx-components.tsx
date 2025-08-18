@@ -1,13 +1,3 @@
-import type * as React from "react";
-import Image from "next/image";
-import Link from "next/link";
-
-import { cn } from "@repo/ui/lib/utils";
-import { Callout } from "@/components/callout";
-import { ComponentSource } from "@/components/component-source";
-import { ComponentsList } from "@/components/components-list";
-import { CopyButton } from "@/components/copy-button";
-import { getIconForLanguageExtension } from "@/components/icons";
 import {
 	Accordion,
 	AccordionContent,
@@ -27,14 +17,23 @@ import {
 	TabsList,
 	TabsTrigger,
 } from "@repo/ui/components/shadcn/tabs";
+import { cn } from "@repo/ui/lib/utils";
+import Image from "next/image";
+import Link from "next/link";
+import type * as React from "react";
+import { Callout } from "@/components/callout";
 import { CodeBlockCommand } from "@/components/code-block";
+import { ComponentSource } from "@/components/component-source";
+import { ComponentsList } from "@/components/components-list";
+import { CopyButton } from "@/components/copy-button";
+import { getIconForLanguageExtension } from "@/components/icons";
 
 export const mdxComponents = {
 	h1: ({ className, ...props }: React.ComponentProps<"h1">) => (
 		<h1
 			className={cn(
-				"font-heading mt-2 scroll-m-28 text-3xl font-bold tracking-tight",
-				className,
+				"mt-2 scroll-m-28 font-bold font-heading text-3xl tracking-tight",
+				className
 			)}
 			{...props}
 		/>
@@ -42,16 +41,16 @@ export const mdxComponents = {
 	h2: ({ className, ...props }: React.ComponentProps<"h2">) => {
 		return (
 			<h2
+				className={cn(
+					"[&+p]:!mt-4 mt-12 scroll-m-28 font-heading font-medium text-2xl tracking-tight first:mt-0 lg:mt-20",
+					className
+				)}
 				id={props.children
 					?.toString()
 					.replace(/ /g, "-")
 					.replace(/'/g, "")
 					.replace(/\?/g, "")
 					.toLowerCase()}
-				className={cn(
-					"font-heading mt-12 scroll-m-28 text-2xl font-medium tracking-tight first:mt-0 lg:mt-20 [&+p]:!mt-4",
-					className,
-				)}
 				{...props}
 			/>
 		);
@@ -59,8 +58,8 @@ export const mdxComponents = {
 	h3: ({ className, ...props }: React.ComponentProps<"h3">) => (
 		<h3
 			className={cn(
-				"font-heading mt-8 scroll-m-28 text-xl font-semibold tracking-tight",
-				className,
+				"mt-8 scroll-m-28 font-heading font-semibold text-xl tracking-tight",
+				className
 			)}
 			{...props}
 		/>
@@ -68,8 +67,8 @@ export const mdxComponents = {
 	h4: ({ className, ...props }: React.ComponentProps<"h4">) => (
 		<h4
 			className={cn(
-				"font-heading mt-8 scroll-m-28 text-lg font-medium tracking-tight",
-				className,
+				"mt-8 scroll-m-28 font-heading font-medium text-lg tracking-tight",
+				className
 			)}
 			{...props}
 		/>
@@ -77,8 +76,8 @@ export const mdxComponents = {
 	h5: ({ className, ...props }: React.ComponentProps<"h5">) => (
 		<h5
 			className={cn(
-				"mt-8 scroll-m-28 text-lg font-medium tracking-tight",
-				className,
+				"mt-8 scroll-m-28 font-medium text-lg tracking-tight",
+				className
 			)}
 			{...props}
 		/>
@@ -86,8 +85,8 @@ export const mdxComponents = {
 	h6: ({ className, ...props }: React.ComponentProps<"h6">) => (
 		<h6
 			className={cn(
-				"mt-8 scroll-m-28 text-base font-medium tracking-tight",
-				className,
+				"mt-8 scroll-m-28 font-medium text-base tracking-tight",
+				className
 			)}
 			{...props}
 		/>
@@ -124,7 +123,7 @@ export const mdxComponents = {
 	),
 	img: ({ className, alt, ...props }: React.ComponentProps<"img">) => (
 		// biome-ignore lint/a11y/useAltText: no need to add alt text to images
-		<img className={cn("rounded-md", className)} alt={alt} {...props} />
+		<img alt={alt} className={cn("rounded-md", className)} {...props} />
 	),
 	hr: ({ ...props }: React.ComponentProps<"hr">) => (
 		<hr className="my-4 md:my-8" {...props} />
@@ -134,7 +133,7 @@ export const mdxComponents = {
 			<table
 				className={cn(
 					"relative w-full overflow-hidden border-none text-sm",
-					className,
+					className
 				)}
 				{...props}
 			/>
@@ -142,7 +141,7 @@ export const mdxComponents = {
 	),
 	tr: ({ className, ...props }: React.ComponentProps<"tr">) => (
 		<tr
-			className={cn("last:border-b-none m-0 border-b", className)}
+			className={cn("m-0 border-b last:border-b-none", className)}
 			{...props}
 		/>
 	),
@@ -150,7 +149,7 @@ export const mdxComponents = {
 		<th
 			className={cn(
 				"px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right",
-				className,
+				className
 			)}
 			{...props}
 		/>
@@ -159,7 +158,7 @@ export const mdxComponents = {
 		<td
 			className={cn(
 				"px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right",
-				className,
+				className
 			)}
 			{...props}
 		/>
@@ -168,8 +167,8 @@ export const mdxComponents = {
 		return (
 			<pre
 				className={cn(
-					"no-scrollbar min-w-0 overflow-x-auto px-4 py-3.5 outline-none has-[[data-highlighted-line]]:px-0 has-[[data-line-numbers]]:px-0 has-[[data-slot=tabs]]:p-0",
-					className,
+					"no-scrollbar min-w-0 overflow-x-auto px-4 py-3.5 outline-none has-[[data-slot=tabs]]:p-0 has-[[data-highlighted-line]]:px-0 has-[[data-line-numbers]]:px-0",
+					className
 				)}
 				{...props}
 			>
@@ -193,8 +192,8 @@ export const mdxComponents = {
 		return (
 			<figcaption
 				className={cn(
-					"text-code-foreground [&_svg]:text-code-foreground flex items-center gap-2 [&_svg]:size-4 [&_svg]:opacity-70",
-					className,
+					"flex items-center gap-2 text-code-foreground [&_svg]:size-4 [&_svg]:text-code-foreground [&_svg]:opacity-70",
+					className
 				)}
 				{...props}
 			>
@@ -221,8 +220,8 @@ export const mdxComponents = {
 			return (
 				<code
 					className={cn(
-						"bg-muted relative rounded-md px-[0.3rem] py-[0.2rem] font-mono text-[0.8rem] outline-none",
-						className,
+						"relative rounded-md bg-muted px-[0.3rem] py-[0.2rem] font-mono text-[0.8rem] outline-none",
+						className
 					)}
 					{...props}
 				/>
@@ -232,13 +231,13 @@ export const mdxComponents = {
 		// Custom codeblock.
 		const isCustom = __tsx__ && __curl__;
 		if (isCustom) {
-			return <CodeBlockCommand __tsx__={__tsx__} __curl__={__curl__} />;
+			return <CodeBlockCommand __curl__={__curl__} __tsx__={__tsx__} />;
 		}
 
 		// Default codeblock.
 		return (
 			<>
-				{__raw__ && <CopyButton value={__raw__} src={__src__} />}
+				{__raw__ && <CopyButton src={__src__} value={__raw__} />}
 				<code {...props} />
 			</>
 		);
@@ -246,15 +245,15 @@ export const mdxComponents = {
 	Step: ({ className, ...props }: React.ComponentProps<"h3">) => (
 		<h3
 			className={cn(
-				"font-heading mt-8 scroll-m-32 text-xl font-medium tracking-tight",
-				className,
+				"mt-8 scroll-m-32 font-heading font-medium text-xl tracking-tight",
+				className
 			)}
 			{...props}
 		/>
 	),
 	Steps: ({ ...props }) => (
 		<div
-			className="[&>h3]:step steps mb-12 [counter-reset:step] *:[h3]:first:!mt-0"
+			className="[&>h3]:step steps *:[h3]:first:!mt-0 mb-12 [counter-reset:step]"
 			{...props}
 		/>
 	),
@@ -267,11 +266,11 @@ export const mdxComponents = {
 		...props
 	}: React.ComponentProps<"img">) => (
 		<Image
+			alt={alt || ""}
 			className={cn("mt-6 rounded-md border", className)}
+			height={Number(height)}
 			src={src as string}
 			width={Number(width)}
-			height={Number(height)}
-			alt={alt || ""}
 			{...props}
 		/>
 	),
@@ -287,7 +286,7 @@ export const mdxComponents = {
 		<TabsList
 			className={cn(
 				"justify-start gap-4 rounded-none bg-transparent px-2 md:px-0",
-				className,
+				className
 			)}
 			{...props}
 		/>
@@ -298,8 +297,8 @@ export const mdxComponents = {
 	}: React.ComponentProps<typeof TabsTrigger>) => (
 		<TabsTrigger
 			className={cn(
-				"text-muted-foreground data-[state=active]:text-foreground px-0 text-base data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
-				className,
+				"px-0 text-base text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
+				className
 			)}
 			{...props}
 		/>
@@ -310,8 +309,8 @@ export const mdxComponents = {
 	}: React.ComponentProps<typeof TabsContent>) => (
 		<TabsContent
 			className={cn(
-				"relative [&_h3.font-heading]:text-base [&_h3.font-heading]:font-medium *:[figure]:first:mt-0 [&>.steps]:mt-6",
-				className,
+				"relative [&>.steps]:mt-6 [&_h3.font-heading]:font-medium [&_h3.font-heading]:text-base *:[figure]:first:mt-0",
+				className
 			)}
 			{...props}
 		/>
@@ -340,8 +339,8 @@ export const mdxComponents = {
 	LinkedCard: ({ className, ...props }: React.ComponentProps<typeof Link>) => (
 		<Link
 			className={cn(
-				"bg-surface text-surface-foreground hover:bg-surface/80 flex w-full flex-col items-center rounded-xl p-6 transition-colors sm:p-10",
-				className,
+				"flex w-full flex-col items-center rounded-xl bg-surface p-6 text-surface-foreground transition-colors hover:bg-surface/80 sm:p-10",
+				className
 			)}
 			{...props}
 		/>

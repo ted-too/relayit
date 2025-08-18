@@ -1,22 +1,22 @@
-export * from "./constants/validations";
 export * from "./constants/core";
 export * from "./constants/organization";
 export * from "./constants/providers";
-
+export * from "./constants/validations";
+export * from "./facets";
+export * from "./validations/auth";
+export * from "./validations/project";
+export * from "./validations/project-provider";
 export * from "./validations/provider-credentials";
 export * from "./validations/providers";
-export * from "./validations/project-provider";
-export * from "./validations/webhooks";
-export * from "./validations/project";
 export * from "./validations/send";
-export * from "./validations/auth";
-
-export * from "./facets";
+export * from "./validations/webhooks";
 
 export function stringifyObject<T extends Record<string, unknown>>(
-	obj?: T,
+	obj?: T
 ): { [K in keyof T]: string | string[] | undefined } {
-	if (!obj) return {} as any;
+	if (!obj) {
+		return {} as any;
+	}
 
 	const result: { [K in keyof T]: string | string[] | undefined } = {} as any;
 
@@ -25,7 +25,7 @@ export function stringifyObject<T extends Record<string, unknown>>(
 			result[key as keyof T] = undefined;
 		} else if (Array.isArray(value)) {
 			result[key as keyof T] = value.map((item) =>
-				item instanceof Date ? item.toISOString() : String(item),
+				item instanceof Date ? item.toISOString() : String(item)
 			);
 		} else if (value instanceof Date) {
 			result[key as keyof T] = value.toISOString();
@@ -37,14 +37,14 @@ export function stringifyObject<T extends Record<string, unknown>>(
 	return result;
 }
 
-export interface GenericError {
+export type GenericError = {
 	message: string;
 	details: string[];
-}
+};
 
 export const createGenericError = (
 	message: string,
-	error?: Error | string[] | unknown,
+	error?: Error | string[] | unknown
 ): GenericError => ({
 	message,
 	details: error

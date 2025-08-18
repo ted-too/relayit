@@ -1,11 +1,11 @@
 "use client";
 
-import { DatePickerWithRange } from "@/components/shared/date-picker-with-range";
-import { useDataTable } from "@/components/data-table/provider";
-import type { DataTableTimerangeFilterField } from "@/components/data-table/types";
-import { isArrayOfDates } from "@/components/data-table/filter-fns";
 import { useCallback, useMemo } from "react";
 import type { DateRange } from "react-day-picker";
+import { isArrayOfDates } from "@/components/data-table/filter-fns";
+import { useDataTable } from "@/components/data-table/provider";
+import type { DataTableTimerangeFilterField } from "@/components/data-table/types";
+import { DatePickerWithRange } from "@/components/shared/date-picker-with-range";
 
 export function DataTableFilterTimerange<TData>({
 	value: _value,
@@ -23,7 +23,7 @@ export function DataTableFilterTimerange<TData>({
 				: Array.isArray(filterValue) && isArrayOfDates(filterValue)
 					? { from: filterValue?.[0], to: filterValue?.[1] }
 					: undefined,
-		[filterValue],
+		[filterValue]
 	);
 
 	const setDate = useCallback(
@@ -39,10 +39,10 @@ export function DataTableFilterTimerange<TData>({
 				column?.setFilterValue([date.from, date.to]);
 			}
 		},
-		[column],
+		[column]
 	);
 
 	return (
-		<DatePickerWithRange date={date} setDate={setDate} presets={presets} />
+		<DatePickerWithRange date={date} presets={presets} setDate={setDate} />
 	);
 }

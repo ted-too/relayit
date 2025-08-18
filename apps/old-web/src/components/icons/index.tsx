@@ -27,7 +27,7 @@ export const svgStringToReact = (svg: string, className?: string) =>
 				attribs.stroke = "currentColor";
 			}
 			if (name === "svg") {
-				attribs.class = cn("stroke-current fill-current", className);
+				attribs.class = cn("fill-current stroke-current", className);
 			}
 			for (const [key, value] of Object.entries(SVG_ATTRIBUTES_TO_REACT)) {
 				if (attribs?.[key]) {
@@ -38,7 +38,7 @@ export const svgStringToReact = (svg: string, className?: string) =>
 		},
 	});
 
+export * from "./discord";
 export * from "./email";
 export * from "./sms";
 export * from "./whatsapp";
-export * from "./discord";

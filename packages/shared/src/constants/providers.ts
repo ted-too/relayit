@@ -63,7 +63,7 @@ export const PROVIDER_CONFIG = {
 
 export function getProviderConfig(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	return PROVIDER_CONFIG[channelType].find((p) => p.type === providerType);
 }
@@ -89,23 +89,23 @@ export type DiscordProviderType =
 
 // Channel-specific available provider arrays
 export const AVAILABLE_EMAIL_PROVIDER_TYPES = PROVIDER_CONFIG.email.map(
-	(p) => p.type,
+	(p) => p.type
 ) as [EmailProviderType, ...EmailProviderType[]];
 export const AVAILABLE_SMS_PROVIDER_TYPES = PROVIDER_CONFIG.sms.map(
-	(p) => p.type,
+	(p) => p.type
 ) as [SMSProviderType, ...SMSProviderType[]];
 export const AVAILABLE_WHATSAPP_PROVIDER_TYPES = PROVIDER_CONFIG.whatsapp.map(
-	(p) => p.type,
+	(p) => p.type
 ) as [WhatsAppProviderType, ...WhatsAppProviderType[]];
 export const AVAILABLE_DISCORD_PROVIDER_TYPES = PROVIDER_CONFIG.discord.map(
-	(p) => p.type,
+	(p) => p.type
 ) as [DiscordProviderType, ...DiscordProviderType[]];
 
 export const AVAILABLE_PROVIDER_TYPES = [
 	...new Set(
 		Object.values(PROVIDER_CONFIG).flatMap((providers) =>
-			providers.map((provider) => provider.type),
-		),
+			providers.map((provider) => provider.type)
+		)
 	),
 ] as [ProviderType, ...ProviderType[]];
 

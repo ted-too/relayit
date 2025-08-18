@@ -1,60 +1,58 @@
 {
-	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-	"vcs": {
-		"enabled": false,
-		"clientKind": "git",
-		"useIgnoreFile": false
-	},
-	"files": {
-		"ignoreUnknown": false,
-		"ignore": [
-			".next",
-			"legacy",
-			".git",
-			"node_modules",
-			"typescript-config",
-			".turbo",
-			"build",
-			"drizzle"
-		]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
-	"organizeImports": {
-		"enabled": true
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"a11y": {
-				"noSvgWithoutTitle": "off",
-				"useSemanticElements": "off",
-				"useButtonType": "off",
-				"useKeyWithClickEvents": "off"
-			},
-			"correctness": {
-				"noUnusedImports": "error",
-				"noChildrenProp": "off",
-				"useExhaustiveDependencies": "off"
-			},
-			"suspicious": {
-				"noArrayIndexKey": "off",
-				"noExplicitAny": "off"
-			},
-			"complexity": {
-				"noBannedTypes": "off"
-			},
-			"style": {
-				"noNonNullAssertion": "off"
-			}
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double"
-		}
-	}
+  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+  "extends": ["ultracite"],
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["apps/**", "packages/**", "**/*.json", "!**/tsconfig.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noUnknownAtRules": "off",
+        "noConsole": "off"
+      },
+      "style": {
+        "noHeadElement": "off",
+        "useBlockStatements": "off",
+        "noMagicNumbers": "off"
+      },
+      "nursery": {
+        "useConsistentTypeDefinitions": "off"
+      },
+      "performance": {
+        "noNamespaceImport": "off"
+      },
+      "correctness": {
+        "noUnusedImports": {
+          "level": "warn",
+          "fix": "safe"
+        },
+        "noUnusedFunctionParameters": "warn"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
 }

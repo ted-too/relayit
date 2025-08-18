@@ -1,7 +1,6 @@
 "use client";
 
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
-import { useDataTable } from "@/components/data-table/provider";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import {
 	Command,
 	CommandEmpty,
@@ -11,15 +10,17 @@ import {
 	CommandList,
 	CommandSeparator,
 } from "@repo/ui/components/shadcn/command";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import { Separator } from "@repo/ui/components/shadcn/separator";
-import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
-import { formatCompactNumber } from "@repo/ui/lib/utils";
-import { cn } from "@repo/ui/lib/utils";
+import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
 import type { ParserBuilder } from "nuqs";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableFilterField } from "@/components/data-table/types";
+import { TABLE_COMMAND_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 import {
 	columnFiltersParser,
 	getFieldOptions,
@@ -27,17 +28,15 @@ import {
 	getWordByCaretPosition,
 	replaceInputByFieldType,
 } from "./utils";
-import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
-import { TABLE_COMMAND_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 
 // FIXME: there is an issue on cmdk if I wanna only set a single slider value...
 
-interface DataTableFilterCommandProps {
+type DataTableFilterCommandProps = {
 	// TODO: maybe use generics for the parser
 	searchParamsParser: Record<string, ParserBuilder<any>>;
 	className?: string;
 	tableId: string;
-}
+};
 
 export function DataTableFilterCommand({
 	searchParamsParser,
@@ -56,14 +55,14 @@ export function DataTableFilterCommand({
 	const [currentWord, setCurrentWord] = useState<string>("");
 	const filterFields = useMemo(
 		() => _filterFields?.filter((i) => !i.commandDisabled),
-		[_filterFields],
+		[_filterFields]
 	);
 	const columnParser = useMemo(
 		() => columnFiltersParser({ searchParamsParser, filterFields }),
-		[searchParamsParser, filterFields],
+		[searchParamsParser, filterFields]
 	);
 	const [inputValue, setInputValue] = useState<string>(
-		columnParser.serialize(columnFilters),
+		columnParser.serialize(columnFilters)
 	);
 	const [lastSearches, setLastSearches] = useLocalStorage<
 		{
@@ -74,11 +73,17 @@ export function DataTableFilterCommand({
 
 	useEffect(() => {
 		// TODO: we could check for ARRAY_DELIMITER or SLIDER_DELIMITER to auto-set filter when typing
-		if (currentWord !== "" && open) return;
+		if (currentWord !== "" && open) {
+			return;
+		}
 		// reset
-		if (currentWord !== "" && !open) setCurrentWord("");
+		if (currentWord !== "" && !open) {
+			setCurrentWord("");
+		}
 		// avoid recursion
-		if (inputValue.trim() === "" && !open) return;
+		if (inputValue.trim() === "" && !open) {
+			return;
+		}
 
 		const searchParams = columnParser.parse(inputValue);
 
@@ -92,12 +97,12 @@ export function DataTableFilterCommand({
 			return field?.commandDisabled;
 		});
 
-		const commandDisabledFilterKeys = currentDisabledFilters.reduce(
+		const _commandDisabledFilterKeys = currentDisabledFilters.reduce(
 			(prev, curr) => {
 				prev[curr.id] = curr.value;
 				return prev;
 			},
-			{} as Record<string, unknown>,
+			{} as Record<string, unknown>
 		);
 
 		for (const key of Object.keys(searchParams)) {
@@ -112,14 +117,22 @@ export function DataTableFilterCommand({
 		}
 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [inputValue, open, currentWord]);
+	}, [
+		inputValue,
+		open,
+		currentWord,
+		_filterFields?.find,
+		columnParser.parse,
+		table.getColumn,
+		table.getState,
+	]);
 
 	useEffect(() => {
 		// REMINDER: only update the input value if the command is closed (avoids jumps while open)
 		if (!open) {
 			setInputValue(columnParser.serialize(columnFilters));
 		}
-	}, [columnFilters, filterFields, open]);
+	}, [columnFilters, open, columnParser.serialize]);
 
 	useHotkeys(TABLE_COMMAND_KEYBOARD_SHORTCUT, () => setOpen((open) => !open));
 
@@ -132,12 +145,12 @@ export function DataTableFilterCommand({
 	return (
 		<div className={cn(className)}>
 			<button
-				type="button"
 				className={cn(
 					"group flex w-full items-center rounded-lg border border-input bg-background px-3 text-muted-foreground ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-accent/50 hover:text-accent-foreground",
-					open ? "hidden" : "visible",
+					open ? "hidden" : "visible"
 				)}
 				onClick={() => setOpen(true)}
+				type="button"
 			>
 				{isLoading ? (
 					<LoaderCircleIcon className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground opacity-50 group-hover:text-popover-foreground" />
@@ -159,7 +172,7 @@ export function DataTableFilterCommand({
 			<Command
 				className={cn(
 					"overflow-visible rounded-lg border border-border dark:bg-muted/50 [&>div]:border-none",
-					open ? "visible" : "hidden",
+					open ? "visible" : "hidden"
 				)}
 				filter={(value, search, keywords) =>
 					getFilterValue({ value, search, keywords, currentWord })
@@ -167,22 +180,19 @@ export function DataTableFilterCommand({
 				// loop
 			>
 				<CommandInput
-					ref={inputRef}
-					value={inputValue}
-					onValueChange={setInputValue}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") inputRef?.current?.blur();
-					}}
+					className="text-foreground"
 					onBlur={() => {
 						setOpen(false);
 						// FIXME: doesnt reflect the jumps
 						// FIXME: will save non-existing searches
 						// TODO: extract into function
 						const search = inputValue.trim();
-						if (!search) return;
+						if (!search) {
+							return;
+						}
 						const timestamp = Date.now();
 						const searchIndex = lastSearches.findIndex(
-							(item) => item.search === search,
+							(item) => item.search === search
 						);
 						if (searchIndex !== -1) {
 							lastSearches[searchIndex].timestamp = timestamp;
@@ -198,22 +208,33 @@ export function DataTableFilterCommand({
 						const word = getWordByCaretPosition({ value, caretPosition });
 						setCurrentWord(word);
 					}}
+					onKeyDown={(e) => {
+						if (e.key === "Escape") {
+							inputRef?.current?.blur();
+						}
+					}}
+					onValueChange={setInputValue}
 					placeholder="Search data table..."
-					className="text-foreground"
+					ref={inputRef}
+					value={inputValue}
 				/>
 				<div className="relative">
-					<div className="absolute top-2 z-10 w-full overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md outline-none animate-in">
+					<div className="absolute top-2 z-10 w-full animate-in overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md outline-none">
 						{/* default height is 300px but in case of more, we'd like to tease the user */}
 						<CommandList className="max-h-[310px]">
 							<CommandGroup heading="Filter">
 								{filterFields.map((field) => {
-									if (typeof field.value !== "string") return null;
-									if (inputValue.includes(`${field.value}:`)) return null;
+									if (typeof field.value !== "string") {
+										return null;
+									}
+									if (inputValue.includes(`${field.value}:`)) {
+										return null;
+									}
 									// TBD: should we handle this in the component?
 									return (
 										<CommandItem
+											className="group"
 											key={field.value}
-											value={field.value}
 											onMouseDown={(e) => {
 												e.preventDefault();
 												e.stopPropagation();
@@ -229,13 +250,13 @@ export function DataTableFilterCommand({
 													const prefix = isStarting ? "" : " ";
 													const input = prev.replace(
 														`${prefix}${currentWord}`,
-														`${prefix}${value}`,
+														`${prefix}${value}`
 													);
 													return `${input}:`;
 												});
 												setCurrentWord(`${value}:`);
 											}}
-											className="group"
+											value={field.value}
 										>
 											{field.value}
 											<CommandItemSuggestions field={field} />
@@ -246,8 +267,12 @@ export function DataTableFilterCommand({
 							<CommandSeparator />
 							<CommandGroup heading="Query">
 								{filterFields?.map((field) => {
-									if (typeof field.value !== "string") return null;
-									if (!currentWord.includes(`${field.value}:`)) return null;
+									if (typeof field.value !== "string") {
+										return null;
+									}
+									if (!currentWord.includes(`${field.value}:`)) {
+										return null;
+									}
 
 									const column = table.getColumn(field.value);
 									const facetedValue =
@@ -260,7 +285,6 @@ export function DataTableFilterCommand({
 										return (
 											<CommandItem
 												key={`${String(field.value)}:${optionValue}`}
-												value={`${String(field.value)}:${optionValue}`}
 												onMouseDown={(e) => {
 													e.preventDefault();
 													e.stopPropagation();
@@ -273,16 +297,17 @@ export function DataTableFilterCommand({
 															optionValue,
 															value,
 															field,
-														}),
+														})
 													);
 													setCurrentWord("");
 												}}
+												value={`${String(field.value)}:${optionValue}`}
 											>
 												{`${optionValue}`}
 												{facetedValue?.has(optionValue.toString()) ? (
 													<span className="ml-auto font-mono text-muted-foreground">
 														{formatCompactNumber(
-															facetedValue.get(optionValue.toString()) || 0,
+															facetedValue.get(optionValue.toString()) || 0
 														)}
 													</span>
 												) : null}
@@ -299,8 +324,8 @@ export function DataTableFilterCommand({
 									.map((item) => {
 										return (
 											<CommandItem
+												className="group"
 												key={`suggestion:${item.search}`}
-												value={`suggestion:${item.search}`}
 												onMouseDown={(e) => {
 													e.preventDefault();
 													e.stopPropagation();
@@ -310,7 +335,7 @@ export function DataTableFilterCommand({
 													setInputValue(`${search} `);
 													setCurrentWord("");
 												}}
-												className="group"
+												value={`suggestion:${item.search}`}
 											>
 												{item.search}
 												<span className="ml-auto truncate text-muted-foreground/80 group-aria-[selected=true]:block">
@@ -319,22 +344,22 @@ export function DataTableFilterCommand({
 													})}
 												</span>
 												<button
-													type="button"
-													onMouseDown={(e) => {
-														e.preventDefault();
-														e.stopPropagation();
-													}}
+													className="ml-1 hidden rounded-md p-0.5 hover:bg-background group-aria-[selected=true]:block"
 													onClick={(e) => {
 														e.preventDefault();
 														e.stopPropagation();
 														// TODO: extract into function
 														setLastSearches(
 															lastSearches.filter(
-																(i) => i.search !== item.search,
-															),
+																(i) => i.search !== item.search
+															)
 														);
 													}}
-													className="ml-1 hidden rounded-md p-0.5 hover:bg-background group-aria-[selected=true]:block"
+													onMouseDown={(e) => {
+														e.preventDefault();
+														e.stopPropagation();
+													}}
+													type="button"
 												>
 													<XIcon className="h-4 w-4" />
 												</button>
@@ -345,7 +370,7 @@ export function DataTableFilterCommand({
 							<CommandEmpty>No results found.</CommandEmpty>
 						</CommandList>
 						<div
-							className="flex flex-wrap justify-between gap-3 border-t bg-accent/50 px-2 py-1.5 text-sm text-accent-foreground"
+							className="flex flex-wrap justify-between gap-3 border-t bg-accent/50 px-2 py-1.5 text-accent-foreground text-sm"
 							cmdk-footer=""
 						>
 							<div className="flex flex-wrap gap-3">
@@ -359,7 +384,7 @@ export function DataTableFilterCommand({
 								<span>
 									<Kbd variant="outline">Esc</Kbd> to close
 								</span>
-								<Separator orientation="vertical" className="my-auto h-3" />
+								<Separator className="my-auto h-3" orientation="vertical" />
 								<span>
 									Union: <Kbd variant="outline">status:a,b</Kbd>
 								</span>
@@ -369,13 +394,13 @@ export function DataTableFilterCommand({
 							</div>
 							{lastSearches.length ? (
 								<button
-									type="button"
 									className="text-muted-foreground hover:text-accent-foreground"
+									onClick={() => setLastSearches([])}
 									onMouseDown={(e) => {
 										e.preventDefault();
 										e.stopPropagation();
 									}}
-									onClick={() => setLastSearches([])}
+									type="button"
 								>
 									Clear suggestions
 								</button>

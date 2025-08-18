@@ -18,7 +18,6 @@ export async function middleware(request: NextRequest) {
 	}
 
 	if (!sessionCookie) {
-		console.log("[middleware] no session cookie found, redirecting to sign-in");
 		return NextResponse.redirect(new URL("/auth/sign-in", request.url));
 	}
 

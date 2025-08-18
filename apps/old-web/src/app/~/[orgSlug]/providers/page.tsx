@@ -1,14 +1,13 @@
-import { ProvidersCardContent } from "@/components/notification-providers";
 import {
 	Card,
 	CardDescription,
 	CardHeader,
 	CardTitle,
 } from "@repo/ui/components/shadcn/card";
-import { getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate } from "@tanstack/react-query";
-import { HydrationBoundary } from "@tanstack/react-query";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
+import { ProvidersCardContent } from "@/components/notification-providers";
+import { getQueryClient, trpc } from "@/trpc/server";
 
 export default async function ProvidersPage({
 	params,
@@ -23,7 +22,7 @@ export default async function ProvidersPage({
 
 	return (
 		<HydrationBoundary state={dehydrate(queryClient)}>
-			<Card variant="shadow" className="mx-auto">
+			<Card className="mx-auto" variant="shadow">
 				<CardHeader>
 					<CardTitle className="text-lg md:text-xl">
 						Notification Providers

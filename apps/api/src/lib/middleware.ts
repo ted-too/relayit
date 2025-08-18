@@ -25,7 +25,6 @@ export const errorHandler = (err: Error | HTTPException, c: Context) => {
 			details: err.errors.map((err) => err.message),
 		});
 	}
-	console.error(err);
 	return errorResponse(c, {
 		status: 500,
 		message: "Something went wrong",
@@ -46,11 +45,11 @@ export const authSessionMiddleware = factory.createMiddleware(
 		c.set("user", session.user);
 		c.set("session", session.session);
 		await next();
-	},
+	}
 );
 
 export const protectedMiddleware = factory.createMiddleware(async (c, next) => {
-	if (!c.get("user") || !c.get("session")) {
+	if (!(c.get("user") && c.get("session"))) {
 		throw new HTTPException(401, { message: "Unauthorized" });
 	}
 
@@ -69,7 +68,7 @@ export const apiKeyMiddleware = factory.createMiddleware(async (c, next) => {
 		},
 	});
 
-	if (!valid || !key || !key.metadata?.organizationId) {
+	if (!(valid && key && key.metadata?.organizationId)) {
 		throw new HTTPException(401, { message: error?.message ?? "Unauthorized" });
 	}
 
@@ -108,7 +107,7 @@ export const hasOrganizationSelected = factory.createMiddleware(
 		c.set("organization", organization);
 
 		await next();
-	},
+	}
 );
 
 export const verifyProject = factory.createMiddleware(async (c, next) => {
@@ -127,7 +126,7 @@ export const verifyProject = factory.createMiddleware(async (c, next) => {
 		columns: { id: true },
 		where: and(
 			eq(schema.project.id, projectId),
-			eq(schema.project.organizationId, organization.id),
+			eq(schema.project.organizationId, organization.id)
 		),
 	});
 

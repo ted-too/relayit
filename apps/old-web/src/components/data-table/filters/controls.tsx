@@ -22,20 +22,20 @@ export function DataTableFilterControls() {
 	const { filterFields } = useDataTable();
 	return (
 		<Accordion
-			type="multiple"
 			defaultValue={filterFields
 				?.filter(({ defaultOpen }) => defaultOpen)
 				?.map(({ value }) => value as string)}
+			type="multiple"
 		>
 			{filterFields?.map((field) => {
 				const value = field.value as string;
 				const hideMetaLabel = field.hideMetaLabel ?? false;
 				return (
-					<AccordionItem key={value} value={value} className="border-none">
-						<AccordionTrigger className="w-full px-2 py-0 hover:no-underline data-[state=closed]:text-muted-foreground data-[state=open]:text-foreground focus-within:data-[state=closed]:text-foreground hover:data-[state=closed]:text-foreground">
+					<AccordionItem className="border-none" key={value} value={value}>
+						<AccordionTrigger className="w-full px-2 py-0 hover:no-underline data-[state=closed]:text-muted-foreground data-[state=open]:text-foreground hover:data-[state=closed]:text-foreground focus-within:data-[state=closed]:text-foreground">
 							<div className="flex w-full items-center justify-between gap-2 truncate py-2 pr-2">
 								<div className="flex items-center gap-2 truncate">
-									<p className="text-sm font-medium">{field.label}</p>
+									<p className="font-medium text-sm">{field.label}</p>
 									{!hideMetaLabel &&
 									value !== field.label.toLowerCase() &&
 									!field.commandDisabled ? (

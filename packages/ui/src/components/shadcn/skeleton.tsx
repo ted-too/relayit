@@ -3,8 +3,8 @@ import { cn } from "@repo/ui/lib/utils";
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
+			className={cn("animate-pulse rounded-md bg-secondary", className)}
 			data-slot="skeleton"
-			className={cn("bg-secondary animate-pulse rounded-md", className)}
 			{...props}
 		/>
 	);

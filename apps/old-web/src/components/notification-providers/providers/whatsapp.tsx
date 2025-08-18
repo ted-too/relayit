@@ -1,5 +1,3 @@
-import { Whatsapp } from "@/components/icons";
-import { ComingSoon } from "@/components/shared/comming-soon";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
@@ -9,6 +7,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@repo/ui/components/shadcn/dialog";
+import { Whatsapp } from "@/components/icons";
+import { ComingSoon } from "@/components/shared/comming-soon";
 import type { NotificationProviderButtonProps } from ".";
 
 export function WhatsappProvider({
@@ -19,10 +19,10 @@ export function WhatsappProvider({
 			<DialogTrigger asChild>
 				<ComingSoon>
 					<Button
-						variant="secondary"
-						size="lg"
-						className="font-semibold bg-[#25D366] hover:bg-[#25D366]/90 text-white"
+						className="bg-[#25D366] font-semibold text-white hover:bg-[#25D366]/90"
 						disabled
+						size="lg"
+						variant="secondary"
 					>
 						<Whatsapp />
 						<span>Whatsapp</span>

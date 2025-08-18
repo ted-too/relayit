@@ -9,5 +9,5 @@ export const errorResponseSchema = z.object({
 
 export const errorResponse = (
 	c: Context,
-	error: { status: ContentfulStatusCode; details: string[]; message: string },
+	error: { status: ContentfulStatusCode; details: string[]; message: string }
 ) => c.json({ details: error.details, message: error.message }, error.status);

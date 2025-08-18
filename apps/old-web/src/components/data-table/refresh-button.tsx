@@ -1,21 +1,21 @@
-import { useDataTable } from "@/components/data-table/provider";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { LoaderCircleIcon, RefreshCcwIcon } from "lucide-react";
+import { useDataTable } from "@/components/data-table/provider";
 
-interface RefreshButtonProps {
+type RefreshButtonProps = {
 	onClick: () => void;
-}
+};
 
 export function RefreshButton({ onClick }: RefreshButtonProps) {
 	const { isLoading } = useDataTable();
 
 	return (
 		<Button
-			variant="outline"
-			size="icon"
+			className="h-9 w-9"
 			disabled={isLoading}
 			onClick={onClick}
-			className="h-9 w-9"
+			size="icon"
+			variant="outline"
 		>
 			{isLoading ? (
 				<LoaderCircleIcon className="h-4 w-4 animate-spin" />

@@ -1,16 +1,16 @@
 "use client";
 
-import * as React from "react";
-import Link, { type LinkProps } from "next/link";
-import { useRouter } from "next/navigation";
-import type { source } from "@/lib/source";
-import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@repo/ui/components/shadcn/popover";
+import { cn } from "@repo/ui/lib/utils";
+import Link, { type LinkProps } from "next/link";
+import { useRouter } from "next/navigation";
+import * as React from "react";
+import type { source } from "@/lib/source";
 
 export function MobileNav({
 	tree,
@@ -24,47 +24,47 @@ export function MobileNav({
 	const [open, setOpen] = React.useState(false);
 
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover onOpenChange={setOpen} open={open}>
 			<PopoverTrigger asChild>
 				<Button
-					variant="ghost"
 					className={cn(
-						"extend-touch-target h-8 touch-manipulation items-center justify-start gap-2.5 !p-0 hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 active:bg-transparent dark:hover:bg-transparent",
-						className,
+						"extend-touch-target !p-0 h-8 touch-manipulation items-center justify-start gap-2.5 hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 active:bg-transparent dark:hover:bg-transparent",
+						className
 					)}
+					variant="ghost"
 				>
 					<div className="relative flex h-8 w-4 items-center justify-center">
 						<div className="relative size-4">
 							<span
 								className={cn(
-									"bg-foreground absolute left-0 block h-0.5 w-4 transition-all duration-100",
-									open ? "top-[0.4rem] -rotate-45" : "top-1",
+									"absolute left-0 block h-0.5 w-4 bg-foreground transition-all duration-100",
+									open ? "-rotate-45 top-[0.4rem]" : "top-1"
 								)}
 							/>
 							<span
 								className={cn(
-									"bg-foreground absolute left-0 block h-0.5 w-4 transition-all duration-100",
-									open ? "top-[0.4rem] rotate-45" : "top-2.5",
+									"absolute left-0 block h-0.5 w-4 bg-foreground transition-all duration-100",
+									open ? "top-[0.4rem] rotate-45" : "top-2.5"
 								)}
 							/>
 						</div>
 						<span className="sr-only">Toggle Menu</span>
 					</div>
-					<span className="flex h-8 items-center text-lg leading-none font-medium">
+					<span className="flex h-8 items-center font-medium text-lg leading-none">
 						Menu
 					</span>
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent
-				className="bg-background/90 no-scrollbar h-(--radix-popper-available-height) w-(--radix-popper-available-width) overflow-y-auto rounded-none border-none p-0 shadow-none backdrop-blur duration-100"
 				align="start"
-				side="bottom"
 				alignOffset={-16}
+				className="no-scrollbar h-(--radix-popper-available-height) w-(--radix-popper-available-width) overflow-y-auto rounded-none border-none bg-background/90 p-0 shadow-none backdrop-blur duration-100"
+				side="bottom"
 				sideOffset={14}
 			>
 				<div className="flex flex-col gap-12 overflow-auto px-6 py-6">
 					<div className="flex flex-col gap-4">
-						<div className="text-muted-foreground text-sm font-medium">
+						<div className="font-medium text-muted-foreground text-sm">
 							Menu
 						</div>
 						<div className="flex flex-col gap-3">
@@ -72,7 +72,7 @@ export function MobileNav({
 								Home
 							</MobileLink>
 							{items.map((item, index) => (
-								<MobileLink key={index} href={item.href} onOpenChange={setOpen}>
+								<MobileLink href={item.href} key={index} onOpenChange={setOpen}>
 									{item.label}
 								</MobileLink>
 							))}
@@ -82,8 +82,8 @@ export function MobileNav({
 						{tree?.children?.map((group, index) => {
 							if (group.type === "folder") {
 								return (
-									<div key={index} className="flex flex-col gap-4">
-										<div className="text-muted-foreground text-sm font-medium">
+									<div className="flex flex-col gap-4" key={index}>
+										<div className="font-medium text-muted-foreground text-sm">
 											{group.name}
 										</div>
 										<div className="flex flex-col gap-3">
@@ -91,8 +91,8 @@ export function MobileNav({
 												if (item.type === "page") {
 													return (
 														<MobileLink
-															key={`${item.url}-${index}`}
 															href={item.url}
+															key={`${item.url}-${index}`}
 															onOpenChange={setOpen}
 														>
 															{item.name}
@@ -126,12 +126,12 @@ function MobileLink({
 	const router = useRouter();
 	return (
 		<Link
+			className={cn("font-medium text-2xl", className)}
 			href={href}
 			onClick={() => {
 				router.push(href.toString());
 				onOpenChange?.(false);
 			}}
-			className={cn("text-2xl font-medium", className)}
 			{...props}
 		>
 			{children}

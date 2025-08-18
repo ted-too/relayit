@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { type Result, createGenericError } from "@repo/shared";
+import { createGenericError, type Result } from "@repo/shared";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // Recommended for GCM
@@ -19,7 +19,7 @@ function getEncryptionKey(): Result<Buffer> {
 		if (!keyHex) {
 			return {
 				error: createGenericError(
-					"CREDENTIAL_ENCRYPTION_KEY environment variable is not set.",
+					"CREDENTIAL_ENCRYPTION_KEY environment variable is not set."
 				),
 				data: null,
 			};
@@ -28,7 +28,7 @@ function getEncryptionKey(): Result<Buffer> {
 		if (key.length !== KEY_LENGTH) {
 			return {
 				error: createGenericError(
-					`CREDENTIAL_ENCRYPTION_KEY must be ${KEY_LENGTH * 2} hex characters long.`,
+					`CREDENTIAL_ENCRYPTION_KEY must be ${KEY_LENGTH * 2} hex characters long.`
 				),
 				data: null,
 			};
@@ -129,7 +129,7 @@ export function decrypt(encryptedText: string): Result<string> {
 		return {
 			error: createGenericError(
 				"Decryption failed. Data may be corrupt or key incorrect.",
-				error,
+				error
 			),
 			data: null,
 		};
@@ -174,7 +174,7 @@ export function encryptRecord<T extends object>(obj: T): Result<T> {
 		return {
 			error: createGenericError(
 				"Unexpected error during record encryption",
-				error,
+				error
 			),
 			data: null,
 		};
@@ -219,7 +219,7 @@ export function decryptRecord<T extends object>(obj: T): Result<T> {
 		return {
 			error: createGenericError(
 				"Unexpected error during record decryption",
-				error,
+				error
 			),
 			data: null,
 		};
@@ -264,13 +264,15 @@ export function getSafeEncryptedRecord<T extends object>(record: T): T {
  */
 export function deepUpdate<T extends Record<string, any>>(
 	target: T,
-	source: DeepPartial<T>,
+	source: DeepPartial<T>
 ): T {
 	const updated = { ...target };
 
 	for (const key in source) {
 		// Skip if key doesn't exist in target
-		if (!(key in target)) continue;
+		if (!(key in target)) {
+			continue;
+		}
 
 		const sourceValue = source[key];
 		const targetValue = target[key];
@@ -290,7 +292,7 @@ export function deepUpdate<T extends Record<string, any>>(
 		) {
 			updated[key] = deepUpdate(
 				targetValue,
-				sourceValue as DeepPartial<typeof targetValue>,
+				sourceValue as DeepPartial<typeof targetValue>
 			);
 			continue;
 		}
@@ -311,7 +313,7 @@ export function deepUpdate<T extends Record<string, any>>(
  */
 export function deepMerge<T extends Record<string, any>>(
 	target: T,
-	source: DeepPartial<T>,
+	source: DeepPartial<T>
 ): T {
 	const merged = { ...target };
 
@@ -348,7 +350,7 @@ export function deepMerge<T extends Record<string, any>>(
 		) {
 			merged[key] = deepMerge(
 				targetValue,
-				sourceValue as DeepPartial<typeof targetValue>,
+				sourceValue as DeepPartial<typeof targetValue>
 			);
 			continue;
 		}

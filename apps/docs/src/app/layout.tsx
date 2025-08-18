@@ -1,10 +1,10 @@
+import { Toaster } from "@repo/ui/components/shadcn/sonner";
+import { ThemeProvider } from "@repo/ui/components/theme-provider";
+import { cn } from "@repo/ui/lib/utils";
 import type { Metadata } from "next";
+import { Analytics } from "@/components/analytics";
 import { META_THEME_COLORS, siteConfig } from "@/lib/config";
 import { fontVariables } from "@/lib/fonts";
-import { cn } from "@repo/ui/lib/utils";
-import { Analytics } from "@/components/analytics";
-import { ThemeProvider } from "@repo/ui/components/theme-provider";
-import { Toaster } from "@repo/ui/components/shadcn/sonner";
 
 import "./globals.css";
 
@@ -17,11 +17,11 @@ export const metadata: Metadata = {
 	description: siteConfig.description,
 	keywords: [
 		"Notification API",
-		"Unified Notifications", 
+		"Unified Notifications",
 		"Developer API",
 		"Message Delivery API",
 		"Email API",
-		"SMS API", 
+		"SMS API",
 		"WhatsApp API",
 		"Discord Bot Notifications",
 		"Self-Hosted Notifications",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 		"AWS SNS",
 		"Notification Hub",
 		"Centralized Notifications",
-		"Application Messaging"
+		"Application Messaging",
 	],
 	authors: [
 		{
@@ -96,12 +96,12 @@ export default function RootLayout({
             `,
 					}}
 				/>
-				<meta name="theme-color" content={META_THEME_COLORS.light} />
+				<meta content={META_THEME_COLORS.light} name="theme-color" />
 			</head>
 			<body
 				className={cn(
-					"text-foreground group/body overscroll-none font-sans antialiased [--footer-height:calc(var(--spacing)*14)] [--header-height:calc(var(--spacing)*14)] xl:[--footer-height:calc(var(--spacing)*24)]",
-					fontVariables,
+					"group/body overscroll-none font-sans text-foreground antialiased [--footer-height:calc(var(--spacing)*14)] [--header-height:calc(var(--spacing)*14)] xl:[--footer-height:calc(var(--spacing)*24)]",
+					fontVariables
 				)}
 			>
 				<ThemeProvider>

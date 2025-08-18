@@ -1,6 +1,6 @@
 import { auth } from "@repo/api/lib/auth";
 import { db, schema } from "@repo/db";
-import { TRPCError, initTRPC } from "@trpc/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { and, eq } from "drizzle-orm";
 import superjson from "superjson";
@@ -27,7 +27,7 @@ export const createCallerFactory = t.createCallerFactory;
 
 export const authdProcedure = publicProcedure.use(async (opts) => {
 	const { ctx } = opts;
-	if (!ctx.user || !ctx.session) {
+	if (!(ctx.user && ctx.session)) {
 		throw new TRPCError({ code: "UNAUTHORIZED" });
 	}
 
@@ -74,7 +74,7 @@ export const verifyProject = authdProcedureWithOrg
 	.input(
 		z.object({
 			projectId: z.string(),
-		}),
+		})
 	)
 	.use(async (opts) => {
 		const { ctx, input } = opts;
@@ -82,7 +82,7 @@ export const verifyProject = authdProcedureWithOrg
 		const project = await db.query.project.findFirst({
 			where: and(
 				eq(schema.project.id, input.projectId),
-				eq(schema.project.organizationId, ctx.session.activeOrganizationId),
+				eq(schema.project.organizationId, ctx.session.activeOrganizationId)
 			),
 		});
 

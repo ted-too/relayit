@@ -8,15 +8,15 @@ import type {
 /**
  * Represents the outcome of a provider's send operation.
  */
-export interface ProviderSendResult {
+export type ProviderSendResult = {
 	success: boolean;
 	details?: any; // Provider-specific details (e.g., external message ID)
-}
+};
 
 /**
  * Defines the contract for all notification provider implementations.
  */
-export interface INotificationProvider {
+export type INotificationProvider = {
 	/**
 	 * Sends a message using the provider's specific API.
 	 *
@@ -29,6 +29,6 @@ export interface INotificationProvider {
 		credentials: ProviderCredentials,
 		messagePayload: SendMessagePayload,
 		config: ProjectProviderConfig,
-		recipient: string,
+		recipient: string
 	): Promise<Result<ProviderSendResult>>;
-}
+};

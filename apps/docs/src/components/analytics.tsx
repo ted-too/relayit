@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
 export function Analytics() {
-  // TODO: Add analytics
-  return null;
-  // return <VercelAnalytics />
+	// TODO: Add analytics
+	return null;
+	// return <VercelAnalytics />
 }

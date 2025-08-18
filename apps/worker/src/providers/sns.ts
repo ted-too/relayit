@@ -1,8 +1,8 @@
 import {
-	SNSClient,
 	PublishCommand,
 	type PublishCommandInput,
 	type PublishCommandOutput,
+	SNSClient,
 } from "@aws-sdk/client-sns";
 import { decryptRecord } from "@repo/db";
 import type {
@@ -34,7 +34,7 @@ export class SNSProvider implements INotificationProvider {
 		encryptedCredentials: ProviderCredentials,
 		messagePayload: SMSPayload,
 		config: ProjectProviderConfig,
-		recipient: string,
+		recipient: string
 	): Promise<Result<ProviderSendResult>> {
 		const startTime = Date.now();
 
@@ -50,11 +50,11 @@ export class SNSProvider implements INotificationProvider {
 		if (!isAWSProviderCredentials(encryptedCredentials)) {
 			logger.error(
 				logContext,
-				"Invalid SNS credentials structure (pre-decrypt)",
+				"Invalid SNS credentials structure (pre-decrypt)"
 			);
 			return {
 				error: createGenericError(
-					"Invalid SNS credentials structure (pre-decrypt)",
+					"Invalid SNS credentials structure (pre-decrypt)"
 				),
 				data: null,
 			};
@@ -72,12 +72,12 @@ export class SNSProvider implements INotificationProvider {
 		if (!configParseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: configParseResult.error },
-				"Invalid SNS config content",
+				"Invalid SNS config content"
 			);
 			return {
 				error: createGenericError(
 					"Invalid SNS config content",
-					configParseResult.error,
+					configParseResult.error
 				),
 				data: null,
 			};
@@ -89,12 +89,12 @@ export class SNSProvider implements INotificationProvider {
 		if (decryptResult.error) {
 			logger.error(
 				{ ...logContext, error: decryptResult.error },
-				"Failed to decrypt SNS credentials",
+				"Failed to decrypt SNS credentials"
 			);
 			return {
 				error: createGenericError(
 					"Failed to decrypt SNS credentials",
-					decryptResult.error.details,
+					decryptResult.error.details
 				),
 				data: null,
 			};
@@ -105,12 +105,12 @@ export class SNSProvider implements INotificationProvider {
 		if (!parseResult.success) {
 			logger.error(
 				{ ...logContext, validationError: parseResult.error },
-				"Invalid decrypted SNS credentials format",
+				"Invalid decrypted SNS credentials format"
 			);
 			return {
 				error: createGenericError(
 					"Invalid decrypted SNS credentials format",
-					parseResult.error,
+					parseResult.error
 				),
 				data: null,
 			};
@@ -171,7 +171,7 @@ export class SNSProvider implements INotificationProvider {
 						duration,
 						success: true,
 					},
-					"SNS SMS sent successfully",
+					"SNS SMS sent successfully"
 				);
 
 				return {
@@ -210,13 +210,13 @@ export class SNSProvider implements INotificationProvider {
 					const delayMs = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
 					logger.warn(
 						{ ...errorContext, retryDelayMs: delayMs },
-						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`,
+						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed, retrying in ${delayMs}ms`
 					);
 					await delay(delayMs);
 				} else {
 					logger.error(
 						errorContext,
-						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`,
+						`SNS attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed${isRetryable ? " (max attempts reached)" : " (non-retryable error)"}`
 					);
 					break;
 				}
@@ -238,13 +238,13 @@ export class SNSProvider implements INotificationProvider {
 						}
 					: null,
 			},
-			`SNS SMS send failed after ${MAX_RETRY_ATTEMPTS} attempts`,
+			`SNS SMS send failed after ${MAX_RETRY_ATTEMPTS} attempts`
 		);
 
 		return {
 			error: createGenericError(
 				`Failed to send SMS via SNS after ${MAX_RETRY_ATTEMPTS} attempt(s)`,
-				lastError,
+				lastError
 			),
 			data: null,
 		};

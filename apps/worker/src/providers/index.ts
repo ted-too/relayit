@@ -1,8 +1,8 @@
 import type { ChannelType } from "@repo/shared";
+import { logger } from "@repo/worker/lib/utils";
 import type { INotificationProvider } from "@repo/worker/providers/interface";
 import { SESProvider } from "@repo/worker/providers/ses";
 import { SNSProvider } from "@repo/worker/providers/sns";
-import { logger } from "@repo/worker/lib/utils";
 
 /**
  * Factory function to get the appropriate notification provider instance.

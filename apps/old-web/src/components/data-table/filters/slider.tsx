@@ -1,13 +1,13 @@
 "use client";
 
 import { InputWithAddons } from "@repo/ui/components/shadcn/input-with-addons";
+import { Label } from "@repo/ui/components/shadcn/label";
 import { Slider } from "@repo/ui/components/shadcn/slider";
+import { useBasicDebounce } from "@repo/ui/hooks/use-debounce";
+import { useEffect, useState } from "react";
+import { isArrayOfNumbers } from "@/components/data-table/filter-fns";
 import { useDataTable } from "@/components/data-table/provider";
 import type { DataTableSliderFilterField } from "@/components/data-table/types";
-import { Label } from "@repo/ui/components/shadcn/label";
-import { useBasicDebounce } from "@repo/ui/hooks/use-debounce";
-import { isArrayOfNumbers } from "@/components/data-table/filter-fns";
-import { useEffect, useState } from "react";
 
 function getFilter(filterValue: unknown) {
 	return typeof filterValue === "number"
@@ -47,7 +47,7 @@ export function DataTableFilterSlider<TData>({
 
 	useEffect(() => {
 		column?.setFilterValue(debouncedValues);
-	}, [debouncedValues]);
+	}, [debouncedValues, column?.setFilterValue]);
 
 	useEffect(() => {
 		setInternalValues([currentMin, currentMax]);
@@ -75,50 +75,50 @@ export function DataTableFilterSlider<TData>({
 			<div className="flex items-center gap-4">
 				<div className="grid w-full gap-1.5">
 					<Label
-						htmlFor={`min-${value}`}
 						className="px-2 text-muted-foreground"
+						htmlFor={`min-${value}`}
 					>
 						Min.
 					</Label>
 					<InputWithAddons
+						containerClassName="mb-2 h-9 rounded-lg"
+						id={`min-${value}`}
+						max={max}
+						min={min}
+						name={`min-${value}`}
+						onChange={handleMinChange}
 						placeholder="from"
 						trailing={unit}
-						containerClassName="mb-2 h-9 rounded-lg"
 						type="number"
-						name={`min-${value}`}
-						id={`min-${value}`}
 						value={`${internalValues[0]}`}
-						min={min}
-						max={max}
-						onChange={handleMinChange}
 					/>
 				</div>
 				<div className="grid w-full gap-1.5">
 					<Label
-						htmlFor={`max-${value}`}
 						className="px-2 text-muted-foreground"
+						htmlFor={`max-${value}`}
 					>
 						Max.
 					</Label>
 					<InputWithAddons
+						containerClassName="mb-2 h-9 rounded-lg"
+						id={`max-${value}`}
+						max={max}
+						min={min}
+						name={`max-${value}`}
+						onChange={handleMaxChange}
 						placeholder="to"
 						trailing={unit}
-						containerClassName="mb-2 h-9 rounded-lg"
 						type="number"
-						name={`max-${value}`}
-						id={`max-${value}`}
 						value={`${internalValues[1]}`}
-						min={min}
-						max={max}
-						onChange={handleMaxChange}
 					/>
 				</div>
 			</div>
 			<Slider
-				min={min}
 				max={max}
-				value={internalValues}
+				min={min}
 				onValueChange={handleSliderChange}
+				value={internalValues}
 			/>
 		</div>
 	);

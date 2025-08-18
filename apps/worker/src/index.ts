@@ -1,22 +1,22 @@
 import {
-	MESSAGE_QUEUE_STREAM,
 	acknowledgeMessage,
 	claimPendingMessages,
 	getPendingMessages,
+	MESSAGE_QUEUE_STREAM,
 } from "@repo/db";
-import { type Result, createGenericError } from "@repo/shared";
+import { createGenericError, type Result } from "@repo/shared";
 import {
 	BLOCK_TIMEOUT_MS,
 	CONSUMER_GROUP_NAME,
 	CONSUMER_NAME,
-	READ_COUNT,
+	MAX_CLAIM_COUNT,
 	MIN_IDLE_TIME_MS,
 	PENDING_CHECK_INTERVAL_MS,
-	MAX_CLAIM_COUNT,
+	READ_COUNT,
 } from "@repo/worker/lib/constants";
 import { handleMessage } from "@repo/worker/lib/process-message";
-import { redis } from "bun";
 import { logger } from "@repo/worker/lib/utils";
+import { redis } from "bun";
 
 let isShuttingDown = false;
 let pendingRecoveryInterval: NodeJS.Timeout | null = null;
@@ -39,7 +39,7 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
 
 	logger.debug(
 		{ ...workerContext, operation: "initializeConsumerGroup" },
-		"Initializing Redis consumer group",
+		"Initializing Redis consumer group"
 	);
 
 	try {
@@ -59,7 +59,7 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
 				duration,
 				created: true,
 			},
-			`Consumer group '${CONSUMER_GROUP_NAME}' created successfully`,
+			`Consumer group '${CONSUMER_GROUP_NAME}' created successfully`
 		);
 		return { error: null, data: undefined };
 	} catch (error: any) {
@@ -74,7 +74,7 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
 					created: false,
 					alreadyExists: true,
 				},
-				`Consumer group '${CONSUMER_GROUP_NAME}' already exists. Proceeding.`,
+				`Consumer group '${CONSUMER_GROUP_NAME}' already exists. Proceeding.`
 			);
 			return { error: null, data: undefined };
 		}
@@ -87,7 +87,7 @@ async function initializeConsumerGroup(): Promise<Result<void>> {
 				operation: "initializeConsumerGroup",
 				duration,
 			},
-			errMessage,
+			errMessage
 		);
 		return { error: createGenericError(errMessage, error), data: null };
 	}
@@ -107,7 +107,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 			minIdleTimeMs: MIN_IDLE_TIME_MS,
 			maxClaimCount: MAX_CLAIM_COUNT,
 		},
-		"Checking for pending messages to claim",
+		"Checking for pending messages to claim"
 	);
 
 	try {
@@ -121,7 +121,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 					stage: "get_pending_info",
 					error: pendingResult.error,
 				},
-				"Failed to get pending message info",
+				"Failed to get pending message info"
 			);
 			return;
 		}
@@ -139,7 +139,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 					firstId: summary.firstId,
 					lastId: summary.lastId,
 				},
-				`Found ${summary.totalPending} pending messages in consumer group`,
+				`Found ${summary.totalPending} pending messages in consumer group`
 			);
 		}
 
@@ -148,7 +148,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 			CONSUMER_GROUP_NAME,
 			CONSUMER_NAME,
 			MIN_IDLE_TIME_MS,
-			MAX_CLAIM_COUNT,
+			MAX_CLAIM_COUNT
 		);
 
 		const duration = Date.now() - startTime;
@@ -162,7 +162,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 					error: claimResult.error,
 					duration,
 				},
-				"Failed to claim pending messages",
+				"Failed to claim pending messages"
 			);
 			return;
 		}
@@ -178,7 +178,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 					claimedCount: claimedMessages.length,
 					duration,
 				},
-				`Successfully claimed ${claimedMessages.length} abandoned messages`,
+				`Successfully claimed ${claimedMessages.length} abandoned messages`
 			);
 
 			// Process the claimed messages
@@ -202,15 +202,15 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 							messageStreamId,
 							internalMessageId,
 						},
-						"Processing claimed message",
+						"Processing claimed message"
 					);
 
 					processingPromises.push(
 						handleMessage(
 							internalMessageId,
 							messageStreamId,
-							CONSUMER_GROUP_NAME,
-						),
+							CONSUMER_GROUP_NAME
+						)
 					);
 				} else {
 					logger.warn(
@@ -220,7 +220,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 							stage: "malformed_claimed",
 							messageStreamId,
 						},
-						"Claimed message lacks messageId field. Acknowledging directly.",
+						"Claimed message lacks messageId field. Acknowledging directly."
 					);
 
 					// Acknowledge malformed claimed message
@@ -228,7 +228,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 						(async () => {
 							const ackRes = await acknowledgeMessage(
 								messageStreamId,
-								CONSUMER_GROUP_NAME,
+								CONSUMER_GROUP_NAME
 							);
 							if (ackRes.error) {
 								logger.error(
@@ -238,10 +238,10 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 										messageStreamId,
 										stage: "claimed_malformed_ack_failed",
 									},
-									"Failed to acknowledge malformed claimed message",
+									"Failed to acknowledge malformed claimed message"
 								);
 							}
-						})(),
+						})()
 					);
 				}
 			}
@@ -270,7 +270,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 						failureCount,
 						totalDuration: Date.now() - startTime,
 					},
-					`Completed processing ${claimedMessages.length} claimed messages`,
+					`Completed processing ${claimedMessages.length} claimed messages`
 				);
 			}
 		} else {
@@ -281,7 +281,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 					stage: "no_messages_claimed",
 					duration,
 				},
-				"No pending messages found to claim",
+				"No pending messages found to claim"
 			);
 		}
 	} catch (error: any) {
@@ -295,7 +295,7 @@ async function checkAndClaimPendingMessages(): Promise<void> {
 				stack: error.stack,
 				duration,
 			},
-			`Unhandled error in pending message check: ${error.message}`,
+			`Unhandled error in pending message check: ${error.message}`
 		);
 	}
 }
@@ -312,7 +312,7 @@ function startPendingMessageRecovery(): NodeJS.Timeout {
 			intervalMs: PENDING_CHECK_INTERVAL_MS,
 			minIdleTimeMs: MIN_IDLE_TIME_MS,
 		},
-		"Starting pending message recovery loop",
+		"Starting pending message recovery loop"
 	);
 
 	return setInterval(async () => {
@@ -338,12 +338,14 @@ async function processMessages(): Promise<void> {
 			operation: "processMessages",
 			startTime,
 		},
-		"Starting message processing loop",
+		"Starting message processing loop"
 	);
 
 	while (!isShuttingDown) {
 		try {
-			if (isShuttingDown) break;
+			if (isShuttingDown) {
+				break;
+			}
 
 			const response = (await redis.send("XREADGROUP", [
 				"GROUP",
@@ -358,7 +360,9 @@ async function processMessages(): Promise<void> {
 				">",
 			])) as Record<string, [string, string[]][]> | null;
 
-			if (isShuttingDown) break;
+			if (isShuttingDown) {
+				break;
+			}
 
 			if (!response || Object.keys(response).length === 0) {
 				continue;
@@ -377,11 +381,13 @@ async function processMessages(): Promise<void> {
 
 				logger.debug(
 					batchContext,
-					`Processing batch of ${messages.length} messages`,
+					`Processing batch of ${messages.length} messages`
 				);
 
 				for (const [messageStreamId, fields] of messages) {
-					if (isShuttingDown) break;
+					if (isShuttingDown) {
+						break;
+					}
 
 					let internalMessageId: string | null = null;
 					for (let i = 0; i < fields.length; i += 2) {
@@ -399,14 +405,14 @@ async function processMessages(): Promise<void> {
 								internalMessageId,
 								stage: "queue_message",
 							},
-							"Queuing message for processing",
+							"Queuing message for processing"
 						);
 						processingPromises.push(
 							handleMessage(
 								internalMessageId,
 								messageStreamId,
-								CONSUMER_GROUP_NAME,
-							),
+								CONSUMER_GROUP_NAME
+							)
 						);
 					} else {
 						// Malformed message (missing internalMessageId in stream data)
@@ -419,11 +425,11 @@ async function processMessages(): Promise<void> {
 										messageStreamId,
 										stage: "malformed_message",
 									},
-									"Stream message lacks messageId field. Acknowledging directly.",
+									"Stream message lacks messageId field. Acknowledging directly."
 								);
 								const ackRes = await acknowledgeMessage(
 									messageStreamId,
-									CONSUMER_GROUP_NAME,
+									CONSUMER_GROUP_NAME
 								);
 								if (ackRes.error) {
 									logger.error(
@@ -434,15 +440,17 @@ async function processMessages(): Promise<void> {
 											messageStreamId,
 											stage: "malformed_ack_failed",
 										},
-										`CRITICAL: Failed to acknowledge malformed stream message: ${ackRes.error.message}`,
+										`CRITICAL: Failed to acknowledge malformed stream message: ${ackRes.error.message}`
 									);
 								}
-							})(),
+							})()
 						);
 					}
 				} // End of messages in current stream batch
 
-				if (isShuttingDown) break;
+				if (isShuttingDown) {
+					break;
+				}
 
 				if (processingPromises.length > 0) {
 					const processingStartTime = Date.now();
@@ -453,7 +461,7 @@ async function processMessages(): Promise<void> {
 							stage: "batch_processing",
 							messageCount: processingPromises.length,
 						},
-						"Processing batch concurrently",
+						"Processing batch concurrently"
 					);
 
 					const results = await Promise.allSettled(processingPromises);
@@ -476,7 +484,7 @@ async function processMessages(): Promise<void> {
 									taskIndex: index,
 									stage: "batch_task_rejected",
 								},
-								"Task in batch rejected",
+								"Task in batch rejected"
 							);
 						}
 					});
@@ -500,7 +508,7 @@ async function processMessages(): Promise<void> {
 					if (rejectedCount > 0) {
 						logger.warn(
 							batchSummary,
-							`Batch processing complete with ${rejectedCount} failures`,
+							`Batch processing complete with ${rejectedCount} failures`
 						);
 					} else {
 						logger.info(batchSummary, "Batch processed successfully");
@@ -508,7 +516,9 @@ async function processMessages(): Promise<void> {
 				}
 			} // End of streams in response (typically only one: MESSAGE_QUEUE_STREAM)
 		} catch (err: any) {
-			if (isShuttingDown) break;
+			if (isShuttingDown) {
+				break;
+			}
 
 			logger.error(
 				{
@@ -520,7 +530,7 @@ async function processMessages(): Promise<void> {
 					totalMessagesProcessed,
 					totalBatchesProcessed,
 				},
-				`Error in message processing loop: ${err.message}. Continuing after delay.`,
+				`Error in message processing loop: ${err.message}. Continuing after delay.`
 			);
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}
@@ -540,7 +550,7 @@ async function processMessages(): Promise<void> {
 					? totalMessagesProcessed / totalBatchesProcessed
 					: 0,
 		},
-		"Message processing loop stopped due to shutdown signal",
+		"Message processing loop stopped due to shutdown signal"
 	);
 }
 
@@ -557,7 +567,7 @@ async function startWorker() {
 			operation: "startWorker",
 			startTime,
 		},
-		"Starting worker process",
+		"Starting worker process"
 	);
 
 	// Redis connection check
@@ -576,7 +586,7 @@ async function startWorker() {
 					received: pong,
 					pingDuration,
 				},
-				"Redis PING failed - unexpected response",
+				"Redis PING failed - unexpected response"
 			);
 			process.exit(1);
 		}
@@ -588,7 +598,7 @@ async function startWorker() {
 				stage: "redis_ping",
 				pingDuration,
 			},
-			"Redis PING successful",
+			"Redis PING successful"
 		);
 	} catch (error: any) {
 		logger.error(
@@ -598,7 +608,7 @@ async function startWorker() {
 				operation: "startWorker",
 				stage: "redis_ping",
 			},
-			"Redis PING failed",
+			"Redis PING failed"
 		);
 		process.exit(1);
 	}
@@ -613,7 +623,7 @@ async function startWorker() {
 				operation: "startWorker",
 				stage: "consumer_group_init",
 			},
-			"Failed to initialize consumer group. Exiting.",
+			"Failed to initialize consumer group. Exiting."
 		);
 		process.exit(1);
 	}
@@ -625,7 +635,7 @@ async function startWorker() {
 			operation: "startWorker",
 			stage: "signal_handlers",
 		},
-		"Setting up graceful shutdown signal handlers",
+		"Setting up graceful shutdown signal handlers"
 	);
 	process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 	process.on("SIGINT", () => gracefulShutdown("SIGINT"));
@@ -637,7 +647,7 @@ async function startWorker() {
 			operation: "startWorker",
 			stage: "startup_pending_check",
 		},
-		"Checking for pending messages from previous worker sessions",
+		"Checking for pending messages from previous worker sessions"
 	);
 	await checkAndClaimPendingMessages();
 
@@ -652,7 +662,7 @@ async function startWorker() {
 			stage: "initialization_complete",
 			initDuration,
 		},
-		"Worker initialization complete. Starting message processing.",
+		"Worker initialization complete. Starting message processing."
 	);
 
 	// Start processing messages
@@ -666,7 +676,7 @@ async function startWorker() {
 			stage: "process_messages_finished",
 			totalDuration,
 		},
-		"ProcessMessages finished. Worker might exit if shutdown was not called via signal.",
+		"ProcessMessages finished. Worker might exit if shutdown was not called via signal."
 	);
 }
 
@@ -680,7 +690,7 @@ startWorker().catch((error) => {
 			stage: "unhandled_error",
 			isShuttingDown,
 		},
-		"Unhandled error in startWorker. Exiting",
+		"Unhandled error in startWorker. Exiting"
 	);
 	if (!isShuttingDown) {
 		process.exit(1);
@@ -698,7 +708,7 @@ async function gracefulShutdown(signal: string) {
 			signal,
 			shutdownStartTime,
 		},
-		`Received ${signal}. Starting graceful shutdown`,
+		`Received ${signal}. Starting graceful shutdown`
 	);
 
 	isShuttingDown = true;
@@ -715,7 +725,7 @@ async function gracefulShutdown(signal: string) {
 				operation: "gracefulShutdown",
 				stage: "stop_pending_recovery",
 			},
-			"Stopping pending message recovery loop",
+			"Stopping pending message recovery loop"
 		);
 		clearInterval(pendingRecoveryInterval);
 		pendingRecoveryInterval = null;
@@ -727,7 +737,7 @@ async function gracefulShutdown(signal: string) {
 			operation: "gracefulShutdown",
 			stage: "closing_redis",
 		},
-		"Closing Redis connection",
+		"Closing Redis connection"
 	);
 
 	redis.close();
@@ -740,7 +750,7 @@ async function gracefulShutdown(signal: string) {
 			stage: "shutdown_complete",
 			shutdownDuration,
 		},
-		"Graceful shutdown complete. Exiting.",
+		"Graceful shutdown complete. Exiting."
 	);
 
 	process.exit(0);

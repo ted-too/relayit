@@ -1,14 +1,12 @@
+import { SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import { cookies, headers as headersFn } from "next/headers";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import {
-	SIDEBAR_COOKIE_NAME,
-} from "@repo/ui/constants";
 import {
 	activeOrganizationQueryOptions,
 	currentMemberQueryOptions,
 } from "@/trpc/queries/auth";
 import { getQueryClient } from "@/trpc/server";
-import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
-import { cookies, headers as headersFn } from "next/headers";
 
 export default async function OrgLayout({
 	children,
@@ -21,11 +19,11 @@ export default async function OrgLayout({
 
 	// TODO: Handle case where user is not a member of any organization
 	const currentUserOrg = await queryClient.ensureQueryData(
-		activeOrganizationQueryOptions({ headers }),
+		activeOrganizationQueryOptions({ headers })
 	);
 
 	const currentUserOrgMember = await queryClient.ensureQueryData(
-		currentMemberQueryOptions({ headers }),
+		currentMemberQueryOptions({ headers })
 	);
 
 	return (

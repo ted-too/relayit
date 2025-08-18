@@ -25,7 +25,7 @@ export const organizationMetadataSchema = z.object({
 		Object.keys(ORGANIZATION_LOGO_GRADIENTS) as [
 			OrganizationLogoGradientKey,
 			...OrganizationLogoGradientKey[],
-		],
+		]
 	),
 	logoEmoji: z.string(),
 });

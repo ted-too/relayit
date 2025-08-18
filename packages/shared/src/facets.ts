@@ -20,7 +20,7 @@ export type Facets = Record<string, FacetMetadata>;
  */
 export function getFacetsFromData<TData extends Record<string, unknown>>(
 	data: TData[],
-	filterValues: string[],
+	filterValues: string[]
 ) {
 	const valuesMap = data.reduce((prev, curr) => {
 		for (const [key, value] of Object.entries(curr)) {
@@ -43,10 +43,16 @@ export function getFacetsFromData<TData extends Record<string, unknown>>(
 			let max: number | undefined;
 			const rows = Array.from(valueMap.entries()).map(([value, total]) => {
 				if (typeof value === "number") {
-					if (!min) min = value;
-					else min = value < min ? value : min;
-					if (!max) max = value;
-					else max = value > max ? value : max;
+					if (min) {
+						min = value < min ? value : min;
+					} else {
+						min = value;
+					}
+					if (max) {
+						max = value > max ? value : max;
+					} else {
+						max = value;
+					}
 				}
 				return {
 					value,
@@ -55,7 +61,7 @@ export function getFacetsFromData<TData extends Record<string, unknown>>(
 			});
 			const total = Array.from(valueMap.values()).reduce((a, b) => a + b, 0);
 			return [key, { rows, total, min, max }];
-		}),
+		})
 	);
 
 	return facets satisfies Facets;

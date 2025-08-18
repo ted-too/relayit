@@ -1,5 +1,7 @@
 "use client";
 
+import type { Project } from "@repo/db";
+import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import {
 	AlertDialogAction,
 	AlertDialogCancel,
@@ -21,22 +23,21 @@ import {
 } from "@repo/ui/components/shadcn/dialog";
 import { useAppForm } from "@repo/ui/components/shadcn/form";
 import { cn } from "@repo/ui/lib/utils";
-import { getChangedFields } from "@/lib/utils";
-import { trpc } from "@/trpc/client";
-import { noThrow } from "@/trpc/no-throw";
-import type { Project } from "@repo/db";
-import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
 import { PlusIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useCallback } from "react";
 import { toast } from "sonner";
-interface CreateProjectFormProps {
+import { getChangedFields } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
+
+type CreateProjectFormProps = {
 	onSuccess?: (data: { id: string; slug: string }) => void;
 	submitWrapper?: typeof DialogFooter;
 	initialData?: Project;
 	className?: { root?: string; submit?: string };
-}
+};
 
 export function CreateProjectForm({
 	submitWrapper,
@@ -74,74 +75,85 @@ export function CreateProjectForm({
 							...getChangedFields(value, initialData),
 							projectId: initialData.id,
 						})
-					: createProject(value),
+					: createProject(value)
 			);
 
-			if (error) return toast.error(error?.message);
+			if (error) {
+				return toast.error(error?.message);
+			}
 
-			if (onSuccess) onSuccess(data as { id: string; slug: string });
+			if (onSuccess) {
+				onSuccess(data as { id: string; slug: string });
+			}
 		},
 	});
 
 	const name = useStore(form.store, (state) => state.values.name);
 
 	const generateSlug = useCallback(async () => {
-		if (!name || name.length === 0) return;
+		if (!name || name.length === 0) {
+			return;
+		}
 
-		if (initialData?.slug) return;
+		if (initialData?.slug) {
+			return;
+		}
 
 		const { data } = await noThrow(
 			generateSlugFn({
 				name,
-			}),
+			})
 		);
 
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-	}, [form, name, initialData?.slug]);
+	}, [form, name, initialData?.slug, generateSlugFn]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
 
 	return (
 		<form
+			className={cn("grid w-full gap-4", className?.root)}
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className={cn("grid gap-4 w-full", className?.root)}
 		>
 			<form.AppField
-				name="name"
+				children={(field) => (
+					<field.TextField
+						className={{
+							root: "grow",
+						}}
+						label="Project Name"
+						placeholder="e.g., My Project"
+					/>
+				)}
 				listeners={{
 					onChangeDebounceMs: 250,
 					onChange: generateSlug,
 				}}
-				children={(field) => (
-					<field.TextField
-						label="Project Name"
-						placeholder="e.g., My Project"
-						className={{
-							root: "grow",
-						}}
-					/>
-				)}
+				name="name"
 			/>
 
 			<form.AppField
-				name="slug"
 				children={(field) => (
 					<field.SlugField
-						label="Project Slug"
 						isLoading={isGeneratingSlug}
+						label="Project Slug"
 						regenerate={generateSlug}
 					/>
 				)}
+				name="slug"
 			/>
 
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
-					<form.SubmitButton className={cn("w-full mt-6", className?.submit)} size="lg">
+					<form.SubmitButton
+						className={cn("mt-6 w-full", className?.submit)}
+						size="lg"
+					>
 						{initialData ? "Update Project" : "Create Project"}
 					</form.SubmitButton>
 				</form.AppForm>
@@ -184,9 +196,9 @@ export function CreateProjectDialog({
 			<DialogTrigger asChild>
 				{children ?? (
 					<Button
-						variant={button.variant}
 						className={button.className}
 						size={button.size}
+						variant={button.variant}
 					>
 						<PlusIcon />
 						{button.label}
@@ -200,7 +212,7 @@ export function CreateProjectDialog({
 						Give your project a name to help you identify it later
 					</DialogDescription>
 				</DialogHeader>
-				<CreateProjectForm submitWrapper={DialogFooter} onSuccess={onSuccess} />
+				<CreateProjectForm onSuccess={onSuccess} submitWrapper={DialogFooter} />
 			</DialogContent>
 		</Dialog>
 	);
@@ -227,7 +239,9 @@ export function DeleteProjectDialogContent({
 
 	const handleDelete = async () => {
 		const { error } = await noThrow(deleteProject({ projectId: project.id }));
-		if (error) return toast.error(error?.message);
+		if (error) {
+			return toast.error(error?.message);
+		}
 		if (onSuccess === "redirect") {
 			router.push(`/~/${orgSlug}`);
 		} else if (onSuccess) {
@@ -249,7 +263,7 @@ export function DeleteProjectDialogContent({
 			</AlertDialogHeader>
 			<AlertDialogFooter>
 				<AlertDialogCancel>Cancel</AlertDialogCancel>
-				<AlertDialogAction variant="destructive" onClick={handleDelete}>
+				<AlertDialogAction onClick={handleDelete} variant="destructive">
 					Delete
 				</AlertDialogAction>
 			</AlertDialogFooter>

@@ -1,10 +1,5 @@
 "use client";
 
-import type { DialogFooter } from "@repo/ui/components/shadcn/dialog";
-import { useAppForm, withForm } from "@repo/ui/components/shadcn/form";
-import { getChangedFields } from "@/lib/utils";
-import { trpc } from "@/trpc/client";
-import { noThrow } from "@/trpc/no-throw";
 import type {
 	NotificationProvider,
 	ProjectDetails,
@@ -12,23 +7,28 @@ import type {
 } from "@repo/db";
 import {
 	type ChannelType,
-	PROVIDER_CONFIG,
 	createProjectProviderSchema,
 	createProviderSchema,
 	getProjectProviderDefaults,
 	getProviderDefaults,
+	PROVIDER_CONFIG,
 } from "@repo/shared";
+import type { DialogFooter } from "@repo/ui/components/shadcn/dialog";
+import { useAppForm, withForm } from "@repo/ui/components/shadcn/form";
 import { useStore } from "@tanstack/react-form";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback } from "react";
 import type { z } from "zod/v4";
-import { useRouter } from "next/navigation";
+import { getChangedFields } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
+import { noThrow } from "@/trpc/no-throw";
 
-interface CreateProviderFormProps {
+type CreateProviderFormProps = {
 	submitWrapper?: typeof DialogFooter;
 	onSuccess?: () => void;
 	channelType: ChannelType;
 	initialData?: NotificationProvider;
-}
+};
 
 export function CreateProviderForm({
 	submitWrapper,
@@ -68,10 +68,12 @@ export function CreateProviderForm({
 			onSubmit: ({ formApi }) => {
 				const parseResult = createProviderSchema(
 					channelType,
-					formApi.state.values.providerType,
+					formApi.state.values.providerType
 				).safeParse(formApi.state.values);
 
-				if (parseResult.success) return undefined;
+				if (parseResult.success) {
+					return;
+				}
 
 				return parseResult.error;
 			},
@@ -91,7 +93,7 @@ export function CreateProviderForm({
 						providerId: initialData.id,
 						...getChangedFields(value, defaultValues),
 					}),
-					noThrowConfig,
+					noThrowConfig
 				);
 			} else {
 				await noThrow(createProvider(value), noThrowConfig);
@@ -102,39 +104,49 @@ export function CreateProviderForm({
 	const name = useStore(form.store, (state) => state.values.name);
 
 	const generateSlug = useCallback(async () => {
-		if (!name || name.length === 0) return;
+		if (!name || name.length === 0) {
+			return;
+		}
 
 		const { data } = await noThrow(
 			generateSlugFn({
 				name,
-			}),
+			})
 		);
 
 		if (data) {
 			form.setFieldValue("slug", data.slug);
 		}
-	}, [form, name]);
+	}, [form, name, generateSlugFn]);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
 
 	const providerConfig = PROVIDER_CONFIG[channelType].find(
-		(p) => p.type === (initialData?.providerType ?? defaultProviderType),
+		(p) => p.type === (initialData?.providerType ?? defaultProviderType)
 	)!;
 
 	// Specific isOneTimeField function for provider credentials
 	const isCredentialOneTimeField = useCallback(
 		(
 			fieldPath: string,
-			oneTimeFieldsDef?: Record<string, any> | boolean,
+			oneTimeFieldsDef?: Record<string, any> | boolean
 		): boolean => {
-			if (!initialData || !oneTimeFieldsDef) return false;
-			if (typeof oneTimeFieldsDef === "boolean") return oneTimeFieldsDef; // Should not happen at top level
+			if (!(initialData && oneTimeFieldsDef)) {
+				return false;
+			}
+			if (typeof oneTimeFieldsDef === "boolean") {
+				return oneTimeFieldsDef; // Should not happen at top level
+			}
 
 			const pathParts = fieldPath.split(".");
 			let current = oneTimeFieldsDef;
 			for (const part of pathParts) {
-				if (typeof current !== "object" || current === null) return false;
-				if ((current as Record<string, any>)[part] === true) return true;
+				if (typeof current !== "object" || current === null) {
+					return false;
+				}
+				if ((current as Record<string, any>)[part] === true) {
+					return true;
+				}
 				if (typeof (current as Record<string, any>)[part] === "object") {
 					current = (current as Record<string, any>)[part];
 				} else {
@@ -143,60 +155,63 @@ export function CreateProviderForm({
 			}
 			return false;
 		},
-		[initialData],
+		[initialData]
 	);
 
 	// Specific getFieldDescription function for provider credentials
 	const getCredentialFieldDescription = useCallback(
 		(path: string, isDisabled: boolean): string | undefined => {
-			if (isDisabled) return "This field cannot be changed after creation";
-			if (path.includes("unencrypted")) return undefined; // e.g. unencrypted.region
+			if (isDisabled) {
+				return "This field cannot be changed after creation";
+			}
+			if (path.includes("unencrypted")) {
+				return; // e.g. unencrypted.region
+			}
 
 			return "This will be encrypted";
 		},
-		[],
+		[]
 	);
 
 	return (
 		<form
+			className="grid w-full grid-cols-2 gap-4"
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="grid grid-cols-2 gap-4 w-full"
 		>
 			<form.AppField
-				name="name"
+				children={(field) => (
+					<field.TextField
+						description="Display name for this provider"
+						label="Provider Name"
+					/>
+				)}
 				listeners={
-					!initialData
-						? {
+					initialData
+						? undefined
+						: {
 								onChangeDebounceMs: 250,
 								onChange: generateSlug,
 							}
-						: undefined
 				}
-				children={(field) => (
-					<field.TextField
-						label="Provider Name"
-						description="Display name for this provider"
-					/>
-				)}
+				name="name"
 			/>
 
 			<form.AppField
-				name="slug"
 				children={(field) => (
 					<field.SlugField
-						label="Provider Slug"
-						isLoading={isGeneratingSlug}
-						regenerate={generateSlug}
 						description="Slug used in API calls"
+						isLoading={isGeneratingSlug}
+						label="Provider Slug"
+						regenerate={generateSlug}
 					/>
 				)}
+				name="slug"
 			/>
 
 			<form.AppField
-				name="providerType"
 				children={(field) => (
 					<field.SelectField
 						label="Type"
@@ -209,21 +224,22 @@ export function CreateProviderForm({
 						}}
 					/>
 				)}
+				name="providerType"
 			/>
 
 			{/* Render credential fields based on schema */}
 			<DynamicSchemaFields
-				form={form}
 				basePath="credentials"
-				schemaToRender={providerConfig.credentialsSchema}
-				isFieldDisabled={isCredentialOneTimeField}
+				form={form}
 				getFieldDescription={getCredentialFieldDescription}
+				isFieldDisabled={isCredentialOneTimeField}
 				oneTimeFieldsDefinition={providerConfig.oneTimeFields}
+				schemaToRender={providerConfig.credentialsSchema}
 			/>
 
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-6" size="lg">
+					<form.SubmitButton className="mt-6 w-full" size="lg">
 						{initialData ? "Update" : "Create"}
 					</form.SubmitButton>
 				</form.AppForm>
@@ -239,15 +255,15 @@ const DynamicSchemaFields = withForm({
 		schemaToRender: z.ZodType;
 		isFieldDisabled?: (
 			path: string,
-			oneTimeFields?: Record<string, any> | boolean,
+			oneTimeFields?: Record<string, any> | boolean
 		) => boolean;
 		getFieldDescription?: (
 			path: string,
-			isDisabled: boolean,
+			isDisabled: boolean
 		) => string | undefined;
 		oneTimeFieldsDefinition?: Record<string, any> | boolean;
 	},
-	render: function render({
+	render({
 		form,
 		basePath,
 		schemaToRender,
@@ -258,7 +274,7 @@ const DynamicSchemaFields = withForm({
 		const renderField = (
 			currentPath: string,
 			schema: z.ZodType,
-			currentOneTimeFieldsDef?: Record<string, any> | boolean,
+			currentOneTimeFieldsDef?: Record<string, any> | boolean
 		) => {
 			const fullPath = basePath ? `${basePath}.${currentPath}` : currentPath;
 			const fieldIsDisabled = isFieldDisabled
@@ -269,8 +285,8 @@ const DynamicSchemaFields = withForm({
 				: undefined;
 			const labelText = currentPath
 				.split(".")
-				.pop()!
-				.split(/(?=[A-Z])/)
+				.pop()
+				?.split(/(?=[A-Z])/)
 				.join(" ")
 				.toLowerCase()
 				.replace(/^./, (str) => str.toUpperCase());
@@ -288,9 +304,9 @@ const DynamicSchemaFields = withForm({
 								return renderField(
 									currentPath ? `${currentPath}.${key}` : key,
 									value as z.ZodType,
-									nextOneTimeFieldsDef,
+									nextOneTimeFieldsDef
 								);
-							},
+							}
 						)}
 					</Fragment>
 				);
@@ -299,23 +315,23 @@ const DynamicSchemaFields = withForm({
 			if (schema.def.type === "enum") {
 				return (
 					<form.AppField
-						key={fullPath}
-						name={fullPath as any}
 						children={(field) => (
 							<field.SelectField
+								description={description}
 								label={labelText}
 								options={(schema as z.ZodEnum<any>).options.map(
 									(option: string) => ({
 										label: option,
 										value: option,
-									}),
+									})
 								)}
-								description={description}
 								triggerProps={{
 									disabled: fieldIsDisabled,
 								}}
 							/>
 						)}
+						key={fullPath}
+						name={fullPath as any}
 					/>
 				);
 			}
@@ -328,10 +344,10 @@ const DynamicSchemaFields = withForm({
 			) {
 				return (
 					<form.AppField
-						key={fullPath}
-						name={fullPath as any}
 						children={(field) => (
 							<field.TextField
+								description={description}
+								disabled={fieldIsDisabled}
 								label={labelText}
 								type={
 									currentPath.toLowerCase().includes("secret") ||
@@ -339,10 +355,10 @@ const DynamicSchemaFields = withForm({
 										? "password"
 										: "text"
 								}
-								description={description}
-								disabled={fieldIsDisabled}
 							/>
 						)}
+						key={fullPath}
+						name={fullPath as any}
 					/>
 				);
 			}
@@ -358,13 +374,13 @@ const DynamicSchemaFields = withForm({
 	},
 });
 
-interface CreateProjectProviderAssociationFormProps {
+type CreateProjectProviderAssociationFormProps = {
 	submitWrapper?: typeof DialogFooter;
 	onSuccess?: () => void;
 	provider: NotificationProvider;
 	project: ProjectDetails;
 	initialData?: ProjectProviderAssociation;
-}
+};
 
 export function CreateProjectProviderAssociationForm({
 	submitWrapper,
@@ -419,10 +435,12 @@ export function CreateProjectProviderAssociationForm({
 			onSubmit: ({ formApi }) => {
 				const parseResult = createProjectProviderSchema(
 					provider.channelType,
-					provider.providerType,
+					provider.providerType
 				).safeParse(formApi.state.values);
 
-				if (parseResult.success) return undefined;
+				if (parseResult.success) {
+					return;
+				}
 
 				return parseResult.error;
 			},
@@ -447,7 +465,7 @@ export function CreateProjectProviderAssociationForm({
 						projectId: project.id,
 						...getChangedFields(value, defaultValues),
 					}),
-					noThrowConfig,
+					noThrowConfig
 				);
 			} else {
 				await noThrow(
@@ -456,54 +474,52 @@ export function CreateProjectProviderAssociationForm({
 						providerCredentialId: provider.id,
 						projectId: project.id,
 					}),
-					noThrowConfig,
+					noThrowConfig
 				);
 			}
 		},
-		onSubmitInvalid: ({ formApi }) => {
-			console.log(formApi.state.errors);
-		},
+		onSubmitInvalid: ({ formApi }) => {},
 	});
 
 	const providerConfig = PROVIDER_CONFIG[provider.channelType].find(
-		(p) => p.type === provider.providerType,
+		(p) => p.type === provider.providerType
 	);
 
 	const SubmitWrapper = submitWrapper ?? Fragment;
 
 	return (
 		<form
+			className="grid w-full grid-cols-2 gap-4"
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
 			}}
-			className="grid grid-cols-2 gap-4 w-full"
 		>
 			<form.AppField
-				name="priority"
 				children={(field) => (
 					<field.TextField
+						description="Lower numbers have higher priority (e.g., 0 is highest)."
 						label="Priority"
 						type="number"
-						description="Lower numbers have higher priority (e.g., 0 is highest)."
 					/>
 				)}
+				name="priority"
 			/>
 
 			{providerConfig?.configSchema && (
 				<DynamicSchemaFields
-					form={form}
 					basePath="config"
-					schemaToRender={providerConfig.configSchema}
+					form={form}
+					getFieldDescription={(_path, _isDisabled) => {}}
 					// Config fields are not "one-time" for creation, and standard description
 					isFieldDisabled={() => false}
-					getFieldDescription={(path, isDisabled) => undefined} // No special descriptions for config
+					schemaToRender={providerConfig.configSchema} // No special descriptions for config
 				/>
 			)}
 
 			<SubmitWrapper className="col-span-full">
 				<form.AppForm>
-					<form.SubmitButton className="w-full mt-6" size="lg">
+					<form.SubmitButton className="mt-6 w-full" size="lg">
 						{initialData ? "Update" : "Create"}
 					</form.SubmitButton>
 				</form.AppForm>

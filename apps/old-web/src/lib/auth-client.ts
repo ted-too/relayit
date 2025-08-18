@@ -26,7 +26,7 @@ export type OrganizationMember = {
 	};
 };
 
-export interface BaseApiKey {
+export type BaseApiKey = {
 	metadata: any;
 	permissions: any;
 	id: string;
@@ -39,7 +39,7 @@ export interface BaseApiKey {
 	// TODO: More fields...
 	createdAt: Date;
 	updatedAt: Date;
-}
+};
 
 export interface CreatedApiKey extends BaseApiKey {
 	key: string;

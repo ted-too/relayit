@@ -1,7 +1,7 @@
 import { generateProjectSlug } from "@repo/api/lib/slugs";
 import { authdProcedureWithOrg, router, verifyProject } from "@repo/api/trpc";
-import { db, schema } from "@repo/db";
 import type { ProjectDetails } from "@repo/db";
+import { db, schema } from "@repo/db";
 import { createProjectSchema, updateProjectSchema } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
@@ -58,7 +58,7 @@ export const projectRouter = router({
 			const project = await db.query.project.findFirst({
 				where: and(
 					eq(schema.project.slug, input.slug),
-					eq(schema.project.organizationId, ctx.organization.id),
+					eq(schema.project.organizationId, ctx.organization.id)
 				),
 				with: {
 					providerAssociations: {
@@ -103,8 +103,8 @@ export const projectRouter = router({
 					.where(
 						and(
 							eq(schema.project.organizationId, organization.id),
-							eq(schema.project.slug, input.slug),
-						),
+							eq(schema.project.slug, input.slug)
+						)
 					)
 					.limit(1);
 
@@ -161,8 +161,8 @@ export const projectRouter = router({
 				.where(
 					and(
 						eq(schema.project.organizationId, organization.id),
-						eq(schema.project.slug, slug),
-					),
+						eq(schema.project.slug, slug)
+					)
 				)
 				.limit(1);
 
@@ -178,7 +178,7 @@ export const projectRouter = router({
 				.values({
 					organizationId: organization.id,
 					name: input.name ?? "Untitled Project",
-					slug: slug,
+					slug,
 					metadata: input.metadata ?? null,
 				})
 				.returning();

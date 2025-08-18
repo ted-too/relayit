@@ -1,7 +1,7 @@
 import type z from "zod/v4";
 
 // get zod object keys recursively
-export const zodKeys = <T extends z.ZodType>(schema: T): string[] => {
+export const zodKeys = <T extends z.ZodType>(_schema: T): string[] => {
 	// FIXME: Make this work
 	// make sure schema is not null or undefined
 	// if (schema === null || schema === undefined) return [];

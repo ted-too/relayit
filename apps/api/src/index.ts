@@ -4,32 +4,31 @@ import { authSessionMiddleware } from "@repo/api/lib/middleware";
 import { appRouter } from "@repo/api/routes";
 import { sendRouter } from "@repo/api/routes/send";
 import { createContext } from "@repo/api/trpc";
-import type { ParsedApiKey } from "@repo/db";
-import type { schema } from "@repo/db";
+import type { ParsedApiKey, schema } from "@repo/db";
+// @ts-expect-error - Scalar is not a module
+import { Scalar } from "@scalar/hono-api-reference";
 import type { InferSelectModel } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { openAPISpecs } from "hono-openapi";
-// @ts-expect-error - Scalar is not a module
-import { Scalar } from "@scalar/hono-api-reference";
 
 type Session = typeof auth.$Infer.Session.session;
 
-interface NullableVariables {
+type NullableVariables = {
 	user: typeof auth.$Infer.Session.user | null;
 	session: Session | null;
 	apiKey: Omit<ParsedApiKey, "key"> | null;
 	organization: InferSelectModel<typeof schema.organization> | null;
-}
+};
 
 type RawNonNullableVariables = {
 	[K in keyof NullableVariables]: NonNullable<NullableVariables[K]>;
 };
 
-export interface NullableContext {
+export type NullableContext = {
 	Variables: NullableVariables;
-}
+};
 
 interface SessionWithOrganization extends Session {
 	activeOrganizationId: string;
@@ -39,13 +38,13 @@ interface NonNullableVariables extends RawNonNullableVariables {
 	session: SessionWithOrganization;
 }
 
-export interface Context {
+export type Context = {
 	Variables: NonNullableVariables;
-}
+};
 
-export interface ApiKeyContext {
+export type ApiKeyContext = {
 	Variables: Pick<NonNullableVariables, "apiKey">;
-}
+};
 
 const app = new Hono<NullableContext>();
 
@@ -62,7 +61,7 @@ app.use(
 		exposeHeaders: ["Content-Length"],
 		maxAge: 600,
 		credentials: true,
-	}),
+	})
 );
 
 app.get(
@@ -92,7 +91,7 @@ app.get(
 				},
 			],
 		},
-	}),
+	})
 );
 
 if (process.env.NODE_ENV === "development") {
@@ -108,7 +107,7 @@ app.use(
 	trpcServer({
 		router: appRouter,
 		createContext,
-	}),
+	})
 );
 
 export default {

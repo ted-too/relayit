@@ -1,10 +1,10 @@
+import { cn } from "@repo/ui/lib/utils";
 import {
 	Geist_Mono as FontMono,
 	Geist as FontSans,
 	Inter,
 	Poppins,
 } from "next/font/google";
-import { cn } from "@repo/ui/lib/utils";
 
 const fontSans = FontSans({
 	subsets: ["latin"],
@@ -32,5 +32,5 @@ export const fontVariables = cn(
 	fontSans.variable,
 	fontMono.variable,
 	fontInter.variable,
-	fontPoppins.variable,
+	fontPoppins.variable
 );

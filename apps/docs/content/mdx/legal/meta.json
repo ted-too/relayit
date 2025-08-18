@@ -1,10 +1,4 @@
 {
   "title": "Legal",
-  "pages": [
-    "index",
-    "privacy",
-    "terms",
-    "acceptable-use",
-    "cookies"
-  ]
+  "pages": ["index", "privacy", "terms", "acceptable-use", "cookies"]
 }

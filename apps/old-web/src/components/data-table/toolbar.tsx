@@ -1,26 +1,26 @@
 "use client";
 
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
-import { useDataTable } from "@/components/data-table/provider";
+import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { Button } from "@repo/ui/components/shadcn/button";
+import { Kbd } from "@repo/ui/components/shadcn/kbd";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
-import useHotkeys from "@reecelucas/react-use-hotkeys";
 import { formatCompactNumber } from "@repo/ui/lib/utils";
-import { useControls } from "../data-table/controls";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
-import { DataTableFilterControlsDrawer } from "./filters/drawer";
-import { DataTableResetButton } from "../data-table/reset-button";
-import { DataTableViewOptions } from "./view-options";
+import { useDataTable } from "@/components/data-table/provider";
 import { TABLE_SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
+import { useControls } from "../data-table/controls";
+import { DataTableResetButton } from "../data-table/reset-button";
+import { DataTableFilterControlsDrawer } from "./filters/drawer";
+import { DataTableViewOptions } from "./view-options";
 
-interface DataTableToolbarProps {
+type DataTableToolbarProps = {
 	renderActions?: () => React.ReactNode;
-}
+};
 
 export function DataTableToolbar({ renderActions }: DataTableToolbarProps) {
 	const { table, filterRows, totalRows } = useDataTable();
@@ -35,10 +35,10 @@ export function DataTableToolbar({ renderActions }: DataTableToolbarProps) {
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
+								className="hidden gap-2 sm:flex"
+								onClick={() => setOpen((prev) => !prev)}
 								size="sm"
 								variant="ghost"
-								onClick={() => setOpen((prev) => !prev)}
-								className="hidden gap-2 sm:flex"
 							>
 								{open ? (
 									<>
@@ -68,15 +68,15 @@ export function DataTableToolbar({ renderActions }: DataTableToolbarProps) {
 					<DataTableFilterControlsDrawer />
 				</div>
 				<div>
-					<p className="hidden text-sm text-muted-foreground sm:block">
-						<span className="font-mono font-medium">
+					<p className="hidden text-muted-foreground text-sm sm:block">
+						<span className="font-medium font-mono">
 							{formatCompactNumber(filterRows)}
 						</span>{" "}
-						of <span className="font-mono font-medium">{totalRows}</span> row(s){" "}
+						of <span className="font-medium font-mono">{totalRows}</span> row(s){" "}
 						<span className="sr-only sm:not-sr-only">filtered</span>
 					</p>
-					<p className="block text-sm text-muted-foreground sm:hidden">
-						<span className="font-mono font-medium">
+					<p className="block text-muted-foreground text-sm sm:hidden">
+						<span className="font-medium font-mono">
 							{formatCompactNumber(filterRows)}
 						</span>{" "}
 						row(s)

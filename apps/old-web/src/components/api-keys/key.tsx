@@ -1,13 +1,12 @@
 "use client";
 
-import { type BaseApiKey, authClient } from "@/lib/auth-client";
-
 import { ActionButton } from "@repo/ui/components/shadcn/button";
 import { Card } from "@repo/ui/components/shadcn/card";
-import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeyIcon } from "lucide-react";
 import { toast } from "sonner";
+import { authClient, type BaseApiKey } from "@/lib/auth-client";
+import { apiKeysListQueryKey } from "@/trpc/queries/auth";
 
 export function ApiKeyCard({ apiKey }: { apiKey: BaseApiKey }) {
 	const queryClient = useQueryClient();
@@ -32,8 +31,8 @@ export function ApiKeyCard({ apiKey }: { apiKey: BaseApiKey }) {
 
 	return (
 		<Card
-			key={apiKey.id}
 			className="flex flex-row items-center gap-3 px-4 py-3"
+			key={apiKey.id}
 		>
 			<KeyIcon className="size-4" />
 			<div className="flex flex-col">
@@ -45,9 +44,9 @@ export function ApiKeyCard({ apiKey }: { apiKey: BaseApiKey }) {
 			<ActionButton
 				className="relative ms-auto"
 				isLoading={revokeLoading}
+				onClick={async () => await revokeKey()}
 				size="sm"
 				variant="outline"
-				onClick={async () => await revokeKey()}
 			>
 				Revoke
 			</ActionButton>

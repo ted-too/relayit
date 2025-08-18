@@ -1,14 +1,14 @@
 "use client";
 
-import { TextWithTooltip } from "@/components/data-table/cells/text-with-tooltip";
-import { DataTableColumnHeader } from "@/components/data-table/cells/column-header";
 import type { Message } from "@repo/db";
+import type { MessageStatus, SendMessagePayload } from "@repo/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MinusIcon } from "lucide-react";
+import { DataTableColumnHeader } from "@/components/data-table/cells/column-header";
 import { HoverCardTimestamp } from "@/components/data-table/cells/hover-card-timestamp";
-import type { MessageStatus, SendMessagePayload } from "@repo/shared";
-import { StatusIndicator } from "../../data-table/cells/status-indicator";
+import { TextWithTooltip } from "@/components/data-table/cells/text-with-tooltip";
 import { getStatusColor } from "@/lib/colors";
+import { StatusIndicator } from "../../data-table/cells/status-indicator";
 
 export const columns: ColumnDef<Message>[] = [
 	{

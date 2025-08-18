@@ -1,4 +1,4 @@
 {
-	"title": "Get Started",
-	"pages": ["index", "[API Reference](/reference)"]
+  "title": "Get Started",
+  "pages": ["index", "[API Reference](/reference)"]
 }

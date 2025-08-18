@@ -1,22 +1,22 @@
-import { MessagesTable } from "@/components/tables/messages";
 import {
 	Card,
-	CardDescription,
-	CardTitle,
-	CardHeader,
 	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
 } from "@repo/ui/components/shadcn/card";
 import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
 import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
+import { MessagesTable } from "@/components/tables/messages";
 
 export default async function MessagesPage() {
 	const cookieStore = await cookies();
 
 	return (
 		<Card
-			variant="shadow"
 			className="mx-auto max-w-none"
+			variant="shadow"
 			wrapperProps={{ className: "h-full" }}
 		>
 			<CardHeader className="pb-0">
@@ -26,6 +26,7 @@ export default async function MessagesPage() {
 				</CardDescription>
 			</CardHeader>
 			<CardContent
+				className="pt-4"
 				style={
 					{
 						// TBH Don't ask me why this works, but it does.
@@ -35,7 +36,6 @@ export default async function MessagesPage() {
 							"calc(var(--content-height) - 5.25rem - 0.5rem - 1.25rem - calc(0.625rem*2) - 0.75rem )",
 					} as CSSProperties
 				}
-				className="pt-4"
 			>
 				<MessagesTable
 					controlsOpen={

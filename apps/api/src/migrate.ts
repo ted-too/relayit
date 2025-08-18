@@ -3,13 +3,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
 async function runMigration() {
-	console.log("Migration started ⌛");
-
 	const dbUrl = process.env.DATABASE_URL;
 
 	if (dbUrl.length === 0) {
-		console.error("🚨 No database url found", process.env.DATABASE_URL);
-		console.log("Current environment:", process.env);
 		process.exit(1);
 	}
 
@@ -20,9 +16,7 @@ async function runMigration() {
 	const db = drizzle(client);
 	try {
 		await migrate(db, { migrationsFolder: "./drizzle" });
-		console.log("Migration completed ✅");
-	} catch (error) {
-		console.error("Migration failed 🚨:", error);
+	} catch (_error) {
 		await client.end(); // Ensure client is closed before exiting
 		process.exit(1); // Exit with non-zero code on failure
 	} finally {
@@ -30,7 +24,6 @@ async function runMigration() {
 	}
 }
 
-runMigration().catch((error) => {
-	console.error("Error in migration process 🚨:", error);
+runMigration().catch((_error) => {
 	process.exit(1); // Exit with non-zero code on uncaught errors during setup/call
 });

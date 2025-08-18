@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
 	serverExternalPackages: ["@repo/api"],
 	typescript: {
 		ignoreBuildErrors: true,
-	}
+	},
 };
 
 export default nextConfig;

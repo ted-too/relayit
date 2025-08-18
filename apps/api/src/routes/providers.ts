@@ -1,7 +1,12 @@
 import { generateProviderSlug } from "@repo/api/lib/slugs";
 import { authdProcedureWithOrg, router } from "@repo/api/trpc";
-import { deepMerge, encryptRecord, getSafeEncryptedRecord } from "@repo/db";
-import { db, schema } from "@repo/db";
+import {
+	db,
+	deepMerge,
+	encryptRecord,
+	getSafeEncryptedRecord,
+	schema,
+} from "@repo/db";
 import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_PROVIDER_TYPES,
@@ -9,7 +14,7 @@ import {
 	updateProviderSchema,
 } from "@repo/shared";
 import { TRPCError } from "@trpc/server";
-import { type SQL, and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 
 export const providerRouter = router({
@@ -27,14 +32,14 @@ export const providerRouter = router({
 					providerType: z.enum(AVAILABLE_PROVIDER_TYPES),
 					channelType: z.enum(AVAILABLE_CHANNELS),
 				})
-				.passthrough(),
+				.passthrough()
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { organization } = ctx;
 
 			const parseSchema = createProviderSchema(
 				input.channelType,
-				input.providerType,
+				input.providerType
 			);
 			const parseResult = parseSchema.safeParse(input);
 
@@ -58,8 +63,8 @@ export const providerRouter = router({
 				.where(
 					and(
 						eq(schema.providerCredential.organizationId, organization.id),
-						eq(schema.providerCredential.slug, slug),
-					),
+						eq(schema.providerCredential.slug, slug)
+					)
 				)
 				.limit(1);
 
@@ -71,7 +76,7 @@ export const providerRouter = router({
 			}
 
 			const encryptedCredentialsResult = encryptRecord(
-				validatedData.credentials,
+				validatedData.credentials
 			);
 
 			if (encryptedCredentialsResult.error) {
@@ -90,14 +95,14 @@ export const providerRouter = router({
 						eq(schema.providerCredential.organizationId, organization.id),
 						eq(
 							schema.providerCredential.channelType,
-							validatedData.channelType,
+							validatedData.channelType
 						),
 						eq(
 							schema.providerCredential.providerType,
-							validatedData.providerType,
+							validatedData.providerType
 						),
-						eq(schema.providerCredential.orgDefault, true),
-					),
+						eq(schema.providerCredential.orgDefault, true)
+					)
 				)
 				.limit(1);
 
@@ -108,7 +113,7 @@ export const providerRouter = router({
 				.insert(schema.providerCredential)
 				.values({
 					organizationId: organization.id,
-					slug: slug,
+					slug,
 					channelType: validatedData.channelType,
 					providerType: validatedData.providerType,
 					name: validatedData.name,
@@ -159,7 +164,7 @@ export const providerRouter = router({
 			const credential = await db.query.providerCredential.findFirst({
 				where: and(
 					eq(schema.providerCredential.id, providerId),
-					eq(schema.providerCredential.organizationId, organization.id),
+					eq(schema.providerCredential.organizationId, organization.id)
 				),
 			});
 
@@ -186,7 +191,7 @@ export const providerRouter = router({
 			const existingCredential = await db.query.providerCredential.findFirst({
 				where: and(
 					eq(schema.providerCredential.id, providerId),
-					eq(schema.providerCredential.organizationId, organization.id),
+					eq(schema.providerCredential.organizationId, organization.id)
 				),
 			});
 
@@ -199,7 +204,7 @@ export const providerRouter = router({
 
 			const parseSchema = updateProviderSchema(
 				existingCredential.channelType,
-				existingCredential.providerType,
+				existingCredential.providerType
 			);
 			const parseResult = parseSchema.safeParse({
 				...updateData,
@@ -233,8 +238,8 @@ export const providerRouter = router({
 					.where(
 						and(
 							eq(schema.providerCredential.organizationId, organization.id),
-							eq(schema.providerCredential.slug, validatedData.slug),
-						),
+							eq(schema.providerCredential.slug, validatedData.slug)
+						)
 					)
 					.limit(1);
 
@@ -249,7 +254,7 @@ export const providerRouter = router({
 
 			if (validatedData.credentials) {
 				const encryptedCredentialsResult = encryptRecord(
-					validatedData.credentials,
+					validatedData.credentials
 				);
 				if (encryptedCredentialsResult.error) {
 					throw new TRPCError({
@@ -259,7 +264,7 @@ export const providerRouter = router({
 				}
 				updatePayload.credentials = deepMerge(
 					existingCredential.credentials,
-					encryptedCredentialsResult.data,
+					encryptedCredentialsResult.data
 				);
 			}
 
@@ -301,7 +306,7 @@ export const providerRouter = router({
 			const existingProvider = await db.query.providerCredential.findFirst({
 				where: and(
 					eq(schema.providerCredential.id, providerId),
-					eq(schema.providerCredential.organizationId, organization.id),
+					eq(schema.providerCredential.organizationId, organization.id)
 				),
 			});
 
@@ -322,10 +327,10 @@ export const providerRouter = router({
 						eq(schema.providerCredential.organizationId, organization.id),
 						eq(
 							schema.providerCredential.channelType,
-							existingProvider.channelType,
+							existingProvider.channelType
 						),
-						eq(schema.providerCredential.orgDefault, true),
-					),
+						eq(schema.providerCredential.orgDefault, true)
+					)
 				);
 
 			// Set the new provider as default
@@ -358,8 +363,8 @@ export const providerRouter = router({
 				.where(
 					and(
 						eq(schema.providerCredential.id, providerId),
-						eq(schema.providerCredential.organizationId, organization.id),
-					),
+						eq(schema.providerCredential.organizationId, organization.id)
+					)
 				);
 
 			if (rowCount === 0) {

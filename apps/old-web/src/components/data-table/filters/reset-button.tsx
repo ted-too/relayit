@@ -1,10 +1,10 @@
 "use client";
 
-import { useDataTable } from "@/components/data-table/provider";
-import type { DataTableFilterField } from "@/components/data-table/types";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { XIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
+import { useDataTable } from "@/components/data-table/provider";
+import type { DataTableFilterField } from "@/components/data-table/types";
 
 export function DataTableFilterResetButton<TData>({
 	value: _value,
@@ -16,7 +16,9 @@ export function DataTableFilterResetButton<TData>({
 	// Get current filter value and normalize to array
 	const filterValue = columnFilters.find((f) => f.id === value)?.value;
 	const filters = useMemo(() => {
-		if (!filterValue) return [];
+		if (!filterValue) {
+			return [];
+		}
 		return Array.isArray(filterValue) ? filterValue : [filterValue];
 	}, [filterValue]);
 
@@ -26,15 +28,17 @@ export function DataTableFilterResetButton<TData>({
 			e.stopPropagation();
 			column?.setFilterValue(undefined);
 		},
-		[column],
+		[column]
 	);
 
 	// Don't render anything if there's no active filter
-	if (filters.length === 0) return null;
+	if (filters.length === 0) {
+		return null;
+	}
 
 	return (
 		<Button
-			variant="outline"
+			asChild
 			className="h-5 rounded-full px-1.5 py-1 font-mono text-[10px]"
 			onClick={handleReset}
 			onKeyDown={(e) => {
@@ -42,7 +46,7 @@ export function DataTableFilterResetButton<TData>({
 					handleReset(e);
 				}
 			}}
-			asChild
+			variant="outline"
 		>
 			{/* REMINDER: `AccordionTrigger` is also a button(!) and we get Hydration error when rendering button within button */}
 			<div role="button" tabIndex={0}>

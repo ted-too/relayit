@@ -1,9 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-
-import type { source } from "@/lib/source";
 import {
 	Sidebar,
 	SidebarContent,
@@ -14,6 +10,9 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "@repo/ui/components/shadcn/sidebar";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { source } from "@/lib/source";
 
 export function DocsSidebar({
 	tree,
@@ -31,7 +30,7 @@ export function DocsSidebar({
 				<div className="h-(--top-spacing) shrink-0" />
 				{tree.children.map((item) => (
 					<SidebarGroup key={item.$id}>
-						<SidebarGroupLabel className="text-muted-foreground font-medium">
+						<SidebarGroupLabel className="font-medium text-muted-foreground">
 							{item.name}
 						</SidebarGroupLabel>
 						<SidebarGroupContent>
@@ -43,8 +42,8 @@ export function DocsSidebar({
 												<SidebarMenuItem key={item.url}>
 													<SidebarMenuButton
 														asChild
+														className="after:-inset-y-1 relative h-[30px] 3xl:w-full w-fit 3xl:max-w-48 overflow-visible border border-transparent font-medium text-[0.8rem] after:absolute after:inset-x-0 after:z-0 after:rounded-md data-[active=true]:border-accent data-[active=true]:bg-accent"
 														isActive={item.url === pathname}
-														className="data-[active=true]:bg-accent data-[active=true]:border-accent 3xl:w-full 3xl:max-w-48 relative h-[30px] w-fit overflow-visible border border-transparent text-[0.8rem] font-medium after:absolute after:inset-x-0 after:-inset-y-1 after:z-0 after:rounded-md"
 													>
 														<Link href={item.url}>{item.name}</Link>
 													</SidebarMenuButton>

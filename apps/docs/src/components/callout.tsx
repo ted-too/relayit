@@ -1,30 +1,30 @@
-import { cn } from "@repo/ui/lib/utils"
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@repo/ui/components/shadcn/alert"
+	Alert,
+	AlertDescription,
+	AlertTitle,
+} from "@repo/ui/components/shadcn/alert";
+import { cn } from "@repo/ui/lib/utils";
 
 export function Callout({
-  title,
-  children,
-  icon,
-  className,
-  ...props
+	title,
+	children,
+	icon,
+	className,
+	...props
 }: React.ComponentProps<typeof Alert> & { icon?: React.ReactNode }) {
-  return (
-    <Alert
-      className={cn(
-        "bg-surface text-surface-foreground mt-6 w-auto border-none md:-mx-4",
-        className
-      )}
-      {...props}
-    >
-      {icon}
-      {title && <AlertTitle>{title}</AlertTitle>}
-      <AlertDescription className="text-card-foreground/80">
-        {children}
-      </AlertDescription>
-    </Alert>
-  )
+	return (
+		<Alert
+			className={cn(
+				"md:-mx-4 mt-6 w-auto border-none bg-surface text-surface-foreground",
+				className
+			)}
+			{...props}
+		>
+			{icon}
+			{title && <AlertTitle>{title}</AlertTitle>}
+			<AlertDescription className="text-card-foreground/80">
+				{children}
+			</AlertDescription>
+		</Alert>
+	);
 }

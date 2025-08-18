@@ -1,16 +1,10 @@
 "use client";
 
-import {
-	Discord,
-	Email,
-	type IconProps,
-	Sms,
-	Whatsapp,
-} from "@/components/icons";
-import {
-	CreateProjectProviderAssociationForm,
-	CreateProviderForm,
-} from "@/components/notification-providers/create";
+import type {
+	NotificationProvider,
+	ProjectDetails,
+	ProjectProviderAssociation,
+} from "@repo/db";
 import { Badge } from "@repo/ui/components/shadcn/badge";
 import { Button } from "@repo/ui/components/shadcn/button";
 import { Card } from "@repo/ui/components/shadcn/card";
@@ -28,10 +22,19 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
-import type { NotificationProvider, ProjectDetails } from "@repo/db";
-import type { ProjectProviderAssociation } from "@repo/db";
 import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";
 import { useState } from "react";
+import {
+	Discord,
+	Email,
+	type IconProps,
+	Sms,
+	Whatsapp,
+} from "@/components/icons";
+import {
+	CreateProjectProviderAssociationForm,
+	CreateProviderForm,
+} from "@/components/notification-providers/create";
 
 const ICONS: Record<
 	NotificationProvider["channelType"],
@@ -52,7 +55,7 @@ function ProviderTitle({ provider }: { provider: NotificationProvider }) {
 				<TooltipTrigger asChild>
 					<Icon className="size-5" />
 				</TooltipTrigger>
-				<TooltipContent side="bottom" align="center">
+				<TooltipContent align="center" side="bottom">
 					{provider.channelType} provider
 				</TooltipContent>
 			</Tooltip>
@@ -65,13 +68,13 @@ function ProviderTitle({ provider }: { provider: NotificationProvider }) {
 						<TooltipTrigger asChild>
 							<Badge variant="light-positive">Default</Badge>
 						</TooltipTrigger>
-						<TooltipContent side="bottom" align="center">
+						<TooltipContent align="center" side="bottom">
 							Default organization provider
 						</TooltipContent>
 					</Tooltip>
 				)}
 			</div>
-			<span className="text-sm font-medium">{provider.name}</span>
+			<span className="font-medium text-sm">{provider.name}</span>
 		</div>
 	);
 }
@@ -84,12 +87,12 @@ export function NotificationProviderCard({
 	const [isOpen, setIsOpen] = useState(false);
 
 	return (
-		<Card className="h-17.5 flex items-center w-full justify-between p-4 rounded-lg">
+		<Card className="flex h-17.5 w-full items-center justify-between rounded-lg p-4">
 			<ProviderTitle provider={provider} />
 			<div className="flex items-center gap-2">
-				<Dialog open={isOpen} onOpenChange={setIsOpen}>
+				<Dialog onOpenChange={setIsOpen} open={isOpen}>
 					<DialogTrigger asChild>
-						<Button variant="ghost" size="icon">
+						<Button size="icon" variant="ghost">
 							<PencilIcon />
 						</Button>
 					</DialogTrigger>
@@ -101,14 +104,14 @@ export function NotificationProviderCard({
 							</DialogDescription>
 						</DialogHeader>
 						<CreateProviderForm
-							submitWrapper={DialogFooter}
 							channelType={provider.channelType}
 							initialData={provider}
 							onSuccess={() => setIsOpen(false)}
+							submitWrapper={DialogFooter}
 						/>
 					</DialogContent>
 				</Dialog>
-				<Button variant="ghost-destructive" size="icon">
+				<Button size="icon" variant="ghost-destructive">
 					<TrashIcon />
 				</Button>
 			</div>
@@ -128,13 +131,13 @@ export function ProjectNotificationProviderCard({
 	const [isOpen, setIsOpen] = useState(false);
 
 	return (
-		<Card className="h-17.5 flex items-center max-w-none justify-between p-4 rounded-lg">
+		<Card className="flex h-17.5 max-w-none items-center justify-between rounded-lg p-4">
 			<ProviderTitle provider={provider} />
 			<div className="flex items-center gap-2">
-				<Dialog open={isOpen} onOpenChange={setIsOpen}>
+				<Dialog onOpenChange={setIsOpen} open={isOpen}>
 					<DialogTrigger asChild>
 						{config ? (
-							<Button variant="ghost" size="icon">
+							<Button size="icon" variant="ghost">
 								<PencilIcon />
 							</Button>
 						) : (
@@ -149,16 +152,16 @@ export function ProjectNotificationProviderCard({
 							</DialogDescription>
 						</DialogHeader>
 						<CreateProjectProviderAssociationForm
-							submitWrapper={DialogFooter}
 							initialData={config}
-							provider={provider}
-							project={project}
 							onSuccess={() => setIsOpen(false)}
+							project={project}
+							provider={provider}
+							submitWrapper={DialogFooter}
 						/>
 					</DialogContent>
 				</Dialog>
 				{config && (
-					<Button variant="ghost-destructive" size="icon">
+					<Button size="icon" variant="ghost-destructive">
 						<UnlinkIcon />
 					</Button>
 				)}

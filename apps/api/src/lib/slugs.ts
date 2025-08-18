@@ -8,7 +8,7 @@ import slugify from "slugify";
  */
 export async function generateProjectSlug(
 	name: string,
-	organizationId: string,
+	organizationId: string
 ): Promise<string> {
 	const baseSlug = slugify(name, { lower: true, strict: true });
 	let slug = baseSlug;
@@ -22,8 +22,8 @@ export async function generateProjectSlug(
 			.where(
 				and(
 					eq(schema.project.organizationId, organizationId),
-					eq(schema.project.slug, slug),
-				),
+					eq(schema.project.slug, slug)
+				)
 			);
 
 		if (existing[0].count === 0) {
@@ -43,7 +43,7 @@ export async function generateProjectSlug(
  */
 export async function generateProviderSlug(
 	name: string,
-	organizationId: string,
+	organizationId: string
 ): Promise<string> {
 	const baseSlug = slugify(name, { lower: true, strict: true });
 	let slug = baseSlug;
@@ -57,8 +57,8 @@ export async function generateProviderSlug(
 			.where(
 				and(
 					eq(schema.providerCredential.organizationId, organizationId),
-					eq(schema.providerCredential.slug, slug),
-				),
+					eq(schema.providerCredential.slug, slug)
+				)
 			);
 
 		if (existing[0].count === 0) {

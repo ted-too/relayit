@@ -1,7 +1,5 @@
 "use client";
 
-import { Email } from "@/components/icons";
-import { CreateProviderForm } from "@/components/notification-providers/create";
 import { Button } from "@repo/ui/components/shadcn/button";
 import {
 	Dialog,
@@ -12,16 +10,18 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@repo/ui/components/shadcn/dialog";
-import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 import { useState } from "react";
+import { Email } from "@/components/icons";
+import { CreateProviderForm } from "@/components/notification-providers/create";
+import { ButtonWrapper, type NotificationProviderButtonProps } from ".";
 
 export function EmailProvider({ configured }: NotificationProviderButtonProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog onOpenChange={setIsOpen} open={isOpen}>
 			<ButtonWrapper configured={configured}>
 				<DialogTrigger asChild>
-					<Button variant="secondary" size="lg" className="font-semibold">
+					<Button className="font-semibold" size="lg" variant="secondary">
 						<Email />
 						<span>Email</span>
 					</Button>
@@ -35,9 +35,9 @@ export function EmailProvider({ configured }: NotificationProviderButtonProps) {
 					</DialogDescription>
 				</DialogHeader>
 				<CreateProviderForm
-					submitWrapper={DialogFooter}
 					channelType="email"
 					onSuccess={() => setIsOpen(false)}
+					submitWrapper={DialogFooter}
 				/>
 			</DialogContent>
 		</Dialog>

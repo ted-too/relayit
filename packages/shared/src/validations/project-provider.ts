@@ -1,8 +1,8 @@
 import { z } from "zod/v4";
 import {
 	type ChannelType,
-	type ProviderType,
 	getProviderConfig,
+	type ProviderType,
 } from "../constants/providers";
 import { generateDefaultFromShape } from "./providers";
 
@@ -36,19 +36,19 @@ export type ProjectProviderConfig =
 	| WhatsAppProjectProviderConfig;
 
 export function isSESProjectProviderConfig(
-	config: ProjectProviderConfig,
+	config: ProjectProviderConfig
 ): config is SESProjectProviderConfig {
 	return "senderEmail" in config;
 }
 
 export function isSNSProjectProviderConfig(
-	config: ProjectProviderConfig,
+	config: ProjectProviderConfig
 ): config is SNSProjectProviderConfig {
 	return "senderName" in config;
 }
 
 export function isWhatsAppProjectProviderConfig(
-	config: ProjectProviderConfig,
+	config: ProjectProviderConfig
 ): config is WhatsAppProjectProviderConfig {
 	return "phoneNumberId" in config;
 }
@@ -59,13 +59,14 @@ export const baseProjectProviderAssociationSchema = z.object({
 
 export function createProjectProviderSchema(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	const config = getProviderConfig(channelType, providerType);
-	if (!config)
+	if (!config) {
 		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`,
+			`Invalid provider configuration: ${channelType}/${providerType}`
 		);
+	}
 
 	return baseProjectProviderAssociationSchema
 		.extend({
@@ -76,12 +77,12 @@ export function createProjectProviderSchema(
 
 export function getProjectProviderDefaults(
 	channelType: ChannelType,
-	providerType: ProviderType,
+	providerType: ProviderType
 ) {
 	const config = getProviderConfig(channelType, providerType);
 	if (!config) {
 		throw new Error(
-			`No provider configuration found for channel: ${channelType} and type: ${providerType}`,
+			`No provider configuration found for channel: ${channelType} and type: ${providerType}`
 		);
 	}
 
@@ -97,13 +98,14 @@ export function getProjectProviderDefaults(
 export function updateProjectProviderSchema(
 	channelType: ChannelType,
 	providerType: ProviderType,
-	configPartial = true,
+	configPartial = true
 ) {
 	const config = getProviderConfig(channelType, providerType);
-	if (!config)
+	if (!config) {
 		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`,
+			`Invalid provider configuration: ${channelType}/${providerType}`
 		);
+	}
 
 	// This usually should not have one-time fields
 	const baseUpdateSchema = baseProjectProviderAssociationSchema.partial();
@@ -116,7 +118,7 @@ export function updateProjectProviderSchema(
 						? config.configSchema.partial()
 						: config.configSchema
 					: z.null(),
-			}),
+			})
 		)
 		.strict();
 }

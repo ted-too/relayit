@@ -1,30 +1,26 @@
-import { DropdownMenu } from "@repo/ui/components/shadcn/dropdown-menu";
 import {
+	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuSeparator,
-} from "@repo/ui/components/shadcn/dropdown-menu";
-import {
 	DropdownMenuGroup,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
 } from "@repo/ui/components/shadcn/dropdown-menu";
-import type { DataTableFilterField } from "@/components/data-table/types";
-import { DropdownMenuTrigger } from "@repo/ui/components/shadcn/dropdown-menu";
 import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
 import { cn } from "@repo/ui/lib/utils";
 import type { Table } from "@tanstack/react-table";
-import { startOfDay } from "date-fns";
-import { startOfHour } from "date-fns";
-import { endOfDay } from "date-fns";
-import { endOfHour } from "date-fns";
+import { endOfDay, endOfHour, startOfDay, startOfHour } from "date-fns";
 import {
-	CopyIcon,
+	CalendarClockIcon,
+	CalendarDaysIcon,
 	CalendarSearchIcon,
 	ChevronLeftIcon,
 	ChevronRightIcon,
+	CopyIcon,
 	EqualIcon,
 	SearchIcon,
 } from "lucide-react";
-import { CalendarDaysIcon, CalendarClockIcon } from "lucide-react";
+import type { DataTableFilterField } from "@/components/data-table/types";
 
 interface DataTableSheetRowActionProps<
 	TData,
@@ -53,10 +49,14 @@ export function DataTableSheetRowAction<
 	const field = filterFields.find((field) => field.value === fieldValue);
 	const column = table.getColumn(fieldValue.toString());
 
-	if (!field || !column) return null;
+	if (!(field && column)) {
+		return null;
+	}
 
 	function renderOptions() {
-		if (!field) return null;
+		if (!field) {
+			return null;
+		}
 		switch (field.type) {
 			case "checkbox":
 				return (
@@ -65,7 +65,7 @@ export function DataTableSheetRowAction<
 							// FIXME:
 							const filterValue = column?.getFilterValue() as
 								| undefined
-								| Array<unknown>;
+								| unknown[];
 							const newValue = filterValue?.includes(value)
 								? filterValue
 								: [...(filterValue || []), value];
@@ -149,7 +149,7 @@ export function DataTableSheetRowAction<
 				className={cn(
 					"rounded-md ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 					"relative",
-					className,
+					className
 				)}
 				onKeyDown={(e) => {
 					if (e.key === "ArrowDown") {
@@ -164,7 +164,7 @@ export function DataTableSheetRowAction<
 			>
 				{children}
 				{isCopied ? (
-					<div className="absolute inset-0 bg-background/70 place-content-center">
+					<div className="absolute inset-0 place-content-center bg-background/70">
 						Value copied
 					</div>
 				) : null}

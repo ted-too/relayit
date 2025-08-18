@@ -8,8 +8,12 @@ export const basePaginationSchema = z.object({
 });
 
 const transformTimestamp = (val: number | string | Date | undefined | null) => {
-	if (val === undefined || val === null) return null;
-	if (typeof val === "number") return val;
+	if (val === undefined || val === null) {
+		return null;
+	}
+	if (typeof val === "number") {
+		return val;
+	}
 	// If it's a Date object or string, convert to timestamp
 	return new Date(val).getTime();
 };
@@ -20,18 +24,15 @@ export const timeRangeSchema = z.object({
 });
 
 export function createTimeRangedPaginatedSchema<T extends z.ZodRawShape>(
-	extraFields: T,
+	extraFields: T
 ) {
 	return timeRangeSchema.extend({
-		id: z.preprocess(
-			(val) => {
-				if (typeof val === "string") {
-					return val.split(ARRAY_DELIMITER);
-				}
-				return val;
-			},
-			z.array(z.string()).nullish(),
-		),
+		id: z.preprocess((val) => {
+			if (typeof val === "string") {
+				return val.split(ARRAY_DELIMITER);
+			}
+			return val;
+		}, z.array(z.string()).nullish()),
 		search: z.string().nullish(),
 		sort: z.array(z.string()).nullish(), // will be in the format of <column_id>:<asc|desc>
 		...basePaginationSchema.shape,

@@ -1,8 +1,17 @@
 "use client";
 
-import { AlertDialog, AlertDialogTrigger } from "@repo/ui/components/shadcn/alert-dialog";
+import type { Project } from "@repo/db";
+import {
+	AlertDialog,
+	AlertDialogTrigger,
+} from "@repo/ui/components/shadcn/alert-dialog";
 import { Button } from "@repo/ui/components/shadcn/button";
-import { Card, CardFooter, CardHeader, CardTitle } from "@repo/ui/components/shadcn/card";
+import {
+	Card,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@repo/ui/components/shadcn/card";
 import {
 	Dialog,
 	DialogContent,
@@ -21,7 +30,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@repo/ui/components/shadcn/dropdown-menu";
-import type { Project } from "@repo/db";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
 	EllipsisIcon,
@@ -42,23 +50,23 @@ export function ProjectCard({ project }: { project: Project }) {
 
 	return (
 		<Link href={`/~/${orgSlug}/projects/${project.slug}`}>
-			<Card className="hover:bg-muted transition-colors duration-200">
+			<Card className="transition-colors duration-200 hover:bg-muted">
 				<CardHeader>
-					<CardTitle className="flex items-center gap-2 justify-between">
+					<CardTitle className="flex items-center justify-between gap-2">
 						{/* TODO: Add icon for project type based on language */}
 						<div className="flex items-center gap-2">
 							<SquareTerminalIcon className="size-4" />
 							{project.name}
 						</div>
-						<Dialog open={isEditing} onOpenChange={setIsEditing}>
-							<AlertDialog open={isDeleting} onOpenChange={setIsDeleting}>
+						<Dialog onOpenChange={setIsEditing} open={isEditing}>
+							<AlertDialog onOpenChange={setIsDeleting} open={isDeleting}>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button variant="ghost" size="icon">
+										<Button size="icon" variant="ghost">
 											<EllipsisIcon />
 										</Button>
 									</DropdownMenuTrigger>
-									<DropdownMenuContent className="w-56" align="end">
+									<DropdownMenuContent align="end" className="w-56">
 										<DropdownMenuLabel>Actions</DropdownMenuLabel>
 										<DropdownMenuSeparator />
 										<DropdownMenuGroup>
@@ -72,9 +80,9 @@ export function ProjectCard({ project }: { project: Project }) {
 											</DialogTrigger>
 											<AlertDialogTrigger asChild>
 												<DropdownMenuItem
-													variant="destructive"
 													className="justify-between"
 													onClick={(e) => e.stopPropagation()}
+													variant="destructive"
 												>
 													Delete <TrashIcon />
 												</DropdownMenuItem>
@@ -83,8 +91,8 @@ export function ProjectCard({ project }: { project: Project }) {
 									</DropdownMenuContent>
 								</DropdownMenu>
 								<DeleteProjectDialogContent
-									project={project}
 									onSuccess={() => setIsDeleting(false)}
+									project={project}
 								/>
 							</AlertDialog>
 							<DialogContent
@@ -98,9 +106,9 @@ export function ProjectCard({ project }: { project: Project }) {
 									</DialogDescription>
 								</DialogHeader>
 								<CreateProjectForm
-									submitWrapper={DialogFooter}
 									initialData={project}
 									onSuccess={() => setIsEditing(false)}
+									submitWrapper={DialogFooter}
 								/>
 							</DialogContent>
 						</Dialog>

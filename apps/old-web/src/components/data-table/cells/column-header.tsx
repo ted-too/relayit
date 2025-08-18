@@ -1,7 +1,7 @@
-import type { Column } from "@tanstack/react-table";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
 import { cn } from "@repo/ui/lib/utils";
+import type { Column } from "@tanstack/react-table";
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 interface DataTableColumnHeaderProps<TData, TValue> extends ButtonProps {
 	column: Column<TData, TValue>;
@@ -20,15 +20,15 @@ export function DataTableColumnHeader<TData, TValue>({
 
 	return (
 		<Button
-			variant="ghost"
-			size="sm"
+			className={cn(
+				"flex h-7 w-full items-center justify-between gap-2 px-0 py-0 text-sm hover:border-transparent hover:bg-transparent [&_svg]:size-3",
+				className
+			)}
 			onClick={() => {
 				column.toggleSorting(undefined);
 			}}
-			className={cn(
-				"py-0 px-0 h-7 hover:bg-transparent hover:border-transparent text-sm flex gap-2 items-center justify-between w-full [&_svg]:size-3",
-				className,
-			)}
+			size="sm"
+			variant="ghost"
 			{...props}
 		>
 			<span>{title}</span>
@@ -38,7 +38,7 @@ export function DataTableColumnHeader<TData, TValue>({
 						"-mb-0.5 h-3 w-3",
 						column.getIsSorted() === "asc"
 							? "text-accent-foreground"
-							: "text-muted-foreground",
+							: "text-muted-foreground"
 					)}
 				/>
 				<ChevronDownIcon
@@ -46,7 +46,7 @@ export function DataTableColumnHeader<TData, TValue>({
 						"-mt-0.5 h-3 w-3",
 						column.getIsSorted() === "desc"
 							? "text-accent-foreground"
-							: "text-muted-foreground",
+							: "text-muted-foreground"
 					)}
 				/>
 			</span>

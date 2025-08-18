@@ -9,9 +9,9 @@ import {
 	type ConfiguredIndicatorProps,
 } from "./configured-indicator";
 
-export interface NotificationProviderButtonProps {
+export type NotificationProviderButtonProps = {
 	configured?: ConfiguredIndicatorProps;
-}
+};
 
 export function ButtonWrapper({
 	children,
@@ -20,7 +20,9 @@ export function ButtonWrapper({
 	children: React.ReactNode;
 	configured?: ConfiguredIndicatorProps;
 }) {
-	if (configured === undefined) return children;
+	if (configured === undefined) {
+		return children;
+	}
 
 	return (
 		<Tooltip>
@@ -37,7 +39,7 @@ export function ButtonWrapper({
 	);
 }
 
+export * from "./discord";
 export * from "./email";
 export * from "./sms";
 export * from "./whatsapp";
-export * from "./discord";

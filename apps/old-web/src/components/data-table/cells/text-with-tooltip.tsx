@@ -1,3 +1,4 @@
+import { TooltipPortal } from "@radix-ui/react-tooltip";
 import {
 	Tooltip,
 	TooltipContent,
@@ -5,13 +6,12 @@ import {
 	TooltipTrigger,
 } from "@repo/ui/components/shadcn/tooltip";
 import { cn } from "@repo/ui/lib/utils";
-import { TooltipPortal } from "@radix-ui/react-tooltip";
 import { useEffect, useRef, useState } from "react";
 
-interface TextWithTooltipProps {
+type TextWithTooltipProps = {
 	text: string | number;
 	className?: string;
-}
+};
 
 export function TextWithTooltip({ text, className }: TextWithTooltipProps) {
 	const [isTruncated, setIsTruncated] = useState<boolean>(false);
@@ -43,14 +43,14 @@ export function TextWithTooltip({ text, className }: TextWithTooltipProps) {
 	return (
 		<TooltipProvider delayDuration={100} disableHoverableContent>
 			<Tooltip>
-				<TooltipTrigger disabled={!isTruncated} asChild>
+				<TooltipTrigger asChild disabled={!isTruncated}>
 					<div
-						ref={textRef}
 						className={cn(
 							"truncate",
 							!isTruncated && "pointer-events-none",
-							className,
+							className
 						)}
+						ref={textRef}
 					>
 						{text}
 					</div>

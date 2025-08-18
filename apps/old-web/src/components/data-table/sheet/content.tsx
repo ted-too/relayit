@@ -1,12 +1,12 @@
 "use client";
 
+import { cn } from "@repo/ui/lib/utils";
+import type { Table } from "@tanstack/react-table";
+import * as React from "react";
 import type {
 	DataTableFilterField,
 	SheetField,
 } from "@/components/data-table/types";
-import { cn } from "@repo/ui/lib/utils";
-import type { Table } from "@tanstack/react-table";
-import * as React from "react";
 import { DataTableSheetRowAction } from "./row-action";
 import { SheetDetailsContentSkeleton } from "./skeleton";
 
@@ -32,12 +32,16 @@ export function DataTableSheetContent<TData, TMeta>({
 	metadata,
 	...props
 }: DataTableSheetContentProps<TData, TMeta>) {
-	if (!data) return <SheetDetailsContentSkeleton fields={fields} />;
+	if (!data) {
+		return <SheetDetailsContentSkeleton fields={fields} />;
+	}
 
 	return (
 		<dl className={cn("divide-y", className)} {...props}>
 			{fields.map((field) => {
-				if (field.condition && !field.condition(data)) return null;
+				if (field.condition && !field.condition(data)) {
+					return null;
+				}
 
 				const Component = field.component;
 				const value = String(data[field.id]);
@@ -47,14 +51,14 @@ export function DataTableSheetContent<TData, TMeta>({
 						{field.type === "readonly" ? (
 							<div
 								className={cn(
-									"flex gap-4 my-1 py-1 text-sm justify-between items-center w-full",
-									field.className,
+									"my-1 flex w-full items-center justify-between gap-4 py-1 text-sm",
+									field.className
 								)}
 							>
 								<dt className="shrink-0 text-muted-foreground">
 									{field.label}
 								</dt>
-								<dd className="font-mono w-full text-right">
+								<dd className="w-full text-right font-mono">
 									{Component ? (
 										<Component {...data} metadata={metadata} />
 									) : (
@@ -64,19 +68,19 @@ export function DataTableSheetContent<TData, TMeta>({
 							</div>
 						) : (
 							<DataTableSheetRowAction
+								className={cn(
+									"my-1 flex w-full items-center justify-between gap-4 py-1 text-sm",
+									field.className
+								)}
 								fieldValue={field.id}
 								filterFields={filterFields}
-								value={value}
 								table={table}
-								className={cn(
-									"flex gap-4 my-1 py-1 text-sm justify-between items-center w-full",
-									field.className,
-								)}
+								value={value}
 							>
 								<dt className="shrink-0 text-muted-foreground">
 									{field.label}
 								</dt>
-								<dd className="font-mono w-full text-right">
+								<dd className="w-full text-right font-mono">
 									{Component ? (
 										<Component {...data} metadata={metadata} />
 									) : (
@@ -97,5 +101,5 @@ export const MemoizedDataTableSheetContent = React.memo(
 	(prev, next) => {
 		// REMINDER: only check if data is the same, rest is useless
 		return prev.data === next.data;
-	},
+	}
 ) as typeof DataTableSheetContent;

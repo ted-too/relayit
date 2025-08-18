@@ -13,7 +13,7 @@ export const noThrow = async <T>(
 		error?: string;
 		success?: string;
 		onSuccess?: (data: T) => void;
-	},
+	}
 ): Promise<{ data: T; error: null } | { data: null; error: ErrorResponse }> => {
 	const config = {
 		error: rawConfig?.error ?? "Something went wrong",
@@ -24,11 +24,15 @@ export const noThrow = async <T>(
 	try {
 		const data = await trpc;
 
-		if (!isServer && config.success) toast.success(config.success);
+		if (!isServer && config.success) {
+			toast.success(config.success);
+		}
 
-		if (config.onSuccess) config.onSuccess(data);
+		if (config.onSuccess) {
+			config.onSuccess(data);
+		}
 
-		return { data: data, error: null };
+		return { data, error: null };
 	} catch (error) {
 		let errorResponse: ErrorResponse;
 		if (error instanceof TRPCClientError) {
@@ -43,10 +47,11 @@ export const noThrow = async <T>(
 			};
 		}
 
-		if (!isServer)
+		if (!isServer) {
 			toast.error(errorResponse.message, {
 				description: errorResponse.details.join("\n"),
 			});
+		}
 
 		return {
 			data: null,
