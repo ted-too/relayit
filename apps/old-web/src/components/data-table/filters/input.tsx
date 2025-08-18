@@ -1,8 +1,8 @@
 "use client";
 
-import { InputWithAddons } from "@repo/ui/components/shadcn/input-with-addons";
-import { Label } from "@repo/ui/components/shadcn/label";
-import { useBasicDebounce } from "@repo/ui/hooks/use-debounce";
+import { InputWithAddons } from "@repo/old-ui/components/shadcn/input-with-addons";
+import { Label } from "@repo/old-ui/components/shadcn/label";
+import { useBasicDebounce } from "@repo/old-ui/hooks/use-debounce";
 import { SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useDataTable } from "@/components/data-table/provider";

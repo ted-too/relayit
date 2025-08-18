@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -9,7 +9,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
+} from "@repo/old-ui/components/shadcn/dialog";
 import { useState } from "react";
 import { Email } from "@/components/icons";
 import { CreateProviderForm } from "@/components/notification-providers/create";

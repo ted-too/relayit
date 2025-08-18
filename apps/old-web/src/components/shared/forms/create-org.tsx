@@ -6,14 +6,8 @@ import {
 	RadioGroupIndicator,
 	RadioGroupItem,
 } from "@radix-ui/react-radio-group";
-import {
-	type CreateOrganizationRequest,
-	createOrganizationSchema,
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationLogoGradientKey,
-} from "@repo/shared";
-import type { ButtonProps } from "@repo/ui/components/shadcn/button";
-import { Button } from "@repo/ui/components/shadcn/button";
+import type { ButtonProps } from "@repo/old-ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -22,21 +16,30 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
-import { FormErrorMessage, useAppForm } from "@repo/ui/components/shadcn/form";
-import { Label } from "@repo/ui/components/shadcn/label";
+} from "@repo/old-ui/components/shadcn/dialog";
+import {
+	FormErrorMessage,
+	useAppForm,
+} from "@repo/old-ui/components/shadcn/form";
+import { Label } from "@repo/old-ui/components/shadcn/label";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@repo/ui/components/shadcn/popover";
+} from "@repo/old-ui/components/shadcn/popover";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tabs";
+import { cn } from "@repo/old-ui/lib/utils";
+import {
+	type CreateOrganizationRequest,
+	createOrganizationSchema,
+	ORGANIZATION_LOGO_GRADIENTS,
+	type OrganizationLogoGradientKey,
+} from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheckIcon, PlusIcon } from "lucide-react";

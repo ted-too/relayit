@@ -1,11 +1,11 @@
-import { Badge } from "@repo/ui/components/shadcn/badge";
-import { Card, CardContent } from "@repo/ui/components/shadcn/card";
+import { Badge } from "@repo/old-ui/components/shadcn/badge";
+import { Card, CardContent } from "@repo/old-ui/components/shadcn/card";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { IconProps as TablerIconProps } from "@tabler/icons-react";
 import type { IconProps } from "./icons";
 

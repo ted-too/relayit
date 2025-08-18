@@ -4,8 +4,8 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
-import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+} from "@repo/old-ui/components/shadcn/card";
+import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/old-ui/constants";
 import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
 import { MessagesTable } from "@/components/tables/messages";

@@ -1,4 +1,4 @@
-import { SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+import { SIDEBAR_COOKIE_NAME } from "@repo/old-ui/constants";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { cookies, headers as headersFn } from "next/headers";
 import { AppSidebar } from "@/components/layout/app-sidebar";

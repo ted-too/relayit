@@ -3,21 +3,21 @@ import {
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
-} from "@repo/ui/components/shadcn/accordion";
+} from "@repo/old-ui/components/shadcn/accordion";
 import {
 	Alert,
 	AlertDescription,
 	AlertTitle,
-} from "@repo/ui/components/shadcn/alert";
-import { AspectRatio } from "@repo/ui/components/shadcn/aspect-ratio";
-import { Button } from "@repo/ui/components/shadcn/button";
+} from "@repo/old-ui/components/shadcn/alert";
+import { AspectRatio } from "@repo/old-ui/components/shadcn/aspect-ratio";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tabs";
+import { cn } from "@repo/old-ui/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import type * as React from "react";

@@ -1,7 +1,7 @@
 "use client";
 
-import { CardContent } from "@repo/ui/components/shadcn/card";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { CardContent } from "@repo/old-ui/components/shadcn/card";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import { trpc } from "@/trpc/client";
 import { ProjectCard } from "./project";
 

@@ -1,6 +1,6 @@
-import { Badge } from "@repo/ui/components/shadcn/badge";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { SidebarProvider } from "@repo/ui/components/shadcn/sidebar";
+import { Badge } from "@repo/old-ui/components/shadcn/badge";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { SidebarProvider } from "@repo/old-ui/components/shadcn/sidebar";
 import {
 	IconArrowLeft,
 	IconArrowRight,

@@ -1,4 +1,4 @@
-import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/old-ui/constants";
 import { createContext, useCallback, useContext, useState } from "react";
 
 type ControlsContextType = {

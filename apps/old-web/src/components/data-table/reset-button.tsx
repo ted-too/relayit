@@ -1,14 +1,14 @@
 "use client";
 
 import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
+} from "@repo/old-ui/components/shadcn/tooltip";
 import { XIcon } from "lucide-react";
 import { useDataTable } from "@/components/data-table/provider";
 import { RESET_TABLE_FILTERS } from "@/constants/keybinds";

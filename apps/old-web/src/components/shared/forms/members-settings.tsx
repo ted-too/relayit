@@ -1,7 +1,6 @@
 "use client";
 
-import { MEMBER_ROLES, type MemberRole } from "@repo/shared";
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Card,
 	CardContent,
@@ -9,11 +8,12 @@ import {
 	CardFooter,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
-import { DropdownMenuItem } from "@repo/ui/components/shadcn/dropdown-menu";
-import { useAppForm } from "@repo/ui/components/shadcn/form";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/card";
+import { DropdownMenuItem } from "@repo/old-ui/components/shadcn/dropdown-menu";
+import { useAppForm } from "@repo/old-ui/components/shadcn/form";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
+import { cn } from "@repo/old-ui/lib/utils";
+import { MEMBER_ROLES, type MemberRole } from "@repo/shared";
 import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";

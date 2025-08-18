@@ -1,5 +1,8 @@
-import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
-import { cn } from "@repo/ui/lib/utils";
+import {
+	Button,
+	type ButtonProps,
+} from "@repo/old-ui/components/shadcn/button";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { Column } from "@tanstack/react-table";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 

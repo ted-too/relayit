@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
-import { Separator } from "@repo/ui/components/shadcn/separator";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
+import { Separator } from "@repo/old-ui/components/shadcn/separator";
 import {
 	Sheet,
 	SheetClose,
@@ -10,15 +10,15 @@ import {
 	SheetDescription,
 	SheetHeader,
 	SheetTitle,
-} from "@repo/ui/components/shadcn/sheet";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+} from "@repo/old-ui/components/shadcn/sheet";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { cn } from "@repo/old-ui/lib/utils";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo } from "react";
 import { useDataTable } from "@/components/data-table/provider";

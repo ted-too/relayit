@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import type * as React from "react";
 import { CopyButton } from "@/components/copy-button";
 import { getIconForLanguageExtension } from "@/components/icons";

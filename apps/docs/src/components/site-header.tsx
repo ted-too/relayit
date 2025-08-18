@@ -1,6 +1,6 @@
-import { ModeSwitcher } from "@repo/ui/components/mode-switcher";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Separator } from "@repo/ui/components/shadcn/separator";
+import { ModeSwitcher } from "@repo/old-ui/components/mode-switcher";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Separator } from "@repo/old-ui/components/shadcn/separator";
 import Link from "next/link";
 // import { CommandMenu } from "@/components/command-menu";
 import { GitHubLink } from "@/components/github-link";

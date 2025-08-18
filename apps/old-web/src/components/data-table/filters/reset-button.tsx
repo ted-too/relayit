@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import { XIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useDataTable } from "@/components/data-table/provider";

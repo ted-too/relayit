@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	IconArrowRight,
 	IconBrandDiscordFilled,

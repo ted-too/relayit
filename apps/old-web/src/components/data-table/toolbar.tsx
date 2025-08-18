@@ -1,15 +1,15 @@
 "use client";
 
 import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { formatCompactNumber } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { formatCompactNumber } from "@repo/old-ui/lib/utils";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { useDataTable } from "@/components/data-table/provider";
 import { TABLE_SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";

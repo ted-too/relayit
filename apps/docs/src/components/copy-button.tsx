@@ -1,12 +1,12 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { cn } from "@repo/old-ui/lib/utils";
 import { CheckIcon, ClipboardIcon } from "lucide-react";
 import * as React from "react";
 import { type Event, trackEvent } from "@/lib/events";

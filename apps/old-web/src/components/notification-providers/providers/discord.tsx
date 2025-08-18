@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -6,7 +6,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
+} from "@repo/old-ui/components/shadcn/dialog";
 import { Discord } from "@/components/icons";
 import { ComingSoon } from "@/components/shared/comming-soon";
 import type { NotificationProviderButtonProps } from ".";

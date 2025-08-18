@@ -2,8 +2,8 @@ import {
 	Alert,
 	AlertDescription,
 	AlertTitle,
-} from "@repo/ui/components/shadcn/alert";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/alert";
+import { cn } from "@repo/old-ui/lib/utils";
 
 export function Callout({
 	title,

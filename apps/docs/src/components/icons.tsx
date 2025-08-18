@@ -1,4 +1,4 @@
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import { FileIcon } from "lucide-react";
 
 export type IconProps = React.HTMLAttributes<SVGElement>;

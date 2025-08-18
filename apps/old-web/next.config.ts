@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
 	output: "standalone",
 	outputFileTracingRoot: path.join(__dirname, "../../"),
-	transpilePackages: ["@repo/shared", "@repo/ui"],
+	transpilePackages: ["@repo/shared", "@repo/old-ui"],
 	serverExternalPackages: ["@repo/api"],
 	typescript: {
 		ignoreBuildErrors: true,

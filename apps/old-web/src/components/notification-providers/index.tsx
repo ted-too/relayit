@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent } from "@repo/ui/components/shadcn/card";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { Card, CardContent } from "@repo/old-ui/components/shadcn/card";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import { NotificationProviderCard } from "@/components/notification-providers/card";
 import { EmailProvider } from "@/components/notification-providers/providers/email";
 import { trpc } from "@/trpc/client";

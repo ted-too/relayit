@@ -1,7 +1,7 @@
 "use client";
 
-import { CardContent } from "@repo/ui/components/shadcn/card";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { CardContent } from "@repo/old-ui/components/shadcn/card";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { apiKeysListQueryOptions } from "@/trpc/queries/auth";
 import { ApiKeyCard } from "./key";

@@ -1,15 +1,15 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Calendar } from "@repo/ui/components/shadcn/calendar";
-import { Input } from "@repo/ui/components/shadcn/input";
-import { kbdVariants } from "@repo/ui/components/shadcn/kbd";
-import { Label } from "@repo/ui/components/shadcn/label";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Calendar } from "@repo/old-ui/components/shadcn/calendar";
+import { Input } from "@repo/old-ui/components/shadcn/input";
+import { kbdVariants } from "@repo/old-ui/components/shadcn/kbd";
+import { Label } from "@repo/old-ui/components/shadcn/label";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@repo/ui/components/shadcn/popover";
+} from "@repo/old-ui/components/shadcn/popover";
 import {
 	Select,
 	SelectContent,
@@ -18,9 +18,9 @@ import {
 	SelectLabel,
 	SelectTrigger,
 	SelectValue,
-} from "@repo/ui/components/shadcn/select";
-import { Separator } from "@repo/ui/components/shadcn/separator";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/select";
+import { Separator } from "@repo/old-ui/components/shadcn/separator";
+import { cn } from "@repo/old-ui/lib/utils";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import * as React from "react";

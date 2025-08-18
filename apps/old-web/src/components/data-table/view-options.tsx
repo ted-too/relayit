@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Command,
 	CommandEmpty,
@@ -8,18 +8,18 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
-} from "@repo/ui/components/shadcn/command";
+} from "@repo/old-ui/components/shadcn/command";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@repo/ui/components/shadcn/popover";
+} from "@repo/old-ui/components/shadcn/popover";
 import {
 	Sortable,
 	SortableDragHandle,
 	SortableItem,
-} from "@repo/ui/components/shadcn/sortable";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/sortable";
+import { cn } from "@repo/old-ui/lib/utils";
 import { CheckIcon, GripVerticalIcon, Settings2Icon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useDataTable } from "@/components/data-table/provider";

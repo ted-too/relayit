@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { Table } from "@tanstack/react-table";
 import * as React from "react";
 import type {

@@ -1,7 +1,6 @@
 "use client";
 
 import type { Project } from "@repo/db";
-import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import {
 	AlertDialogAction,
 	AlertDialogCancel,
@@ -10,8 +9,11 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@repo/ui/components/shadcn/alert-dialog";
-import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
+} from "@repo/old-ui/components/shadcn/alert-dialog";
+import {
+	Button,
+	type ButtonProps,
+} from "@repo/old-ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogContent,
@@ -20,9 +22,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
-import { useAppForm } from "@repo/ui/components/shadcn/form";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/dialog";
+import { useAppForm } from "@repo/old-ui/components/shadcn/form";
+import { cn } from "@repo/old-ui/lib/utils";
+import { type CreateProjectInput, createProjectSchema } from "@repo/shared";
 import { useStore } from "@tanstack/react-form";
 import { PlusIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";

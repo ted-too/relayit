@@ -1,10 +1,10 @@
 "use client";
 
-import { Checkbox } from "@repo/ui/components/shadcn/checkbox";
-import { InputWithAddons } from "@repo/ui/components/shadcn/input-with-addons";
-import { Label } from "@repo/ui/components/shadcn/label";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
+import { Checkbox } from "@repo/old-ui/components/shadcn/checkbox";
+import { InputWithAddons } from "@repo/old-ui/components/shadcn/input-with-addons";
+import { Label } from "@repo/old-ui/components/shadcn/label";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
+import { cn, formatCompactNumber } from "@repo/old-ui/lib/utils";
 import { SearchIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useDataTable } from "@/components/data-table/provider";

@@ -2,7 +2,7 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
+} from "@repo/old-ui/components/shadcn/tooltip";
 
 export function ComingSoon({
 	children,

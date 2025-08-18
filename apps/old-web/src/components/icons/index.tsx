@@ -1,4 +1,4 @@
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import parse from "html-react-parser";
 import type React from "react";
 

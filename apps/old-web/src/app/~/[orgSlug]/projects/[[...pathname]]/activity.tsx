@@ -1,5 +1,5 @@
 import type { Project } from "@repo/db";
-import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+import { SECONDARY_SIDEBAR_COOKIE_NAME } from "@repo/old-ui/constants";
 import { cookies } from "next/headers";
 import { MessagesTable } from "@/components/tables/messages";
 

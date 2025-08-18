@@ -1,7 +1,7 @@
 "use client";
 
-import { ActionButton } from "@repo/ui/components/shadcn/button";
-import { Card } from "@repo/ui/components/shadcn/card";
+import { ActionButton } from "@repo/old-ui/components/shadcn/button";
+import { Card } from "@repo/old-ui/components/shadcn/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeyIcon } from "lucide-react";
 import { toast } from "sonner";

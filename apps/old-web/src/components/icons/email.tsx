@@ -1,4 +1,4 @@
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { IconProps } from ".";
 
 export function Email({ className, ...props }: IconProps): React.ReactNode {

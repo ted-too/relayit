@@ -3,7 +3,7 @@ import {
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
+} from "@repo/old-ui/components/shadcn/tabs";
 import {
 	IconBraces,
 	IconDownload,

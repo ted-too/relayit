@@ -4,8 +4,8 @@ import {
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { cn } from "@repo/old-ui/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
 type TextWithTooltipProps = {

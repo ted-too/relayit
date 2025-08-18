@@ -1,11 +1,11 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
-} from "@repo/ui/components/shadcn/collapsible";
+} from "@repo/old-ui/components/shadcn/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -14,7 +14,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
+} from "@repo/old-ui/components/shadcn/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -24,8 +24,8 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/shadcn/dropdown-menu";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+} from "@repo/old-ui/components/shadcn/dropdown-menu";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
 import {
 	Sidebar,
 	SidebarContent,
@@ -44,15 +44,15 @@ import {
 	SidebarRail,
 	SidebarTrigger,
 	useSidebar,
-} from "@repo/ui/components/shadcn/sidebar";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+} from "@repo/old-ui/components/shadcn/sidebar";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { SIDEBAR_KEYBOARD_SHORTCUT } from "@repo/ui/constants";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { SIDEBAR_KEYBOARD_SHORTCUT } from "@repo/old-ui/constants";
+import { cn } from "@repo/old-ui/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Category2, type IconProps } from "iconsax-react";
 import {

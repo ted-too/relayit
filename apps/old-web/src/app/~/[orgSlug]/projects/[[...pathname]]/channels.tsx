@@ -9,7 +9,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import { ProjectNotificationProviderCard } from "@/components/notification-providers/card";
 import type { ConfiguredIndicatorType } from "@/components/notification-providers/providers/configured-indicator";
 import { DiscordProvider } from "@/components/notification-providers/providers/discord";

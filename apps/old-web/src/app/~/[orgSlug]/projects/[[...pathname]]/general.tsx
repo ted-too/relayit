@@ -5,7 +5,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import { CreateProjectForm } from "@/components/projects/create";
 
 export function GeneralTab({ project }: { project: Project }) {

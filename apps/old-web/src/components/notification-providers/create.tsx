@@ -5,6 +5,8 @@ import type {
 	ProjectDetails,
 	ProjectProviderAssociation,
 } from "@repo/db";
+import type { DialogFooter } from "@repo/old-ui/components/shadcn/dialog";
+import { useAppForm, withForm } from "@repo/old-ui/components/shadcn/form";
 import {
 	type ChannelType,
 	createProjectProviderSchema,
@@ -13,8 +15,6 @@ import {
 	getProviderDefaults,
 	PROVIDER_CONFIG,
 } from "@repo/shared";
-import type { DialogFooter } from "@repo/ui/components/shadcn/dialog";
-import { useAppForm, withForm } from "@repo/ui/components/shadcn/form";
 import { useStore } from "@tanstack/react-form";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback } from "react";

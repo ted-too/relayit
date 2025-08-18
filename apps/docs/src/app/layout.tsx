@@ -1,6 +1,6 @@
-import { Toaster } from "@repo/ui/components/shadcn/sonner";
-import { ThemeProvider } from "@repo/ui/components/theme-provider";
-import { cn } from "@repo/ui/lib/utils";
+import { Toaster } from "@repo/old-ui/components/shadcn/sonner";
+import { ThemeProvider } from "@repo/old-ui/components/theme-provider";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { Metadata } from "next";
 import { Analytics } from "@/components/analytics";
 import { META_THEME_COLORS, siteConfig } from "@/lib/config";

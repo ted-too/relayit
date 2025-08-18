@@ -4,13 +4,13 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
+} from "@repo/old-ui/components/shadcn/tabs";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { SquareTerminalIcon } from "lucide-react";

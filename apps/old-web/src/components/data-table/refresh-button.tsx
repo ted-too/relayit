@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import { LoaderCircleIcon, RefreshCcwIcon } from "lucide-react";
 import { useDataTable } from "@/components/data-table/provider";
 

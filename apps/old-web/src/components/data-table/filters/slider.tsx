@@ -1,9 +1,9 @@
 "use client";
 
-import { InputWithAddons } from "@repo/ui/components/shadcn/input-with-addons";
-import { Label } from "@repo/ui/components/shadcn/label";
-import { Slider } from "@repo/ui/components/shadcn/slider";
-import { useBasicDebounce } from "@repo/ui/hooks/use-debounce";
+import { InputWithAddons } from "@repo/old-ui/components/shadcn/input-with-addons";
+import { Label } from "@repo/old-ui/components/shadcn/label";
+import { Slider } from "@repo/old-ui/components/shadcn/slider";
+import { useBasicDebounce } from "@repo/old-ui/hooks/use-debounce";
 import { useEffect, useState } from "react";
 import { isArrayOfNumbers } from "@/components/data-table/filter-fns";
 import { useDataTable } from "@/components/data-table/provider";

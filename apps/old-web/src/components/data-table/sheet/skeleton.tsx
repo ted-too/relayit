@@ -1,5 +1,5 @@
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { cn } from "@repo/ui/lib/utils";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
+import { cn } from "@repo/old-ui/lib/utils";
 import type { SheetField } from "@/components/data-table/types";
 
 type SheetDetailsContentSkeletonProps<TData, TMeta> = {

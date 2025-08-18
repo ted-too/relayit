@@ -5,9 +5,9 @@ import type {
 	ProjectDetails,
 	ProjectProviderAssociation,
 } from "@repo/db";
-import { Badge } from "@repo/ui/components/shadcn/badge";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Card } from "@repo/ui/components/shadcn/card";
+import { Badge } from "@repo/old-ui/components/shadcn/badge";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Card } from "@repo/old-ui/components/shadcn/card";
 import {
 	Dialog,
 	DialogContent,
@@ -16,12 +16,12 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
+} from "@repo/old-ui/components/shadcn/dialog";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
+} from "@repo/old-ui/components/shadcn/tooltip";
 import { PencilIcon, TrashIcon, UnlinkIcon } from "lucide-react";
 import { useState } from "react";
 import {

@@ -8,7 +8,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 	AlertDialogTrigger,
-} from "@repo/ui/components/shadcn/alert-dialog";
+} from "@repo/old-ui/components/shadcn/alert-dialog";
 
 type Props = {
 	title?: string | React.ReactNode;

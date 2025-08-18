@@ -5,7 +5,7 @@ import {
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
-} from "@repo/ui/components/shadcn/accordion";
+} from "@repo/old-ui/components/shadcn/accordion";
 import { useDataTable } from "@/components/data-table/provider";
 import { DataTableFilterCheckbox } from "./checkbox";
 import { DataTableFilterInput } from "./input";

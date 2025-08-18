@@ -1,16 +1,12 @@
 "use client";
 
 import {
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationMetadata,
-} from "@repo/shared";
-import {
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
-} from "@repo/ui/components/shadcn/avatar";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { ModeToggle } from "@repo/ui/components/shadcn/dark-mode-toggle";
+} from "@repo/old-ui/components/shadcn/avatar";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { ModeToggle } from "@repo/old-ui/components/shadcn/dark-mode-toggle";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -19,15 +15,19 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/shadcn/dropdown-menu";
-import { SidebarMenuButton } from "@repo/ui/components/shadcn/sidebar";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+} from "@repo/old-ui/components/shadcn/dropdown-menu";
+import { SidebarMenuButton } from "@repo/old-ui/components/shadcn/sidebar";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { cn, getInitials } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { cn, getInitials } from "@repo/old-ui/lib/utils";
+import {
+	ORGANIZATION_LOGO_GRADIENTS,
+	type OrganizationMetadata,
+} from "@repo/shared";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";

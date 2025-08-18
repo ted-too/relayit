@@ -1,8 +1,8 @@
 // "use client";
 
-// import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/shadcn/avatar";
-// import { Button } from "@repo/ui/components/shadcn/button";
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/shadcn/tabs";
+// import { Avatar, AvatarFallback, AvatarImage } from "@repo/old-ui/components/shadcn/avatar";
+// import { Button } from "@repo/old-ui/components/shadcn/button";
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/old-ui/components/shadcn/tabs";
 // import { authClient } from "@/lib/auth-client";
 // import { getInitials } from "@/lib/utils";
 // import {

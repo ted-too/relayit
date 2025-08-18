@@ -1,18 +1,18 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
+} from "@repo/old-ui/components/shadcn/tabs";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
+} from "@repo/old-ui/components/shadcn/tooltip";
+import { useLocalStorage } from "@repo/old-ui/hooks/use-local-storage";
 import { CheckIcon, ClipboardIcon, TerminalIcon } from "lucide-react";
 import * as React from "react";
 import { copyToClipboardWithMeta } from "@/components/copy-button";

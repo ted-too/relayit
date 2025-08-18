@@ -9,11 +9,11 @@ import {
 	CommandItem,
 	CommandList,
 	CommandSeparator,
-} from "@repo/ui/components/shadcn/command";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
-import { Separator } from "@repo/ui/components/shadcn/separator";
-import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
-import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/command";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
+import { Separator } from "@repo/old-ui/components/shadcn/separator";
+import { useLocalStorage } from "@repo/old-ui/hooks/use-local-storage";
+import { cn, formatCompactNumber } from "@repo/old-ui/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
 import type { ParserBuilder } from "nuqs";

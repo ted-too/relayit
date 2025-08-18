@@ -1,10 +1,9 @@
 "use client";
 
 import useHotkeys from "@reecelucas/react-use-hotkeys";
-import { type Facets, SORT_DELIMITER } from "@repo/shared";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { ScrollArea } from "@repo/ui/components/shadcn/scroll-area";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { ScrollArea } from "@repo/old-ui/components/shadcn/scroll-area";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
 import {
 	Table,
 	TableBody,
@@ -12,9 +11,10 @@ import {
 	TableHead,
 	TableHeader,
 	TableRow,
-} from "@repo/ui/components/shadcn/table";
-import { useLocalStorage } from "@repo/ui/hooks/use-local-storage";
-import { cn, formatCompactNumber } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/table";
+import { useLocalStorage } from "@repo/old-ui/hooks/use-local-storage";
+import { cn, formatCompactNumber } from "@repo/old-ui/lib/utils";
+import { type Facets, SORT_DELIMITER } from "@repo/shared";
 import type {
 	FetchNextPageOptions,
 	FetchPreviousPageOptions,

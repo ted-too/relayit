@@ -1,6 +1,8 @@
 "use client";
-import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";
-import { Button, type ButtonProps } from "@repo/ui/components/shadcn/button";
+import {
+	Button,
+	type ButtonProps,
+} from "@repo/old-ui/components/shadcn/button";
 import {
 	Dialog,
 	DialogClose,
@@ -10,10 +12,11 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@repo/ui/components/shadcn/dialog";
-import { useAppForm } from "@repo/ui/components/shadcn/form";
-import { Label } from "@repo/ui/components/shadcn/label";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+} from "@repo/old-ui/components/shadcn/dialog";
+import { useAppForm } from "@repo/old-ui/components/shadcn/form";
+import { Label } from "@repo/old-ui/components/shadcn/label";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
+import { type CreateApiKeyRequest, createApiKeySchema } from "@repo/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { Fragment, useState } from "react";

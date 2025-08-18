@@ -1,5 +1,5 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Drawer,
 	DrawerClose,
@@ -9,14 +9,14 @@ import {
 	DrawerHeader,
 	DrawerTitle,
 	DrawerTrigger,
-} from "@repo/ui/components/shadcn/drawer";
-import { Kbd } from "@repo/ui/components/shadcn/kbd";
+} from "@repo/old-ui/components/shadcn/drawer";
+import { Kbd } from "@repo/old-ui/components/shadcn/kbd";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
+} from "@repo/old-ui/components/shadcn/tooltip";
 import { FilterIcon } from "lucide-react";
 import { TABLE_SIDEBAR_KEYBOARD_SHORTCUT } from "@/constants/keybinds";
 import { DataTableFilterControls } from "./controls";

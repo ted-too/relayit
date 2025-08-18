@@ -1,6 +1,6 @@
-import { Button } from "@repo/ui/components/shadcn/button";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
-import { formatCompactNumber } from "@repo/ui/lib/utils";
+import { Button } from "@repo/old-ui/components/shadcn/button";
+import { Skeleton } from "@repo/old-ui/components/shadcn/skeleton";
+import { formatCompactNumber } from "@repo/old-ui/lib/utils";
 import Link from "next/link";
 import * as React from "react";
 import { Icons } from "@/components/icons";

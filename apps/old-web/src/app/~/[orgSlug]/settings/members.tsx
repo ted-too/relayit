@@ -3,29 +3,29 @@ import {
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
-} from "@repo/ui/components/shadcn/avatar";
-import { Badge } from "@repo/ui/components/shadcn/badge";
-import { Button } from "@repo/ui/components/shadcn/button";
+} from "@repo/old-ui/components/shadcn/avatar";
+import { Badge } from "@repo/old-ui/components/shadcn/badge";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Card,
 	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/shadcn/dropdown-menu";
+} from "@repo/old-ui/components/shadcn/dropdown-menu";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
-} from "@repo/ui/components/shadcn/tabs";
-import { getInitials } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/tabs";
+import { getInitials } from "@repo/old-ui/lib/utils";
 import { MoreHorizontalIcon } from "lucide-react";
 import {
 	CancelInvitationAction,

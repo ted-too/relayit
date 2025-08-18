@@ -3,7 +3,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { headers as headersFn } from "next/headers";
 import { ProvidersCardContent } from "@/components/notification-providers";

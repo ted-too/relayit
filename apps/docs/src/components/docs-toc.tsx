@@ -1,14 +1,14 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/shadcn/dropdown-menu";
+} from "@repo/old-ui/components/shadcn/dropdown-menu";
 
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import { IconMenu3 } from "@tabler/icons-react";
 import * as React from "react";
 

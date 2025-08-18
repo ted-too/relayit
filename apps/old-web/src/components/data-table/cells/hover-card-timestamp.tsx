@@ -6,9 +6,9 @@ import {
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
-} from "@repo/ui/components/shadcn/hover-card";
-import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/hover-card";
+import { useCopyToClipboard } from "@repo/old-ui/hooks/use-copy-to-clipboard";
+import { cn } from "@repo/old-ui/lib/utils";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import type { ComponentPropsWithoutRef } from "react";

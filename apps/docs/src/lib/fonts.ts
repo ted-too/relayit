@@ -1,4 +1,4 @@
-import { cn } from "@repo/ui/lib/utils";
+import { cn } from "@repo/old-ui/lib/utils";
 import {
 	Geist_Mono as FontMono,
 	Geist as FontSans,

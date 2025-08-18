@@ -1,6 +1,7 @@
 "use client";
 
 import type { Message } from "@repo/db";
+import { cn } from "@repo/old-ui/lib/utils";
 import {
 	AVAILABLE_MESSAGE_STATUSES,
 	type MessageStatus,
@@ -9,7 +10,6 @@ import {
 	AVAILABLE_CHANNELS,
 	AVAILABLE_PROVIDER_TYPES,
 } from "@repo/shared/constants/providers";
-import { cn } from "@repo/ui/lib/utils";
 import { format } from "date-fns";
 import type {
 	DataTableFilterField,

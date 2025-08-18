@@ -4,7 +4,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/shadcn/card";
+} from "@repo/old-ui/components/shadcn/card";
 import { CreateOrganizationForm } from "@/components/shared/forms/create-org";
 import type { Organization } from "@/lib/auth-client";
 

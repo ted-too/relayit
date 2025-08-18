@@ -1,12 +1,12 @@
 "use client";
 
-import { Button } from "@repo/ui/components/shadcn/button";
+import { Button } from "@repo/old-ui/components/shadcn/button";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@repo/ui/components/shadcn/popover";
-import { cn } from "@repo/ui/lib/utils";
+} from "@repo/old-ui/components/shadcn/popover";
+import { cn } from "@repo/old-ui/lib/utils";
 import Link, { type LinkProps } from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
