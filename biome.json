@@ -20,7 +20,9 @@
       "recommended": true,
       "suspicious": {
         "noUnknownAtRules": "off",
-        "noConsole": "off"
+        "noConsole": "off",
+        "noDocumentCookie": "off",
+        "noExplicitAny": "off"
       },
       "style": {
         "noHeadElement": "off",
@@ -28,10 +30,14 @@
         "noMagicNumbers": "off"
       },
       "nursery": {
-        "useConsistentTypeDefinitions": "off"
+        "useConsistentTypeDefinitions": "off",
+        "noShadow": "off",
+        "useImageSize": "off"
       },
       "performance": {
-        "noNamespaceImport": "off"
+        "noNamespaceImport": "off",
+        "noImgElement": "warn",
+        "noBarrelFile": "off"
       },
       "correctness": {
         "noUnusedImports": {
@@ -39,6 +45,9 @@
           "fix": "safe"
         },
         "noUnusedFunctionParameters": "warn"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
       }
     }
   },
@@ -51,7 +60,8 @@
     "enabled": true,
     "actions": {
       "source": {
-        "organizeImports": "on"
+        "organizeImports": "on",
+        "useSortedAttributes": "off"
       }
     }
   }

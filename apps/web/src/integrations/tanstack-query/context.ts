@@ -11,31 +11,13 @@ export function getContext() {
 		},
 	});
 
-	const getServerHelpers = () => {
-		const trpcClient = (() => {
-			if (typeof window !== "undefined") {
-				return createTrpcClient();
-			}
-
-			try {
-				const { getWebRequest } = require("@tanstack/react-start/server");
-				const req = getWebRequest();
-				return createTrpcClient(req.headers.get("cookie"));
-			} catch {
-				return createTrpcClient();
-			}
-		})();
-
-		return createTRPCOptionsProxy({
-			client: trpcClient,
-			queryClient,
-		});
-	};
+	const trpc = createTRPCOptionsProxy({
+		client: createTrpcClient(),
+		queryClient,
+	});
 
 	return {
 		queryClient,
-		get trpc() {
-			return getServerHelpers();
-		},
+		trpc,
 	};
 }

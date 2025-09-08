@@ -1,6 +1,6 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
-import { getAuthContext } from "@/integrations/better-auth/context";
+import { createAuthClient } from "@/integrations/better-auth/client";
 import { getContext } from "@/integrations/tanstack-query/context";
 import { Provider as TanstackQueryProvider } from "@/integrations/tanstack-query/root-provider";
 import { DefaultCatchBoundary } from "./components/default-catch";
@@ -9,11 +9,10 @@ import { routeTree } from "./routeTree.gen";
 
 export function createRouter() {
 	const rqContext = getContext();
-	const authContext = getAuthContext();
 
 	const router = createTanStackRouter({
 		routeTree,
-		context: { ...rqContext, ...authContext },
+		context: { ...rqContext, auth: createAuthClient() },
 		defaultPreload: "intent",
 		defaultErrorComponent: DefaultCatchBoundary,
 		defaultNotFoundComponent: () => <NotFound />,
