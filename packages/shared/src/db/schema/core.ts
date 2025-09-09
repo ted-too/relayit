@@ -1,30 +1,25 @@
-import {
-	apikey,
-	organization,
-	type Project,
-	project,
-} from "./auth";
 import type { ProviderCredentials } from "@repo/shared";
 import {
-	AVAILABLE_CHANNELS,
-	AVAILABLE_MESSAGE_STATUSES,
-	AVAILABLE_PROVIDER_TYPES,
-	type ProjectProviderConfig,
-	type SendMessagePayload,
+  AVAILABLE_CHANNELS,
+  AVAILABLE_MESSAGE_STATUSES,
+  AVAILABLE_PROVIDER_TYPES,
+  type ProjectProviderConfig,
+  type SendMessagePayload,
 } from "@repo/shared";
 import { type InferEnum, type InferSelectModel, relations } from "drizzle-orm";
 import {
-	boolean,
-	index,
-	integer,
-	jsonb,
-	pgEnum,
-	pgTable,
-	text,
-	timestamp,
-	uniqueIndex,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
+import { apikey, organization, type Project, project } from "./auth";
 
 /**
  * Enum defining the supported notification channels.
@@ -35,8 +30,8 @@ export const channelEnum = pgEnum("channel", AVAILABLE_CHANNELS);
  * Enum defining the possible statuses of a message throughout its lifecycle.
  */
 export const messageStatusEnum = pgEnum(
-	"message_status",
-	AVAILABLE_MESSAGE_STATUSES
+  "message_status",
+  AVAILABLE_MESSAGE_STATUSES
 );
 
 export type MessageStatus = InferEnum<typeof messageStatusEnum>;
@@ -45,8 +40,8 @@ export type MessageStatus = InferEnum<typeof messageStatusEnum>;
  * Enum defining the possible types of notification providers.
  */
 export const providerTypeEnum = pgEnum(
-	"provider_type",
-	AVAILABLE_PROVIDER_TYPES
+  "provider_type",
+  AVAILABLE_PROVIDER_TYPES
 );
 
 /**
@@ -54,36 +49,36 @@ export const providerTypeEnum = pgEnum(
  * Credentials are encrypted.
  */
 export const providerCredential = pgTable(
-	"provider_credential",
-	{
-		id: text("id")
-			.primaryKey()
-			.$defaultFn(() => typeid("prvc").toString()),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id, { onDelete: "cascade" }),
-		slug: text("slug").notNull(),
-		channelType: channelEnum("channel_type").notNull(),
-		providerType: providerTypeEnum("provider_type").notNull(),
-		name: text("name").notNull(),
-		credentials: jsonb("credentials").$type<ProviderCredentials>().notNull(),
-		orgDefault: boolean("org_default").notNull(),
-		createdAt: timestamp("created_at").defaultNow().notNull(),
-		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-	},
-	(t) => [
-		uniqueIndex("provider_credential_org_slug_unique_idx").on(
-			t.organizationId,
-			t.slug
-		),
-		uniqueIndex("provider_credential_org_default_unique_idx").on(
-			t.organizationId,
-			t.channelType,
-			t.providerType,
-			t.orgDefault
-		),
-		index("provider_credential_organization_idx").on(t.organizationId),
-	]
+  "provider_credential",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("prvc").toString()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    channelType: channelEnum("channel_type").notNull(),
+    providerType: providerTypeEnum("provider_type").notNull(),
+    name: text("name").notNull(),
+    credentials: jsonb("credentials").$type<ProviderCredentials>().notNull(),
+    orgDefault: boolean("org_default").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("provider_credential_org_slug_unique_idx").on(
+      t.organizationId,
+      t.slug
+    ),
+    uniqueIndex("provider_credential_org_default_unique_idx").on(
+      t.organizationId,
+      t.channelType,
+      t.providerType,
+      t.orgDefault
+    ),
+    index("provider_credential_organization_idx").on(t.organizationId),
+  ]
 );
 
 export type NotificationProvider = InferSelectModel<typeof providerCredential>;
@@ -93,14 +88,14 @@ export type NotificationProvider = InferSelectModel<typeof providerCredential>;
  * Each credential belongs to one organization and can be associated with multiple projects.
  */
 export const providerCredentialRelations = relations(
-	providerCredential,
-	({ one, many }) => ({
-		organization: one(organization, {
-			fields: [providerCredential.organizationId],
-			references: [organization.id],
-		}),
-		projectAssociations: many(projectProviderAssociation),
-	})
+  providerCredential,
+  ({ one, many }) => ({
+    organization: one(organization, {
+      fields: [providerCredential.organizationId],
+      references: [organization.id],
+    }),
+    projectAssociations: many(projectProviderAssociation),
+  })
 );
 
 /**
@@ -108,34 +103,34 @@ export const providerCredentialRelations = relations(
  * allowing project-specific activation status.
  */
 export const projectProviderAssociation = pgTable(
-	"project_provider_association",
-	{
-		id: text("id")
-			.primaryKey()
-			.$defaultFn(() => typeid("ppasc").toString()),
-		projectId: text("project_id")
-			.notNull()
-			.references(() => project.id, { onDelete: "cascade" }),
-		providerCredentialId: text("provider_credential_id")
-			.notNull()
-			.references(() => providerCredential.id, { onDelete: "cascade" }),
-		config: jsonb("config").$type<ProjectProviderConfig>(),
-		priority: integer("priority").notNull(),
-		createdAt: timestamp("created_at").defaultNow().notNull(),
-		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-	},
-	(t) => [
-		uniqueIndex("proj_provider_assoc_unique_idx").on(
-			t.projectId,
-			t.providerCredentialId
-		),
-		index("ppa_project_idx").on(t.projectId),
-		index("ppa_provider_idx").on(t.providerCredentialId),
-	]
+  "project_provider_association",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("ppasc").toString()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    providerCredentialId: text("provider_credential_id")
+      .notNull()
+      .references(() => providerCredential.id, { onDelete: "cascade" }),
+    config: jsonb("config").$type<ProjectProviderConfig>(),
+    priority: integer("priority").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("proj_provider_assoc_unique_idx").on(
+      t.projectId,
+      t.providerCredentialId
+    ),
+    index("ppa_project_idx").on(t.projectId),
+    index("ppa_provider_idx").on(t.providerCredentialId),
+  ]
 );
 
 export type ProjectProviderAssociation = InferSelectModel<
-	typeof projectProviderAssociation
+  typeof projectProviderAssociation
 >;
 
 /**
@@ -143,17 +138,17 @@ export type ProjectProviderAssociation = InferSelectModel<
  * Each association links one project and one provider credential.
  */
 export const projectProviderAssociationRelations = relations(
-	projectProviderAssociation,
-	({ one }) => ({
-		project: one(project, {
-			fields: [projectProviderAssociation.projectId],
-			references: [project.id],
-		}),
-		providerCredential: one(providerCredential, {
-			fields: [projectProviderAssociation.providerCredentialId],
-			references: [providerCredential.id],
-		}),
-	})
+  projectProviderAssociation,
+  ({ one }) => ({
+    project: one(project, {
+      fields: [projectProviderAssociation.projectId],
+      references: [project.id],
+    }),
+    providerCredential: one(providerCredential, {
+      fields: [projectProviderAssociation.providerCredentialId],
+      references: [providerCredential.id],
+    }),
+  })
 );
 
 /**
@@ -162,35 +157,35 @@ export const projectProviderAssociationRelations = relations(
  */
 // TODO: Add a message trail for each provider independent of message as we will be using priority to determine which provider to use
 export const message = pgTable(
-	"message",
-	{
-		id: text("id")
-			.primaryKey()
-			.$defaultFn(() => typeid("mesg").toString()), // Unique identifier for the message, generated by the application
-		projectId: text("project_id")
-			.notNull()
-			.references(() => project.id, { onDelete: "cascade" }),
-		apiKeyId: text("api_key_id").references(() => apikey.id, {
-			onDelete: "set null", // Keep message record even if API key is deleted
-		}),
-		channel: channelEnum("channel").notNull(),
-		providerType: providerTypeEnum("provider_type").notNull(),
-		recipient: text("recipient").notNull(),
-		payload: jsonb("payload").$type<SendMessagePayload>().notNull(),
-		status: messageStatusEnum("status").default("queued").notNull(),
-		statusReason: text("status_reason"),
-		lastStatusAt: timestamp("last_status_at"),
-		createdAt: timestamp("created_at").defaultNow().notNull(),
-		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-	},
-	(t) => [
-		index("message_project_status_idx").on(t.projectId, t.status),
-		index("message_api_key_idx").on(t.apiKeyId),
-	]
+  "message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("mesg").toString()), // Unique identifier for the message, generated by the application
+    projectId: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id").references(() => apikey.id, {
+      onDelete: "set null", // Keep message record even if API key is deleted
+    }),
+    channel: channelEnum("channel").notNull(),
+    providerType: providerTypeEnum("provider_type").notNull(),
+    recipient: text("recipient").notNull(),
+    payload: jsonb("payload").$type<SendMessagePayload>().notNull(),
+    status: messageStatusEnum("status").default("queued").notNull(),
+    statusReason: text("status_reason"),
+    lastStatusAt: timestamp("last_status_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("message_project_status_idx").on(t.projectId, t.status),
+    index("message_api_key_idx").on(t.apiKeyId),
+  ]
 );
 
 export type Message = InferSelectModel<typeof message> & {
-	project: Pick<Project, "name">;
+  project: Pick<Project, "name">;
 };
 
 /**
@@ -199,15 +194,15 @@ export type Message = InferSelectModel<typeof message> & {
  * Each message can have multiple status events.
  */
 export const messageRelations = relations(message, ({ one, many }) => ({
-	project: one(project, {
-		fields: [message.projectId],
-		references: [project.id],
-	}),
-	apiKey: one(apikey, {
-		fields: [message.apiKeyId],
-		references: [apikey.id],
-	}),
-	events: many(messageEvent),
+  project: one(project, {
+    fields: [message.projectId],
+    references: [project.id],
+  }),
+  apiKey: one(apikey, {
+    fields: [message.apiKeyId],
+    references: [apikey.id],
+  }),
+  events: many(messageEvent),
 }));
 
 /**
@@ -215,19 +210,19 @@ export const messageRelations = relations(message, ({ one, many }) => ({
  * This provides a history of the message's journey through the system.
  */
 export const messageEvent = pgTable(
-	"message_event",
-	{
-		id: text("id")
-			.primaryKey()
-			.$defaultFn(() => typeid("msev").toString()),
-		messageId: text("message_id")
-			.notNull()
-			.references(() => message.id, { onDelete: "cascade" }),
-		status: messageStatusEnum("status").notNull(),
-		details: jsonb("details"),
-		occurredAt: timestamp("occurred_at").defaultNow().notNull(),
-	},
-	(t) => [index("message_event_message_idx").on(t.messageId)]
+  "message_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("msev").toString()),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => message.id, { onDelete: "cascade" }),
+    status: messageStatusEnum("status").notNull(),
+    details: jsonb("details"),
+    occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  },
+  (t) => [index("message_event_message_idx").on(t.messageId)]
 );
 
 /**
@@ -235,10 +230,10 @@ export const messageEvent = pgTable(
  * Each event belongs to one message.
  */
 export const messageEventRelations = relations(messageEvent, ({ one }) => ({
-	message: one(message, {
-		fields: [messageEvent.messageId],
-		references: [message.id],
-	}),
+  message: one(message, {
+    fields: [messageEvent.messageId],
+    references: [message.id],
+  }),
 }));
 
 /**
@@ -246,22 +241,22 @@ export const messageEventRelations = relations(messageEvent, ({ one }) => ({
  * Linked to the team that owns the webhook configuration.
  */
 export const webhookEndpoint = pgTable(
-	"webhook_endpoint",
-	{
-		id: text("id")
-			.primaryKey()
-			.$defaultFn(() => typeid("whep").toString()),
-		projectId: text("project_id")
-			.notNull()
-			.references(() => project.id, { onDelete: "cascade" }),
-		url: text("url").notNull(),
-		secret: text("secret"),
-		eventTypes: jsonb("event_types").$type<string[]>().notNull(),
-		isActive: boolean("is_active").default(true).notNull(),
-		createdAt: timestamp("created_at").defaultNow().notNull(),
-		updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-	},
-	(t) => [index("webhook_endpoint_project_idx").on(t.projectId)]
+  "webhook_endpoint",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("whep").toString()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    secret: text("secret"),
+    eventTypes: jsonb("event_types").$type<string[]>().notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  },
+  (t) => [index("webhook_endpoint_project_idx").on(t.projectId)]
 );
 
 /**
@@ -269,11 +264,11 @@ export const webhookEndpoint = pgTable(
  * Each endpoint belongs to one team.
  */
 export const webhookEndpointRelations = relations(
-	webhookEndpoint,
-	({ one }) => ({
-		project: one(project, {
-			fields: [webhookEndpoint.projectId],
-			references: [project.id],
-		}),
-	})
+  webhookEndpoint,
+  ({ one }) => ({
+    project: one(project, {
+      fields: [webhookEndpoint.projectId],
+      references: [project.id],
+    }),
+  })
 );
