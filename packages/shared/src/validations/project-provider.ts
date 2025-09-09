@@ -1,138 +1,138 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 import {
-	type ChannelType,
-	getProviderConfig,
-	type ProviderType,
+  type ChannelType,
+  getProviderConfig,
+  type ProviderType,
 } from "../constants/providers";
 import { generateDefaultFromShape } from "./providers";
 
 export const sesProjectProviderConfigSchema = z.object({
-	senderEmail: z.string(),
+  senderEmail: z.string(),
 });
 
 export type SESProjectProviderConfig = z.infer<
-	typeof sesProjectProviderConfigSchema
+  typeof sesProjectProviderConfigSchema
 >;
 
 export const snsProjectProviderConfigSchema = z.object({
-	senderName: z.string(),
+  senderName: z.string(),
 });
 
 export const whatsappProjectProviderConfigSchema = z.object({
-	phoneNumberId: z.string(),
+  phoneNumberId: z.string(),
 });
 
 export type WhatsAppProjectProviderConfig = z.infer<
-	typeof whatsappProjectProviderConfigSchema
+  typeof whatsappProjectProviderConfigSchema
 >;
 
 export type SNSProjectProviderConfig = z.infer<
-	typeof snsProjectProviderConfigSchema
+  typeof snsProjectProviderConfigSchema
 >;
 
 export type ProjectProviderConfig =
-	| SESProjectProviderConfig
-	| SNSProjectProviderConfig
-	| WhatsAppProjectProviderConfig;
+  | SESProjectProviderConfig
+  | SNSProjectProviderConfig
+  | WhatsAppProjectProviderConfig;
 
 export function isSESProjectProviderConfig(
-	config: ProjectProviderConfig
+  config: ProjectProviderConfig
 ): config is SESProjectProviderConfig {
-	return "senderEmail" in config;
+  return "senderEmail" in config;
 }
 
 export function isSNSProjectProviderConfig(
-	config: ProjectProviderConfig
+  config: ProjectProviderConfig
 ): config is SNSProjectProviderConfig {
-	return "senderName" in config;
+  return "senderName" in config;
 }
 
 export function isWhatsAppProjectProviderConfig(
-	config: ProjectProviderConfig
+  config: ProjectProviderConfig
 ): config is WhatsAppProjectProviderConfig {
-	return "phoneNumberId" in config;
+  return "phoneNumberId" in config;
 }
 
 export const baseProjectProviderAssociationSchema = z.object({
-	priority: z.coerce.number().default(0),
+  priority: z.coerce.number().default(0),
 });
 
 export function createProjectProviderSchema(
-	channelType: ChannelType,
-	providerType: ProviderType
+  channelType: ChannelType,
+  providerType: ProviderType
 ) {
-	const config = getProviderConfig(channelType, providerType);
-	if (!config) {
-		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`
-		);
-	}
+  const config = getProviderConfig(channelType, providerType);
+  if (!config) {
+    throw new Error(
+      `Invalid provider configuration: ${channelType}/${providerType}`
+    );
+  }
 
-	return baseProjectProviderAssociationSchema
-		.extend({
-			config: config.configSchema ?? z.null(),
-		})
-		.strict();
+  return baseProjectProviderAssociationSchema
+    .extend({
+      config: config.configSchema ?? z.null(),
+    })
+    .strict();
 }
 
 export function getProjectProviderDefaults(
-	channelType: ChannelType,
-	providerType: ProviderType
+  channelType: ChannelType,
+  providerType: ProviderType
 ) {
-	const config = getProviderConfig(channelType, providerType);
-	if (!config) {
-		throw new Error(
-			`No provider configuration found for channel: ${channelType} and type: ${providerType}`
-		);
-	}
+  const config = getProviderConfig(channelType, providerType);
+  if (!config) {
+    throw new Error(
+      `No provider configuration found for channel: ${channelType} and type: ${providerType}`
+    );
+  }
 
-	// Get the schema for this provider
-	const schema = createProjectProviderSchema(channelType, providerType);
-	const shape = schema.shape;
+  // Get the schema for this provider
+  const schema = createProjectProviderSchema(channelType, providerType);
+  const shape = schema.shape;
 
-	return generateDefaultFromShape(shape) as z.infer<
-		ReturnType<typeof createProjectProviderSchema>
-	>;
+  return generateDefaultFromShape(shape) as z.infer<
+    ReturnType<typeof createProjectProviderSchema>
+  >;
 }
 
 export function updateProjectProviderSchema(
-	channelType: ChannelType,
-	providerType: ProviderType,
-	configPartial = true
+  channelType: ChannelType,
+  providerType: ProviderType,
+  configPartial = true
 ) {
-	const config = getProviderConfig(channelType, providerType);
-	if (!config) {
-		throw new Error(
-			`Invalid provider configuration: ${channelType}/${providerType}`
-		);
-	}
+  const config = getProviderConfig(channelType, providerType);
+  if (!config) {
+    throw new Error(
+      `Invalid provider configuration: ${channelType}/${providerType}`
+    );
+  }
 
-	// This usually should not have one-time fields
-	const baseUpdateSchema = baseProjectProviderAssociationSchema.partial();
+  // This usually should not have one-time fields
+  const baseUpdateSchema = baseProjectProviderAssociationSchema.partial();
 
-	return baseUpdateSchema
-		.merge(
-			z.object({
-				config: config.configSchema
-					? configPartial
-						? config.configSchema.partial()
-						: config.configSchema
-					: z.null(),
-			})
-		)
-		.strict();
+  return baseUpdateSchema
+    .merge(
+      z.object({
+        config: config.configSchema
+          ? configPartial
+            ? config.configSchema.partial()
+            : config.configSchema
+          : z.null(),
+      })
+    )
+    .strict();
 }
 
 export type UpdateProjectProviderConfig = z.infer<
-	ReturnType<typeof updateProjectProviderSchema>
+  ReturnType<typeof updateProjectProviderSchema>
 >;
 
 export const getProjectProviderAssociationsQuerySchema = z
-	.object({
-		isActive: z.boolean().optional(),
-	})
-	.partial();
+  .object({
+    isActive: z.boolean().optional(),
+  })
+  .partial();
 
 export type GetProjectProviderAssociationsQueryInput = z.infer<
-	typeof getProjectProviderAssociationsQuerySchema
+  typeof getProjectProviderAssociationsQuerySchema
 >;

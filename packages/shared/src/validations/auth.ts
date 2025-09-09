@@ -1,50 +1,50 @@
 import {
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationLogoGradientKey,
+  ORGANIZATION_LOGO_GRADIENTS,
+  type OrganizationLogoGradientKey,
 } from "@repo/shared";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 export const signUpSchema = z.object({
-	name: z.string(),
-	email: z.email(),
-	password: z.string(),
+  name: z.string(),
+  email: z.email(),
+  password: z.string(),
 });
 
 export type SignUpRequest = z.infer<typeof signUpSchema>;
 
 export const signInSchema = z.object({
-	email: z.email(),
-	password: z.string(),
-	rememberMe: z.boolean().optional(),
+  email: z.email(),
+  password: z.string(),
+  rememberMe: z.boolean().optional(),
 });
 
 export type SignInRequest = z.infer<typeof signInSchema>;
 
 export const organizationMetadataSchema = z.object({
-	logoBgKey: z.enum(
-		Object.keys(ORGANIZATION_LOGO_GRADIENTS) as [
-			OrganizationLogoGradientKey,
-			...OrganizationLogoGradientKey[],
-		]
-	),
-	logoEmoji: z.string(),
+  logoBgKey: z.enum(
+    Object.keys(ORGANIZATION_LOGO_GRADIENTS) as [
+      OrganizationLogoGradientKey,
+      ...OrganizationLogoGradientKey[],
+    ]
+  ),
+  logoEmoji: z.string(),
 });
 
 export type OrganizationMetadata = z.infer<typeof organizationMetadataSchema>;
 
 export const createOrganizationSchema = z.object({
-	name: z.string(),
-	slug: z.string(),
-	metadata: organizationMetadataSchema,
+  name: z.string(),
+  slug: z.string(),
+  metadata: organizationMetadataSchema,
 });
 
 export type CreateOrganizationRequest = z.infer<
-	typeof createOrganizationSchema
+  typeof createOrganizationSchema
 >;
 
 export const createApiKeySchema = z.object({
-	name: z.string(),
-	expiresIn: z.number().optional(),
+  name: z.string(),
+  expiresIn: z.number().optional(),
 });
 
 export type CreateApiKeyRequest = z.infer<typeof createApiKeySchema>;
