@@ -38,3 +38,5 @@ yarn-error.log*
 *.pem
 
 docs/v1
+
+legacy

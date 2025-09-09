@@ -2,8 +2,8 @@ import { db, schema } from "@repo/shared/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, lastLoginMethod, organization } from "better-auth/plugins";
+import { emailHarmony } from "better-auth-harmony";
 import { redis } from "bun";
-import { emailHarmony } from 'better-auth-harmony';
 
 export const auth = betterAuth({
   basePath: "/auth",

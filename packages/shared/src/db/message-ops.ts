@@ -1,21 +1,21 @@
-import { db, schema, type Transaction } from ".";
 import {
-	createGenericError,
-	type MessageStatus,
-	type Result,
+  createGenericError,
+  type MessageStatus,
+  type Result,
 } from "@repo/shared";
 import { eq } from "drizzle-orm";
+import { db, schema, type Transaction } from ".";
 
 // Define the type for message with relations included
 // Adjust based on your actual schema and relation names in Drizzle
 export type MessageWithRelations = typeof schema.message.$inferSelect & {
-	projectProviderAssociation:
-		| (typeof schema.projectProviderAssociation.$inferSelect & {
-				providerCredential:
-					| typeof schema.providerCredential.$inferSelect
-					| null;
-		  })
-		| null;
+  projectProviderAssociation:
+    | (typeof schema.projectProviderAssociation.$inferSelect & {
+        providerCredential:
+          | typeof schema.providerCredential.$inferSelect
+          | null;
+      })
+    | null;
 };
 
 /**
@@ -25,63 +25,63 @@ export type MessageWithRelations = typeof schema.message.$inferSelect & {
  * @returns A Result object containing the message details with relations, or an error.
  */
 export async function fetchMessageDetails(
-	messageId: string
+  messageId: string
 ): Promise<Result<MessageWithRelations>> {
-	// TODO: Add a check to see the status of the provider so we can choose a different one if available and primary failed
-	try {
-		const messageDetails = await db.query.message.findFirst({
-			where: eq(schema.message.id, messageId),
-		});
+  // TODO: Add a check to see the status of the provider so we can choose a different one if available and primary failed
+  try {
+    const messageDetails = await db.query.message.findFirst({
+      where: eq(schema.message.id, messageId),
+    });
 
-		if (!messageDetails) {
-			return {
-				error: createGenericError(`Message ${messageId} not found`),
-				data: null,
-			};
-		}
+    if (!messageDetails) {
+      return {
+        error: createGenericError(`Message ${messageId} not found`),
+        data: null,
+      };
+    }
 
-		const projectProviderAssociations = (
-			await db.query.projectProviderAssociation.findMany({
-				where: eq(
-					schema.projectProviderAssociation.projectId,
-					messageDetails.projectId
-				),
-				with: {
-					providerCredential: true,
-				},
-			})
-		)
-			.filter(
-				(ppa) =>
-					ppa.providerCredential.channelType === messageDetails.channel &&
-					ppa.providerCredential.providerType === messageDetails.providerType
-			)
-			.sort((a, b) => a.priority - b.priority);
+    const projectProviderAssociations = (
+      await db.query.projectProviderAssociation.findMany({
+        where: eq(
+          schema.projectProviderAssociation.projectId,
+          messageDetails.projectId
+        ),
+        with: {
+          providerCredential: true,
+        },
+      })
+    )
+      .filter(
+        (ppa) =>
+          ppa.providerCredential.channelType === messageDetails.channel &&
+          ppa.providerCredential.providerType === messageDetails.providerType
+      )
+      .sort((a, b) => a.priority - b.priority);
 
-		const projectProviderAssociation = projectProviderAssociations?.[0] ?? null;
-		if (!projectProviderAssociation) {
-			return {
-				error: createGenericError(
-					`No project provider association found for message ${messageId}`
-				),
-				data: null,
-			};
-		}
+    const projectProviderAssociation = projectProviderAssociations?.[0] ?? null;
+    if (!projectProviderAssociation) {
+      return {
+        error: createGenericError(
+          `No project provider association found for message ${messageId}`
+        ),
+        data: null,
+      };
+    }
 
-		return {
-			error: null,
-			data: {
-				...messageDetails,
-				projectProviderAssociation,
-			},
-		};
-	} catch (error) {
-		const errorMessage = `Database error fetching message ${messageId}`;
-		return {
-			error: createGenericError(errorMessage, error),
-			data: null,
-		};
-	}
+    return {
+      error: null,
+      data: {
+        ...messageDetails,
+        projectProviderAssociation,
+      },
+    };
+  } catch (error) {
+    const errorMessage = `Database error fetching message ${messageId}`;
+    return {
+      error: createGenericError(errorMessage, error),
+      data: null,
+    };
+  }
 }
 
 /**
@@ -94,30 +94,30 @@ export async function fetchMessageDetails(
  * @returns A Result object indicating success or failure.
  */
 export async function updateMessageStatus(
-	tx: Transaction | typeof db,
-	messageId: string,
-	status: MessageStatus,
-	reason?: string
+  tx: Transaction | typeof db,
+  messageId: string,
+  status: MessageStatus,
+  reason?: string
 ): Promise<Result<void>> {
-	try {
-		await tx
-			.update(schema.message)
-			.set({
-				status,
-				statusReason: reason ?? null,
-				lastStatusAt: new Date(),
-				updatedAt: new Date(), // Also update the general updated timestamp
-			})
-			.where(eq(schema.message.id, messageId));
-		// Return success result
-		return { error: null, data: undefined };
-	} catch (error) {
-		const errorMessage = `Database error updating message status for ${messageId} to ${status}`;
-		return {
-			error: createGenericError(errorMessage, error),
-			data: null,
-		};
-	}
+  try {
+    await tx
+      .update(schema.message)
+      .set({
+        status,
+        statusReason: reason ?? null,
+        lastStatusAt: new Date(),
+        updatedAt: new Date(), // Also update the general updated timestamp
+      })
+      .where(eq(schema.message.id, messageId));
+    // Return success result
+    return { error: null, data: undefined };
+  } catch (error) {
+    const errorMessage = `Database error updating message status for ${messageId} to ${status}`;
+    return {
+      error: createGenericError(errorMessage, error),
+      data: null,
+    };
+  }
 }
 
 /**
@@ -130,24 +130,24 @@ export async function updateMessageStatus(
  * @returns A Result object indicating success or failure.
  */
 export async function logMessageEvent(
-	tx: Transaction | typeof db,
-	messageId: string,
-	status: MessageStatus,
-	details?: any
+  tx: Transaction | typeof db,
+  messageId: string,
+  status: MessageStatus,
+  details?: any
 ): Promise<Result<void>> {
-	try {
-		await tx.insert(schema.messageEvent).values({
-			messageId,
-			status,
-			details: details ?? null,
-		});
-		// Return success result
-		return { error: null, data: undefined };
-	} catch (error) {
-		const errorMessage = `Database error logging event for message ${messageId}, status ${status}`;
-		return {
-			error: createGenericError(errorMessage, error),
-			data: null,
-		};
-	}
+  try {
+    await tx.insert(schema.messageEvent).values({
+      messageId,
+      status,
+      details: details ?? null,
+    });
+    // Return success result
+    return { error: null, data: undefined };
+  } catch (error) {
+    const errorMessage = `Database error logging event for message ${messageId}, status ${status}`;
+    return {
+      error: createGenericError(errorMessage, error),
+      data: null,
+    };
+  }
 }

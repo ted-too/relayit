@@ -8,33 +8,33 @@ import { NotFound } from "./components/not-found";
 import { routeTree } from "./routeTree.gen";
 
 export function createRouter() {
-	const rqContext = getContext();
+  const rqContext = getContext();
 
-	const router = createTanStackRouter({
-		routeTree,
-		context: { ...rqContext, auth: createAuthClient() },
-		defaultPreload: "intent",
-		defaultErrorComponent: DefaultCatchBoundary,
-		defaultNotFoundComponent: () => <NotFound />,
-		Wrap: (props: { children: React.ReactNode }) => {
-			return (
-				<TanstackQueryProvider queryClient={rqContext.queryClient}>
-					{props.children}
-				</TanstackQueryProvider>
-			);
-		},
-	});
+  const router = createTanStackRouter({
+    routeTree,
+    context: { ...rqContext, auth: createAuthClient() },
+    defaultPreload: "intent",
+    defaultErrorComponent: DefaultCatchBoundary,
+    defaultNotFoundComponent: () => <NotFound />,
+    Wrap: (props: { children: React.ReactNode }) => {
+      return (
+        <TanstackQueryProvider queryClient={rqContext.queryClient}>
+          {props.children}
+        </TanstackQueryProvider>
+      );
+    },
+  });
 
-	setupRouterSsrQueryIntegration({
-		router,
-		queryClient: rqContext.queryClient,
-	});
+  setupRouterSsrQueryIntegration({
+    router,
+    queryClient: rqContext.queryClient,
+  });
 
-	return router;
+  return router;
 }
 
 declare module "@tanstack/react-router" {
-	interface Register {
-		router: ReturnType<typeof createRouter>;
-	}
+  interface Register {
+    router: ReturnType<typeof createRouter>;
+  }
 }

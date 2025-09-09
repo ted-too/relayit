@@ -1,20 +1,20 @@
 import {
-	apiKeyClient,
-	organizationClient,
-	passkeyClient,
+  apiKeyClient,
+  organizationClient,
+  passkeyClient,
 } from "better-auth/client/plugins";
 import { createAuthClient as createBetterAuthClient } from "better-auth/react";
 import { getUrl } from "@/integrations/trpc/client";
 
 export const createAuthClient = (cookie?: string | null) =>
-	createBetterAuthClient({
-		baseURL: getUrl(),
-		plugins: [apiKeyClient(), organizationClient(), passkeyClient()],
-		fetchOptions: {
-			credentials: "include",
-			headers: cookie ? { cookie } : undefined,
-		},
-	});
+  createBetterAuthClient({
+    baseURL: getUrl(),
+    plugins: [apiKeyClient(), organizationClient(), passkeyClient()],
+    fetchOptions: {
+      credentials: "include",
+      headers: cookie ? { cookie } : undefined,
+    },
+  });
 
 export type AuthClient = ReturnType<typeof createAuthClient>;
 
@@ -23,33 +23,33 @@ export type AuthClient = ReturnType<typeof createAuthClient>;
 // export type Organization = typeof authClient.$Infer.Organization;
 
 export type OrganizationMember = {
-	id: string;
-	organizationId: string;
-	role: string;
-	createdAt: Date;
-	userId: string;
-	user: {
-		email: string;
-		name: string;
-		image: string | null | undefined;
-	};
+  id: string;
+  organizationId: string;
+  role: string;
+  createdAt: Date;
+  userId: string;
+  user: {
+    email: string;
+    name: string;
+    image: string | null | undefined;
+  };
 };
 
 export type BaseApiKey = {
-	metadata: any;
-	permissions: any;
-	id: string;
-	name: string | null;
-	start: string | null;
-	prefix: string | null;
-	userId: string;
-	refillInterval: number | null;
-	refillAmount: number | null;
-	// TODO: More fields...
-	createdAt: Date;
-	updatedAt: Date;
+  metadata: any;
+  permissions: any;
+  id: string;
+  name: string | null;
+  start: string | null;
+  prefix: string | null;
+  userId: string;
+  refillInterval: number | null;
+  refillAmount: number | null;
+  // TODO: More fields...
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export interface CreatedApiKey extends BaseApiKey {
-	key: string;
+  key: string;
 }

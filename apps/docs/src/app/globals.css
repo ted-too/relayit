@@ -1,7 +1,0 @@
-@import "tailwindcss" source(none);
-@import "@repo/old-ui/globals.css";
-
-@source "../../../../apps/**/*.{ts,tsx}";
-@source "../../../../apps/**/**/*.{ts,tsx}";
-@source "../../../../packages/**/*.{ts,tsx}";
-@source "../../../../packages/**/**/*.{ts,tsx}";

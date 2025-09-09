@@ -5,7 +5,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "ultracite format --unsafe",
+    "format": "ultracite fix --unsafe",
     "syncpack": "syncpack",
     "check-types": "turbo run check-types"
   },
