@@ -1,16 +1,12 @@
 {
   "compilerOptions": {
     "strict": true,
-    "skipLibCheck": true,
     "jsx": "react-jsx",
-    "lib": ["DOM"],
     "jsxImportSource": "hono/jsx",
     "baseUrl": ".",
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
     "paths": {
       "@repo/api/*": ["./src/*"],
-      "@repo/db/*": ["../../packages/db/src/*"],
       "@repo/shared/*": ["../../packages/shared/src/*"]
     }
   }

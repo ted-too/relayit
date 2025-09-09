@@ -3,7 +3,7 @@ import {
 	organization,
 	type Project,
 	project,
-} from "@repo/db/schema/auth";
+} from "./auth";
 import type { ProviderCredentials } from "@repo/shared";
 import {
 	AVAILABLE_CHANNELS,

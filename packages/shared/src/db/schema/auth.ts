@@ -1,9 +1,8 @@
-// Import relations from core schema
 import {
 	message,
 	type ProjectProviderAssociation,
 	projectProviderAssociation,
-} from "@repo/db/schema/core";
+} from "./core";
 import type { ChannelType, ProviderType } from "@repo/shared";
 import { type InferSelectModel, relations } from "drizzle-orm";
 import {

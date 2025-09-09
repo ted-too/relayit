@@ -4,30 +4,30 @@ import * as authSchema from "./schema/auth";
 import * as coreSchema from "./schema/core";
 
 export const schema = {
-	...authSchema,
-	...coreSchema,
+  ...authSchema,
+  ...coreSchema,
 };
 
 export const db = drizzle({
-	connection: {
-		connectionString: process.env.DATABASE_URL,
-		ssl: false,
-	},
-	schema,
+  connection: {
+    connectionString: process.env.DATABASE_URL,
+    ssl: false,
+  },
+  schema,
 });
 
 export type Transaction = Parameters<typeof db.transaction>[0] extends (
-	tx: infer T
+  tx: infer T
 ) => any
-	? T
-	: never;
+  ? T
+  : never;
 
-export * from "./lib/crypto";
-export * from "./lib/message-ops";
-export * from "./lib/redis";
+export * from "./crypto";
+export * from "./message-ops";
+export * from "./redis";
 export type { ParsedApiKey, Project, ProjectDetails } from "./schema/auth";
 export type {
-	Message,
-	NotificationProvider,
-	ProjectProviderAssociation,
+  Message,
+  NotificationProvider,
+  ProjectProviderAssociation,
 } from "./schema/core";

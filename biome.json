@@ -1,18 +1,14 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite"],
-  "vcs": {
+  "assist": {
     "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true
-  },
-  "files": {
-    "ignoreUnknown": true,
-    "includes": ["apps/**", "packages/**", "**/*.json", "!**/tsconfig.json"]
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "tab"
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "off"
+      }
+    }
   },
   "linter": {
     "enabled": true,
@@ -27,7 +23,9 @@
       "style": {
         "noHeadElement": "off",
         "useBlockStatements": "off",
-        "noMagicNumbers": "off"
+        "noMagicNumbers": "off",
+        "noNestedTernary": "off",
+        "noNonNullAssertion": "warn"
       },
       "nursery": {
         "useConsistentTypeDefinitions": "off",
@@ -46,22 +44,12 @@
         },
         "noUnusedFunctionParameters": "warn"
       },
+      "a11y": {
+        "useSemanticElements": "off"
+      },
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off"
-      }
-    }
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double"
-    }
-  },
-  "assist": {
-    "enabled": true,
-    "actions": {
-      "source": {
-        "organizeImports": "on",
-        "useSortedAttributes": "off"
+        "noExcessiveCognitiveComplexity": "off",
+        "noVoid": "off"
       }
     }
   }

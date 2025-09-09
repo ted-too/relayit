@@ -3,12 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./db": "./src/db/index.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "zod": "^3.25.20"
+    "zod": "^4.1.5",
+    "drizzle-orm": "^0.44.5"
   }
 }

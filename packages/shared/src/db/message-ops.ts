@@ -1,4 +1,4 @@
-import { db, schema, type Transaction } from "@repo/db";
+import { db, schema, type Transaction } from ".";
 import {
 	createGenericError,
 	type MessageStatus,
