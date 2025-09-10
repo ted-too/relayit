@@ -7,6 +7,10 @@ export const Route = createFileRoute("/_authd")({
       throw redirect({ to: "/auth/sign-in" });
     }
 
+    if (!context.session.activeOrganizationId) {
+      throw redirect({ to: "/auth/finish" });
+    }
+
     return {
       session: context.session,
       user: context.user,

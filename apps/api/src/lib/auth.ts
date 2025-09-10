@@ -11,6 +11,12 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
   secondaryStorage: {
     get: async (key) => {
       const value = await redis.get(key);
@@ -53,4 +59,5 @@ export const auth = betterAuth({
       enableMetadata: true,
     }),
   ],
+  trustedOrigins: [process.env.APP_URL],
 });

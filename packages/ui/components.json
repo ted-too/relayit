@@ -13,8 +13,11 @@
   "aliases": {
     "components": "@repo/ui/components",
     "utils": "@repo/ui/lib/utils",
-    "hooks": "@repo/ui/hooks",
+    "ui": "@repo/ui/components/misc",
     "lib": "@repo/ui/lib",
-    "ui": "@repo/ui/components/misc"
+    "hooks": "@repo/ui/hooks"
+  },
+  "registries": {
+    "@animate-ui": "https://animate-ui.com/r/{name}.json"
   }
 }

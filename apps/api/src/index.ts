@@ -2,13 +2,16 @@ import { trpcServer } from "@hono/trpc-server";
 import { auth } from "@repo/api/lib/auth";
 import type { Context } from "@repo/api/trpc";
 import { appRouter } from "@repo/api/trpc/router";
+import { db } from "@repo/shared/db";
+import { logger } from "@repo/shared/utils";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
+import { logger as honoLogger } from "hono/logger";
 
 const app = new Hono<{ Variables: Context }>();
 
-app.use(logger());
+app.use(honoLogger((msg, ...args) => logger.info(args, msg)));
 
 app.use(
   "*",
@@ -49,12 +52,20 @@ app.use(
       return {
         user,
         session,
+        req: c.req.raw,
       };
     },
   })
 );
 
-export default {
-  port: 3005,
-  fetch: app.fetch,
-};
+async function startServer() {
+  await migrate(db, { migrationsFolder: "./drizzle" });
+
+  // biome-ignore lint/correctness/noUndeclaredVariables: this is a bun server
+  Bun.serve({
+    port: 3005,
+    fetch: app.fetch,
+  });
+}
+
+export default await startServer();

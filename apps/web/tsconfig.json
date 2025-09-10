@@ -18,7 +18,9 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@repo/api/*": ["../api/src/*"],
+      "@repo/shared/*": ["../../packages/shared/src/*"]
     }
   }
 }

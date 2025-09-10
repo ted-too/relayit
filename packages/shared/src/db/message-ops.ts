@@ -4,7 +4,13 @@ import {
   type Result,
 } from "@repo/shared";
 import { eq } from "drizzle-orm";
-import { db, schema, type Transaction } from ".";
+import { db, schema } from ".";
+
+export type Transaction = Parameters<typeof db.transaction>[0] extends (
+  tx: infer T
+) => any
+  ? T
+  : never;
 
 // Define the type for message with relations included
 // Adjust based on your actual schema and relation names in Drizzle
@@ -43,8 +49,8 @@ export async function fetchMessageDetails(
     const projectProviderAssociations = (
       await db.query.projectProviderAssociation.findMany({
         where: eq(
-          schema.projectProviderAssociation.projectId,
-          messageDetails.projectId
+          schema.projectProviderAssociation.appId,
+          messageDetails.appId
         ),
         with: {
           providerCredential: true,

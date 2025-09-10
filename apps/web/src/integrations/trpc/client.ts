@@ -3,7 +3,7 @@ import superjson from "superjson";
 import type { TRPCRouter } from "@/integrations/trpc/router";
 
 export function getUrl() {
-  const DEFAULT_URL = "http://localhost:3009";
+  const DEFAULT_URL = "http://localhost:3005";
   if (typeof window !== "undefined")
     return import.meta.env.VITE_API_URL ?? DEFAULT_URL;
   return process.env.VITE_API_URL ?? DEFAULT_URL;

@@ -12,11 +12,14 @@
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-beta.2",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
     "@tanstack/react-form": "^1.19.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.539.0",
+    "lucide-react": "^0.543.0",
     "motion": "^12.23.12",
+    "radix-ui": "^1.4.3",
     "react-hotkeys-hook": "^5.1.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
@@ -26,12 +29,14 @@
   "exports": {
     "./globals.css": "./src/styles/globals.css",
     "./lib/*": "./src/lib/*.ts",
+    "./lib/get-strict-context": "./src/lib/get-strict-context.tsx",
     "./components/radix/*": "./src/components/radix/*.tsx",
     "./components/base/*": "./src/components/base/*.tsx",
     "./components/animate-ui/*": "./src/components/animate-ui/*.tsx",
     "./components/custom/*": "./src/components/custom/*.tsx",
     "./components/shared/*": "./src/components/shared/*.tsx",
     "./hooks/*": "./src/hooks/*.ts",
+    "./hooks/use-controlled-state": "./src/hooks/use-controlled-state.tsx",
     "./constants": "./src/constants.ts"
   }
 }

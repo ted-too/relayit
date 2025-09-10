@@ -1,11 +1,20 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-
+import * as appSchema from "./schema/app";
 import * as authSchema from "./schema/auth";
-import * as coreSchema from "./schema/core";
+import * as contactSchema from "./schema/contact";
+import * as eventSchema from "./schema/event";
+import * as messageSchema from "./schema/message";
+import * as providerSchema from "./schema/provider";
+import * as templateSchema from "./schema/template";
 
 export const schema = {
   ...authSchema,
-  ...coreSchema,
+  ...appSchema,
+  ...contactSchema,
+  ...providerSchema,
+  ...messageSchema,
+  ...eventSchema,
+  ...templateSchema,
 };
 
 export const db = drizzle({
@@ -16,18 +25,10 @@ export const db = drizzle({
   schema,
 });
 
-export type Transaction = Parameters<typeof db.transaction>[0] extends (
-  tx: infer T
-) => any
-  ? T
-  : never;
-
-export * from "./crypto";
-export * from "./message-ops";
-export * from "./redis";
-export type { ParsedApiKey, Project, ProjectDetails } from "./schema/auth";
-export type {
-  Message,
-  NotificationProvider,
-  ProjectProviderAssociation,
-} from "./schema/core";
+export type * from "./schema/app";
+export type * from "./schema/auth";
+export type * from "./schema/contact";
+export type * from "./schema/event";
+export type * from "./schema/message";
+export type * from "./schema/provider";
+export type * from "./schema/template";

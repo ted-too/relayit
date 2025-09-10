@@ -12,5 +12,7 @@ declare module "bun" {
 
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
+
+    LOG_LEVEL?: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   }
 }

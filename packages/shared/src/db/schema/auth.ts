@@ -1,20 +1,15 @@
-import type { ChannelType, ProviderType } from "@repo/shared";
-import { type InferSelectModel, relations } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   boolean,
   integer,
-  jsonb,
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import {
-  message,
-  type ProjectProviderAssociation,
-  projectProviderAssociation,
-} from "./core";
+import { app } from "./app";
+import { contact } from "./contact";
+import { message } from "./message";
 
 /**
  * Represents users in the system.
@@ -135,7 +130,7 @@ export type ParsedApiKey = Omit<
   /**
    * Extra metadata about the apiKey
    */
-  metadata: Record<string, any> | null;
+  metadata: { appId?: string } | null;
   /**
    * Permissions for the api key
    */
@@ -171,6 +166,8 @@ export const organization = pgTable("organization", {
   metadata: text("metadata"),
 });
 
+export type Organization = typeof organization.$inferSelect;
+
 /**
  * Defines relationships for the organization table.
  * Organizations can have multiple members, invitations, and teams.
@@ -178,7 +175,8 @@ export const organization = pgTable("organization", {
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
-  projects: many(project),
+  projects: many(app),
+  contacts: many(contact),
 }));
 
 /**
@@ -195,6 +193,8 @@ export const member = pgTable("member", {
   role: text("role").default("member").notNull(),
   createdAt: timestamp("created_at").notNull(),
 });
+
+export type Member = typeof member.$inferSelect;
 
 /**
  * Defines relationships for the member table.
@@ -243,52 +243,4 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
     fields: [invitation.inviterId],
     references: [user.id],
   }),
-}));
-
-type ProjectMetadata = Record<string, any>;
-
-/**
- * Represents projects within an organization.
- */
-export const project = pgTable(
-  "project",
-  {
-    id: text("id")
-      .primaryKey()
-      .$defaultFn(() => typeid("proj").toString()),
-    name: text("name").notNull(),
-    slug: text("slug").notNull(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
-    metadata: jsonb("metadata").$type<ProjectMetadata>(),
-  },
-  (t) => [uniqueIndex("slug_idx").on(t.slug, t.organizationId)]
-);
-
-export type Project = InferSelectModel<typeof project> & {
-  providerAssociations: Pick<ProjectProviderAssociation, "id">[];
-};
-
-export type ProjectDetails = Omit<Project, "providerAssociations"> & {
-  providerAssociations: (ProjectProviderAssociation & {
-    providerCredential: {
-      channelType: ChannelType;
-      providerType: ProviderType;
-    };
-  })[];
-};
-
-/**
- * Defines relationships for the project table.
- * Each project belongs to one organization.
- */
-export const projectRelations = relations(project, ({ one, many }) => ({
-  organization: one(organization, {
-    fields: [project.organizationId],
-    references: [organization.id],
-  }),
-  providerAssociations: many(projectProviderAssociation),
 }));

@@ -6,9 +6,9 @@ import {
 } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/auth")({
-  beforeLoad: ({ context }) => {
-    if (context.session !== null) {
-      throw redirect({ to: "/" });
+  beforeLoad: ({ context, location }) => {
+    if (context.session !== null && location.pathname !== "/auth/finish") {
+      throw redirect({ to: "/auth/finish" });
     }
   },
   component: RouteComponent,

@@ -11,7 +11,7 @@ export interface Context {
  * Initialization of tRPC backend
  * Should be done only once per backend!
  */
-const t = initTRPC.context<Context>().create({
+const t = initTRPC.context<Context & { req: Request }>().create({
   transformer: superjson,
 });
 
