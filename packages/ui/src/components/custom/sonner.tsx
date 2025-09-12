@@ -1,7 +1,7 @@
 "use client";
 
-import { useTheme } from "@repo/ui/components/custom/theme-provider";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { useTheme } from "@/components/custom/theme-provider";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme } = useTheme();

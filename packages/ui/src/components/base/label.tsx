@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/a11y/noLabelWithoutControl: this is handled by the form */
-import { cn } from "@repo/ui/lib/utils";
+
 import type * as React from "react";
+import { cn } from "@/lib/utils";
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
   return (

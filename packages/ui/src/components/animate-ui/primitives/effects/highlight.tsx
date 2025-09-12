@@ -2,9 +2,9 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: this is fine as per library docs */
 "use client";
 
-import { cn } from "@repo/ui/lib/utils";
 import { AnimatePresence, motion, type Transition } from "motion/react";
 import * as React from "react";
+import { cn } from "@/lib/utils";
 
 type HighlightMode = "children" | "parent";
 

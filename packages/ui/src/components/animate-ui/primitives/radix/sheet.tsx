@@ -1,10 +1,10 @@
 "use client";
 
-import { useControlledState } from "@repo/ui/hooks/use-controlled-state";
-import { getStrictContext } from "@repo/ui/lib/get-strict-context";
 import { AnimatePresence, type HTMLMotionProps, motion } from "motion/react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
+import { useControlledState } from "@/hooks/use-controlled-state";
+import { getStrictContext } from "@/lib/get-strict-context";
 
 type SheetContextType = {
   isOpen: boolean;

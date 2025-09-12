@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@repo/ui/lib/utils";
 import {
   type LegacyAnimationControls,
   type SVGMotionProps,
@@ -8,6 +7,7 @@ import {
   type Variants,
 } from "motion/react";
 import * as React from "react";
+import { cn } from "@/lib/utils";
 
 const staticAnimations = {
   path: {
@@ -66,7 +66,7 @@ interface AnimateIconProps<T = string> extends DefaultIconProps<T> {
   children: React.ReactElement<any, any>;
 }
 
-interface IconProps<T>
+interface IconProps<T = string>
   extends DefaultIconProps<T>,
     Omit<
       SVGMotionProps<SVGSVGElement>,

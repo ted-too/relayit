@@ -1,9 +1,9 @@
 "use client";
 
 import { Menu as DropdownMenuPrimitive } from "@base-ui-components/react/menu";
-import { cn } from "@repo/ui/lib/utils";
 import { Check, ChevronRightIcon, Circle } from "lucide-react";
 import type * as React from "react";
+import { cn } from "@/lib/utils";
 
 function DropdownMenu({
   ...props
@@ -92,7 +92,7 @@ function DropdownMenuItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        "data-[variant=destructive]:*:[svg]:!text-destructive relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none outline-hidden transition-colors data-[variant=destructive]:data-[highlighted]:bg-destructive/10 data-[variant=destructive]:data-[highlighted]:text-destructive data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[inset]:pl-8 data-[highlighted]:text-accent-foreground data-[variant=destructive]:text-destructive data-[disabled]:opacity-50 dark:data-[variant=destructive]:data-[highlighted]:bg-destructive/20 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground [&_svg]:shrink-0",
+        "data-[variant=destructive]:*:[svg]:!text-destructive relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none outline-hidden transition-colors data-[variant=destructive]:data-[highlighted]:bg-destructive/10 data-[variant=destructive]:data-[highlighted]:text-destructive data-[disabled]:pointer-events-none data-[active]:bg-foreground/5 data-[highlighted]:bg-accent data-[inset]:pl-8 data-[highlighted]:text-accent-foreground data-[variant=destructive]:text-destructive data-[disabled]:opacity-50 dark:data-[variant=destructive]:data-[highlighted]:bg-destructive/20 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground [&_svg]:shrink-0",
         className
       )}
       data-inset={inset}

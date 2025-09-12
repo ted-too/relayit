@@ -1,3 +1,4 @@
+import { ac, admin, member, owner } from "@repo/shared/permissions";
 import {
   apiKeyClient,
   lastLoginMethodClient,
@@ -13,17 +14,27 @@ export const createAuthClient = (cookie?: string | null) =>
     basePath: "/auth",
     plugins: [
       apiKeyClient(),
-      organizationClient(),
+      organizationClient({
+        ac,
+        roles: {
+          owner,
+          admin,
+          member,
+        },
+      }),
       lastLoginMethodClient(),
       reactStartCookies(),
     ],
-    fetchOptions: {
-      credentials: "include",
-      headers: cookie ? { cookie } : undefined,
-    },
+    fetchOptions: cookie
+      ? {
+          headers: { cookie },
+        }
+      : undefined,
   });
 
 export type AuthClient = ReturnType<typeof createAuthClient>;
+
+export const AUTH_COOKIES = ["relayit.session_token"];
 
 // export type Session = typeof authClient.$Infer.Session;
 // export type User = Session["user"];

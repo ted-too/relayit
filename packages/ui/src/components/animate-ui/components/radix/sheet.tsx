@@ -1,3 +1,4 @@
+import { XIcon } from "lucide-react";
 import {
   SheetClose as SheetClosePrimitive,
   type SheetCloseProps as SheetClosePrimitiveProps,
@@ -18,9 +19,8 @@ import {
   type SheetTitleProps as SheetTitlePrimitiveProps,
   SheetTrigger as SheetTriggerPrimitive,
   type SheetTriggerProps as SheetTriggerPrimitiveProps,
-} from "@repo/ui/components/animate-ui/primitives/radix/sheet";
-import { cn } from "@repo/ui/lib/utils";
-import { XIcon } from "lucide-react";
+} from "@/components/animate-ui/primitives/radix/sheet";
+import { cn } from "@/lib/utils";
 
 type SheetProps = SheetPrimitiveProps;
 

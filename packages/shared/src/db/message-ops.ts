@@ -1,9 +1,5 @@
-import {
-  createGenericError,
-  type MessageStatus,
-  type Result,
-} from "@repo/shared";
 import { eq } from "drizzle-orm";
+import { createGenericError, type MessageStatus, type Result } from "@/utils";
 import { db, schema } from ".";
 
 export type Transaction = Parameters<typeof db.transaction>[0] extends (

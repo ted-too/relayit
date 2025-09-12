@@ -15,7 +15,9 @@ import { message } from "./message";
  * Represents users in the system.
  */
 export const user = pgTable("user", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("user").toString()),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
@@ -45,7 +47,9 @@ export const userRelations = relations(user, ({ many }) => ({
  * Represents linked external accounts (e.g., OAuth providers).
  */
 export const account = pgTable("account", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("acct").toString()),
   accountId: text("account_id").notNull(),
   providerId: text("provider_id").notNull(),
   userId: text("user_id")
@@ -81,7 +85,9 @@ export const accountRelations = relations(account, ({ one }) => ({
  * Stores verification tokens (e.g., email verification, password reset).
  */
 export const verification = pgTable("verification", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("vrfy").toString()),
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
@@ -94,18 +100,24 @@ export const verification = pgTable("verification", {
     .notNull(),
 });
 
+export interface ApiKeyPermissions {
+  [key: string]: string[];
+}
+
 /**
  * Stores API keys for programmatic access.
  */
 export const apikey = pgTable("apikey", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("akey").toString()),
   name: text("name"),
   start: text("start"),
   prefix: text("prefix"),
   key: text("key").notNull(),
   userId: text("user_id")
     .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "set null" }),
   refillInterval: integer("refill_interval"),
   refillAmount: integer("refill_amount"),
   lastRefillAt: timestamp("last_refill_at"),
@@ -123,25 +135,53 @@ export const apikey = pgTable("apikey", {
   metadata: text("metadata"),
 });
 
-export type ParsedApiKey = Omit<
-  typeof apikey.$inferSelect,
-  "permissions" | "metadata"
-> & {
-  /**
-   * Extra metadata about the apiKey
-   */
-  metadata: { appId?: string } | null;
-  /**
-   * Permissions for the api key
-   */
-  permissions?: {
-    [key: string]: string[];
-  } | null;
+export type ParsedApiKey = Omit<typeof apikey.$inferSelect, "permissions"> & {
+  // /**
+  //  * Permissions for the api key
+  //  */
+  // permissions?: ApiKeyPermissions | null;
 };
+
+export type ClientParsedApiKey = Omit<ParsedApiKey, "key">;
+
+/**
+ * Join table to link API keys with organizations (many-to-many relationship).
+ */
+export const apikeyOrganization = pgTable("apikey_organization", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("akyo").toString()),
+  apikeyId: text("apikey_id")
+    .notNull()
+    .references(() => apikey.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at")
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
+
+/**
+ * Defines relationships for the apikeyOrganization join table.
+ */
+export const apikeyOrganizationRelations = relations(
+  apikeyOrganization,
+  ({ one }) => ({
+    apikey: one(apikey, {
+      fields: [apikeyOrganization.apikeyId],
+      references: [apikey.id],
+    }),
+    organization: one(organization, {
+      fields: [apikeyOrganization.organizationId],
+      references: [organization.id],
+    }),
+  })
+);
 
 /**
  * Defines relationships for the apiKey table.
- * Each API key belongs to one user and can be associated with multiple messages.
+ * Each API key belongs to one user and can be associated with multiple messages and organizations.
  */
 export const apiKeyRelations = relations(apikey, ({ one, many }) => ({
   user: one(user, {
@@ -149,6 +189,7 @@ export const apiKeyRelations = relations(apikey, ({ one, many }) => ({
     references: [user.id],
   }),
   messages: many(message),
+  organizations: many(apikeyOrganization),
 }));
 
 /**
@@ -159,7 +200,7 @@ export const organization = pgTable("organization", {
     .primaryKey()
     .$defaultFn(() => typeid("orgn").toString()),
   name: text("name").notNull(),
-  slug: text("slug").unique(),
+  slug: text("slug").unique().notNull(),
   logo: text("logo"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
@@ -170,20 +211,23 @@ export type Organization = typeof organization.$inferSelect;
 
 /**
  * Defines relationships for the organization table.
- * Organizations can have multiple members, invitations, and teams.
+ * Organizations can have multiple members, invitations, teams, and API keys.
  */
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
   projects: many(app),
   contacts: many(contact),
+  apikeys: many(apikeyOrganization),
 }));
 
 /**
  * Represents the membership of a user within an organization, potentially linking them to a team.
  */
 export const member = pgTable("member", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("memb").toString()),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
@@ -217,7 +261,9 @@ export type InvitationStatus = "pending" | "accepted" | "rejected" | "canceled";
  * Stores invitations for users to join an organization.
  */
 export const invitation = pgTable("invitation", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => typeid("invt").toString()),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),

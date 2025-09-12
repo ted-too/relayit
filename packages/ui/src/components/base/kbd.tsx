@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui-components/react/merge-props";
 import { useRender } from "@base-ui-components/react/use-render";
-import { cn } from "@repo/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
 
 export const kbdVariants = cva(
   "inline-flex items-center justify-center gap-1.5 text-center font-medium text-muted-foreground text-xs tracking-tight shadow-sm",

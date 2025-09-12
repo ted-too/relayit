@@ -1,4 +1,3 @@
-import { THEME_COOKIE_MAX_AGE, THEME_COOKIE_NAME } from "@repo/ui/constants";
 import {
   createContext,
   type PropsWithChildren,
@@ -7,6 +6,7 @@ import {
   useState,
 } from "react";
 import type { ToasterProps } from "sonner";
+import { THEME_COOKIE_MAX_AGE, THEME_COOKIE_NAME } from "@/constants";
 
 export type Theme = ToasterProps["theme"];
 

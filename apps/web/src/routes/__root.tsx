@@ -1,3 +1,4 @@
+import { Toaster } from "@repo/ui/components/custom/sonner";
 import {
   type Theme,
   ThemeProvider,
@@ -6,7 +7,6 @@ import {
 import { SIDEBAR_COOKIE_NAME, THEME_COOKIE_NAME } from "@repo/ui/constants";
 import appCss from "@repo/ui/globals.css?url";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import {
   createRootRouteWithContext,
@@ -16,17 +16,10 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
-import { getCookie, getWebRequest } from "@tanstack/react-start/server";
-import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import { getCookie } from "@tanstack/react-start/server";
 import z from "zod";
-import type { AuthClient } from "@/integrations/better-auth/client";
-import type { TRPCRouter } from "@/integrations/trpc/router";
-
-interface RouterContext {
-  queryClient: QueryClient;
-  trpc: TRPCOptionsProxy<TRPCRouter>;
-  auth: AuthClient;
-}
+import { AUTH_COOKIES } from "@/integrations/better-auth/client";
+import type { RouterContext } from "@/integrations/context";
 
 export const getSSRCookie = createServerFn({ method: "POST" })
   .validator(
@@ -39,12 +32,6 @@ export const getSSRCookie = createServerFn({ method: "POST" })
 
     return value;
   });
-
-export const getCookieString = createServerFn({ method: "GET" }).handler(() => {
-  const req = getWebRequest();
-
-  return req.headers.get("cookie");
-});
 
 const MOBILE_REGEX =
   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i;
@@ -87,39 +74,20 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       },
     ],
   }),
-  beforeLoad: async ({ context }) => {
-    const cookieString = await getCookieString();
-    const [{ data, error }, { isMobile }, sidebarOpen = "false", theme] =
+  beforeLoad: async () => {
+    const [{ isMobile }, sidebarOpen = "false", theme, ...sessionCookies] =
       await Promise.all([
-        context.auth.getSession({
-          fetchOptions: {
-            credentials: "include",
-            headers: { cookie: cookieString ?? "" },
-          },
-        }),
         getSSRMobileDetection(),
         getSSRCookie({ data: { name: SIDEBAR_COOKIE_NAME } }),
         getSSRCookie({ data: { name: THEME_COOKIE_NAME } }),
+        ...AUTH_COOKIES.map((cookie) =>
+          getSSRCookie({ data: { name: cookie } })
+        ),
       ]);
 
-    if (import.meta.env.DEV && error) {
-      console.error("Error getting session", error);
-    }
-
-    if (data?.session && data?.user) {
-      return {
-        session: data.session,
-        user: data.user,
-        isMobile,
-        sidebarOpen: sidebarOpen === "true",
-        theme,
-      };
-    }
-
     return {
-      session: null,
-      user: null,
       isMobile,
+      isPotentialAuthd: sessionCookies.filter(Boolean).length > 0,
       sidebarOpen: sidebarOpen === "true",
       theme,
     };
@@ -149,6 +117,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="antialiased">
         <div className="Root">{children}</div>
+        <Toaster richColors />
         <TanStackDevtools
           config={{
             position: "bottom-right",

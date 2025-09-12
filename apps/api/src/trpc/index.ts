@@ -1,6 +1,7 @@
-import type { auth } from "@repo/api/lib/auth";
+import { db } from "@repo/shared/db";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
+import type { auth } from "@/lib/auth";
 
 export interface Context {
   user: typeof auth.$Infer.Session.user | null;
@@ -32,6 +33,36 @@ export const authdProcedure = publicProcedure.use((opts) => {
     ctx: {
       user: ctx.user,
       session: ctx.session,
+    },
+  });
+});
+
+export const authdOrganizationProcedure = authdProcedure.use(async (opts) => {
+  const {
+    ctx: {
+      session: { activeOrganizationId, ...session },
+      user,
+    },
+  } = opts;
+  if (!activeOrganizationId) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  const activeOrganization = await db.query.organization.findFirst({
+    where: (table, { eq }) => eq(table.id, activeOrganizationId),
+  });
+
+  if (!activeOrganization) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return opts.next({
+    ctx: {
+      session: {
+        ...session,
+        activeOrganization,
+      },
+      user,
     },
   });
 });

@@ -1,28 +1,35 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { createServerFn } from "@tanstack/react-start";
+import { setCookie } from "@tanstack/react-start/server";
+import { AUTH_COOKIES } from "@/integrations/better-auth/client";
+
+const clearAuthCookies = createServerFn({ method: "POST" }).handler(() => {
+  for (const cookie of AUTH_COOKIES) {
+    setCookie(cookie, "", { maxAge: 0 });
+  }
+});
 
 export const Route = createFileRoute("/_authd")({
-  beforeLoad: ({ context }) => {
-    if (context.session === null || context.user === null) {
+  beforeLoad: async ({ context }) => {
+    if (!context.isPotentialAuthd) {
       throw redirect({ to: "/auth/sign-in" });
     }
 
-    if (!context.session.activeOrganizationId) {
-      throw redirect({ to: "/auth/finish" });
-    }
+    try {
+      const data = await context.queryClient.ensureQueryData(
+        context.trpc.auth.getSession.queryOptions()
+      );
 
-    return {
-      session: context.session,
-      user: context.user,
-    };
+      return data;
+    } catch (error) {
+      clearAuthCookies();
+      if (import.meta.env.DEV) console.error(error);
+      throw redirect({ to: "/auth/sign-in" });
+    }
   },
   component: RouteComponent,
 });
 
 function RouteComponent() {
-  return (
-    <AppSidebar>
-      <Outlet />
-    </AppSidebar>
-  );
+  return <Outlet />;
 }

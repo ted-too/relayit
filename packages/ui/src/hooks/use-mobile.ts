@@ -1,5 +1,5 @@
-import { MOBILE_BREAKPOINT } from "@repo/ui/constants";
 import * as React from "react";
+import { MOBILE_BREAKPOINT } from "@/constants";
 
 export function useIsMobile({
   breakpoint = MOBILE_BREAKPOINT,

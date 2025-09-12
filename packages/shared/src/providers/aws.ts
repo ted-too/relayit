@@ -49,21 +49,40 @@ export const AWS_REGIONS = [
 
 export const awsCredentialsSchema = buildCredentialSchema({
   encrypted: z.object({
-    accessKeyId: z.string(),
-    secretAccessKey: z.string(),
+    accessKeyId: z.string().meta({
+      title: "Access Key ID",
+      description: "Your AWS Access Key ID from IAM console",
+      placeholder: "AKIA...",
+      order: 1,
+    }),
+    secretAccessKey: z.string().meta({
+      title: "Secret Access Key",
+      description: "Your AWS Secret Access Key from IAM console",
+      placeholder: "Enter your secret key",
+      type: "password",
+      order: 2,
+    }),
   }),
   unencrypted: z.object({
-    region: z.enum(AWS_REGIONS, {
-      message: "Invalid region",
-    }),
+    region: z
+      .enum(AWS_REGIONS, {
+        message: "Invalid region",
+      })
+      .meta({
+        title: "AWS Region",
+        description: "The AWS region where your SES service is configured",
+        order: 3,
+      }),
   }),
 });
 
 export const AWS_PROVIDER_CONFIG = {
+  label: "AWS",
   credentialsSchema: awsCredentialsSchema,
   channels: {
     email: {
       id: "ses",
+      label: "SES",
     },
   },
 } as const satisfies GenericProviderConfig;

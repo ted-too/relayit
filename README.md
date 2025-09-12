@@ -42,7 +42,8 @@ BETTER_AUTH_URL=http://localhost:3005
 FRONTEND_URL=http://localhost:3000
 
 # Encryption
-CREDENTIAL_ENCRYPTION_KEY=your-32-character-encryption-key
+ENCRYPTION_KEY_VERSION=v1
+CREDENTIAL_ENCRYPTION_KEY_V1=your-64-character-hex-encryption-key
 ```
 
 ### 2. Deploy with Docker Compose
@@ -79,7 +80,8 @@ docker run -d \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
   -e BETTER_AUTH_SECRET="your-secret" \
-  -e CREDENTIAL_ENCRYPTION_KEY="your-key" \
+  -e ENCRYPTION_KEY_VERSION="v1" \
+  -e CREDENTIAL_ENCRYPTION_KEY_V1="your-key" \
   ghcr.io/your-username/relayit-api:latest
 ```
 
@@ -89,7 +91,8 @@ docker run -d \
   --name relayit-worker \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
-  -e CREDENTIAL_ENCRYPTION_KEY="your-key" \
+  -e ENCRYPTION_KEY_VERSION="v1" \
+  -e CREDENTIAL_ENCRYPTION_KEY_V1="your-key" \
   ghcr.io/your-username/relayit-worker:latest
 ```
 
@@ -112,7 +115,8 @@ docker run -d \
 | `DATABASE_URL`              | PostgreSQL connection string                         | ✅        | -                     |
 | `REDIS_URL`                 | Redis connection string                              | ✅        | -                     |
 | `BETTER_AUTH_SECRET`        | Secret key for authentication                        | ✅        | -                     |
-| `CREDENTIAL_ENCRYPTION_KEY` | 32-character key for encrypting provider credentials | ✅        | -                     |
+| `ENCRYPTION_KEY_VERSION` | Current encryption key version (e.g., v1, v2) | ✅        | v1                    |
+| `CREDENTIAL_ENCRYPTION_KEY_V1` | 64-character hex key for encrypting provider credentials | ✅        | -                     |
 | `API_URL`                   | Public URL of your API service                       | ✅        | http://localhost:3005 |
 | `WEB_URL`                   | Public URL of your web dashboard                     | ✅        | http://localhost:3000 |
 | `GITHUB_REPOSITORY_OWNER`   | Your GitHub username for pulling images              | ✅        | -                     |
@@ -173,7 +177,8 @@ IMAGE_TAG=v1.0.0
 
 # Strong secrets
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)
+ENCRYPTION_KEY_VERSION=v1
+CREDENTIAL_ENCRYPTION_KEY_V1=$(openssl rand -hex 32)
 ```
 
 ### 3. Database Setup

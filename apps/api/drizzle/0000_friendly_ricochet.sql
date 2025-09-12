@@ -56,6 +56,13 @@ CREATE TABLE "apikey" (
 	"metadata" text
 );
 --> statement-breakpoint
+CREATE TABLE "apikey_organization" (
+	"id" text PRIMARY KEY NOT NULL,
+	"apikey_id" text NOT NULL,
+	"organization_id" text NOT NULL,
+	"created_at" timestamp NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "invitation" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
@@ -77,7 +84,7 @@ CREATE TABLE "member" (
 CREATE TABLE "organization" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
-	"slug" text,
+	"slug" text NOT NULL,
 	"logo" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp,
@@ -184,6 +191,25 @@ CREATE TABLE "provider_identity" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "encryption_migration" (
+	"id" text PRIMARY KEY NOT NULL,
+	"from_version" text NOT NULL,
+	"to_version" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"total_records" text,
+	"migrated_records" text DEFAULT '0',
+	"error_message" text,
+	"started_at" timestamp DEFAULT now() NOT NULL,
+	"completed_at" timestamp
+);
+--> statement-breakpoint
+CREATE TABLE "system_config" (
+	"key" text PRIMARY KEY NOT NULL,
+	"value" text NOT NULL,
+	"description" text,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "template" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
@@ -209,7 +235,9 @@ CREATE TABLE "template_version" (
 --> statement-breakpoint
 ALTER TABLE "app" ADD CONSTRAINT "app_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "apikey" ADD CONSTRAINT "apikey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "apikey" ADD CONSTRAINT "apikey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "apikey_organization" ADD CONSTRAINT "apikey_organization_apikey_id_apikey_id_fk" FOREIGN KEY ("apikey_id") REFERENCES "public"."apikey"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "apikey_organization" ADD CONSTRAINT "apikey_organization_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREIGN KEY ("inviter_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -251,6 +279,7 @@ CREATE INDEX "message_event_response_time_idx" ON "message_event" USING btree ("
 CREATE INDEX "message_template_message_idx" ON "message_template" USING btree ("message_id");--> statement-breakpoint
 CREATE INDEX "message_template_version_idx" ON "message_template" USING btree ("template_version_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "provider_credential_org_channel_default_unique_idx" ON "provider_credential" USING btree ("organization_id","channel_type","is_default") WHERE "provider_credential"."is_default" = true;--> statement-breakpoint
+CREATE UNIQUE INDEX "provider_credential_org_channel_priority_unique_idx" ON "provider_credential" USING btree ("organization_id","channel_type","priority");--> statement-breakpoint
 CREATE INDEX "provider_credential_organization_idx" ON "provider_credential" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "provider_credential_channel_type_idx" ON "provider_credential" USING btree ("channel_type");--> statement-breakpoint
 CREATE INDEX "provider_credential_priority_idx" ON "provider_credential" USING btree ("priority");--> statement-breakpoint

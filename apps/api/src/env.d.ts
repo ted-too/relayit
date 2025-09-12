@@ -5,7 +5,10 @@ declare module "bun" {
 
     BETTER_AUTH_SECRET: string;
     BETTER_AUTH_URL: string;
-    CREDENTIAL_ENCRYPTION_KEY: string;
+    ENCRYPTION_KEY_VERSION: string;
+    CREDENTIAL_ENCRYPTION_KEY_V1: string;
+    CREDENTIAL_ENCRYPTION_KEY_V2?: string;
+    CREDENTIAL_ENCRYPTION_KEY_V3?: string;
 
     APP_URL: string;
     DOCS_URL?: string;

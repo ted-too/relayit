@@ -6,8 +6,8 @@ import {
 } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/auth")({
-  beforeLoad: ({ context, location }) => {
-    if (context.session !== null && location.pathname !== "/auth/finish") {
+  beforeLoad: ({ context }) => {
+    if (context.isPotentialAuthd) {
       throw redirect({ to: "/auth/finish" });
     }
   },

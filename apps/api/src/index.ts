@@ -1,13 +1,14 @@
 import { trpcServer } from "@hono/trpc-server";
-import { auth } from "@repo/api/lib/auth";
-import type { Context } from "@repo/api/trpc";
-import { appRouter } from "@repo/api/trpc/router";
 import { db } from "@repo/shared/db";
+import { checkAndRunKeyRotation } from "@repo/shared/db/crypto";
 import { logger } from "@repo/shared/utils";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
+import { auth } from "@/lib/auth";
+import type { Context } from "@/trpc";
+import { appRouter } from "@/trpc/router";
 
 const app = new Hono<{ Variables: Context }>();
 
@@ -17,7 +18,7 @@ app.use(
   "*",
   cors({
     origin: [process.env.APP_URL],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "TRPC-Accept"],
     allowMethods: ["POST", "GET", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -60,6 +61,13 @@ app.use(
 
 async function startServer() {
   await migrate(db, { migrationsFolder: "./drizzle" });
+
+  const rotationResult = await checkAndRunKeyRotation(db);
+  if (rotationResult.error) {
+    throw new Error(`Key rotation failed: ${rotationResult.error.message}`);
+  }
+
+  logger.info("Server initialization complete");
 
   // biome-ignore lint/correctness/noUndeclaredVariables: this is a bun server
   Bun.serve({

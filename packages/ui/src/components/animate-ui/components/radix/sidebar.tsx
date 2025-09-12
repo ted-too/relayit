@@ -1,26 +1,32 @@
 "use client";
 
+import { cva, type VariantProps } from "class-variance-authority";
+import { PanelLeftIcon } from "lucide-react";
+import type { Transition } from "motion/react";
+import { Slot } from "radix-ui";
+import * as React from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@repo/ui/components/animate-ui/base/tooltip";
+} from "@/components/animate-ui/base/tooltip";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@repo/ui/components/animate-ui/components/radix/sheet";
+} from "@/components/animate-ui/components/radix/sheet";
 import {
   Highlight,
   HighlightItem,
-} from "@repo/ui/components/animate-ui/primitives/effects/highlight";
-import { Button } from "@repo/ui/components/base/button";
-import { Input } from "@repo/ui/components/base/input";
-import { Separator } from "@repo/ui/components/base/separator";
-import { Skeleton } from "@repo/ui/components/base/skeleton";
+} from "@/components/animate-ui/primitives/effects/highlight";
+import { Button } from "@/components/base/button";
+import { Input } from "@/components/base/input";
+import { Separator } from "@/components/base/separator";
+import { Skeleton } from "@/components/base/skeleton";
 import {
   SIDEBAR_COOKIE_MAX_AGE,
   SIDEBAR_COOKIE_NAME,
@@ -28,16 +34,10 @@ import {
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_ICON,
   SIDEBAR_WIDTH_MOBILE,
-} from "@repo/ui/constants";
-import { useIsMobile } from "@repo/ui/hooks/use-mobile";
-import { getStrictContext } from "@repo/ui/lib/get-strict-context";
-import { cn } from "@repo/ui/lib/utils";
-import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeftIcon } from "lucide-react";
-import type { Transition } from "motion/react";
-import { Slot } from "radix-ui";
-import * as React from "react";
-import { useHotkeys } from "react-hotkeys-hook";
+} from "@/constants";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { getStrictContext } from "@/lib/get-strict-context";
+import { cn } from "@/lib/utils";
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
@@ -55,19 +55,21 @@ const [LocalSidebarProvider, useSidebar] =
 type SidebarProviderProps = React.ComponentProps<"div"> & {
   defaultOpen?: boolean;
   open?: boolean;
+  isMobile?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
 
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
+  isMobile: isMobileProp,
   onOpenChange: setOpenProp,
   className,
   style,
   children,
   ...props
 }: SidebarProviderProps) {
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile({ initialValue: isMobileProp });
   const [openMobile, setOpenMobile] = React.useState(false);
 
   // This is the internal state of the sidebar.
@@ -127,7 +129,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar",
+            "group/sidebar-wrapper flex min-h-svh has-data-[variant=inset]:bg-sidebar",
             className
           )}
           {...props}

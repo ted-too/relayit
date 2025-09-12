@@ -1,6 +1,6 @@
-import { cn } from "@repo/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
+import { cn } from "@/lib/utils";
 
 const skeletonVariants = cva("rounded-md bg-primary/10", {
   variants: {

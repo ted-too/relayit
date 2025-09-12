@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type * as z4 from "zod/v4/core";
 
 export const AVAILABLE_CHANNELS = [
   "email",
@@ -10,8 +11,8 @@ export const AVAILABLE_CHANNELS = [
 export type ChannelType = (typeof AVAILABLE_CHANNELS)[number];
 
 export function buildCredentialSchema<
-  T extends z.ZodType,
-  R extends z.ZodType,
+  T extends z4.$ZodObject,
+  R extends z4.$ZodObject,
 >({ encrypted, unencrypted }: { encrypted: T; unencrypted: R }) {
   return z.object({
     encrypted,
@@ -20,19 +21,21 @@ export function buildCredentialSchema<
 }
 
 export type GenericProviderConfig = {
+  label: string;
   credentialsSchema: ReturnType<
-    typeof buildCredentialSchema<z.ZodType, z.ZodType>
+    typeof buildCredentialSchema<z4.$ZodObject, z4.$ZodObject>
   >;
   channels: Partial<
     Record<
       ChannelType,
       {
         id: string;
+        label: string;
       }
     >
   >;
 };
 
-export type GenericProviderCredentials = z.infer<
+export type GenericProviderCredentials = z4.infer<
   GenericProviderConfig["credentialsSchema"]
 >;

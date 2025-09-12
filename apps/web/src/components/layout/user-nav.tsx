@@ -1,9 +1,12 @@
 "use client";
 
+import { RiLogoutCircleLine, RiMore2Line, RiUserLine } from "@remixicon/react";
 import {
-  ORGANIZATION_LOGO_GRADIENTS,
-  type OrganizationMetadata,
-} from "@repo/shared";
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@repo/ui/components/animate-ui/components/radix/sidebar";
 import {
   Avatar,
   AvatarFallback,
@@ -12,133 +15,91 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuGroupLabel,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/base/dropdown-menu";
-import { SidebarMenuButton } from "@repo/ui/components/base/sidebar";
 import { toast } from "@repo/ui/components/custom/sonner";
 import { cn, getInitials } from "@repo/ui/lib/utils";
-import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
-import { ChevronsUpDownIcon } from "lucide-react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useNavigate, useRouteContext } from "@tanstack/react-router";
+import { useTRPC } from "@/integrations/trpc/react";
 
 export function SideBarUserNav() {
   const navigate = useNavigate();
-  const { user, auth } = useRouteContext({
+  const { auth } = useRouteContext({
     from: "/_authd",
   });
+  const trpc = useTRPC();
+  const {
+    data: { user },
+  } = useSuspenseQuery(trpc.auth.getSession.queryOptions());
+
+  const { open } = useSidebar();
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <SidebarMenuButton
-            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            size="lg"
-          >
-            <Avatar className="h-8 w-8 rounded-lg">
-              <AvatarImage alt={user.image || ""} src={user.image || ""} />
-              <AvatarFallback className="rounded-lg">
-                {getInitials(
-                  user.name && user.name !== ""
-                    ? user.name
-                    : (user.email.split("@")[0] ?? "")
-                )}
-              </AvatarFallback>
-            </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-semibold">{user.name}</span>
-              <span className="truncate text-xs">{user.email}</span>
-            </div>
-            <ChevronsUpDownIcon className="ml-auto size-4" />
-          </SidebarMenuButton>
-        }
-      />
-      <DropdownMenuContent
-        align="end"
-        className="min-w-56 rounded-lg"
-        side="right"
-        sideOffset={4}
-      >
-        <DropdownMenuGroup>
-          <DropdownMenuGroupLabel className="flex flex-col text-left">
-            Logged in as
-            <span className="font-normal text-muted-foreground text-xs">
-              {user.email}
-            </span>
-          </DropdownMenuGroupLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="cursor-pointer"
-            render={<Link to="/settings/profile">Profile</Link>}
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton
+                size="lg"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              >
+                <Avatar className="in-data-[state=expanded]:size-6 transition-[width,height] duration-200 ease-in-out">
+                  <AvatarImage src={user.image ?? undefined} alt={user.name} />
+                  <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                </Avatar>
+                <div className="ms-1 grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">{user.name}</span>
+                </div>
+                <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-accent/50 in-[[data-slot=dropdown-menu-trigger]:hover]:bg-transparent">
+                  <RiMore2Line className="size-5 opacity-40" size={20} />
+                </div>
+              </SidebarMenuButton>
+            }
           />
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onSelect={async () => {
-              const { error } = await auth.signOut();
-              if (error) {
-                return toast.error("Failed to sign out", {
-                  description: error.message,
-                });
-              }
-              navigate({ to: "/auth/sign-in", reloadDocument: true });
-            }}
+          <DropdownMenuContent
+            className={cn(
+              "w-full rounded-md transition-[width] duration-200 ease-in-out",
+              open ? "min-w-64" : "min-w-56"
+            )}
+            side={open ? "top" : "right"}
+            align="end"
+            sideOffset={4}
           >
-            Log out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-export function OrganizationLogo({
-  logoUrl,
-  orgMetadata,
-  name = "",
-  size = "md",
-}: {
-  logoUrl?: string | null;
-  orgMetadata?: OrganizationMetadata | null;
-  name?: string;
-  size?: "sm" | "md";
-}) {
-  if (logoUrl || !orgMetadata?.logoEmoji) {
-    return (
-      <Avatar
-        className={cn(
-          "shrink-0",
-          size === "sm" && "size-6 text-xs",
-          size === "md" && "size-8"
-        )}
-      >
-        <AvatarImage alt={name} src={logoUrl ?? undefined} />
-        <AvatarFallback>{getInitials(name)}</AvatarFallback>
-      </Avatar>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-full",
-        !orgMetadata?.logoBgKey && "bg-muted",
-        size === "sm" && "size-6",
-        size === "md" && "size-8"
-      )}
-      style={{
-        background: orgMetadata?.logoBgKey
-          ? ORGANIZATION_LOGO_GRADIENTS[orgMetadata.logoBgKey]
-          : undefined,
-      }}
-    >
-      <span
-        className={cn({ sm: "text-base", md: "text-lg" }[size], "leading-none")}
-      >
-        {orgMetadata.logoEmoji}
-      </span>
-    </div>
+            <DropdownMenuItem className="gap-3 px-1">
+              <RiUserLine
+                size={20}
+                className="text-muted-foreground/70"
+                aria-hidden="true"
+              />
+              <span>Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-3 px-1"
+              onSelect={async () => {
+                const { error } = await auth.signOut();
+                if (error) {
+                  return toast.error("Failed to sign out", {
+                    description: error.message,
+                  });
+                }
+                navigate({ to: "/auth/sign-in", reloadDocument: true });
+              }}
+            >
+              <RiLogoutCircleLine
+                size={20}
+                className="text-muted-foreground/70"
+                aria-hidden="true"
+              />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

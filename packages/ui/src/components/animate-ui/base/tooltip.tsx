@@ -1,7 +1,6 @@
 "use client";
 
 import { Tooltip as TooltipPrimitive } from "@base-ui-components/react/tooltip";
-import { cn } from "@repo/ui/lib/utils";
 import {
   AnimatePresence,
   type HTMLMotionProps,
@@ -9,6 +8,7 @@ import {
   type Transition,
 } from "motion/react";
 import * as React from "react";
+import { cn } from "@/lib/utils";
 
 type TooltipContextType = {
   isOpen: boolean;
@@ -141,7 +141,7 @@ function TooltipContent({
               data-slot="tooltip-popup"
               {...popupProps}
               className={cn(
-                "relative w-fit text-balance rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm shadow-md",
+                "relative w-fit text-balance rounded-md bg-accent px-3 py-1.5 text-foreground text-sm shadow-sm",
                 className
               )}
               render={
@@ -159,7 +159,7 @@ function TooltipContent({
 
               {arrow && (
                 <TooltipPrimitive.Arrow
-                  className="data-[side='bottom']:-top-[4px] data-[side='right']:-left-[4px] data-[side='left']:-right-[4px] data-[side='inline-start']:-right-[4px] data-[side='inline-end']:-left-[4px] z-50 size-2.5 rotate-45 rounded-[2px] bg-primary fill-primary"
+                  className="data-[side='bottom']:-top-[4px] data-[side='right']:-left-[4px] data-[side='left']:-right-[4px] data-[side='inline-start']:-right-[4px] data-[side='inline-end']:-left-[4px] z-50 size-2.5 rotate-45 rounded-[2px] bg-accent fill-primary"
                   data-slot="tooltip-content-arrow"
                 />
               )}

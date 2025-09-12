@@ -1,10 +1,10 @@
+import { z } from "zod";
 import {
   ARRAY_DELIMITER,
   AVAILABLE_CHANNELS,
   AVAILABLE_MESSAGE_STATUSES,
   AVAILABLE_PROVIDER_TYPES,
-} from "@repo/shared";
-import { z } from "zod";
+} from "@";
 import { createTimeRangedPaginatedSchema } from "./pagination";
 
 export const createProjectSchema = z.object({

@@ -1,7 +1,5 @@
 "use client";
 
-import { useControlledState } from "@repo/ui/hooks/use-controlled-state";
-import { getStrictContext } from "@repo/ui/lib/get-strict-context";
 import {
   type HTMLMotionProps,
   motion,
@@ -9,6 +7,8 @@ import {
 } from "motion/react";
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 import type * as React from "react";
+import { useControlledState } from "@/hooks/use-controlled-state";
+import { getStrictContext } from "@/lib/get-strict-context";
 
 type CheckboxContextType = {
   isChecked: boolean | "indeterminate";

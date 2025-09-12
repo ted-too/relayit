@@ -41,6 +41,11 @@ export const providerCredential = pgTable(
     uniqueIndex("provider_credential_org_channel_default_unique_idx")
       .on(t.organizationId, t.channelType, t.isDefault)
       .where(sql`${t.isDefault} = true`),
+    uniqueIndex("provider_credential_org_channel_priority_unique_idx").on(
+      t.organizationId,
+      t.channelType,
+      t.priority
+    ),
     index("provider_credential_organization_idx").on(t.organizationId),
     index("provider_credential_channel_type_idx").on(t.channelType),
     index("provider_credential_priority_idx").on(t.priority),
@@ -48,7 +53,7 @@ export const providerCredential = pgTable(
   ]
 );
 
-export type NotificationProvider = InferSelectModel<typeof providerCredential>;
+export type ProviderCredential = InferSelectModel<typeof providerCredential>;
 
 export const providerCredentialRelations = relations(
   providerCredential,

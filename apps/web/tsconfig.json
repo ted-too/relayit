@@ -20,7 +20,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@repo/api/*": ["../api/src/*"],
-      "@repo/shared/*": ["../../packages/shared/src/*"]
+      "@repo/shared/*": ["../../packages/shared/src/*"],
+      "@repo/ui/*": ["../../packages/ui/src/*"]
     }
   }
 }

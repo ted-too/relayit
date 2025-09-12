@@ -1,24 +1,23 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
-import { createAuthClient } from "@/integrations/better-auth/client";
-import { getContext } from "@/integrations/tanstack-query/context";
+import { getContext } from "@/integrations/context";
 import { Provider as TanstackQueryProvider } from "@/integrations/tanstack-query/root-provider";
 import { DefaultCatchBoundary } from "./components/default-catch";
 import { NotFound } from "./components/not-found";
 import { routeTree } from "./routeTree.gen";
 
 export function createRouter() {
-  const rqContext = getContext();
+  const context = getContext();
 
   const router = createTanStackRouter({
     routeTree,
-    context: { ...rqContext, auth: createAuthClient() },
+    context,
     defaultPreload: "intent",
     defaultErrorComponent: DefaultCatchBoundary,
     defaultNotFoundComponent: () => <NotFound />,
     Wrap: (props: { children: React.ReactNode }) => {
       return (
-        <TanstackQueryProvider queryClient={rqContext.queryClient}>
+        <TanstackQueryProvider queryClient={context.queryClient}>
           {props.children}
         </TanstackQueryProvider>
       );
@@ -27,7 +26,7 @@ export function createRouter() {
 
   setupRouterSsrQueryIntegration({
     router,
-    queryClient: rqContext.queryClient,
+    queryClient: context.queryClient,
   });
 
   return router;

@@ -1,4 +1,5 @@
 import { db, schema } from "@repo/shared/db";
+import { ac, admin, member, owner } from "@repo/shared/permissions";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { apiKey, lastLoginMethod, organization } from "better-auth/plugins";
@@ -11,12 +12,6 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
-  session: {
-    cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60,
-    },
-  },
   secondaryStorage: {
     get: async (key) => {
       const value = await redis.get(key);
@@ -41,6 +36,10 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: true,
     },
+    database: {
+      generateId: false,
+    },
+    cookiePrefix: "relayit",
   },
   socialProviders: {
     github: {
@@ -50,7 +49,14 @@ export const auth = betterAuth({
   },
   plugins: [
     emailHarmony(),
-    organization(),
+    organization({
+      ac,
+      roles: {
+        owner,
+        admin,
+        member,
+      },
+    }),
     lastLoginMethod(),
     apiKey({
       disableSessionForAPIKeys: true,

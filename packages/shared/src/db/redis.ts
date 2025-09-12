@@ -1,5 +1,5 @@
-import { createGenericError, type Result } from "@repo/shared";
 import { redis } from "bun";
+import { createGenericError, type Result } from "@/utils";
 
 export const MESSAGE_QUEUE_STREAM = "messageQueue";
 

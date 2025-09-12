@@ -1,5 +1,5 @@
-import { cn } from "@repo/ui/lib/utils";
 import type * as React from "react";
+import { cn } from "@/lib/utils";
 
 function Textarea({
   className,

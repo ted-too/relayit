@@ -16,3 +16,4 @@ export {
   type GenericProviderConfig,
   type GenericProviderCredentials,
 } from "./base";
+export * from "./zod-helpers";

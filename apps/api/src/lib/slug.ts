@@ -47,3 +47,18 @@ export async function generateDbSlug<
 
   return `${baseSlug}-${nextNumber}`;
 }
+
+export async function isSlugTaken<T extends AnyPgTable & { slug: AnyPgColumn }>(
+  table: T,
+  slug: string
+): Promise<boolean> {
+  const existingCount = (
+    await db
+      .select({ count: count() })
+      // @ts-expect-error - This is a drizzle orm bug see - https://github.com/drizzle-team/drizzle-orm/issues/4069
+      .from(table)
+      .where(eq(table.slug, slug))
+  )[0].count;
+
+  return existingCount > 0;
+}

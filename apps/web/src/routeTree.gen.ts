@@ -14,8 +14,18 @@ import { Route as AuthdRouteImport } from './routes/_authd'
 import { Route as AuthdIndexRouteImport } from './routes/_authd/index'
 import { Route as AuthSignUpRouteImport } from './routes/auth/sign-up'
 import { Route as AuthSignInRouteImport } from './routes/auth/sign-in'
-import { Route as AuthFinishRouteImport } from './routes/auth/finish'
+import { Route as AuthdProjectSlugRouteImport } from './routes/_authd/$projectSlug'
+import { Route as AuthdProjectSlugIndexRouteImport } from './routes/_authd/$projectSlug/index'
 import { Route as AuthdSettingsProfileRouteImport } from './routes/_authd/settings.profile'
+import { Route as AuthdAuthFinishRouteImport } from './routes/_authd/auth.finish'
+import { Route as AuthdProjectSlugTemplatesRouteImport } from './routes/_authd/$projectSlug/templates'
+import { Route as AuthdProjectSlugSettingsRouteImport } from './routes/_authd/$projectSlug/settings'
+import { Route as AuthdProjectSlugContactsRouteImport } from './routes/_authd/$projectSlug/contacts'
+import { Route as AuthdProjectSlugSettingsIndexRouteImport } from './routes/_authd/$projectSlug/settings/index'
+import { Route as AuthdProjectSlugSettingsTeamRouteImport } from './routes/_authd/$projectSlug/settings/team'
+import { Route as AuthdProjectSlugSettingsIntegrationsRouteImport } from './routes/_authd/$projectSlug/settings/integrations'
+import { Route as AuthdProjectSlugSettingsBillingRouteImport } from './routes/_authd/$projectSlug/settings/billing'
+import { Route as AuthdProjectSlugSettingsApiKeysRouteImport } from './routes/_authd/$projectSlug/settings/api-keys'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -41,69 +51,183 @@ const AuthSignInRoute = AuthSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthFinishRoute = AuthFinishRouteImport.update({
-  id: '/finish',
-  path: '/finish',
-  getParentRoute: () => AuthRoute,
+const AuthdProjectSlugRoute = AuthdProjectSlugRouteImport.update({
+  id: '/$projectSlug',
+  path: '/$projectSlug',
+  getParentRoute: () => AuthdRoute,
+} as any)
+const AuthdProjectSlugIndexRoute = AuthdProjectSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthdProjectSlugRoute,
 } as any)
 const AuthdSettingsProfileRoute = AuthdSettingsProfileRouteImport.update({
   id: '/settings/profile',
   path: '/settings/profile',
   getParentRoute: () => AuthdRoute,
 } as any)
+const AuthdAuthFinishRoute = AuthdAuthFinishRouteImport.update({
+  id: '/auth/finish',
+  path: '/auth/finish',
+  getParentRoute: () => AuthdRoute,
+} as any)
+const AuthdProjectSlugTemplatesRoute =
+  AuthdProjectSlugTemplatesRouteImport.update({
+    id: '/templates',
+    path: '/templates',
+    getParentRoute: () => AuthdProjectSlugRoute,
+  } as any)
+const AuthdProjectSlugSettingsRoute =
+  AuthdProjectSlugSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthdProjectSlugRoute,
+  } as any)
+const AuthdProjectSlugContactsRoute =
+  AuthdProjectSlugContactsRouteImport.update({
+    id: '/contacts',
+    path: '/contacts',
+    getParentRoute: () => AuthdProjectSlugRoute,
+  } as any)
+const AuthdProjectSlugSettingsIndexRoute =
+  AuthdProjectSlugSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthdProjectSlugSettingsRoute,
+  } as any)
+const AuthdProjectSlugSettingsTeamRoute =
+  AuthdProjectSlugSettingsTeamRouteImport.update({
+    id: '/team',
+    path: '/team',
+    getParentRoute: () => AuthdProjectSlugSettingsRoute,
+  } as any)
+const AuthdProjectSlugSettingsIntegrationsRoute =
+  AuthdProjectSlugSettingsIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => AuthdProjectSlugSettingsRoute,
+  } as any)
+const AuthdProjectSlugSettingsBillingRoute =
+  AuthdProjectSlugSettingsBillingRouteImport.update({
+    id: '/billing',
+    path: '/billing',
+    getParentRoute: () => AuthdProjectSlugSettingsRoute,
+  } as any)
+const AuthdProjectSlugSettingsApiKeysRoute =
+  AuthdProjectSlugSettingsApiKeysRouteImport.update({
+    id: '/api-keys',
+    path: '/api-keys',
+    getParentRoute: () => AuthdProjectSlugSettingsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
-  '/auth/finish': typeof AuthFinishRoute
+  '/$projectSlug': typeof AuthdProjectSlugRouteWithChildren
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AuthdIndexRoute
+  '/$projectSlug/contacts': typeof AuthdProjectSlugContactsRoute
+  '/$projectSlug/settings': typeof AuthdProjectSlugSettingsRouteWithChildren
+  '/$projectSlug/templates': typeof AuthdProjectSlugTemplatesRoute
+  '/auth/finish': typeof AuthdAuthFinishRoute
   '/settings/profile': typeof AuthdSettingsProfileRoute
+  '/$projectSlug/': typeof AuthdProjectSlugIndexRoute
+  '/$projectSlug/settings/api-keys': typeof AuthdProjectSlugSettingsApiKeysRoute
+  '/$projectSlug/settings/billing': typeof AuthdProjectSlugSettingsBillingRoute
+  '/$projectSlug/settings/integrations': typeof AuthdProjectSlugSettingsIntegrationsRoute
+  '/$projectSlug/settings/team': typeof AuthdProjectSlugSettingsTeamRoute
+  '/$projectSlug/settings/': typeof AuthdProjectSlugSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
-  '/auth/finish': typeof AuthFinishRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AuthdIndexRoute
+  '/$projectSlug/contacts': typeof AuthdProjectSlugContactsRoute
+  '/$projectSlug/templates': typeof AuthdProjectSlugTemplatesRoute
+  '/auth/finish': typeof AuthdAuthFinishRoute
   '/settings/profile': typeof AuthdSettingsProfileRoute
+  '/$projectSlug': typeof AuthdProjectSlugIndexRoute
+  '/$projectSlug/settings/api-keys': typeof AuthdProjectSlugSettingsApiKeysRoute
+  '/$projectSlug/settings/billing': typeof AuthdProjectSlugSettingsBillingRoute
+  '/$projectSlug/settings/integrations': typeof AuthdProjectSlugSettingsIntegrationsRoute
+  '/$projectSlug/settings/team': typeof AuthdProjectSlugSettingsTeamRoute
+  '/$projectSlug/settings': typeof AuthdProjectSlugSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authd': typeof AuthdRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
-  '/auth/finish': typeof AuthFinishRoute
+  '/_authd/$projectSlug': typeof AuthdProjectSlugRouteWithChildren
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/_authd/': typeof AuthdIndexRoute
+  '/_authd/$projectSlug/contacts': typeof AuthdProjectSlugContactsRoute
+  '/_authd/$projectSlug/settings': typeof AuthdProjectSlugSettingsRouteWithChildren
+  '/_authd/$projectSlug/templates': typeof AuthdProjectSlugTemplatesRoute
+  '/_authd/auth/finish': typeof AuthdAuthFinishRoute
   '/_authd/settings/profile': typeof AuthdSettingsProfileRoute
+  '/_authd/$projectSlug/': typeof AuthdProjectSlugIndexRoute
+  '/_authd/$projectSlug/settings/api-keys': typeof AuthdProjectSlugSettingsApiKeysRoute
+  '/_authd/$projectSlug/settings/billing': typeof AuthdProjectSlugSettingsBillingRoute
+  '/_authd/$projectSlug/settings/integrations': typeof AuthdProjectSlugSettingsIntegrationsRoute
+  '/_authd/$projectSlug/settings/team': typeof AuthdProjectSlugSettingsTeamRoute
+  '/_authd/$projectSlug/settings/': typeof AuthdProjectSlugSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/auth'
-    | '/auth/finish'
+    | '/$projectSlug'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
+    | '/$projectSlug/contacts'
+    | '/$projectSlug/settings'
+    | '/$projectSlug/templates'
+    | '/auth/finish'
     | '/settings/profile'
+    | '/$projectSlug/'
+    | '/$projectSlug/settings/api-keys'
+    | '/$projectSlug/settings/billing'
+    | '/$projectSlug/settings/integrations'
+    | '/$projectSlug/settings/team'
+    | '/$projectSlug/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
-    | '/auth/finish'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
+    | '/$projectSlug/contacts'
+    | '/$projectSlug/templates'
+    | '/auth/finish'
     | '/settings/profile'
+    | '/$projectSlug'
+    | '/$projectSlug/settings/api-keys'
+    | '/$projectSlug/settings/billing'
+    | '/$projectSlug/settings/integrations'
+    | '/$projectSlug/settings/team'
+    | '/$projectSlug/settings'
   id:
     | '__root__'
     | '/_authd'
     | '/auth'
-    | '/auth/finish'
+    | '/_authd/$projectSlug'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/_authd/'
+    | '/_authd/$projectSlug/contacts'
+    | '/_authd/$projectSlug/settings'
+    | '/_authd/$projectSlug/templates'
+    | '/_authd/auth/finish'
     | '/_authd/settings/profile'
+    | '/_authd/$projectSlug/'
+    | '/_authd/$projectSlug/settings/api-keys'
+    | '/_authd/$projectSlug/settings/billing'
+    | '/_authd/$projectSlug/settings/integrations'
+    | '/_authd/$projectSlug/settings/team'
+    | '/_authd/$projectSlug/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -148,12 +272,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSignInRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/auth/finish': {
-      id: '/auth/finish'
-      path: '/finish'
-      fullPath: '/auth/finish'
-      preLoaderRoute: typeof AuthFinishRouteImport
-      parentRoute: typeof AuthRoute
+    '/_authd/$projectSlug': {
+      id: '/_authd/$projectSlug'
+      path: '/$projectSlug'
+      fullPath: '/$projectSlug'
+      preLoaderRoute: typeof AuthdProjectSlugRouteImport
+      parentRoute: typeof AuthdRoute
+    }
+    '/_authd/$projectSlug/': {
+      id: '/_authd/$projectSlug/'
+      path: '/'
+      fullPath: '/$projectSlug/'
+      preLoaderRoute: typeof AuthdProjectSlugIndexRouteImport
+      parentRoute: typeof AuthdProjectSlugRoute
     }
     '/_authd/settings/profile': {
       id: '/_authd/settings/profile'
@@ -162,29 +293,134 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthdSettingsProfileRouteImport
       parentRoute: typeof AuthdRoute
     }
+    '/_authd/auth/finish': {
+      id: '/_authd/auth/finish'
+      path: '/auth/finish'
+      fullPath: '/auth/finish'
+      preLoaderRoute: typeof AuthdAuthFinishRouteImport
+      parentRoute: typeof AuthdRoute
+    }
+    '/_authd/$projectSlug/templates': {
+      id: '/_authd/$projectSlug/templates'
+      path: '/templates'
+      fullPath: '/$projectSlug/templates'
+      preLoaderRoute: typeof AuthdProjectSlugTemplatesRouteImport
+      parentRoute: typeof AuthdProjectSlugRoute
+    }
+    '/_authd/$projectSlug/settings': {
+      id: '/_authd/$projectSlug/settings'
+      path: '/settings'
+      fullPath: '/$projectSlug/settings'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsRouteImport
+      parentRoute: typeof AuthdProjectSlugRoute
+    }
+    '/_authd/$projectSlug/contacts': {
+      id: '/_authd/$projectSlug/contacts'
+      path: '/contacts'
+      fullPath: '/$projectSlug/contacts'
+      preLoaderRoute: typeof AuthdProjectSlugContactsRouteImport
+      parentRoute: typeof AuthdProjectSlugRoute
+    }
+    '/_authd/$projectSlug/settings/': {
+      id: '/_authd/$projectSlug/settings/'
+      path: '/'
+      fullPath: '/$projectSlug/settings/'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsIndexRouteImport
+      parentRoute: typeof AuthdProjectSlugSettingsRoute
+    }
+    '/_authd/$projectSlug/settings/team': {
+      id: '/_authd/$projectSlug/settings/team'
+      path: '/team'
+      fullPath: '/$projectSlug/settings/team'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsTeamRouteImport
+      parentRoute: typeof AuthdProjectSlugSettingsRoute
+    }
+    '/_authd/$projectSlug/settings/integrations': {
+      id: '/_authd/$projectSlug/settings/integrations'
+      path: '/integrations'
+      fullPath: '/$projectSlug/settings/integrations'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsIntegrationsRouteImport
+      parentRoute: typeof AuthdProjectSlugSettingsRoute
+    }
+    '/_authd/$projectSlug/settings/billing': {
+      id: '/_authd/$projectSlug/settings/billing'
+      path: '/billing'
+      fullPath: '/$projectSlug/settings/billing'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsBillingRouteImport
+      parentRoute: typeof AuthdProjectSlugSettingsRoute
+    }
+    '/_authd/$projectSlug/settings/api-keys': {
+      id: '/_authd/$projectSlug/settings/api-keys'
+      path: '/api-keys'
+      fullPath: '/$projectSlug/settings/api-keys'
+      preLoaderRoute: typeof AuthdProjectSlugSettingsApiKeysRouteImport
+      parentRoute: typeof AuthdProjectSlugSettingsRoute
+    }
   }
 }
 
+interface AuthdProjectSlugSettingsRouteChildren {
+  AuthdProjectSlugSettingsApiKeysRoute: typeof AuthdProjectSlugSettingsApiKeysRoute
+  AuthdProjectSlugSettingsBillingRoute: typeof AuthdProjectSlugSettingsBillingRoute
+  AuthdProjectSlugSettingsIntegrationsRoute: typeof AuthdProjectSlugSettingsIntegrationsRoute
+  AuthdProjectSlugSettingsTeamRoute: typeof AuthdProjectSlugSettingsTeamRoute
+  AuthdProjectSlugSettingsIndexRoute: typeof AuthdProjectSlugSettingsIndexRoute
+}
+
+const AuthdProjectSlugSettingsRouteChildren: AuthdProjectSlugSettingsRouteChildren =
+  {
+    AuthdProjectSlugSettingsApiKeysRoute: AuthdProjectSlugSettingsApiKeysRoute,
+    AuthdProjectSlugSettingsBillingRoute: AuthdProjectSlugSettingsBillingRoute,
+    AuthdProjectSlugSettingsIntegrationsRoute:
+      AuthdProjectSlugSettingsIntegrationsRoute,
+    AuthdProjectSlugSettingsTeamRoute: AuthdProjectSlugSettingsTeamRoute,
+    AuthdProjectSlugSettingsIndexRoute: AuthdProjectSlugSettingsIndexRoute,
+  }
+
+const AuthdProjectSlugSettingsRouteWithChildren =
+  AuthdProjectSlugSettingsRoute._addFileChildren(
+    AuthdProjectSlugSettingsRouteChildren,
+  )
+
+interface AuthdProjectSlugRouteChildren {
+  AuthdProjectSlugContactsRoute: typeof AuthdProjectSlugContactsRoute
+  AuthdProjectSlugSettingsRoute: typeof AuthdProjectSlugSettingsRouteWithChildren
+  AuthdProjectSlugTemplatesRoute: typeof AuthdProjectSlugTemplatesRoute
+  AuthdProjectSlugIndexRoute: typeof AuthdProjectSlugIndexRoute
+}
+
+const AuthdProjectSlugRouteChildren: AuthdProjectSlugRouteChildren = {
+  AuthdProjectSlugContactsRoute: AuthdProjectSlugContactsRoute,
+  AuthdProjectSlugSettingsRoute: AuthdProjectSlugSettingsRouteWithChildren,
+  AuthdProjectSlugTemplatesRoute: AuthdProjectSlugTemplatesRoute,
+  AuthdProjectSlugIndexRoute: AuthdProjectSlugIndexRoute,
+}
+
+const AuthdProjectSlugRouteWithChildren =
+  AuthdProjectSlugRoute._addFileChildren(AuthdProjectSlugRouteChildren)
+
 interface AuthdRouteChildren {
+  AuthdProjectSlugRoute: typeof AuthdProjectSlugRouteWithChildren
   AuthdIndexRoute: typeof AuthdIndexRoute
+  AuthdAuthFinishRoute: typeof AuthdAuthFinishRoute
   AuthdSettingsProfileRoute: typeof AuthdSettingsProfileRoute
 }
 
 const AuthdRouteChildren: AuthdRouteChildren = {
+  AuthdProjectSlugRoute: AuthdProjectSlugRouteWithChildren,
   AuthdIndexRoute: AuthdIndexRoute,
+  AuthdAuthFinishRoute: AuthdAuthFinishRoute,
   AuthdSettingsProfileRoute: AuthdSettingsProfileRoute,
 }
 
 const AuthdRouteWithChildren = AuthdRoute._addFileChildren(AuthdRouteChildren)
 
 interface AuthRouteChildren {
-  AuthFinishRoute: typeof AuthFinishRoute
   AuthSignInRoute: typeof AuthSignInRoute
   AuthSignUpRoute: typeof AuthSignUpRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthFinishRoute: AuthFinishRoute,
   AuthSignInRoute: AuthSignInRoute,
   AuthSignUpRoute: AuthSignUpRoute,
 }
