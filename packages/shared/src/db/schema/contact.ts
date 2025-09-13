@@ -27,7 +27,7 @@ export const contact = pgTable(
 
     // For automatic contact linking: {"user_id": "12345", "customer_id": "cust_789"}
     externalIdentifiers: jsonb("external_identifiers")
-      .$type<Record<string, string>>()
+      .$type<Record<string, string[]>>()
       .default({}),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),

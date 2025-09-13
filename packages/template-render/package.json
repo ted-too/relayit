@@ -1,0 +1,24 @@
+{
+  "name": "@repo/template-render",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./react-email": "./src/react-email/server.ts"
+  },
+  "dependencies": {
+    "@react-email/components": "^0.5.3",
+    "@react-email/render": "^1.2.3",
+    "@repo/shared": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/babel__standalone": "^7.1.9",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

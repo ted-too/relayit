@@ -12,6 +12,7 @@ const config = defineConfig({
     tailwindcss(),
     tanstackStart({
       customViteReactPlugin: true,
+      target: "bun",
     }),
     viteReact(),
   ],

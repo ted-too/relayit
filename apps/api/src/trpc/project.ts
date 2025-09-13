@@ -59,7 +59,10 @@ export const projectRouter = router({
       });
 
       if (!hasPermission) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to update organizations" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have permission to update organizations",
+        });
       }
 
       if (input.slug && input.slug !== ctx.session.activeOrganization.slug) {

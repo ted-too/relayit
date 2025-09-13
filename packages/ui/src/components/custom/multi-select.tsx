@@ -13,7 +13,7 @@ import {
 import { Label } from "@/components/base/label";
 import { cn } from "@/lib/utils";
 
-interface Item<T> {
+export interface Item<T> {
   value: T;
   label: React.ReactNode;
 }

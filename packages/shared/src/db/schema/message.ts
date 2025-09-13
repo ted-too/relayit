@@ -9,7 +9,6 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import { app } from "./app";
 import { apikey } from "./auth";
 import { contact } from "./contact";
 import { bytea } from "./custom-types";
@@ -25,9 +24,7 @@ export const message = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => typeid("mesg").toString()),
-    appId: text("app_id")
-      .notNull()
-      .references(() => app.id, { onDelete: "cascade" }),
+    appSlug: text("app_slug"),
     apiKeyId: text("api_key_id").references(() => apikey.id, {
       onDelete: "set null",
     }),
@@ -54,6 +51,7 @@ export const message = pgTable(
     index("message_channel_idx").on(t.channel),
     index("message_from_identity_idx").on(t.fromIdentityId),
     index("message_source_idx").on(t.source),
+    index("message_app_slug_idx").on(t.appSlug),
     index("message_created_at_idx").on(t.createdAt),
   ]
 );
@@ -109,8 +107,7 @@ export const messageTemplate = pgTable(
       .references(() => message.id, { onDelete: "cascade" }),
     templateVersionId: text("template_version_id").notNull(),
     templateProps: jsonb("template_props")
-      .$type<Record<string, any>>()
-      .notNull(),
+      .$type<Record<string, any>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
@@ -122,10 +119,6 @@ export const messageTemplate = pgTable(
 export type MessageTemplate = InferSelectModel<typeof messageTemplate>;
 
 export const messageRelations = relations(message, ({ one, many }) => ({
-  project: one(app, {
-    fields: [message.appId],
-    references: [app.id],
-  }),
   apiKey: one(apikey, {
     fields: [message.apiKeyId],
     references: [apikey.id],

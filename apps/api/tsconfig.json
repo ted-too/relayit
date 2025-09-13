@@ -17,7 +17,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@repo/shared/*": ["../../packages/shared/src/*"]
+      "@repo/shared/*": ["../../packages/shared/src/*"],
+      "@repo/template-render/*": ["../../packages/template-render/src/*"]
     }
   }
 }

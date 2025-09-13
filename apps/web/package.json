@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bunx --bun vite dev --port 3000",
-    "start": "node .output/server/index.mjs",
-    "build": "bunx --bun vite build",
-    "serve": "bunx --bun vite preview",
+    "dev": "bun --bun vite dev --port 3000",
+    "start": "bun run .output/server/index.mjs",
+    "build": "bun --bun vite build",
+    "serve": "bun --bun vite preview",
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check"
@@ -16,6 +16,7 @@
     "@remixicon/react": "^4.6.0",
     "@repo/shared": "workspace:*",
     "@repo/ui": "workspace:*",
+    "@repo/template-render": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/react-devtools": "^0.6.6",
     "@tanstack/react-form": "^1.19.5",
@@ -31,17 +32,19 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
-    "superjson": "^1.13.3",
+    "superjson": "^2.2.2",
     "tailwindcss": "^4",
     "vite-tsconfig-paths": "^5.1.4",
     "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/react": "^19",
-    "@repo/api": "workspace:*",
     "@types/react-dom": "^19",
+    "@repo/api": "workspace:*",
     "@vitejs/plugin-react": "^5.0.2",
-    "typescript": "^5",
     "vite": "^7.1.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

@@ -1,4 +1,3 @@
-export type * from "./schema/app";
 export type * from "./schema/auth";
 export type * from "./schema/contact";
 // export type * from "./schema/event";

@@ -7,7 +7,6 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import { app } from "./app";
 import { contact } from "./contact";
 import { message } from "./message";
 
@@ -216,7 +215,6 @@ export type Organization = typeof organization.$inferSelect;
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
-  projects: many(app),
   contacts: many(contact),
   apikeys: many(apikeyOrganization),
 }));

@@ -6,9 +6,16 @@ import { Loader } from "@/components/animate-ui/icons/loader";
 import { ActionButton, type ButtonProps } from "@/components/base/button";
 import { Input } from "@/components/base/input";
 import { Label } from "@/components/base/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/base/select";
 import { Textarea } from "@/components/custom/textarea.js";
 import { cn } from "@/lib/utils";
-import { MultiSelect, type MultiSelectProps } from "./multi-select";
+import { type Item, MultiSelect, type MultiSelectProps } from "./multi-select";
 
 /**
  * Formats form validation errors into a readable string for toast messages
@@ -275,6 +282,51 @@ export function MultiSelectField(
   );
 }
 
+export function SelectField(
+  props: BaseFieldProps &
+    Pick<React.ComponentProps<typeof Select>, "multiple"> & {
+      items: Item<string>[];
+    }
+) {
+  const { className = {}, description, items, label, ...rest } = props;
+
+  const field = useFieldContext<string[] | string | null>();
+
+  return (
+    <div className={cn("flex flex-col gap-2", className.root)}>
+      <Label className={className.label} htmlFor={field.name}>
+        {label}
+      </Label>
+      <Select
+        items={items}
+        id={field.name}
+        value={field.state.value}
+        onValueChange={(v) => field.handleChange(v as string | string[] | null)}
+        {...rest}
+      >
+        <SelectTrigger className={cn("w-full", className.input)}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items?.map(({ label, value }) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <FormDescription
+        className={className.description}
+        description={description}
+      />
+      <FormErrorMessage
+        className={className.message}
+        errors={field.state.meta.errors}
+      />
+    </div>
+  );
+}
+
 export function SwitchField(
   props: BaseFieldProps & { orientation?: "horizontal" | "vertical" }
 ) {
@@ -325,6 +377,7 @@ export function SwitchField(
 export const { useAppForm, withForm } = createFormHook({
   fieldComponents: {
     TextField,
+    SelectField,
     SlugField,
     MultiSelectField,
     SwitchField,

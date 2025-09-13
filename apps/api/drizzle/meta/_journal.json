@@ -8,6 +8,34 @@
       "when": 1757662673789,
       "tag": "0000_friendly_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1757685157141,
+      "tag": "0001_sparkling_professor_monster",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757703736911,
+      "tag": "0002_lively_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1757791757062,
+      "tag": "0003_opposite_crystal",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757801106301,
+      "tag": "0004_solid_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

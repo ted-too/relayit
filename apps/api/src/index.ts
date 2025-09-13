@@ -2,17 +2,57 @@ import { trpcServer } from "@hono/trpc-server";
 import { db } from "@repo/shared/db";
 import { checkAndRunKeyRotation } from "@repo/shared/db/crypto";
 import { logger } from "@repo/shared/utils";
+import { Scalar } from "@scalar/hono-api-reference";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
+import { openAPIRouteHandler } from "hono-openapi";
 import { auth } from "@/lib/auth";
+import { sendRouter } from "@/send";
 import type { Context } from "@/trpc";
 import { appRouter } from "@/trpc/router";
 
 const app = new Hono<{ Variables: Context }>();
 
 app.use(honoLogger((msg, ...args) => logger.info(args, msg)));
+
+// FIXME: Put these behind CORS from the project db
+app.route("/send/:project", sendRouter);
+
+if (process.env.ENABLE_DOCS === "true") {
+  app.get(
+    "/openapi",
+    openAPIRouteHandler(sendRouter, {
+      documentation: {
+        info: {
+          title: "RelayIt API",
+          version: "1.0.0",
+          description: "RelayIt API",
+        },
+        servers: [
+          { url: process.env.BETTER_AUTH_URL, description: "Local Server" },
+        ],
+        components: {
+          securitySchemes: {
+            apiKey: {
+              type: "apiKey",
+              in: "header",
+              name: "X-API-Key",
+            },
+          },
+        },
+        security: [
+          {
+            apiKey: [],
+          },
+        ],
+      },
+    })
+  );
+
+  app.get("/reference", Scalar({ url: "/openapi" }));
+}
 
 app.use(
   "*",
@@ -69,7 +109,6 @@ async function startServer() {
 
   logger.info("Server initialization complete");
 
-  // biome-ignore lint/correctness/noUndeclaredVariables: this is a bun server
   Bun.serve({
     port: 3005,
     fetch: app.fetch,

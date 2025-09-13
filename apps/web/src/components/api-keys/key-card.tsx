@@ -28,9 +28,7 @@ export function ApiKeyCard({ apiKey }: { apiKey: ClientParsedApiKey }) {
   );
 
   return (
-    <Card
-      className="flex flex-row items-center gap-3 px-4 py-3"
-    >
+    <Card className="flex flex-row items-center gap-3 px-4 py-3">
       <KeyIcon className="size-4" />
       <div className="flex flex-col">
         <span className="font-semibold text-sm">{apiKey.name}</span>
