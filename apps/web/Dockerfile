@@ -15,6 +15,9 @@ RUN bun install --frozen-lockfile
 FROM base AS builder
 ARG TURBO_TOKEN
 ARG TURBO_TEAM
+ENV VITE_API_URL=BAKED_VITE_API_URL \
+    VITE_DOCS_URL=BAKED_VITE_DOCS_URL \
+    VITE_BASE_URL=BAKED_VITE_BASE_URL
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -27,10 +30,6 @@ WORKDIR /app
 
 RUN addgroup --system --gid 1003 vite && \
     adduser --system --uid 1003 --ingroup vite vite
-
-ENV VITE_API_URL=BAKED_VITE_API_URL \
-    VITE_DOCS_URL=BAKED_VITE_DOCS_URL \
-    VITE_BASE_URL=BAKED_VITE_BASE_URL
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
