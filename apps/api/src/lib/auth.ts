@@ -12,6 +12,12 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
   secondaryStorage: {
     get: async (key) => {
       const value = await redis.get(key);
@@ -35,7 +41,7 @@ export const auth = betterAuth({
   advanced: {
     crossSubDomainCookies: {
       enabled: true,
-      domain: new URL(process.env.APP_URL).hostname,
+      domain: `.${new URL(process.env.APP_URL).hostname.split(".").slice(-2).join(".")}`,
     },
     database: {
       generateId: false,
@@ -66,5 +72,9 @@ export const auth = betterAuth({
       enableMetadata: true,
     }),
   ],
-  trustedOrigins: [process.env.APP_URL],
+  trustedOrigins: [
+    "https://app.relayit.io",
+    "https://api.relayit.io", 
+    "https://docs.relayit.io"
+  ],
 });
