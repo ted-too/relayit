@@ -35,7 +35,7 @@
     "superjson": "^2.2.2",
     "tailwindcss": "^4",
     "vite-tsconfig-paths": "^5.1.4",
-    "zod": "^4.1.5"
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@types/react": "^19",

@@ -21,45 +21,19 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
 
       - name: Install dependencies
         run: |
-          npm install -g semantic-release@22 
-          npm install -g @semantic-release/changelog@6
-          npm install -g @semantic-release/git@10
-          npm install -g @semantic-release/github@9
+          bun add -g semantic-release@22 
+          bun add -g @semantic-release/changelog@6
+          bun add -g @semantic-release/git@10
+          bun add -g @semantic-release/github@9
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cat > .releaserc.json << 'EOF'
-          {
-            "branches": ["main"],
-            "repositoryUrl": "https://github.com/${{ github.repository }}",
-            "plugins": [
-              "@semantic-release/commit-analyzer",
-              "@semantic-release/release-notes-generator",
-              [
-                "@semantic-release/changelog",
-                {
-                  "changelogFile": "CHANGELOG.md"
-                }
-              ],
-              "@semantic-release/github",
-              [
-                "@semantic-release/git",
-                {
-                  "assets": ["CHANGELOG.md"],
-                  "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
-                }
-              ]
-            ]
-          }
-          EOF
-          
-          npx semantic-release 
+        run: bunx semantic-release 

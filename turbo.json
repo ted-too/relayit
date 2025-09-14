@@ -5,7 +5,45 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "env": [
+        "NODE_ENV",
+        "VITE_API_URL",
+        "VITE_DOCS_URL", 
+        "VITE_BASE_URL",
+        "VITE_EDITION",
+        "BETTER_AUTH_URL",
+        "APP_URL"
+      ]
+    },
+    "@repo/api#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": [
+        "NODE_ENV",
+        "BETTER_AUTH_URL",
+        "APP_URL"
+      ],
+      "outputs": ["build/**"]
+    },
+    "@repo/web#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": [
+        "NODE_ENV",
+        "VITE_API_URL",
+        "VITE_DOCS_URL",
+        "VITE_BASE_URL", 
+        "VITE_EDITION"
+      ],
+      "outputs": [".output/**"]
+    },
+    "@repo/worker#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": [
+        "NODE_ENV"
+      ],
+      "outputs": ["build/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
