@@ -114,6 +114,7 @@ export const sendTemplateRouter = new Hono<{ Variables: ApiKeyContext }>().post(
           .insert(schema.message)
           .values({
             appSlug: body.app,
+            appEnvironment: body.appEnvironment,
             apiKeyId,
             contactId: contact.id,
             channel: "email",

@@ -15,6 +15,13 @@
       "when": 1757832891679,
       "tag": "0001_flaky_redwing",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757890901595,
+      "tag": "0002_faulty_gressill",
+      "breakpoints": true
     }
   ]
 }

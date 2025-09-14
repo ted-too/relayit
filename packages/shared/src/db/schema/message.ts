@@ -29,6 +29,7 @@ export const message = pgTable(
       .primaryKey()
       .$defaultFn(() => typeid("mesg").toString()),
     appSlug: text("app_slug"),
+    appEnvironment: text("app_environment"),
     apiKeyId: text("api_key_id").references(() => apikey.id, {
       onDelete: "set null",
     }),
@@ -49,6 +50,7 @@ export const message = pgTable(
     index("message_channel_idx").on(t.channel),
     index("message_source_idx").on(t.source),
     index("message_app_slug_idx").on(t.appSlug),
+    index("message_app_environment_idx").on(t.appEnvironment),
     index("message_created_at_idx").on(t.createdAt),
   ]
 );
