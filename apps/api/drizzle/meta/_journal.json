@@ -36,6 +36,20 @@
       "when": 1757801106301,
       "tag": "0004_solid_mac_gargan",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1757808272505,
+      "tag": "0005_harsh_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1757811535656,
+      "tag": "0006_fixed_meggan",
+      "breakpoints": true
     }
   ]
 }

@@ -81,7 +81,6 @@ export const AWS_PROVIDER_CONFIG = {
   credentialsSchema: awsCredentialsSchema,
   channels: {
     email: {
-      id: "ses",
       label: "SES",
     },
   },

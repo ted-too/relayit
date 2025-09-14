@@ -1,12 +1,11 @@
 import { db, queueMessage, schema } from "@repo/shared/db";
 import { buildSendTemplateSchema } from "@repo/shared/providers";
 import { logger } from "@repo/shared/utils";
-import { renderEmailServer } from "@repo/template-render/react-email/server";
+import { renderEmailServer } from "@repo/template-render/react-email";
 import Ajv from "ajv";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator as zValidator } from "hono-openapi";
-import SuperJSON from "superjson";
 import type { ApiKeyContext } from "@/send/middleware";
 import { errorResponseSchema, successResponseSchema } from "@/send/schemas";
 import {
@@ -118,8 +117,7 @@ export const sendTemplateRouter = new Hono<{ Variables: ApiKeyContext }>().post(
             apiKeyId,
             contactId: contact.id,
             channel: "email",
-            fromIdentityId: providerIdentity.id,
-            payload: SuperJSON.stringify(renderResult.data),
+            payload: renderResult.data,
             source: "template",
           })
           .returning();
@@ -131,14 +129,25 @@ export const sendTemplateRouter = new Hono<{ Variables: ApiKeyContext }>().post(
           templateProps: body.template.props,
         });
 
-        return message;
+        // Create initial message event for worker processing
+        const [messageEvent] = await tx
+          .insert(schema.messageEvent)
+          .values({
+            messageId: message.id,
+            status: "queued",
+            attemptNumber: 1,
+            identityId: providerIdentity.id,
+          })
+          .returning();
+
+        return { message, messageEvent };
       });
 
-      await queueMessage(newMessage.id);
+      await queueMessage(newMessage.messageEvent.id);
 
       return c.json(
         {
-          id: newMessage.id,
+          id: newMessage.message.id,
           status: "queued",
         },
         201

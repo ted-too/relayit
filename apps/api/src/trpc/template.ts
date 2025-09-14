@@ -5,7 +5,7 @@ import {
   createTemplateSchema,
   updateTemplateSchema,
 } from "@repo/shared/forms";
-import { renderEmailServer } from "@repo/template-render/react-email/server";
+import { renderEmailServer } from "@repo/template-render/react-email";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import SuperJSON from "superjson";

@@ -174,29 +174,17 @@ export const integrationsRouter = router({
         });
       }
 
-      // Create mapping from channel IDs back to channel types
-      const channelIdToTypeMap = new Map<string, string>();
-      const AVAILABLE_CHANNEL_IDS: string[] = [];
-
-      for (const [channelType, channelConfig] of Object.entries(
-        config.channels
-      )) {
-        const channelId = channelConfig.id;
-        channelIdToTypeMap.set(channelId, channelType);
-        AVAILABLE_CHANNEL_IDS.push(channelId);
-      }
-
-      if (!input.channelIds.every((id) => AVAILABLE_CHANNEL_IDS.includes(id))) {
+      // Validate channel types are supported by this provider
+      const supportedChannels = Object.keys(config.channels) as ChannelType[];
+      
+      if (!input.channels.every((channelType) => supportedChannels.includes(channelType as ChannelType))) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Invalid channel IDs, available: ${AVAILABLE_CHANNEL_IDS.join(", ")}`,
+          message: `Invalid channel types, available: ${supportedChannels.join(", ")}`,
         });
       }
 
-      // Convert channel IDs to channel types for database operations
-      const channelTypes = input.channelIds
-        .map((id) => channelIdToTypeMap.get(id))
-        .filter((id) => id !== undefined) as ChannelType[];
+      const channelTypes = input.channels as ChannelType[];
 
       const rawCredentials = parseResult.data;
 
@@ -225,8 +213,7 @@ export const integrationsRouter = router({
         );
 
         // Process all channels in parallel for better performance
-        const integrationPromises = input.channelIds.map(async (_, index) => {
-          const channelType = channelTypes[index];
+        const integrationPromises = channelTypes.map(async (channelType) => {
           const isFirstIntegrationForChannel =
             !existingIntegrationsMap[channelType];
 

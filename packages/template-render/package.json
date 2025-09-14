@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./react-email": "./src/react-email/server.ts"
+    "./react-email": "./src/react-email/index.ts"
   },
   "dependencies": {
     "@react-email/components": "^0.5.3",

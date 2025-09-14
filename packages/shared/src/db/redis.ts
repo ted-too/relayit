@@ -1,22 +1,31 @@
+import { createGenericError, type Result } from "@repo/shared/utils";
 import { redis } from "bun";
-import { createGenericError, type Result } from "@/utils";
 
 export const MESSAGE_QUEUE_STREAM = "messageQueue";
 
+// Type-safe Redis stream message structure
+export interface QueuedEvent {
+  eventId: string;
+}
+
+export interface RedisStreamMessage {
+  id: string;
+  fields: QueuedEvent;
+}
+
 /**
- * Adds a message ID to the Redis message queue stream.
+ * Adds a message event ID to the Redis message queue stream.
  *
- * @param messageId The unique ID of the message to queue.
+ * @param eventId The unique ID of the message event to queue.
  * @returns A Result object containing the stream entry ID assigned by Redis or an error.
- * @throws {HTTPException} If queuing fails.
  */
-export async function queueMessage(messageId: string): Promise<Result<string>> {
+export async function queueMessage(eventId: string): Promise<Result<string>> {
   try {
     const streamEntryId = await redis.send("XADD", [
       MESSAGE_QUEUE_STREAM, // The stream key
       "*", // Generate ID automatically
-      "messageId", // Field name
-      messageId, // Field value
+      "eventId", // Field name
+      eventId, // Field value
     ]);
 
     if (typeof streamEntryId !== "string") {
@@ -30,7 +39,7 @@ export async function queueMessage(messageId: string): Promise<Result<string>> {
 
     return { error: null, data: streamEntryId };
   } catch (error) {
-    const errorMessage = `Failed to add message ${messageId} to Redis queue ${MESSAGE_QUEUE_STREAM}`;
+    const errorMessage = `Failed to add event ${eventId} to Redis queue ${MESSAGE_QUEUE_STREAM}`;
 
     return {
       error: createGenericError(errorMessage, error as Error),
@@ -40,14 +49,78 @@ export async function queueMessage(messageId: string): Promise<Result<string>> {
 }
 
 /**
- * Acknowledges a message in a Redis stream consumer group.
+ * Reads events from the Redis stream using XREADGROUP.
+ * Returns type-safe event data for worker processing.
+ */
+export async function readEvents(
+  groupName: string,
+  consumerName: string,
+  count: number,
+  blockTimeoutMs: number
+): Promise<Result<RedisStreamMessage[]>> {
+  try {
+    const response = (await redis.send("XREADGROUP", [
+      "GROUP",
+      groupName,
+      consumerName,
+      "COUNT",
+      count.toString(),
+      "BLOCK",
+      blockTimeoutMs.toString(),
+      "STREAMS",
+      MESSAGE_QUEUE_STREAM,
+      ">",
+    ])) as Record<string, [string, string[]][]> | null;
+
+    if (!response || Object.keys(response).length === 0) {
+      return { error: null, data: [] };
+    }
+
+    const messages: RedisStreamMessage[] = [];
+
+    for (const [_, streamMessages] of Object.entries(response)) {
+      for (const [messageId, fields] of streamMessages) {
+        // Parse Redis stream fields into typed structure
+        const eventData: Partial<QueuedEvent> = {};
+
+        for (let i = 0; i < fields.length; i += 2) {
+          const key = fields[i];
+          const value = fields[i + 1];
+
+          if (key === "eventId" && value) {
+            eventData.eventId = value;
+          }
+        }
+
+        if (eventData.eventId) {
+          messages.push({
+            id: messageId,
+            fields: eventData as QueuedEvent,
+          });
+        }
+      }
+    }
+
+    return { error: null, data: messages };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        `Failed to read events from Redis stream ${MESSAGE_QUEUE_STREAM}`,
+        error
+      ),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Acknowledges an event in a Redis stream consumer group.
  *
  * @param streamId The ID of the stream entry to acknowledge.
  * @param groupName The name of the consumer group.
- * @returns A Result object containing the number of messages acknowledged or an error.
- * @throws {Error} If acknowledgment fails.
+ * @returns A Result object containing the number of events acknowledged or an error.
  */
-export async function acknowledgeMessage(
+export async function acknowledgeEvent(
   streamId: string,
   groupName: string
 ): Promise<Result<number>> {
@@ -69,7 +142,7 @@ export async function acknowledgeMessage(
 
     return { error: null, data: result };
   } catch (error) {
-    const errorMessage = `Failed to acknowledge message streamId ${streamId} in group ${groupName}`;
+    const errorMessage = `Failed to acknowledge event streamId ${streamId} in group ${groupName}`;
 
     return {
       error: createGenericError(errorMessage, error as Error),
@@ -79,28 +152,28 @@ export async function acknowledgeMessage(
 }
 
 /**
- * Claims pending messages that have been idle for too long (likely from crashed consumers).
- * Uses XCLAIM to transfer ownership of abandoned messages to the current consumer.
+ * Claims pending events that have been idle for too long (likely from crashed consumers).
+ * Uses XCLAIM to transfer ownership of abandoned events to the current consumer.
  *
  * @param groupName The name of the consumer group.
- * @param consumerName The name of the current consumer claiming the messages.
- * @param minIdleTimeMs Minimum idle time in milliseconds before a message can be claimed.
- * @param count Maximum number of messages to claim.
- * @returns A Result object containing claimed messages or an error.
+ * @param consumerName The name of the current consumer claiming the events.
+ * @param minIdleTimeMs Minimum idle time in milliseconds before an event can be claimed.
+ * @param count Maximum number of events to claim.
+ * @returns A Result object containing claimed events or an error.
  */
-export async function claimPendingMessages(
+export async function claimPendingEvents(
   groupName: string,
   consumerName: string,
   minIdleTimeMs: number,
   count = 10
 ): Promise<Result<[string, string[]][]>> {
   try {
-    // First, get pending messages to find which ones to claim
-    const pendingResult = await getPendingMessages(groupName, count);
+    // First, get pending events to find which ones to claim
+    const pendingResult = await getPendingEvents(groupName, count);
     if (pendingResult.error) {
       return {
         error: createGenericError(
-          `Failed to get pending messages before claiming: ${pendingResult.error.message}`,
+          `Failed to get pending events before claiming: ${pendingResult.error.message}`,
           pendingResult.error
         ),
         data: null,
@@ -109,37 +182,35 @@ export async function claimPendingMessages(
 
     const { details } = pendingResult.data;
 
-    // Filter messages that are idle long enough and get their IDs
-    const messageIdsToClaim: string[] = [];
-    const _now = Date.now();
+    // Filter events that are idle long enough and get their IDs
+    const eventIdsToClaim: string[] = [];
 
-    for (const messageInfo of details) {
-      if (Array.isArray(messageInfo) && messageInfo.length >= 4) {
-        const [messageId, , idleTime] = messageInfo;
-        // idleTime is in milliseconds
+    for (const eventInfo of details) {
+      if (Array.isArray(eventInfo) && eventInfo.length >= 4) {
+        const [eventId, , idleTime] = eventInfo;
         if (typeof idleTime === "number" && idleTime >= minIdleTimeMs) {
-          messageIdsToClaim.push(messageId);
+          eventIdsToClaim.push(eventId);
         }
       }
     }
 
-    // If no messages to claim, return empty array
-    if (messageIdsToClaim.length === 0) {
+    // If no events to claim, return empty array
+    if (eventIdsToClaim.length === 0) {
       return { error: null, data: [] };
     }
 
-    // Claim the messages using XCLAIM
+    // Claim the events using XCLAIM
     const claimArgs = [
       MESSAGE_QUEUE_STREAM,
       groupName,
       consumerName,
       minIdleTimeMs.toString(),
-      ...messageIdsToClaim,
+      ...eventIdsToClaim,
     ];
 
     const result = await redis.send("XCLAIM", claimArgs);
 
-    // XCLAIM returns an array of [messageId, [field1, value1, field2, value2, ...]]
+    // XCLAIM returns an array of [eventId, [field1, value1, field2, value2, ...]]
     if (!Array.isArray(result)) {
       return {
         error: createGenericError("XCLAIM returned unexpected format"),
@@ -149,7 +220,7 @@ export async function claimPendingMessages(
 
     return { error: null, data: result as [string, string[]][] };
   } catch (error) {
-    const errorMessage = `Failed to claim pending messages for group ${groupName}, consumer ${consumerName}`;
+    const errorMessage = `Failed to claim pending events for group ${groupName}, consumer ${consumerName}`;
     return {
       error: createGenericError(errorMessage, error as Error),
       data: null,
@@ -158,14 +229,14 @@ export async function claimPendingMessages(
 }
 
 /**
- * Gets information about pending messages in a consumer group.
- * Uses XPENDING to check for messages that need to be processed or claimed.
+ * Gets information about pending events in a consumer group.
+ * Uses XPENDING to check for events that need to be processed or claimed.
  *
  * @param groupName The name of the consumer group.
- * @param count Maximum number of pending message details to return.
- * @returns A Result object containing pending message info or an error.
+ * @param count Maximum number of pending event details to return.
+ * @returns A Result object containing pending event info or an error.
  */
-export async function getPendingMessages(
+export async function getPendingEvents(
   groupName: string,
   count = 10
 ): Promise<Result<any>> {
@@ -207,7 +278,7 @@ export async function getPendingMessages(
       },
     };
   } catch (error) {
-    const errorMessage = `Failed to get pending messages for group ${groupName}`;
+    const errorMessage = `Failed to get pending events for group ${groupName}`;
     return {
       error: createGenericError(errorMessage, error as Error),
       data: null,

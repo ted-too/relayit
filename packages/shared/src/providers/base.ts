@@ -29,7 +29,6 @@ export type GenericProviderConfig = {
     Record<
       ChannelType,
       {
-        id: string;
         label: string;
       }
     >

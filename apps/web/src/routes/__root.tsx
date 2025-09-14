@@ -16,7 +16,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
-import { getCookie } from "@tanstack/react-start/server";
+import { getCookie, getWebRequest } from "@tanstack/react-start/server";
 import z from "zod";
 import { AUTH_COOKIES } from "@/integrations/better-auth/client";
 import type { RouterContext } from "@/integrations/context";
@@ -38,8 +38,7 @@ const MOBILE_REGEX =
 const SCREEN_SIZE_REGEX = /Mobile.*Safari|Android.*Mobile/i;
 
 export const getSSRMobileDetection = createServerFn({ method: "GET" }).handler(
-  async () => {
-    const { getWebRequest } = await import("@tanstack/react-start/server");
+  () => {
     const request = getWebRequest();
     const userAgent = request.headers.get("user-agent") || "";
 

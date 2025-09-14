@@ -4,22 +4,34 @@ import * as path from "node:path";
 import * as vm from "node:vm";
 import { render } from "@react-email/render";
 import type { EmailContent } from "@repo/shared/forms";
-import { createGenericError } from "@repo/shared/utils";
+import type { SendRawPayload } from "@repo/shared/providers";
+import { createGenericError, type Result } from "@repo/shared/utils";
 import * as React from "react";
 import { renderingUtilitiesExporter } from "./esbuild/renderring-utilities-exporter";
-import {
-  processTemplate,
-  RENDER_ERRORS,
-  type RenderOptions,
-  type TemplateRenderResult,
-} from "./shared";
 
-export * from "./shared";
+export const RENDER_ERRORS = {
+  COMPILATION_FAILED: "Failed to compile React component",
+  EXECUTION_FAILED: "Failed to execute React component",
+  RENDER_FAILED: "Failed to render component to HTML",
+  INVALID_COMPONENT: "Invalid React Email component",
+  MISSING_DEPENDENCIES: "Missing required React Email dependencies",
+} as const;
+
+export interface RenderOptions {
+  pretty?: boolean;
+  plainText?: boolean;
+}
+
+function processTemplate(template: string, props: Record<string, any>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    return props[key]?.toString() || match;
+  });
+}
 
 export async function renderEmailServer(
   templateData: EmailContent & { props?: Record<string, any> },
   options: RenderOptions = {}
-): Promise<TemplateRenderResult> {
+): Promise<Result<SendRawPayload<"email">>> {
   const tempDir = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), "react-email-")
   );

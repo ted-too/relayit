@@ -55,6 +55,10 @@ export const sendRawPayloadSchemas = {
     .describe("Email payload content"),
 } satisfies Record<ChannelType, z.ZodObject>;
 
+export type SendRawPayload<T extends ChannelType = ChannelType> = z.infer<
+  (typeof sendRawPayloadSchemas)[T]
+>;
+
 const buildBaseSendSchema = (channel: ChannelType) =>
   z.object({
     to: channelIdentifierValidators[channel].describe("Recipient address"),
@@ -90,7 +94,11 @@ export const buildSendTemplateSchema = (channel: ChannelType) =>
               .describe("Template identifier")
               .meta({ example: "user.welcome" }),
             props: z
-              .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
+              .record(
+                z.string(),
+                z.union([z.string(), z.number(), z.boolean(), z.null()])
+              )
+              .optional()
               .describe("Template variables and data")
               .meta({
                 example: {

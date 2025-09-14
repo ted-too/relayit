@@ -50,9 +50,9 @@ export function CreateIntegrationForm({
 
   const channels = useMemo(
     () =>
-      Object.entries(config.channels).map(([key, value]) => ({
-        value: value.id,
-        label: `${value.label} (${key})`,
+      Object.entries(config.channels).map(([channelType, channelConfig]) => ({
+        value: channelType,
+        label: `${channelConfig.label} (${channelType})`,
       })),
     [config.channels]
   );
@@ -62,7 +62,7 @@ export function CreateIntegrationForm({
       ({
         provider: type,
         credentials: generateDefaultFromSchema(config.credentialsSchema),
-        channelIds: channels.map((channel) => channel.value),
+        channels: channels.map((channel) => channel.value),
         priority: null,
         name: null,
         isDefault: false,
