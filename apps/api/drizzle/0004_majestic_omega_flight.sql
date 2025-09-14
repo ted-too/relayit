@@ -1,0 +1,1 @@
+ALTER TABLE "provider_identity" ALTER COLUMN "channel_data" SET NOT NULL;

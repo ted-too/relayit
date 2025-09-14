@@ -1,6 +1,6 @@
 import { db, schema, type Transaction } from "@repo/shared/db";
 import { encryptRecord } from "@repo/shared/db/crypto";
-import type { ProviderCredential } from "@repo/shared/db/types";
+import type { SanitizedProviderCredential } from "@repo/shared/db/types";
 import { createIntegrationSchema } from "@repo/shared/forms";
 import {
   type ChannelType,
@@ -13,8 +13,6 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import z from "zod";
 import { auth } from "@/lib/auth";
 import { authdOrganizationProcedure, router } from ".";
-
-type SanitizedProviderCredential = Omit<ProviderCredential, "credentials">;
 
 /**
  * Calculates the next available priority for a channel, rounded to nearest 100

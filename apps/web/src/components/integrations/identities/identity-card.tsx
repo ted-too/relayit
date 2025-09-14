@@ -41,7 +41,13 @@ export function IdentityCard({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium text-sm">
-            {identity.identifier}
+            {identity.channelData?.email?.name ? (
+              <>
+                "{identity.channelData.email.name}" &lt;{identity.identifier}&gt;
+              </>
+            ) : (
+              identity.identifier
+            )}
           </span>
           {identity.isDefault && (
             <Badge variant="secondary" className="text-xs">
@@ -54,9 +60,12 @@ export function IdentityCard({
             </Badge>
           )}
         </div>
-        <span className="text-muted-foreground text-xs">
-          Added: {new Date(identity.createdAt).toLocaleDateString()}
-        </span>
+        <div className="flex items-center gap-3 text-muted-foreground text-xs">
+          <span>Added: {new Date(identity.createdAt).toLocaleDateString()}</span>
+          {identity.channelData?.email?.name && (
+            <span>Display Name: {identity.channelData.email.name}</span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <ConfirmAction
