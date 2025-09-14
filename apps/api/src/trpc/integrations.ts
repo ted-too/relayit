@@ -1,5 +1,6 @@
-import { db, schema } from "@repo/shared/db";
+import { db, schema, type Transaction } from "@repo/shared/db";
 import { encryptRecord } from "@repo/shared/db/crypto";
+import type { ProviderCredential } from "@repo/shared/db/types";
 import { createIntegrationSchema } from "@repo/shared/forms";
 import {
   type ChannelType,
@@ -13,6 +14,8 @@ import z from "zod";
 import { auth } from "@/lib/auth";
 import { authdOrganizationProcedure, router } from ".";
 
+type SanitizedProviderCredential = Omit<ProviderCredential, "credentials">;
+
 /**
  * Calculates the next available priority for a channel, rounded to nearest 100
  * @param organizationId - The organization ID
@@ -21,13 +24,14 @@ import { authdOrganizationProcedure, router } from ".";
  * @returns Promise<number> - The next available priority
  */
 async function getNextAvailablePriority(
+  tx: Transaction,
   organizationId: string,
   channelType: ChannelType,
   requestedPriority?: number | null
 ): Promise<number> {
   if (requestedPriority !== null && requestedPriority !== undefined) {
     // Check if requested priority is available
-    const existing = await db.query.providerCredential.findFirst({
+    const existing = await tx.query.providerCredential.findFirst({
       where: and(
         eq(schema.providerCredential.organizationId, organizationId),
         eq(schema.providerCredential.channelType, channelType as ChannelType),
@@ -46,7 +50,7 @@ async function getNextAvailablePriority(
   }
 
   // Find the highest priority and add 100 (rounded to nearest 100)
-  const result = await db
+  const result = await tx
     .select({ maxPriority: max(schema.providerCredential.priority) })
     .from(schema.providerCredential)
     .where(
@@ -64,16 +68,22 @@ async function getNextAvailablePriority(
 
 /**
  * Handles default flag logic - ensures only one default per channel
- * @param organizationId - The organization ID
- * @param channelType - The channel type
- * @param isDefault - Whether this should be the default
- * @param isFirstIntegrationForChannel - Whether this is the first integration for this channel
+ * @param tx - The database transaction
+ * @param params - Configuration object
  */
 async function handleDefaultFlag(
-  organizationId: string,
-  channelType: ChannelType,
-  isDefault: boolean,
-  isFirstIntegrationForChannel: boolean
+  tx: Transaction,
+  {
+    organizationId,
+    channelType,
+    isDefault,
+    isFirstIntegrationForChannel,
+  }: {
+    organizationId: string;
+    channelType: ChannelType;
+    isDefault: boolean;
+    isFirstIntegrationForChannel: boolean;
+  }
 ): Promise<boolean> {
   // If this is the first integration for the channel, make it default regardless
   const shouldBeDefault = isDefault || isFirstIntegrationForChannel;
@@ -81,7 +91,7 @@ async function handleDefaultFlag(
   if (!shouldBeDefault) return false;
 
   // Unset any existing defaults for this channel
-  await db
+  await tx
     .update(schema.providerCredential)
     .set({ isDefault: false })
     .where(
@@ -97,15 +107,17 @@ async function handleDefaultFlag(
 
 /**
  * Checks if there are existing integrations for each channel
+ * @param tx - The database transaction
  * @param organizationId - The organization ID
  * @param channelIds - Array of channel IDs to check
  * @returns Promise<Record<string, boolean>> - Map of channelId -> hasExistingIntegrations
  */
 async function getExistingIntegrationsMap(
+  tx: Transaction,
   organizationId: string,
   channelIds: ChannelType[]
 ): Promise<Record<string, boolean>> {
-  const existingIntegrations = await db.query.providerCredential.findMany({
+  const existingIntegrations = await tx.query.providerCredential.findMany({
     where: and(
       eq(schema.providerCredential.organizationId, organizationId),
       inArray(schema.providerCredential.channelType, channelIds)
@@ -129,14 +141,27 @@ async function getExistingIntegrationsMap(
 }
 
 export const integrationsRouter = router({
-  list: authdOrganizationProcedure.query(async ({ ctx }) => {
-    const integrations = await db.query.providerCredential.findMany({
-      where: (table, { eq }) =>
-        eq(table.organizationId, ctx.session.activeOrganization.id),
-    });
+  list: authdOrganizationProcedure.query(
+    async ({ ctx }): Promise<SanitizedProviderCredential[]> => {
+      const integrations = await db.query.providerCredential.findMany({
+        where: (table, { eq }) =>
+          eq(table.organizationId, ctx.session.activeOrganization.id),
+        columns: {
+          id: true,
+          organizationId: true,
+          channelType: true,
+          providerType: true,
+          name: true,
+          isDefault: true,
+          priority: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
 
-    return integrations;
-  }),
+      return integrations;
+    }
+  ),
   // FIXME: Add healthcheck for credentials
   create: authdOrganizationProcedure
     .input(createIntegrationSchema)
@@ -177,8 +202,12 @@ export const integrationsRouter = router({
 
       // Validate channel types are supported by this provider
       const supportedChannels = Object.keys(config.channels) as ChannelType[];
-      
-      if (!input.channels.every((channelType) => supportedChannels.includes(channelType as ChannelType))) {
+
+      if (
+        !input.channels.every((channelType) =>
+          supportedChannels.includes(channelType as ChannelType)
+        )
+      ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `Invalid channel types, available: ${supportedChannels.join(", ")}`,
@@ -209,6 +238,7 @@ export const integrationsRouter = router({
       const validIntegrations = await db.transaction(async (tx) => {
         // Check which channels already have integrations (for auto-default logic)
         const existingIntegrationsMap = await getExistingIntegrationsMap(
+          tx,
           ctx.session.activeOrganization.id,
           channelTypes
         );
@@ -219,15 +249,16 @@ export const integrationsRouter = router({
             !existingIntegrationsMap[channelType];
 
           // Handle default flag (unset existing defaults if needed)
-          const shouldBeDefault = await handleDefaultFlag(
-            ctx.session.activeOrganization.id,
+          const shouldBeDefault = await handleDefaultFlag(tx, {
+            organizationId: ctx.session.activeOrganization.id,
             channelType,
-            input.isDefault,
-            isFirstIntegrationForChannel
-          );
+            isDefault: input.isDefault,
+            isFirstIntegrationForChannel,
+          });
 
           // Get the next available priority
           const priority = await getNextAvailablePriority(
+            tx,
             ctx.session.activeOrganization.id,
             channelType,
             input.priority

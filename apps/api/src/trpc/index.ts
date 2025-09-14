@@ -31,6 +31,7 @@ export const authdProcedure = publicProcedure.use((opts) => {
 
   return opts.next({
     ctx: {
+      ...ctx,
       user: ctx.user,
       session: ctx.session,
     },
@@ -58,6 +59,7 @@ export const authdOrganizationProcedure = authdProcedure.use(async (opts) => {
 
   return opts.next({
     ctx: {
+      ...opts.ctx,
       session: {
         ...session,
         activeOrganization,

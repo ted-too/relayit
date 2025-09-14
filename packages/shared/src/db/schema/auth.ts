@@ -115,7 +115,6 @@ export const apikey = pgTable("apikey", {
   prefix: text("prefix"),
   key: text("key").notNull(),
   userId: text("user_id")
-    .notNull()
     .references(() => user.id, { onDelete: "set null" }),
   refillInterval: integer("refill_interval"),
   refillAmount: integer("refill_amount"),
@@ -128,8 +127,13 @@ export const apikey = pgTable("apikey", {
   remaining: integer("remaining"),
   lastRequest: timestamp("last_request"),
   expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at").notNull(),
+  createdAt: timestamp("created_at")
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: timestamp("updated_at")
+    .$defaultFn(() => new Date())
+    .$onUpdate(() => new Date())
+    .notNull(),
   permissions: text("permissions"),
   metadata: text("metadata"),
 });
