@@ -1,20 +1,24 @@
 {
-	"$schema": "https://ui.shadcn.com/schema.json",
-	"style": "new-york",
-	"rsc": true,
-	"tsx": true,
-	"tailwind": {
-		"config": "",
-		"css": "src/styles/globals.css",
-		"baseColor": "neutral",
-		"cssVariables": true
-	},
-	"iconLibrary": "lucide",
-	"aliases": {
-		"components": "@repo/ui/components",
-		"utils": "@repo/ui/lib/utils",
-		"hooks": "@repo/ui/hooks",
-		"lib": "@repo/ui/lib",
-		"ui": "@repo/ui/components/shadcn"
-	}
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/misc",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "registries": {
+    "@animate-ui": "https://animate-ui.com/r/{name}.json",
+    "@eo-n": "https://eo-n.vercel.app/r/{name}.json"
+  }
 }

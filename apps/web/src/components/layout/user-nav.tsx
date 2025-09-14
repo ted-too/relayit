@@ -1,200 +1,105 @@
 "use client";
 
+import { RiLogoutCircleLine, RiMore2Line, RiUserLine } from "@remixicon/react";
 import {
-	Avatar,
-	AvatarFallback,
-	AvatarImage,
-} from "@repo/ui/components/shadcn/avatar";
-import { Button } from "@repo/ui/components/shadcn/button";
-import { ModeToggle } from "@repo/ui/components/shadcn/dark-mode-toggle";
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@repo/ui/components/animate-ui/components/radix/sidebar";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@repo/ui/components/shadcn/dropdown-menu";
-import { SidebarMenuButton } from "@repo/ui/components/shadcn/sidebar";
-import { Skeleton } from "@repo/ui/components/shadcn/skeleton";
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@repo/ui/components/base/avatar";
 import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@repo/ui/components/shadcn/tooltip";
-import { authClient } from "@/lib/auth-client";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@repo/ui/components/base/dropdown-menu";
+import { toast } from "@repo/ui/components/custom/sonner";
 import { cn, getInitials } from "@repo/ui/lib/utils";
-import { sessionQueryOptions } from "@/trpc/queries/auth";
-import {
-	ORGANIZATION_LOGO_GRADIENTS,
-	type OrganizationMetadata,
-} from "@repo/shared";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDownIcon } from "lucide-react";
-import { LogOutIcon } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useNavigate, useRouteContext } from "@tanstack/react-router";
+import { useTRPC } from "@/integrations/trpc/react";
 
-export function LogoutButton({
-	size = "md",
-	className,
-}: {
-	size?: "sm" | "md";
-	className?: string;
-}) {
-	const router = useRouter();
+export function SideBarUserNav() {
+  const navigate = useNavigate();
+  const { auth } = useRouteContext({
+    from: "/_authd",
+  });
+  const trpc = useTRPC();
+  const {
+    data: { user },
+  } = useSuspenseQuery(trpc.auth.getSession.queryOptions());
 
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button
-					className={cn(
-						"h-max p-0! w-max",
-						size === "sm" && "[&_svg:not([class*='size-'])]:size-3",
-						size === "md" && "[&_svg:not([class*='size-'])]:size-4",
-						className,
-					)}
-					variant="link"
-					onClick={async () => {
-						const { error } = await authClient.signOut();
-						if (error) {
-							toast.error("Failed to sign out");
-							return;
-						}
-						router.refresh();
-					}}
-				>
-					<LogOutIcon />
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent>
-				<p>Sign out</p>
-			</TooltipContent>
-		</Tooltip>
-	);
-}
+  const { open } = useSidebar();
 
-export function SideBarUserNav({ orgSlug }: { orgSlug?: string }) {
-	const router = useRouter();
-	const { data: session, isPending: sessionPending } = useQuery(
-		sessionQueryOptions(),
-	);
-
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				{sessionPending || !session ? (
-					<Skeleton className="h-8 w-8 rounded-lg" />
-				) : (
-					<SidebarMenuButton
-						size="lg"
-						className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-					>
-						<Avatar className="h-8 w-8 rounded-lg">
-							<AvatarImage
-								src={session.user.image || ""}
-								alt={session.user.image || ""}
-							/>
-							<AvatarFallback className="rounded-lg">
-								{getInitials(session.user.name)}
-							</AvatarFallback>
-						</Avatar>
-						<div className="grid flex-1 text-left text-sm leading-tight">
-							<span className="truncate font-semibold">
-								{session.user.name}
-							</span>
-							<span className="truncate text-xs">{session.user.email}</span>
-						</div>
-						<ChevronsUpDownIcon className="ml-auto size-4" />
-					</SidebarMenuButton>
-				)}
-			</DropdownMenuTrigger>
-			<DropdownMenuContent
-				className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-				side="right"
-				align="end"
-				sideOffset={4}
-			>
-				<div className="flex items-center justify-between px-2 py-1.5">
-					<DropdownMenuLabel className="flex flex-col">
-						My account
-						<span className="text-xs font-normal text-muted-foreground">
-							{session?.user.email}
-						</span>
-					</DropdownMenuLabel>
-					<ModeToggle />
-				</div>
-				<DropdownMenuSeparator />
-				<DropdownMenuGroup>
-					<DropdownMenuItem className="cursor-pointer" asChild>
-						<Link href={`/~/${orgSlug}/settings/profile`}>Profile</Link>
-					</DropdownMenuItem>
-				</DropdownMenuGroup>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem
-					className="cursor-pointer"
-					onSelect={async () => {
-						const { error } = await authClient.signOut();
-						if (error) {
-							toast.error("Failed to sign out");
-							return;
-						}
-						router.refresh();
-					}}
-				>
-					Log out
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
-export function OrganizationLogo({
-	logoUrl,
-	orgMetadata,
-	name,
-	size = "md",
-}: {
-	logoUrl: string | null | undefined;
-	orgMetadata: OrganizationMetadata | null | undefined;
-	name: string;
-	size?: "sm" | "md";
-}) {
-	if (logoUrl || !orgMetadata?.logoEmoji)
-		return (
-			<Avatar
-				className={cn(
-					"shrink-0",
-					size === "sm" && "size-6 text-xs",
-					size === "md" && "size-8",
-				)}
-			>
-				<AvatarImage src={logoUrl ?? undefined} alt={name} />
-				<AvatarFallback>{getInitials(name)}</AvatarFallback>
-			</Avatar>
-		);
-
-	return (
-		<div
-			className={cn(
-				"shrink-0 flex items-center justify-center rounded-full",
-				!orgMetadata?.logoBgKey && "bg-muted",
-				size === "sm" && "size-6",
-				size === "md" && "size-8",
-			)}
-			style={{
-				background: orgMetadata?.logoBgKey
-					? ORGANIZATION_LOGO_GRADIENTS[orgMetadata.logoBgKey]
-					: undefined,
-			}}
-		>
-			<span
-				className={cn({ sm: "text-base", md: "text-lg" }[size], "leading-none")}
-			>
-				{orgMetadata.logoEmoji}
-			</span>
-		</div>
-	);
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton
+                size="lg"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              >
+                <Avatar className="in-data-[state=expanded]:size-6 transition-[width,height] duration-200 ease-in-out">
+                  <AvatarImage src={user.image ?? undefined} alt={user.name} />
+                  <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                </Avatar>
+                <div className="ms-1 grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">{user.name}</span>
+                </div>
+                <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-accent/50 in-[[data-slot=dropdown-menu-trigger]:hover]:bg-transparent">
+                  <RiMore2Line className="size-5 opacity-40" size={20} />
+                </div>
+              </SidebarMenuButton>
+            }
+          />
+          <DropdownMenuContent
+            className={cn(
+              "w-full rounded-md transition-[width] duration-200 ease-in-out",
+              open ? "min-w-64" : "min-w-56"
+            )}
+            side={open ? "top" : "right"}
+            align="end"
+            sideOffset={4}
+          >
+            <DropdownMenuItem className="gap-3 px-1">
+              <RiUserLine
+                size={20}
+                className="text-muted-foreground/70"
+                aria-hidden="true"
+              />
+              <span>Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-3 px-1"
+              onSelect={async () => {
+                const { error } = await auth.signOut();
+                if (error) {
+                  return toast.error("Failed to sign out", {
+                    description: error.message,
+                  });
+                }
+                navigate({ to: "/auth/sign-in", reloadDocument: true });
+              }}
+            >
+              <RiLogoutCircleLine
+                size={20}
+                className="text-muted-foreground/70"
+                aria-hidden="true"
+              />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
 }

@@ -1,17 +1,24 @@
 {
-	"compilerOptions": {
-		"strict": true,
-		"skipLibCheck": true,
-		"jsx": "react-jsx",
-		"lib": ["DOM"],
-		"jsxImportSource": "hono/jsx",
-		"baseUrl": ".",
-		"module": "NodeNext",
-		"moduleResolution": "nodenext",
-		"paths": {
-			"@repo/api/*": ["./src/*"],
-			"@repo/db/*": ["../../packages/db/src/*"],
-			"@repo/shared/*": ["../../packages/shared/src/*"]
-		}
-	}
+  "compilerOptions": {
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@repo/shared/*": ["../../packages/shared/src/*"],
+      "@repo/template-render/*": ["../../packages/template-render/src/*"]
+    }
+  }
 }

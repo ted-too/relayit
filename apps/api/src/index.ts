@@ -1,117 +1,118 @@
 import { trpcServer } from "@hono/trpc-server";
-import { auth } from "@repo/api/lib/auth";
-import { authSessionMiddleware } from "@repo/api/lib/middleware";
-import { appRouter } from "@repo/api/routes";
-import { sendRouter } from "@repo/api/routes/send";
-import { createContext } from "@repo/api/trpc";
-import type { ParsedApiKey } from "@repo/db";
-import type { schema } from "@repo/db";
-import type { InferSelectModel } from "drizzle-orm";
+import { db } from "@repo/shared/db";
+import { checkAndRunKeyRotation } from "@repo/shared/db/crypto";
+import { logger } from "@repo/shared/utils";
+import { Scalar } from "@scalar/hono-api-reference";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
-import { openAPISpecs } from "hono-openapi";
-// @ts-expect-error - Scalar is not a module
-import { Scalar } from "@scalar/hono-api-reference";
+import { logger as honoLogger } from "hono/logger";
+import { openAPIRouteHandler } from "hono-openapi";
+import { auth } from "@/lib/auth";
+import { sendRouter } from "@/send";
+import type { Context } from "@/trpc";
+import { appRouter } from "@/trpc/router";
 
-type Session = typeof auth.$Infer.Session.session;
+const app = new Hono<{ Variables: Context }>();
 
-interface NullableVariables {
-	user: typeof auth.$Infer.Session.user | null;
-	session: Session | null;
-	apiKey: Omit<ParsedApiKey, "key"> | null;
-	organization: InferSelectModel<typeof schema.organization> | null;
+app.use(honoLogger((msg, ...args) => logger.info(args, msg)));
+
+// FIXME: Put these behind CORS from the project db
+app.route("/", sendRouter);
+
+if (process.env.ENABLE_DOCS === "true") {
+  app.get(
+    "/openapi",
+    openAPIRouteHandler(sendRouter, {
+      documentation: {
+        info: {
+          title: "RelayIt API",
+          version: "1.0.0",
+          description: "RelayIt API",
+        },
+        servers: [
+          { url: process.env.BETTER_AUTH_URL, description: "Local Server" },
+        ],
+        components: {
+          securitySchemes: {
+            apiKey: {
+              type: "apiKey",
+              in: "header",
+              name: "X-API-Key",
+            },
+          },
+        },
+        security: [
+          {
+            apiKey: [],
+          },
+        ],
+      },
+    })
+  );
+
+  app.get("/reference", Scalar({ url: "/openapi" }));
 }
-
-type RawNonNullableVariables = {
-	[K in keyof NullableVariables]: NonNullable<NullableVariables[K]>;
-};
-
-export interface NullableContext {
-	Variables: NullableVariables;
-}
-
-interface SessionWithOrganization extends Session {
-	activeOrganizationId: string;
-}
-
-interface NonNullableVariables extends RawNonNullableVariables {
-	session: SessionWithOrganization;
-}
-
-export interface Context {
-	Variables: NonNullableVariables;
-}
-
-export interface ApiKeyContext {
-	Variables: Pick<NonNullableVariables, "apiKey">;
-}
-
-const app = new Hono<NullableContext>();
-
-app.use("*", logger());
-
-app.route("/send", sendRouter);
 
 app.use(
-	"*",
-	cors({
-		origin: [process.env.FRONTEND_URL, process.env.DOCS_URL],
-		allowHeaders: ["Content-Type", "Authorization"],
-		allowMethods: ["POST", "PUT", "DELETE", "GET", "OPTIONS"],
-		exposeHeaders: ["Content-Length"],
-		maxAge: 600,
-		credentials: true,
-	}),
+  "*",
+  cors({
+    origin: [process.env.APP_URL],
+    allowHeaders: ["Content-Type", "Authorization", "TRPC-Accept"],
+    allowMethods: ["POST", "GET", "OPTIONS"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+    credentials: true,
+  })
 );
 
-app.get(
-	"/openapi",
-	openAPISpecs(app, {
-		documentation: {
-			info: {
-				title: "RelayIt API",
-				version: "1.0.0",
-				description: "RelayIt API",
-			},
-			servers: [
-				{ url: process.env.BETTER_AUTH_URL, description: "Local Server" },
-			],
-			components: {
-				securitySchemes: {
-					apiKey: {
-						type: "apiKey",
-						in: "header",
-						name: "X-API-Key",
-					},
-				},
-			},
-			security: [
-				{
-					apiKey: [],
-				},
-			],
-		},
-	}),
-);
+app.use("*", async (c, next) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    c.set("user", null);
+    c.set("session", null);
+    return next();
+  }
+  c.set("user", session.user);
+  c.set("session", session.session);
+  return next();
+});
 
-if (process.env.NODE_ENV === "development") {
-	app.get("/reference", Scalar({ url: "/openapi" }));
-}
-
-app.on(["POST", "GET"], "/api/auth/*", authSessionMiddleware, (c) => {
-	return auth.handler(c.req.raw);
+app.on(["POST", "GET"], "/auth/*", (c) => {
+  return auth.handler(c.req.raw);
 });
 
 app.use(
-	"/trpc/*",
-	trpcServer({
-		router: appRouter,
-		createContext,
-	}),
+  "/trpc/*",
+  trpcServer({
+    router: appRouter,
+    createContext: (_, c) => {
+      const session = c.get("session");
+      const user = c.get("user");
+
+      return {
+        user,
+        session,
+        req: c.req.raw,
+      };
+    },
+  })
 );
 
-export default {
-	port: process.env.PORT || 3000,
-	fetch: app.fetch,
-};
+async function startServer() {
+  await migrate(db, { migrationsFolder: "./drizzle" });
+
+  const rotationResult = await checkAndRunKeyRotation(db);
+  if (rotationResult.error) {
+    throw new Error(`Key rotation failed: ${rotationResult.error.message}`);
+  }
+
+  logger.info("Server initialization complete");
+
+  Bun.serve({
+    port: 3005,
+    fetch: app.fetch,
+  });
+}
+
+export default await startServer();

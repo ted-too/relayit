@@ -1,60 +1,59 @@
 {
-	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-	"vcs": {
-		"enabled": false,
-		"clientKind": "git",
-		"useIgnoreFile": false
-	},
-	"files": {
-		"ignoreUnknown": false,
-		"ignore": [
-			".next",
-			"legacy",
-			".git",
-			"node_modules",
-			"typescript-config",
-			".turbo",
-			"build",
-			"drizzle"
-		]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
-	"organizeImports": {
-		"enabled": true
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"a11y": {
-				"noSvgWithoutTitle": "off",
-				"useSemanticElements": "off",
-				"useButtonType": "off",
-				"useKeyWithClickEvents": "off"
-			},
-			"correctness": {
-				"noUnusedImports": "error",
-				"noChildrenProp": "off",
-				"useExhaustiveDependencies": "off"
-			},
-			"suspicious": {
-				"noArrayIndexKey": "off",
-				"noExplicitAny": "off"
-			},
-			"complexity": {
-				"noBannedTypes": "off"
-			},
-			"style": {
-				"noNonNullAssertion": "off"
-			}
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double"
-		}
-	}
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite"],
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "off"
+      }
+    }
+  },
+  "javascript": {
+    "globals": ["Bun"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noUnknownAtRules": "off",
+        "noConsole": "off",
+        "noDocumentCookie": "off",
+        "noExplicitAny": "off"
+      },
+      "style": {
+        "noHeadElement": "off",
+        "useBlockStatements": "off",
+        "noMagicNumbers": "off",
+        "noNestedTernary": "off",
+        "noNonNullAssertion": "warn"
+      },
+      "nursery": {
+        "useConsistentTypeDefinitions": "off",
+        "noShadow": "off",
+        "useImageSize": "off"
+      },
+      "performance": {
+        "noNamespaceImport": "off",
+        "noImgElement": "warn",
+        "noBarrelFile": "off"
+      },
+      "correctness": {
+        "noUnusedImports": {
+          "level": "warn",
+          "fix": "safe"
+        },
+        "noUnusedFunctionParameters": "warn"
+      },
+      "a11y": {
+        "useSemanticElements": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "noVoid": "off"
+      }
+    }
+  }
 }

@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "provider_credential_org_default_unique_idx" ON "provider_credential" USING btree ("organization_id","channel_type","provider_type","org_default");

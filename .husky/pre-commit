@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+set -euo pipefail
+
+# Get staged files (JS/TS/JSX/TSX files only)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx|json|css|scss|md)$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+  echo "No staged files to format"
+  exit 0
+fi
+
+echo "Formatting staged files..."
+
+# Try bun first, then fallback to other package managers
+if command -v bun >/dev/null 2>&1; then
+  echo "Using bun to run ultracite..."
+  bun x ultracite fix $STAGED_FILES
+elif command -v npx >/dev/null 2>&1; then
+  echo "Bun not found, using npx to run ultracite..."
+  npx ultracite fix $STAGED_FILES
+elif command -v yarn >/dev/null 2>&1 && [ -f "yarn.lock" ]; then
+  echo "Bun and npx not found, using yarn to run ultracite..."
+  yarn dlx ultracite fix $STAGED_FILES
+elif command -v pnpm >/dev/null 2>&1 && [ -f "pnpm-lock.yaml" ]; then
+  echo "Other package managers not found, using pnpm to run ultracite..."
+  pnpm dlx ultracite fix $STAGED_FILES
+else
+  echo "Error: No suitable package manager found (bun, npx, yarn, or pnpm)"
+  echo "Please install Node.js/npm or Bun to run ultracite"
+  exit 1
+fi
+
+# Re-stage the formatted files
+echo "Re-staging formatted files..."
+echo "$STAGED_FILES" | xargs git add
+
+echo "Pre-commit formatting completed successfully!"

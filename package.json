@@ -1,24 +1,31 @@
 {
   "name": "relayit",
+  "version": "0.0.0",
   "private": true,
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "biome format . --write",
-    "format-and-lint": "biome check .",
-    "format-and-lint:fix": "biome check . --write",
+    "format": "ultracite fix --unsafe",
+    "syncpack": "syncpack",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "turbo": "^2.4.4",
-    "typescript": "5.8.2"
+    "@biomejs/biome": "2.2.3",
+    "husky": "^9.1.7",
+    "syncpack": "14.0.0-alpha.19",
+    "turbo": "^2.5.6",
+    "typescript": "^5",
+    "ultracite": "5.3.4"
   },
   "engines": {
     "node": ">=18"
   },
   "packageManager": "bun@1.2.12",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "trustedDependencies": [
     "@repo/docs",
     "@tailwindcss/oxide",
@@ -27,3 +34,4 @@
     "sharp"
   ]
 }
+

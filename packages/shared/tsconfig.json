@@ -1,16 +1,24 @@
 {
-	"compilerOptions": {
-		"strict": true,
-		"jsx": "react-jsx",
-		"lib": ["DOM"],
-		"jsxImportSource": "hono/jsx",
-		"baseUrl": ".",
-		"module": "NodeNext",
-		"moduleResolution": "nodenext",
-		"paths": {
-			"@repo/shared/*": ["./src/*"]
-		}
-	},
-	"include": ["src"],
-	"exclude": ["node_modules"]
+  "compilerOptions": {
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }

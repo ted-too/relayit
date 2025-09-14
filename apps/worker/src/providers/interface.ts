@@ -1,34 +1,35 @@
 import type {
-	ProjectProviderConfig,
-	ProviderCredentials,
-	Result,
-	SendMessagePayload,
-} from "@repo/shared";
+  MessageEventError,
+  ProviderCredential,
+  ProviderIdentity,
+} from "@repo/shared/db/types";
+import type { ChannelType, SendRawPayload } from "@repo/shared/providers";
 
-/**
- * Represents the outcome of a provider's send operation.
- */
-export interface ProviderSendResult {
-	success: boolean;
-	details?: any; // Provider-specific details (e.g., external message ID)
+export interface ProviderError extends MessageEventError {
+  retryable: boolean;
 }
 
-/**
- * Defines the contract for all notification provider implementations.
- */
-export interface INotificationProvider {
-	/**
-	 * Sends a message using the provider's specific API.
-	 *
-	 * @param credentials The credentials required by the provider.
-	 * @param messagePayload The provider-specific payload for the message.
-	 * @param recipient The target recipient (e.g., email address, phone number).
-	 * @returns A promise resolving to a ProviderSendResult.
-	 */
-	send(
-		credentials: ProviderCredentials,
-		messagePayload: SendMessagePayload,
-		config: ProjectProviderConfig,
-		recipient: string,
-	): Promise<Result<ProviderSendResult>>;
+export type ProviderResult<T> =
+  | {
+      error: null;
+      data: T;
+    }
+  | {
+      error: ProviderError;
+      data: null;
+    };
+
+export type ProviderSendParams<T extends ChannelType> = {
+  to: string;
+  credentials: ProviderCredential;
+  payload: SendRawPayload<T>;
+  identity: ProviderIdentity;
+};
+
+export type SendMethod<T extends ChannelType, R = unknown> = (
+  params: ProviderSendParams<T>
+) => Promise<ProviderResult<R>>;
+
+export interface INotificationProvider<T extends ChannelType, R = unknown> {
+  send: SendMethod<T, R>;
 }
