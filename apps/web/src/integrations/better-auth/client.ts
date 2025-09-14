@@ -34,4 +34,4 @@ export const createAuthClient = (cookie?: string | null) =>
 
 export type AuthClient = ReturnType<typeof createAuthClient>;
 
-export const AUTH_COOKIES = ["relayit.session_token"];
+export const AUTH_COOKIES = ["relayit.session_token", "__Secure-relayit.session_token"];
