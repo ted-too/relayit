@@ -18,7 +18,7 @@ const app = new Hono<{ Variables: Context }>();
 app.use(honoLogger((msg, ...args) => logger.info(args, msg)));
 
 // FIXME: Put these behind CORS from the project db
-app.route("/send/:project", sendRouter);
+app.route("/", sendRouter);
 
 if (process.env.ENABLE_DOCS === "true") {
   app.get(

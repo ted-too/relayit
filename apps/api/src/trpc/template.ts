@@ -1,4 +1,5 @@
 import { db, schema } from "@repo/shared/db";
+import type { JSONSchema } from "@repo/shared/db/schema/json-schema";
 import type { TemplateWithVersions } from "@repo/shared/db/schema/template";
 import {
   channelContentSchema,
@@ -8,7 +9,6 @@ import {
 import { renderEmailServer } from "@repo/template-render/react-email";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
-import SuperJSON from "superjson";
 import { z } from "zod";
 import { authdOrganizationProcedure, router } from ".";
 
@@ -127,7 +127,7 @@ export const templateRouter = router({
           .values({
             templateId: template.id,
             version: 1,
-            schema: input.schema,
+            schema: input.schema as JSONSchema | undefined,
           })
           .returning();
 
@@ -232,9 +232,9 @@ export const templateRouter = router({
             .values({
               templateId: id,
               version: nextVersion,
-              schema: updateData.schema
-                ? SuperJSON.parse(updateData.schema)
-                : currentVersion?.schema,
+              schema: (updateData.schema
+                ? updateData.schema
+                : currentVersion?.schema) as (JSONSchema | undefined),
             })
             .returning();
 

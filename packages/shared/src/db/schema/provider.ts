@@ -77,7 +77,6 @@ export const providerIdentity = pgTable(
       .notNull()
       .references(() => providerCredential.id, { onDelete: "cascade" }),
 
-    name: text("name").notNull(),
     identifier: text("identifier").notNull(),
     isDefault: boolean("is_default").default(false).notNull(),
     isActive: boolean("is_active").default(true).notNull(),

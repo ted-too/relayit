@@ -4,6 +4,8 @@ import {
   getPendingEvents,
   MESSAGE_QUEUE_STREAM,
   readEvents,
+  recoverOrphanedEvents,
+  recoverStuckProcessingEvents,
 } from "@repo/shared/db";
 import { createGenericError, logger } from "@repo/shared/utils";
 import { redis } from "bun";
@@ -77,6 +79,146 @@ async function initializeConsumerGroup(): Promise<{ error: any; data: any }> {
       errMessage
     );
     return { error: createGenericError(errMessage, error), data: null };
+  }
+}
+
+// Recovery logic for stuck processing events
+async function checkAndRecoverStuckProcessingEvents(): Promise<void> {
+  const startTime = Date.now();
+
+  logger.debug(
+    {
+      ...workerContext,
+      operation: "checkAndRecoverStuckProcessingEvents",
+      timeoutMinutes: env.WORKER_PROCESSING_TIMEOUT_MINUTES,
+    },
+    "Checking for stuck processing events"
+  );
+
+  try {
+    const recoveryResult = await recoverStuckProcessingEvents(
+      env.WORKER_PROCESSING_TIMEOUT_MINUTES,
+      env.WORKER_PROCESSING_RECOVERY_LIMIT
+    );
+
+    if (recoveryResult.error) {
+      logger.error(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverStuckProcessingEvents",
+          error: recoveryResult.error,
+        },
+        "Failed to recover stuck processing events"
+      );
+      return;
+    }
+
+    const { recovered, failed } = recoveryResult.data;
+    const total = recovered + failed;
+
+    if (total > 0) {
+      logger.warn(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverStuckProcessingEvents",
+          recovered,
+          failed,
+          total,
+          timeoutMinutes: env.WORKER_PROCESSING_TIMEOUT_MINUTES,
+          duration: Date.now() - startTime,
+        },
+        `Processing recovery completed: ${recovered} recovered, ${failed} failed (events stuck > ${env.WORKER_PROCESSING_TIMEOUT_MINUTES}min)`
+      );
+    } else {
+      logger.debug(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverStuckProcessingEvents",
+          duration: Date.now() - startTime,
+        },
+        "No stuck processing events found"
+      );
+    }
+  } catch (error) {
+    logger.error(
+      {
+        ...workerContext,
+        operation: "checkAndRecoverStuckProcessingEvents",
+        error,
+        duration: Date.now() - startTime,
+      },
+      `Error in stuck processing event recovery: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+// Recovery logic for orphaned database events
+async function checkAndRecoverOrphanedEvents(): Promise<void> {
+  const startTime = Date.now();
+
+  logger.debug(
+    {
+      ...workerContext,
+      operation: "checkAndRecoverOrphanedEvents",
+    },
+    "Checking for orphaned queued events in database"
+  );
+
+  try {
+    const recoveryResult = await recoverOrphanedEvents(
+      env.WORKER_CONSUMER_GROUP_NAME,
+      env.WORKER_ORPHANED_RECOVERY_LIMIT,
+      env.WORKER_ORPHANED_RECOVERY_MAX_AGE_MINUTES
+    );
+
+    if (recoveryResult.error) {
+      logger.error(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverOrphanedEvents",
+          error: recoveryResult.error,
+        },
+        "Failed to recover orphaned events"
+      );
+      return;
+    }
+
+    const { recovered, skipped, failed } = recoveryResult.data;
+    const total = recovered + skipped + failed;
+
+    if (total > 0) {
+      logger.info(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverOrphanedEvents",
+          recovered,
+          skipped,
+          failed,
+          total,
+          duration: Date.now() - startTime,
+        },
+        `Database recovery completed: ${recovered} recovered, ${skipped} skipped, ${failed} failed`
+      );
+    } else {
+      logger.debug(
+        {
+          ...workerContext,
+          operation: "checkAndRecoverOrphanedEvents",
+          duration: Date.now() - startTime,
+        },
+        "No orphaned events found in database"
+      );
+    }
+  } catch (error) {
+    logger.error(
+      {
+        ...workerContext,
+        operation: "checkAndRecoverOrphanedEvents",
+        error,
+        duration: Date.now() - startTime,
+      },
+      `Error in orphaned event recovery: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
   }
 }
 
@@ -158,7 +300,7 @@ async function checkAndClaimPendingEvents(): Promise<void> {
         );
 
         // Process claimed events
-        const processingPromises = claimedEvents.map(([streamId, fields]) => {
+        const processingPromises = claimedEvents.map(async ([streamId, fields]) => {
           let eventId: string | null = null;
           for (let i = 0; i < fields.length; i += 2) {
             if (fields[i] === "eventId") {
@@ -167,13 +309,31 @@ async function checkAndClaimPendingEvents(): Promise<void> {
             }
           }
 
-          return eventId
-            ? processMessageEvent(
+          try {
+            if (eventId) {
+              await processMessageEvent(
                 eventId,
                 streamId,
                 env.WORKER_CONSUMER_GROUP_NAME
-              )
-            : acknowledgeEvent(streamId, env.WORKER_CONSUMER_GROUP_NAME);
+              );
+            }
+          } finally {
+            // Always acknowledge Redis stream entry to prevent reprocessing
+            const ackResult = await acknowledgeEvent(streamId, env.WORKER_CONSUMER_GROUP_NAME);
+            if (ackResult.error) {
+              logger.error(
+                {
+                  ...workerContext,
+                  operation: "checkAndClaimPendingEvents",
+                  eventId,
+                  streamId,
+                  error: ackResult.error,
+                  stage: "acknowledgment_claimed",
+                },
+                "CRITICAL: Failed to acknowledge claimed event"
+              );
+            }
+          }
         });
 
         await Promise.allSettled(processingPromises);
@@ -415,14 +575,25 @@ async function startWorker() {
     {
       ...workerContext,
       operation: "startWorker",
-      stage: "startup_pending_check",
+      stage: "startup_recovery",
     },
-    "Checking for pending events from previous sessions"
+    "Running startup recovery checks"
   );
+  
+  // First, recover events stuck in processing (crashed workers)
+  await checkAndRecoverStuckProcessingEvents();
+  
+  // Second, recover any orphaned events from the database
+  await checkAndRecoverOrphanedEvents();
+  
+  // Finally, claim any pending events from Redis
   await checkAndClaimPendingEvents();
 
   pendingRecoveryInterval = setInterval(async () => {
     if (!isShuttingDown) {
+      // Run all recovery mechanisms periodically
+      await checkAndRecoverStuckProcessingEvents();
+      await checkAndRecoverOrphanedEvents();
       await checkAndClaimPendingEvents();
     }
   }, env.WORKER_PENDING_CHECK_INTERVAL_MS);

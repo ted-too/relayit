@@ -1,1 +1,0 @@
-ALTER TABLE "template_version" DROP COLUMN "content";

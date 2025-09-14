@@ -126,7 +126,7 @@ export function CreateIntegrationForm({
           />
         )}
       </form.AppField>
-      <form.AppField name="channelIds">
+      <form.AppField name="channels">
         {(field) => (
           <field.MultiSelectField
             label="Channels"

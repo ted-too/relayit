@@ -1,5 +1,7 @@
 import { createGenericError, type Result } from "@repo/shared/utils";
 import { redis } from "bun";
+import { eq } from "drizzle-orm";
+import { db, schema } from ".";
 
 export const MESSAGE_QUEUE_STREAM = "messageQueue";
 
@@ -281,6 +283,299 @@ export async function getPendingEvents(
     const errorMessage = `Failed to get pending events for group ${groupName}`;
     return {
       error: createGenericError(errorMessage, error as Error),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Finds message events that are queued in the database but not in Redis.
+ * These are events that were created but never queued to Redis, or were lost
+ * due to Redis restarts, network issues, or application crashes.
+ *
+ * @param limit - Maximum number of events to return
+ * @param maxAgeMinutes - Only return events newer than this (to avoid processing very old events)
+ * @returns Array of message event IDs that need to be queued to Redis
+ */
+export async function findOrphanedQueuedEvents(
+  limit = 100,
+  maxAgeMinutes = 60
+): Promise<Result<string[]>> {
+  try {
+    const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000);
+
+    const orphanedEvents = await db.query.messageEvent.findMany({
+      where: (table, { eq, and, gte }) =>
+        and(eq(table.status, "queued"), gte(table.startedAt, cutoffTime)),
+      columns: {
+        id: true,
+      },
+      orderBy: (table, { asc }) => asc(table.startedAt),
+      limit,
+    });
+
+    const eventIds = orphanedEvents.map((event) => event.id);
+
+    return { error: null, data: eventIds };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        "Failed to find orphaned queued events",
+        error as Error
+      ),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Checks if a message event is currently being processed by checking if it's
+ * in the Redis stream as a pending message. This helps prevent duplicate processing.
+ *
+ * @param eventId - The message event ID to check
+ * @param groupName - The consumer group name
+ * @returns True if the event is currently pending in Redis, false otherwise
+ */
+export async function isEventPendingInRedis(
+  eventId: string,
+  groupName: string
+): Promise<Result<boolean>> {
+  try {
+    // Get pending messages summary first
+    const pendingResult = await getPendingEvents(groupName, 1000);
+    if (pendingResult.error) {
+      return pendingResult;
+    }
+
+    const { details } = pendingResult.data;
+
+    // Check if any pending message contains this eventId
+    for (const pendingMessage of details) {
+      if (Array.isArray(pendingMessage) && pendingMessage.length >= 4) {
+        const [streamId] = pendingMessage;
+
+        // Get the actual message content to check the eventId field
+        try {
+          const messageContent = await redis.send("XRANGE", [
+            MESSAGE_QUEUE_STREAM,
+            streamId,
+            streamId,
+          ]);
+
+          if (Array.isArray(messageContent) && messageContent.length > 0) {
+            const [, fields] = messageContent[0];
+            if (Array.isArray(fields)) {
+              for (let i = 0; i < fields.length; i += 2) {
+                if (fields[i] === "eventId" && fields[i + 1] === eventId) {
+                  return { error: null, data: true };
+                }
+              }
+            }
+          }
+        } catch {
+          // If we can't read the message, assume it's not our event
+        }
+      }
+    }
+
+    return { error: null, data: false };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        `Failed to check if event ${eventId} is pending in Redis`,
+        error as Error
+      ),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Finds message events that are stuck in "processing" status for too long.
+ * These are events where a worker started processing but crashed before completion.
+ * 
+ * @param timeoutMinutes - Events processing longer than this are considered stuck
+ * @param limit - Maximum number of events to return
+ * @returns Array of message event IDs that need to be reset and requeued
+ */
+export async function findStuckProcessingEvents(
+  timeoutMinutes = 15,
+  limit = 100
+): Promise<Result<string[]>> {
+  try {
+    const timeoutTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+    
+    const stuckEvents = await db.query.messageEvent.findMany({
+      where: (table, { eq, and, lt, isNull }) =>
+        and(
+          eq(table.status, "processing"),
+          lt(table.startedAt, timeoutTime),
+          isNull(table.completedAt) // Make sure it's not completed
+        ),
+      columns: {
+        id: true,
+      },
+      orderBy: (table, { asc }) => asc(table.startedAt),
+      limit,
+    });
+
+    const eventIds = stuckEvents.map(event => event.id);
+    
+    return { error: null, data: eventIds };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        "Failed to find stuck processing events",
+        error as Error
+      ),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Resets stuck processing events back to queued status and queues them to Redis.
+ * This handles events where workers crashed during processing.
+ * 
+ * @param timeoutMinutes - Events processing longer than this are considered stuck
+ * @param limit - Maximum number of events to recover
+ * @returns Number of events successfully recovered
+ */
+export async function recoverStuckProcessingEvents(
+  timeoutMinutes = 15,
+  limit = 50
+): Promise<Result<{ recovered: number; failed: number }>> {
+  try {
+    // Find stuck events
+    const stuckResult = await findStuckProcessingEvents(timeoutMinutes, limit);
+    if (stuckResult.error) {
+      return stuckResult;
+    }
+
+    const stuckEventIds = stuckResult.data;
+    if (stuckEventIds.length === 0) {
+      return { 
+        error: null, 
+        data: { recovered: 0, failed: 0 } 
+      };
+    }
+
+    let recovered = 0;
+    let failed = 0;
+
+    // Process each stuck event in a transaction
+    for (const eventId of stuckEventIds) {
+      try {
+        await db.transaction(async (tx) => {
+          // Reset the event status back to queued
+          await tx
+            .update(schema.messageEvent)
+            .set({
+              status: "queued",
+              completedAt: null,
+              responseTimeMs: null,
+              error: null,
+              retryable: null,
+            })
+            .where(eq(schema.messageEvent.id, eventId));
+
+          // Queue it back to Redis
+          const queueResult = await queueMessage(eventId);
+          if (queueResult.error) {
+            throw new Error(`Failed to queue event ${eventId}: ${queueResult.error.message}`);
+          }
+        });
+
+        recovered++;
+      } catch {
+        failed++;
+        // Continue processing other events even if one fails
+      }
+    }
+
+    return {
+      error: null,
+      data: { recovered, failed }
+    };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        "Failed to recover stuck processing events",
+        error as Error
+      ),
+      data: null,
+    };
+  }
+}
+
+/**
+ * Recovers orphaned queued events by finding them in the database and queueing them to Redis.
+ * Only queues events that are not already pending in Redis to avoid duplicates.
+ * 
+ * @param groupName - The consumer group name
+ * @param limit - Maximum number of events to recover
+ * @param maxAgeMinutes - Only recover events newer than this
+ * @returns Number of events successfully recovered
+ */
+export async function recoverOrphanedEvents(
+  groupName: string,
+  limit = 50,
+  maxAgeMinutes = 30
+): Promise<Result<{ recovered: number; skipped: number; failed: number }>> {
+  try {
+    // Find orphaned events
+    const orphanedResult = await findOrphanedQueuedEvents(limit, maxAgeMinutes);
+    if (orphanedResult.error) {
+      return orphanedResult;
+    }
+
+    const orphanedEventIds = orphanedResult.data;
+    if (orphanedEventIds.length === 0) {
+      return {
+        error: null,
+        data: { recovered: 0, skipped: 0, failed: 0 },
+      };
+    }
+
+    let recovered = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    // Process each orphaned event
+    for (const eventId of orphanedEventIds) {
+      // Check if it's already pending in Redis
+      const pendingResult = await isEventPendingInRedis(eventId, groupName);
+      if (pendingResult.error) {
+        failed++;
+        continue;
+      }
+
+      if (pendingResult.data) {
+        // Already pending in Redis, skip it
+        skipped++;
+        continue;
+      }
+
+      // Queue the event to Redis
+      const queueResult = await queueMessage(eventId);
+      if (queueResult.error) {
+        failed++;
+        continue;
+      }
+
+      recovered++;
+    }
+
+    return {
+      error: null,
+      data: { recovered, skipped, failed },
+    };
+  } catch (error) {
+    return {
+      error: createGenericError(
+        "Failed to recover orphaned events",
+        error as Error
+      ),
       data: null,
     };
   }

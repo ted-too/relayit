@@ -1,13 +1,10 @@
+import type { EmailContent } from "@repo/shared/forms";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTRPC } from "@/integrations/trpc/react";
 
 interface EmailPreviewProps {
-  template: {
-    engine: "react-email";
-    subject: string;
-    component: string;
-  };
+  template: EmailContent;
   previewData: Record<string, any>;
   className?: string;
 }

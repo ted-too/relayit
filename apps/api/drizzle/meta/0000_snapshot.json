@@ -1,106 +1,9 @@
 {
-  "id": "7deabb36-bac4-4b31-91d4-251d70517e2f",
+  "id": "6533e13c-05b6-4f52-8204-1ca541a88a48",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.app": {
-      "name": "app",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "app_slug_org_unique_idx": {
-          "name": "app_slug_org_unique_idx",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "app_organization_idx": {
-          "name": "app_organization_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "app_organization_id_organization_id_fk": {
-          "name": "app_organization_id_organization_id_fk",
-          "tableFrom": "app",
-          "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.account": {
       "name": "account",
       "schema": "",
@@ -190,8 +93,12 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -344,8 +251,12 @@
           "name": "apikey_user_id_user_id_fk",
           "tableFrom": "apikey",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -391,8 +302,12 @@
           "name": "apikey_organization_apikey_id_apikey_id_fk",
           "tableFrom": "apikey_organization",
           "tableTo": "apikey",
-          "columnsFrom": ["apikey_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "apikey_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -400,8 +315,12 @@
           "name": "apikey_organization_organization_id_organization_id_fk",
           "tableFrom": "apikey_organization",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -466,8 +385,12 @@
           "name": "invitation_organization_id_organization_id_fk",
           "tableFrom": "invitation",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -475,8 +398,12 @@
           "name": "invitation_inviter_id_user_id_fk",
           "tableFrom": "invitation",
           "tableTo": "user",
-          "columnsFrom": ["inviter_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "inviter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -529,8 +456,12 @@
           "name": "member_organization_id_organization_id_fk",
           "tableFrom": "member",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -538,8 +469,12 @@
           "name": "member_user_id_user_id_fk",
           "tableFrom": "member",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -605,7 +540,9 @@
         "organization_slug_unique": {
           "name": "organization_slug_unique",
           "nullsNotDistinct": false,
-          "columns": ["slug"]
+          "columns": [
+            "slug"
+          ]
         }
       },
       "policies": {},
@@ -673,12 +610,16 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
         },
         "user_normalized_email_unique": {
           "name": "user_normalized_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["normalized_email"]
+          "columns": [
+            "normalized_email"
+          ]
         }
       },
       "policies": {},
@@ -799,8 +740,12 @@
           "name": "contact_organization_id_organization_id_fk",
           "tableFrom": "contact",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1006,8 +951,12 @@
           "name": "contact_identifier_contact_id_contact_id_fk",
           "tableFrom": "contact_identifier",
           "tableTo": "contact",
-          "columnsFrom": ["contact_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1028,11 +977,11 @@
           "primaryKey": true,
           "notNull": true
         },
-        "app_id": {
-          "name": "app_id",
+        "app_slug": {
+          "name": "app_slug",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "api_key_id": {
           "name": "api_key_id",
@@ -1053,17 +1002,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "from_identity_id": {
-          "name": "from_identity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "payload": {
           "name": "payload",
-          "type": "bytea",
+          "type": "jsonb",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "source": {
           "name": "source",
@@ -1127,11 +1070,11 @@
           "method": "btree",
           "with": {}
         },
-        "message_from_identity_idx": {
-          "name": "message_from_identity_idx",
+        "message_source_idx": {
+          "name": "message_source_idx",
           "columns": [
             {
-              "expression": "from_identity_id",
+              "expression": "source",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1142,11 +1085,11 @@
           "method": "btree",
           "with": {}
         },
-        "message_source_idx": {
-          "name": "message_source_idx",
+        "message_app_slug_idx": {
+          "name": "message_app_slug_idx",
           "columns": [
             {
-              "expression": "source",
+              "expression": "app_slug",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1174,21 +1117,16 @@
         }
       },
       "foreignKeys": {
-        "message_app_id_app_id_fk": {
-          "name": "message_app_id_app_id_fk",
-          "tableFrom": "message",
-          "tableTo": "app",
-          "columnsFrom": ["app_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "message_api_key_id_apikey_id_fk": {
           "name": "message_api_key_id_apikey_id_fk",
           "tableFrom": "message",
           "tableTo": "apikey",
-          "columnsFrom": ["api_key_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1196,18 +1134,13 @@
           "name": "message_contact_id_contact_id_fk",
           "tableFrom": "message",
           "tableTo": "contact",
-          "columnsFrom": ["contact_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "message_from_identity_id_provider_identity_id_fk": {
-          "name": "message_from_identity_id_provider_identity_id_fk",
-          "tableFrom": "message",
-          "tableTo": "provider_identity",
-          "columnsFrom": ["from_identity_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1246,11 +1179,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "from_identity_id": {
-          "name": "from_identity_id",
+        "identity_id": {
+          "name": "identity_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "started_at": {
           "name": "started_at",
@@ -1337,6 +1270,21 @@
           "method": "btree",
           "with": {}
         },
+        "message_event_identity_idx": {
+          "name": "message_event_identity_idx",
+          "columns": [
+            {
+              "expression": "identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "message_event_started_at_idx": {
           "name": "message_event_started_at_idx",
           "columns": [
@@ -1373,18 +1321,26 @@
           "name": "message_event_message_id_message_id_fk",
           "tableFrom": "message_event",
           "tableTo": "message",
-          "columnsFrom": ["message_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "message_event_from_identity_id_provider_identity_id_fk": {
-          "name": "message_event_from_identity_id_provider_identity_id_fk",
+        "message_event_identity_id_provider_identity_id_fk": {
+          "name": "message_event_identity_id_provider_identity_id_fk",
           "tableFrom": "message_event",
           "tableTo": "provider_identity",
-          "columnsFrom": ["from_identity_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
+          "columnsFrom": [
+            "identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -1420,7 +1376,7 @@
           "name": "template_props",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1467,8 +1423,12 @@
           "name": "message_template_message_id_message_id_fk",
           "tableFrom": "message_template",
           "tableTo": "message",
-          "columnsFrom": ["message_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1672,8 +1632,12 @@
           "name": "provider_credential_organization_id_organization_id_fk",
           "tableFrom": "provider_credential",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1696,12 +1660,6 @@
         },
         "provider_credential_id": {
           "name": "provider_credential_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1844,8 +1802,12 @@
           "name": "provider_identity_provider_credential_id_provider_credential_id_fk",
           "tableFrom": "provider_identity",
           "tableTo": "provider_credential",
-          "columnsFrom": ["provider_credential_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "provider_credential_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1992,13 +1954,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "channel": {
-          "name": "channel",
-          "type": "channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
         "category": {
           "name": "category",
           "type": "template_category",
@@ -2036,17 +1991,11 @@
         }
       },
       "indexes": {
-        "template_org_channel_slug_unique_idx": {
-          "name": "template_org_channel_slug_unique_idx",
+        "template_org_slug_unique_idx": {
+          "name": "template_org_slug_unique_idx",
           "columns": [
             {
               "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "channel",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2068,21 +2017,6 @@
           "columns": [
             {
               "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "template_channel_idx": {
-          "name": "template_channel_idx",
-          "columns": [
-            {
-              "expression": "channel",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2144,8 +2078,123 @@
           "name": "template_organization_id_organization_id_fk",
           "tableFrom": "template",
           "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.template_channel_version": {
+      "name": "template_channel_version",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "template_version_id": {
+          "name": "template_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "template_channel_version_unique_idx": {
+          "name": "template_channel_version_unique_idx",
+          "columns": [
+            {
+              "expression": "template_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "channel",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "template_channel_version_template_idx": {
+          "name": "template_channel_version_template_idx",
+          "columns": [
+            {
+              "expression": "template_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "template_channel_version_channel_idx": {
+          "name": "template_channel_version_channel_idx",
+          "columns": [
+            {
+              "expression": "channel",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "template_channel_version_template_version_id_template_version_id_fk": {
+          "name": "template_channel_version_template_version_id_template_version_id_fk",
+          "tableFrom": "template_channel_version",
+          "tableTo": "template_version",
+          "columnsFrom": [
+            "template_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2178,24 +2227,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "content": {
-          "name": "content",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "schema": {
           "name": "schema",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -2242,21 +2278,6 @@
           "method": "btree",
           "with": {}
         },
-        "template_version_active_idx": {
-          "name": "template_version_active_idx",
-          "columns": [
-            {
-              "expression": "is_active",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "template_version_created_at_idx": {
           "name": "template_version_created_at_idx",
           "columns": [
@@ -2278,8 +2299,12 @@
           "name": "template_version_template_id_template_id_fk",
           "tableFrom": "template_version",
           "tableTo": "template",
-          "columnsFrom": ["template_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "template_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2295,22 +2320,31 @@
     "public.action_type": {
       "name": "action_type",
       "schema": "public",
-      "values": ["send_message"]
+      "values": [
+        "send_message"
+      ]
     },
     "public.channel": {
       "name": "channel",
       "schema": "public",
-      "values": ["email"]
+      "values": [
+        "email"
+      ]
     },
     "public.event_source": {
       "name": "event_source",
       "schema": "public",
-      "values": ["api"]
+      "values": [
+        "api"
+      ]
     },
     "public.message_source": {
       "name": "message_source",
       "schema": "public",
-      "values": ["api"]
+      "values": [
+        "api",
+        "template"
+      ]
     },
     "public.message_status": {
       "name": "message_status",
@@ -2327,22 +2361,34 @@
     "public.provider_type": {
       "name": "provider_type",
       "schema": "public",
-      "values": ["aws"]
+      "values": [
+        "aws"
+      ]
     },
     "public.subscription_status": {
       "name": "subscription_status",
       "schema": "public",
-      "values": ["opted_out", "subscribed", "unsubscribed"]
+      "values": [
+        "opted_out",
+        "subscribed",
+        "unsubscribed"
+      ]
     },
     "public.template_category": {
       "name": "template_category",
       "schema": "public",
-      "values": ["transactional", "marketing"]
+      "values": [
+        "transactional"
+      ]
     },
     "public.template_status": {
       "name": "template_status",
       "schema": "public",
-      "values": ["draft", "active", "archived"]
+      "values": [
+        "draft",
+        "active",
+        "archived"
+      ]
     }
   },
   "schemas": {},

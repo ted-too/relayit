@@ -12,6 +12,7 @@ import {
 import { typeid } from "typeid-js";
 import { organization } from "./auth";
 import { channelEnum, templateCategoryEnum, templateStatusEnum } from "./enums";
+import type { JSONSchema } from "./json-schema";
 
 // Organization-scoped template metadata with version references
 export const template = pgTable(
@@ -57,7 +58,7 @@ export const templateVersion = pgTable(
       .references(() => template.id, { onDelete: "cascade" }),
 
     version: integer("version").notNull(),
-    schema: jsonb("schema"),
+    schema: jsonb("schema").$type<JSONSchema>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [

@@ -2,7 +2,7 @@ import { db, queueMessage, schema } from "@repo/shared/db";
 import { buildSendTemplateSchema } from "@repo/shared/providers";
 import { logger } from "@repo/shared/utils";
 import { renderEmailServer } from "@repo/template-render/react-email";
-import Ajv from "ajv";
+import Ajv from "ajv/dist/2020";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator as zValidator } from "hono-openapi";

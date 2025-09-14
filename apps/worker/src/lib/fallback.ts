@@ -76,7 +76,7 @@ export async function findFallbackProvider(
     );
 
   if (validCandidates.length === 0) {
-    logger.warn(
+    logger.debug(
       {
         ...logContext,
         stage: "no_fallback_found",
@@ -98,7 +98,7 @@ export async function findFallbackProvider(
       ...logContext,
       stage: "fallback_selected",
       selectedProvider: selectedCandidate.providerCredential.name,
-      selectedIdentity: selectedCandidate.name,
+      selectedIdentity: selectedCandidate.identifier,
       totalCandidates: validCandidates.length,
     },
     `Selected fallback provider: ${selectedCandidate.providerCredential.name}`

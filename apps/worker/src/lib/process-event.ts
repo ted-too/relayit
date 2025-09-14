@@ -55,7 +55,7 @@ export async function processMessageEvent(
   logContext.attemptNumber = eventDetails.attemptNumber;
   logContext.providerType =
     eventDetails.identity.providerCredential.providerType;
-  logContext.identityName = eventDetails.identity.name;
+  logContext.identityName = eventDetails.identity.identifier;
 
   // Idempotency check
   if (eventDetails.status === "sent" || eventDetails.status === "failed")
@@ -293,7 +293,7 @@ async function handleSendFailure(
       ...logContext,
       stage: "fallback_initiated",
       fallbackProvider: fallbackCandidate.providerCredential.name,
-      fallbackIdentity: fallbackCandidate.name,
+      fallbackIdentity: fallbackCandidate.identifier,
     },
     `Initiating fallback to ${fallbackCandidate.providerCredential.name}`
   );

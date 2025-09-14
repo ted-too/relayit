@@ -137,6 +137,7 @@ export const integrationsRouter = router({
 
     return integrations;
   }),
+  // FIXME: Add healthcheck for credentials
   create: authdOrganizationProcedure
     .input(createIntegrationSchema)
     .mutation(async ({ ctx, input }) => {

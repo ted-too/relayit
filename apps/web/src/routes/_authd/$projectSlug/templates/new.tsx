@@ -23,7 +23,7 @@ import {
 import { useAppForm } from "@repo/ui/components/custom/form";
 import { toast } from "@repo/ui/components/custom/sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Fragment } from "react";
 import { useTRPC } from "@/integrations/trpc/react";
 
@@ -34,13 +34,22 @@ export const Route = createFileRoute("/_authd/$projectSlug/templates/new")({
 function RouteComponent() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { projectSlug } = Route.useParams();
   const { mutateAsync: createApiKey } = useMutation(
     trpc.templates.create.mutationOptions({
-      onSuccess: async () => {
+      onSuccess: async ({ slug }) => {
         await queryClient.invalidateQueries({
           queryKey: trpc.templates.list.queryOptions().queryKey,
         });
         toast.success("Template created successfully");
+        navigate({
+          to: "/$projectSlug/templates/$templateSlug",
+          params: {
+            projectSlug,
+            templateSlug: slug,
+          },
+        });
       },
       onError: (error) => {
         toast.error("Failed to create template", {
@@ -71,6 +80,7 @@ function RouteComponent() {
       onSubmit: createTemplateSchema,
     },
     onSubmit: async ({ value }) => await createApiKey(value),
+    onSubmitInvalid: ({ formApi, value }) => console.log(formApi.state.errors, value),
   });
 
   return (
@@ -89,12 +99,7 @@ function RouteComponent() {
           </CardDescription>
           <CardAction>
             <form.AppForm>
-              <form.SubmitButton
-                disabled={!form.state.isDirty}
-                className="w-full"
-              >
-                Save
-              </form.SubmitButton>
+              <form.SubmitButton className="w-full">Save</form.SubmitButton>
             </form.AppForm>
           </CardAction>
         </CardHeader>
@@ -184,10 +189,10 @@ function RouteComponent() {
                                   )}
                                 </form.AppField>
                                 <form.AppField
-                                  name={`${baseKey}.content.component`}
+                                  name={`${baseKey}.content.template`}
                                 >
                                   {(field) => (
-                                    <field.TextField label="Content" textarea />
+                                    <field.TextField label="Template" textarea />
                                   )}
                                 </form.AppField>
                               </Fragment>

@@ -47,7 +47,7 @@ export const sendSES: SendMethod<"email", SESResultDetails> = async ({
     };
   }
 
-  const decryptResult = decryptRecord(credentials.credentials);
+  const decryptResult = decryptRecord(credentials.credentials.encrypted);
   if (decryptResult.error) {
     return {
       error: {
@@ -58,7 +58,14 @@ export const sendSES: SendMethod<"email", SESResultDetails> = async ({
       data: null,
     };
   }
-  const credentialsValidation = credentialsSchema.safeParse(decryptResult.data);
+  
+  // Combine decrypted encrypted fields with unencrypted fields
+  const fullCredentials = {
+    encrypted: decryptResult.data,
+    unencrypted: credentials.credentials.unencrypted,
+  };
+  
+  const credentialsValidation = credentialsSchema.safeParse(fullCredentials);
   if (!credentialsValidation.success) {
     return {
       error: {

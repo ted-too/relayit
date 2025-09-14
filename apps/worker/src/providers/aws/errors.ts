@@ -61,6 +61,9 @@ export function categorizeAWSError(awsError: any): ProviderError {
     case "CredentialsError":
     case "UnauthorizedOperation":
     case "InvalidUserID.NotFound":
+    case "SignatureDoesNotMatch":
+    case "InvalidAccessKeyId":
+    case "TokenRefreshRequired":
       return AWS_SES_ERRORS.INVALID_CREDENTIALS;
     default:
       break;

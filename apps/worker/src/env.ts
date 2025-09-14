@@ -4,6 +4,11 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
+    REDIS_URL: z.string(),
+    DATABASE_URL: z.string(),
+    ENCRYPTION_KEY_VERSION: z.string().default("v1"),
+    CREDENTIAL_ENCRYPTION_KEY_V1: z.string(),
+    
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace"])
       .optional()
@@ -36,6 +41,20 @@ export const env = createEnv({
       .optional()
       .default(30 * 1000), // 30 seconds
     WORKER_MAX_CLAIM_COUNT: z.coerce.number().optional().default(5),
+
+    // Orphaned event recovery settings
+    WORKER_ORPHANED_RECOVERY_LIMIT: z.coerce.number().optional().default(50),
+    WORKER_ORPHANED_RECOVERY_MAX_AGE_MINUTES: z.coerce
+      .number()
+      .optional()
+      .default(30), // Only recover events newer than 30 minutes
+
+    // Stuck processing event recovery settings
+    WORKER_PROCESSING_TIMEOUT_MINUTES: z.coerce
+      .number()
+      .optional()
+      .default(15), // Events stuck in processing for longer than this are recovered
+    WORKER_PROCESSING_RECOVERY_LIMIT: z.coerce.number().optional().default(50),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -16,6 +16,21 @@ const config = defineConfig({
     }),
     viteReact(),
   ],
+  // The code below is required for better-auth to work
+  define: {
+    global: "globalThis",
+  },
+  build: {
+    rollupOptions: {
+      external: ["node:async_hooks", "node:crypto", "node:buffer"],
+    },
+  },
+  optimizeDeps: {
+    exclude: ["better-auth"],
+  },
+  ssr: {
+    noExternal: ["better-auth"],
+  },
 });
 
 export default config;

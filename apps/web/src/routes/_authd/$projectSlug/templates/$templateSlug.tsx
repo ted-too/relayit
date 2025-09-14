@@ -90,13 +90,14 @@ function RouteComponent() {
       name: data.name,
       slug: data.slug,
       category: data.category,
-      schema: JSON.stringify(data.currentVersion.schema, null, 2),
+      schema: data.currentVersion.schema ? JSON.stringify(data.currentVersion.schema, null, 2) : undefined,
       channelVersions: data.currentVersion.channelVersions.map((v) => ({
         channel: v.channel,
         content: v.content,
       })),
     } as UpdateTemplateRequest,
     validators: {
+      // @ts-expect-error - FIXME: we need to fix this
       onSubmit: updateTemplateSchema,
     },
     onSubmit: async ({ value }) => await updateTemplate(value),
@@ -223,9 +224,9 @@ function RouteComponent() {
                             />
                           )}
                         </form.AppField>
-                        <form.AppField name={`${baseKey}.content.component`}>
+                        <form.AppField name={`${baseKey}.content.template`}>
                           {(field) => (
-                            <field.TextField label="Content" textarea />
+                            <field.TextField label="Template" textarea />
                           )}
                         </form.AppField>
                       </Fragment>
@@ -261,10 +262,8 @@ function RouteComponent() {
                             content ? (
                               <EmailPreview
                                 template={content}
-                                previewData={{
-                                  userFirstname: "Alan",
-                                  baseUrl: "https://koala.com",
-                                }}
+                                // TODO: Allow this to be set by the user
+                                previewData={{}}
                               />
                             ) : null
                           }

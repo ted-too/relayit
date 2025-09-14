@@ -117,7 +117,11 @@ export async function renderEmailServer(
       };
     }
 
-    const element = React.createElement(EmailComponent, props);
+    // Extract PreviewProps from the component if available and merge with provided props
+    const previewProps = EmailComponent.PreviewProps || {};
+    const mergedProps = { ...previewProps, ...props };
+
+    const element = React.createElement(EmailComponent, mergedProps);
     const html = await render(element, { pretty: options.pretty ?? true });
     const text = await render(element, { plainText: true });
 

@@ -18,3 +18,17 @@ export const createIntegrationSchema = z.object({
   isActive: z.boolean().default(true),
   credentials: z.any(),
 });
+
+export const createIdentitySchema = z.object({
+  providerCredentialId: z.string().min(1, "Provider credential ID is required"),
+  identifier: z.string().min(1, "Identifier is required"),
+  isDefault: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+});
+
+export const updateIdentitySchema = z.object({
+  id: z.string().min(1, "Identity ID is required"),
+  identifier: z.string().min(1, "Identifier is required").optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
