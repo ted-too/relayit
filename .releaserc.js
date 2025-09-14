@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: this is fine */
 module.exports = {
   branches: [
     {
