@@ -6,7 +6,6 @@ module.exports = {
       prerelease: 'alpha'
     }
   ],
-  tagFormat: 'v${version}',
   plugins: [
     [
       '@semantic-release/commit-analyzer',
