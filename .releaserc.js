@@ -24,7 +24,7 @@ module.exports = {
           { type: 'test', release: false },
           { type: 'build', release: false },
           { type: 'ci', release: false },
-          { breaking: true, release: 'minor' }
+          { breaking: true, release: 'major' }
         ]
       }
     ],
