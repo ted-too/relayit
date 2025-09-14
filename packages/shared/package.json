@@ -24,6 +24,20 @@
     "drizzle-orm": "^0.44.5",
     "pino": "^9.9.4"
   },
+  "peerDependenciesMeta": {
+    "better-auth": {
+      "optional": true
+    },
+    "typeid-js": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    },
+    "pino": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "zod": "^4.1.8"
   }

@@ -10,10 +10,7 @@ RUN turbo prune @repo/api --docker
 FROM base AS deps
 WORKDIR /app
 COPY --from=pruner /app/out/json .
-# FIXME: There is currently a bug with turbo prune for bun where the lockfile is not updated.
-# Will investigate this further. https://github.com/vercel/turborepo/discussions/7456
-# RUN bun install --frozen-lockfile
-RUN bun install
+RUN bun install --frozen-lockfile
 
 FROM base AS builder
 ARG TURBO_TOKEN

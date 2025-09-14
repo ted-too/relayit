@@ -12,9 +12,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.3",
-    "@emnapi/core": "^1.4.5",
-    "@emnapi/runtime": "^1.5.0",
-    "@tybys/wasm-util": "^0.10.1",
     "husky": "^9.1.7",
     "syncpack": "14.0.0-alpha.19",
     "turbo": "^2.5.6",

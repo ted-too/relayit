@@ -42,6 +42,9 @@
     "@types/react-dom": "^19",
     "@repo/api": "workspace:*",
     "@vitejs/plugin-react": "^5.0.2",
+    "@emnapi/core": "^1.4.5",
+    "@emnapi/runtime": "^1.5.0",
+    "@tybys/wasm-util": "^0.10.1",
     "vite": "^7.1.5"
   },
   "peerDependencies": {
