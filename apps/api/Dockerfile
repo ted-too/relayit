@@ -1,15 +1,15 @@
+# This is intentionally not using turbo prune - https://turborepo.com/docs/guides/tools/docker#the---docker-flag
+# Because of this issue - https://github.com/vercel/turborepo/issues/10658
+# TODO: Consider switching to it when this gets merged - https://github.com/vercel/turborepo/pull/10729
+
 FROM oven/bun:1 AS base
 WORKDIR /usr/src/app
 
-FROM base AS pruner
-WORKDIR /app
-RUN bun add turbo@^2.5.6 --global
-COPY . .
-RUN turbo prune @repo/api --docker
-
 FROM base AS deps
 WORKDIR /app
-COPY --from=pruner /app/out/json .
+
+COPY . .
+
 RUN bun install --frozen-lockfile
 
 FROM base AS builder
@@ -17,10 +17,9 @@ ARG TURBO_TOKEN
 ARG TURBO_TEAM
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=pruner /app/out/full .
+COPY --from=deps /app .
 
-RUN TURBO_TOKEN=$TURBO_TOKEN TURBO_TEAM=$TURBO_TEAM NODE_ENV=production bun run turbo build
+RUN TURBO_TOKEN=$TURBO_TOKEN TURBO_TEAM=$TURBO_TEAM NODE_ENV=production bun run turbo build --filter=@repo/api
 
 FROM base AS runner
 WORKDIR /app

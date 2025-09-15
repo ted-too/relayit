@@ -20,9 +20,9 @@
     "ultracite": "5.3.4"
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1.2.21"
   },
-  "packageManager": "bun@1.2.12",
+  "packageManager": "bun@1.2.21",
   "workspaces": [
     "apps/*",
     "packages/*"
