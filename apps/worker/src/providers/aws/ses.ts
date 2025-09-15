@@ -9,6 +9,7 @@ import {
   channelIdentifierValidators,
   PROVIDER_CONFIG,
 } from "@repo/shared/providers";
+import { formatEmailIdentity } from "@/lib/email-utils";
 import { categorizeAWSError } from "@/providers/aws/errors";
 import { PROVIDER_ERRORS } from "@/providers/errors";
 import type { SendMethod } from "@/providers/interface";
@@ -58,13 +59,13 @@ export const sendSES: SendMethod<"email", SESResultDetails> = async ({
       data: null,
     };
   }
-  
+
   // Combine decrypted encrypted fields with unencrypted fields
   const fullCredentials = {
     encrypted: decryptResult.data,
     unencrypted: credentials.credentials.unencrypted,
   };
-  
+
   const credentialsValidation = credentialsSchema.safeParse(fullCredentials);
   if (!credentialsValidation.success) {
     return {
@@ -86,7 +87,7 @@ export const sendSES: SendMethod<"email", SESResultDetails> = async ({
     },
   });
   const emailParams: SendEmailCommandInput = {
-    Source: identity.identifier,
+    Source: formatEmailIdentity(identity),
     Destination: { ToAddresses: [to] },
     Message: {
       Subject: { Data: payload.subject, Charset: "UTF-8" },

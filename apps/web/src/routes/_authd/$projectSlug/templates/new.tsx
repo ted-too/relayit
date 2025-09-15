@@ -80,7 +80,8 @@ function RouteComponent() {
       onSubmit: createTemplateSchema,
     },
     onSubmit: async ({ value }) => await createApiKey(value),
-    onSubmitInvalid: ({ formApi, value }) => console.log(formApi.state.errors, value),
+    onSubmitInvalid: ({ formApi, value }) =>
+      console.log(formApi.state.errors, value),
   });
 
   return (
@@ -192,7 +193,10 @@ function RouteComponent() {
                                   name={`${baseKey}.content.template`}
                                 >
                                   {(field) => (
-                                    <field.TextField label="Template" textarea />
+                                    <field.TextField
+                                      label="Template"
+                                      textarea
+                                    />
                                   )}
                                 </form.AppField>
                               </Fragment>

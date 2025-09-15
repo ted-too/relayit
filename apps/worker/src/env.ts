@@ -8,7 +8,7 @@ export const env = createEnv({
     DATABASE_URL: z.string(),
     ENCRYPTION_KEY_VERSION: z.string().default("v1"),
     CREDENTIAL_ENCRYPTION_KEY_V1: z.string(),
-    
+
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace"])
       .optional()
@@ -50,11 +50,19 @@ export const env = createEnv({
       .default(30), // Only recover events newer than 30 minutes
 
     // Stuck processing event recovery settings
-    WORKER_PROCESSING_TIMEOUT_MINUTES: z.coerce
+    WORKER_PROCESSING_TIMEOUT_MINUTES: z.coerce.number().optional().default(15), // Events stuck in processing for longer than this are recovered
+    WORKER_PROCESSING_RECOVERY_LIMIT: z.coerce.number().optional().default(50),
+
+    // Redis stream duplicate detection settings
+    WORKER_STREAM_SCAN_TIME_WINDOW_HOURS: z.coerce
       .number()
       .optional()
-      .default(15), // Events stuck in processing for longer than this are recovered
-    WORKER_PROCESSING_RECOVERY_LIMIT: z.coerce.number().optional().default(50),
+      .default(1), // How far back to scan for duplicates (in hours)
+    WORKER_STREAM_SCAN_MAX_MESSAGES: z.coerce.number().optional().default(5000), // Maximum messages to scan in time window
+    WORKER_STREAM_FALLBACK_SCAN_LIMIT: z.coerce
+      .number()
+      .optional()
+      .default(2000), // Fallback limit when time-based scanning fails
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

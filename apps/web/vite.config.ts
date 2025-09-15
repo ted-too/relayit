@@ -25,12 +25,6 @@ const config = defineConfig({
       external: ["node:async_hooks", "node:crypto", "node:buffer"],
     },
   },
-  optimizeDeps: {
-    exclude: ["better-auth"],
-  },
-  ssr: {
-    noExternal: ["better-auth"],
-  },
 });
 
 export default config;

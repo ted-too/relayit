@@ -149,6 +149,7 @@ export const identitiesRouter = router({
           .values({
             providerCredentialId: input.providerCredentialId,
             identifier: input.identifier,
+            channelData: input.channelData || {},
             isDefault: shouldBeDefault,
             isActive: input.isActive,
           })
@@ -240,6 +241,7 @@ export const identitiesRouter = router({
           .update(schema.providerIdentity)
           .set({
             identifier: input.identifier,
+            channelData: input.channelData || {},
             isDefault: input.isDefault,
             isActive: input.isActive,
           })

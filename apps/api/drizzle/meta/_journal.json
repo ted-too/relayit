@@ -15,6 +15,27 @@
       "when": 1757832891679,
       "tag": "0001_flaky_redwing",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757890901595,
+      "tag": "0002_faulty_gressill",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1757892502550,
+      "tag": "0003_tough_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757892857569,
+      "tag": "0004_majestic_omega_flight",
+      "breakpoints": true
     }
   ]
 }

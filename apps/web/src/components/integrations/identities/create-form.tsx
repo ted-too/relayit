@@ -1,3 +1,4 @@
+import type { SanitizedProviderCredential } from "@repo/shared/db/types";
 import { createIdentitySchema } from "@repo/shared/forms";
 import {
   Tooltip,
@@ -16,46 +17,66 @@ import {
 } from "@repo/ui/components/base/dialog";
 import { formatFormErrors, useAppForm } from "@repo/ui/components/custom/form";
 import { toast } from "@repo/ui/components/custom/sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import type z from "zod";
 import { useTRPC } from "@/integrations/trpc/react";
 
 type CreateIdentityFormProps = {
-  providerCredentialId: string;
+  providerCredential: SanitizedProviderCredential;
   submitWrapper?: typeof DialogFooter;
   onSuccess?: () => void;
   onError?: () => void;
 };
 
 export function CreateIdentityForm({
-  providerCredentialId,
+  providerCredential,
   submitWrapper,
   onSuccess,
   onError,
 }: CreateIdentityFormProps) {
   const schema = createIdentitySchema;
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  const {
+    data: { session },
+  } = useSuspenseQuery(trpc.auth.getSession.queryOptions());
+
+  const isEmailProvider = providerCredential.channelType === "email";
+  const orgName = session.activeOrganization?.name;
 
   const defaultValues = useMemo(
     () =>
       ({
-        providerCredentialId,
+        providerCredentialId: providerCredential.id,
         identifier: "",
+        channelData:
+          isEmailProvider && orgName
+            ? {
+                email: {
+                  name: orgName,
+                },
+              }
+            : {},
         isDefault: false,
         isActive: true,
       }) as z.infer<typeof schema>,
-    [providerCredentialId]
+    [providerCredential.id, isEmailProvider, orgName]
   );
-
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
 
   const { mutateAsync: createIdentity } = useMutation(
     trpc.identities.create.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.identities.list.queryOptions({ providerCredentialId }).queryKey,
+          queryKey: trpc.identities.list.queryOptions({
+            providerCredentialId: providerCredential.id,
+          }).queryKey,
         });
         toast.success("Identity created successfully");
         onSuccess?.();
@@ -103,6 +124,17 @@ export function CreateIdentityForm({
           />
         )}
       </form.AppField>
+      {isEmailProvider && (
+        <form.AppField name="channelData.email.name">
+          {(field) => (
+            <field.TextField
+              label="Display Name"
+              placeholder="e.g. Your Company Name"
+              description="The name that will appear in the 'From' field of emails"
+            />
+          )}
+        </form.AppField>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <form.AppField name="isDefault">
           {(field) => (
@@ -141,9 +173,9 @@ export function CreateIdentityForm({
 }
 
 export function CreateIdentityDialog({
-  providerCredentialId,
+  providerCredential,
 }: {
-  providerCredentialId: string;
+  providerCredential: SanitizedProviderCredential;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -172,7 +204,7 @@ export function CreateIdentityDialog({
           </DialogDescription>
         </DialogHeader>
         <CreateIdentityForm
-          providerCredentialId={providerCredentialId}
+          providerCredential={providerCredential}
           submitWrapper={DialogFooter}
           onSuccess={() => setOpen(false)}
         />

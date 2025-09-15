@@ -168,7 +168,12 @@ async function checkAndRecoverOrphanedEvents(): Promise<void> {
     const recoveryResult = await recoverOrphanedEvents(
       env.WORKER_CONSUMER_GROUP_NAME,
       env.WORKER_ORPHANED_RECOVERY_LIMIT,
-      env.WORKER_ORPHANED_RECOVERY_MAX_AGE_MINUTES
+      env.WORKER_ORPHANED_RECOVERY_MAX_AGE_MINUTES,
+      {
+        timeWindowHours: env.WORKER_STREAM_SCAN_TIME_WINDOW_HOURS,
+        maxMessagesInWindow: env.WORKER_STREAM_SCAN_MAX_MESSAGES,
+        fallbackScanLimit: env.WORKER_STREAM_FALLBACK_SCAN_LIMIT,
+      }
     );
 
     if (recoveryResult.error) {
@@ -300,41 +305,46 @@ async function checkAndClaimPendingEvents(): Promise<void> {
         );
 
         // Process claimed events
-        const processingPromises = claimedEvents.map(async ([streamId, fields]) => {
-          let eventId: string | null = null;
-          for (let i = 0; i < fields.length; i += 2) {
-            if (fields[i] === "eventId") {
-              eventId = fields[i + 1] || null;
-              break;
+        const processingPromises = claimedEvents.map(
+          async ([streamId, fields]) => {
+            let eventId: string | null = null;
+            for (let i = 0; i < fields.length; i += 2) {
+              if (fields[i] === "eventId") {
+                eventId = fields[i + 1] || null;
+                break;
+              }
             }
-          }
 
-          try {
-            if (eventId) {
-              await processMessageEvent(
-                eventId,
+            try {
+              if (eventId) {
+                await processMessageEvent(
+                  eventId,
+                  streamId,
+                  env.WORKER_CONSUMER_GROUP_NAME
+                );
+              }
+            } finally {
+              // Always acknowledge Redis stream entry to prevent reprocessing
+              const ackResult = await acknowledgeEvent(
                 streamId,
                 env.WORKER_CONSUMER_GROUP_NAME
               );
-            }
-          } finally {
-            // Always acknowledge Redis stream entry to prevent reprocessing
-            const ackResult = await acknowledgeEvent(streamId, env.WORKER_CONSUMER_GROUP_NAME);
-            if (ackResult.error) {
-              logger.error(
-                {
-                  ...workerContext,
-                  operation: "checkAndClaimPendingEvents",
-                  eventId,
-                  streamId,
-                  error: ackResult.error,
-                  stage: "acknowledgment_claimed",
-                },
-                "CRITICAL: Failed to acknowledge claimed event"
-              );
+              if (ackResult.error) {
+                logger.error(
+                  {
+                    ...workerContext,
+                    operation: "checkAndClaimPendingEvents",
+                    eventId,
+                    streamId,
+                    error: ackResult.error,
+                    stage: "acknowledgment_claimed",
+                  },
+                  "CRITICAL: Failed to acknowledge claimed event"
+                );
+              }
             }
           }
-        });
+        );
 
         await Promise.allSettled(processingPromises);
       }
@@ -579,13 +589,13 @@ async function startWorker() {
     },
     "Running startup recovery checks"
   );
-  
+
   // First, recover events stuck in processing (crashed workers)
   await checkAndRecoverStuckProcessingEvents();
-  
+
   // Second, recover any orphaned events from the database
   await checkAndRecoverOrphanedEvents();
-  
+
   // Finally, claim any pending events from Redis
   await checkAndClaimPendingEvents();
 

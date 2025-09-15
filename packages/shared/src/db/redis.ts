@@ -329,19 +329,31 @@ export async function findOrphanedQueuedEvents(
 }
 
 /**
- * Checks if a message event is currently being processed by checking if it's
- * in the Redis stream as a pending message. This helps prevent duplicate processing.
+ * Checks if a message event exists anywhere in the Redis stream.
+ * Uses a hybrid approach: check pending messages first, then use a time-based
+ * heuristic to scan recent messages efficiently.
  *
  * @param eventId - The message event ID to check
  * @param groupName - The consumer group name
- * @returns True if the event is currently pending in Redis, false otherwise
+ * @param options - Configuration options for scanning
+ * @returns True if the event exists in Redis stream, false otherwise
  */
-export async function isEventPendingInRedis(
+export async function isEventInRedisStream(
   eventId: string,
-  groupName: string
+  groupName: string,
+  options: {
+    timeWindowHours?: number;
+    maxMessagesInWindow?: number;
+    fallbackScanLimit?: number;
+  } = {}
 ): Promise<Result<boolean>> {
+  const {
+    timeWindowHours = 1,
+    maxMessagesInWindow = 5000,
+    fallbackScanLimit = 2000,
+  } = options;
   try {
-    // Get pending messages summary first
+    // First check pending messages (already consumed but not acknowledged)
     const pendingResult = await getPendingEvents(groupName, 1000);
     if (pendingResult.error) {
       return pendingResult;
@@ -378,11 +390,71 @@ export async function isEventPendingInRedis(
       }
     }
 
+    // For unprocessed messages, use a time-based approach
+    // Check messages from the configured time window
+    try {
+      const timeWindowMs = timeWindowHours * 60 * 60 * 1000;
+      const windowStartTime = Date.now() - timeWindowMs;
+      const startTime = `${windowStartTime}-0`; // Redis stream ID format: timestamp-sequence
+
+      // Use XRANGE to efficiently scan messages from the time window
+      const recentMessages = await redis.send("XRANGE", [
+        MESSAGE_QUEUE_STREAM,
+        startTime,
+        "+", // Current time
+        "COUNT",
+        maxMessagesInWindow.toString(),
+      ]);
+
+      if (Array.isArray(recentMessages)) {
+        for (const message of recentMessages) {
+          if (Array.isArray(message) && message.length >= 2) {
+            const [, fields] = message;
+            if (Array.isArray(fields)) {
+              for (let i = 0; i < fields.length; i += 2) {
+                if (fields[i] === "eventId" && fields[i + 1] === eventId) {
+                  return { error: null, data: true };
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // If time-based search fails, fall back to checking recent messages
+      try {
+        const recentMessages = await redis.send("XREVRANGE", [
+          MESSAGE_QUEUE_STREAM,
+          "+",
+          "-",
+          "COUNT",
+          fallbackScanLimit.toString(),
+        ]);
+
+        if (Array.isArray(recentMessages)) {
+          for (const message of recentMessages) {
+            if (Array.isArray(message) && message.length >= 2) {
+              const [, fields] = message;
+              if (Array.isArray(fields)) {
+                for (let i = 0; i < fields.length; i += 2) {
+                  if (fields[i] === "eventId" && fields[i + 1] === eventId) {
+                    return { error: null, data: true };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // If all else fails, assume not found (better to potentially duplicate than crash)
+      }
+    }
+
     return { error: null, data: false };
   } catch (error) {
     return {
       error: createGenericError(
-        `Failed to check if event ${eventId} is pending in Redis`,
+        `Failed to check if event ${eventId} exists in Redis stream`,
         error as Error
       ),
       data: null,
@@ -393,7 +465,7 @@ export async function isEventPendingInRedis(
 /**
  * Finds message events that are stuck in "processing" status for too long.
  * These are events where a worker started processing but crashed before completion.
- * 
+ *
  * @param timeoutMinutes - Events processing longer than this are considered stuck
  * @param limit - Maximum number of events to return
  * @returns Array of message event IDs that need to be reset and requeued
@@ -404,7 +476,7 @@ export async function findStuckProcessingEvents(
 ): Promise<Result<string[]>> {
   try {
     const timeoutTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-    
+
     const stuckEvents = await db.query.messageEvent.findMany({
       where: (table, { eq, and, lt, isNull }) =>
         and(
@@ -419,8 +491,8 @@ export async function findStuckProcessingEvents(
       limit,
     });
 
-    const eventIds = stuckEvents.map(event => event.id);
-    
+    const eventIds = stuckEvents.map((event) => event.id);
+
     return { error: null, data: eventIds };
   } catch (error) {
     return {
@@ -436,7 +508,7 @@ export async function findStuckProcessingEvents(
 /**
  * Resets stuck processing events back to queued status and queues them to Redis.
  * This handles events where workers crashed during processing.
- * 
+ *
  * @param timeoutMinutes - Events processing longer than this are considered stuck
  * @param limit - Maximum number of events to recover
  * @returns Number of events successfully recovered
@@ -454,9 +526,9 @@ export async function recoverStuckProcessingEvents(
 
     const stuckEventIds = stuckResult.data;
     if (stuckEventIds.length === 0) {
-      return { 
-        error: null, 
-        data: { recovered: 0, failed: 0 } 
+      return {
+        error: null,
+        data: { recovered: 0, failed: 0 },
       };
     }
 
@@ -482,7 +554,9 @@ export async function recoverStuckProcessingEvents(
           // Queue it back to Redis
           const queueResult = await queueMessage(eventId);
           if (queueResult.error) {
-            throw new Error(`Failed to queue event ${eventId}: ${queueResult.error.message}`);
+            throw new Error(
+              `Failed to queue event ${eventId}: ${queueResult.error.message}`
+            );
           }
         });
 
@@ -495,7 +569,7 @@ export async function recoverStuckProcessingEvents(
 
     return {
       error: null,
-      data: { recovered, failed }
+      data: { recovered, failed },
     };
   } catch (error) {
     return {
@@ -510,17 +584,23 @@ export async function recoverStuckProcessingEvents(
 
 /**
  * Recovers orphaned queued events by finding them in the database and queueing them to Redis.
- * Only queues events that are not already pending in Redis to avoid duplicates.
- * 
+ * Only queues events that are not already in Redis stream to avoid duplicates.
+ *
  * @param groupName - The consumer group name
  * @param limit - Maximum number of events to recover
  * @param maxAgeMinutes - Only recover events newer than this
+ * @param streamScanOptions - Configuration for Redis stream duplicate detection
  * @returns Number of events successfully recovered
  */
 export async function recoverOrphanedEvents(
   groupName: string,
   limit = 50,
-  maxAgeMinutes = 30
+  maxAgeMinutes = 30,
+  streamScanOptions?: {
+    timeWindowHours?: number;
+    maxMessagesInWindow?: number;
+    fallbackScanLimit?: number;
+  }
 ): Promise<Result<{ recovered: number; skipped: number; failed: number }>> {
   try {
     // Find orphaned events
@@ -543,15 +623,19 @@ export async function recoverOrphanedEvents(
 
     // Process each orphaned event
     for (const eventId of orphanedEventIds) {
-      // Check if it's already pending in Redis
-      const pendingResult = await isEventPendingInRedis(eventId, groupName);
-      if (pendingResult.error) {
+      // Check if it's already in Redis stream (pending or unprocessed)
+      const inStreamResult = await isEventInRedisStream(
+        eventId,
+        groupName,
+        streamScanOptions
+      );
+      if (inStreamResult.error) {
         failed++;
         continue;
       }
 
-      if (pendingResult.data) {
-        // Already pending in Redis, skip it
+      if (inStreamResult.data) {
+        // Already in Redis stream, skip it
         skipped++;
         continue;
       }

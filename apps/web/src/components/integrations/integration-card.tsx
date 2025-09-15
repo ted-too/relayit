@@ -1,4 +1,5 @@
-import type { ProviderCredential } from "@repo/shared/db/types";
+import type { SanitizedProviderCredential } from "@repo/shared/db/types";
+import { Badge } from "@repo/ui/components/base/badge";
 import { Button } from "@repo/ui/components/base/button";
 import { Card } from "@repo/ui/components/base/card";
 import { ConfirmAction } from "@repo/ui/components/custom/confirm-action";
@@ -12,7 +13,7 @@ import { IdentityCard } from "./identities/identity-card";
 export function IntegrationCard({
   integration,
 }: {
-  integration: ProviderCredential;
+  integration: SanitizedProviderCredential;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -43,15 +44,32 @@ export function IntegrationCard({
   return (
     <div className="flex flex-col gap-2">
       <Card className="flex flex-row items-center gap-3 px-4 py-3">
-        <Icon className="size-4" />
+        <Icon className="size-9.5" />
         <div className="flex flex-col">
-          <span className="font-semibold text-sm">{integration.name}</span>
-          <span className="text-muted-foreground text-xs">
-            Created: {new Date(integration.createdAt).toLocaleDateString()}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">{integration.name}</span>
+            {integration.isDefault && (
+              <Badge variant="secondary" className="text-xs">
+                Default
+              </Badge>
+            )}
+            {!integration.isActive && (
+              <Badge variant="outline" className="text-xs">
+                Inactive
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-muted-foreground text-xs">
+            <span>
+              Created: {new Date(integration.createdAt).toLocaleDateString()}
+            </span>
+            <span>Channel: {integration.channelType}</span>
+            <span>Priority: {integration.priority}</span>
+            {data && <span>Identities: {data.length}</span>}
+          </div>
         </div>
         <div className="ms-auto flex items-center gap-4">
-          <CreateIdentityDialog providerCredentialId={integration.id} />
+          <CreateIdentityDialog providerCredential={integration} />
           <ConfirmAction
             execute={async () => {
               await deleteIntegration({ id: integration.id });
@@ -67,14 +85,14 @@ export function IntegrationCard({
             </Button>
           </ConfirmAction>
         </div>
-       </Card>
-       {data?.map((identity) => (
-         <IdentityCard
-           key={identity.id}
-           identity={identity}
-           providerCredentialId={integration.id}
-         />
-       ))}
+      </Card>
+      {data?.map((identity) => (
+        <IdentityCard
+          key={identity.id}
+          identity={identity}
+          providerCredentialId={integration.id}
+        />
+      ))}
     </div>
   );
 }

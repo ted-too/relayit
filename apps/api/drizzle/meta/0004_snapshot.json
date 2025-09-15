@@ -1,6 +1,6 @@
 {
-  "id": "6533e13c-05b6-4f52-8204-1ca541a88a48",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "08cf6677-0e51-4f42-a571-77589c5ef021",
+  "prevId": "7aa36694-4084-490a-b73f-f5f0993e4769",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -143,7 +143,7 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "refill_interval": {
           "name": "refill_interval",
@@ -937,6 +937,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "app_environment": {
+          "name": "app_environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "api_key_id": {
           "name": "api_key_id",
           "type": "text",
@@ -1044,6 +1050,21 @@
           "columns": [
             {
               "expression": "app_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_app_environment_idx": {
+          "name": "message_app_environment_idx",
+          "columns": [
+            {
+              "expression": "app_environment",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1599,6 +1620,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "channel_data": {
+          "name": "channel_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "is_default": {
           "name": "is_default",

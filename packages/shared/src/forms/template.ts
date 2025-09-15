@@ -78,7 +78,10 @@ export const createTemplateSchema = z.object({
   category: z.enum(AVAILABLE_TEMPLATE_CATEGORIES),
 
   // This is a JSON schema string
-  schema: z.string().optional().transform((val) => (val ? JSON.parse(val) : undefined)),
+  schema: z
+    .string()
+    .optional()
+    .transform((val) => (val ? JSON.parse(val) : undefined)),
 
   channelVersions: z
     .array(channelContentSchema)

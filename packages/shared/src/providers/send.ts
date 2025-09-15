@@ -72,6 +72,11 @@ const buildBaseSendSchema = (channel: ChannelType) =>
       .optional()
       .describe("Application identifier for message tagging")
       .meta({ example: "mobile-app" }),
+    appEnvironment: z
+      .string()
+      .optional()
+      .describe("Application environment for message tagging")
+      .meta({ example: "production" }),
   });
 
 export const buildSendRawSchema = (channel: ChannelType) =>
