@@ -25,7 +25,7 @@ FROM base AS runner
 WORKDIR /app
 
 # Required for pino logging
-RUN echo '{"dependencies":{"pino":"^9.9.4","pino-pretty":"^13.1.1"}}' > package.json && \
+RUN echo '{"dependencies":{"pino":"^9.9.4","pino-pretty":"^13.1.1", "@react-email/components": "^0.5.3", "@react-email/render": "^1.2.3", "react": "^19.0.0", "react-dom": "^19.0.0"}}' > package.json && \
     bun install --production
 
 RUN addgroup --system --gid 1003 honojs && \
