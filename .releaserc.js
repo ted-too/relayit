@@ -13,7 +13,7 @@ module.exports = {
       {
         preset: "conventionalcommits",
         releaseRules: [
-          { type: "feat", release: "minor" },
+          { type: "feat", release: "patch" },
           { type: "fix", release: "patch" },
           { type: "perf", release: "patch" },
           { type: "revert", release: "patch" },
@@ -26,12 +26,21 @@ module.exports = {
           { type: "ci", release: false },
           { breaking: true, release: "minor" },
         ],
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"],
+        },
       },
     ],
     [
       "@semantic-release/release-notes-generator",
       {
         preset: "conventionalcommits",
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"],
+        },
+        writerOpts: {
+          commitsSort: ["subject", "scope"],
+        },
         presetConfig: {
           types: [
             { type: "feat", section: "🚀 Features" },
