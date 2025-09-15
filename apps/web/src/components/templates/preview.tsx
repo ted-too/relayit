@@ -1,15 +1,19 @@
 import type { EmailContent } from "@repo/shared/forms";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTRPC } from "@/integrations/trpc/react";
 
 interface EmailPreviewProps {
   template: EmailContent;
-  previewData: Record<string, any>;
+  previewData?: Record<string, any>;
   className?: string;
 }
 
-export function EmailPreview({
+// FIXME: This component is not memoized correctly
+// This will be fixed when we extract the channel specific templates to a separate component
+// We will be able to handle preview upstream
+
+function InternalEmailPreview({
   template,
   previewData,
   className,
@@ -25,6 +29,13 @@ export function EmailPreview({
     isPending: isLoading,
   } = useMutation(trpc.templates.preview.mutationOptions());
 
+  // const previewTemplate = useCallback(
+  //   (params: Parameters<typeof mutate>[0]) => {
+  //     mutate(params);
+  //   },
+  //   []
+  // );
+
   useEffect(() => {
     console.log("previewing template");
     previewTemplate({
@@ -32,7 +43,7 @@ export function EmailPreview({
         channel: "email",
         content: template,
       },
-      props: previewData,
+      props: previewData || {},
     });
   }, [previewData, template, previewTemplate]);
 
@@ -99,7 +110,7 @@ export function EmailPreview({
                   channel: "email",
                   content: template,
                 },
-                props: previewData,
+                props: previewData || {},
               });
             }}
             className="rounded border border-red-300 bg-red-100 px-3 py-1 text-red-800 text-sm transition-colors hover:bg-red-200"
@@ -159,3 +170,15 @@ export function EmailPreview({
     </div>
   );
 }
+
+export const EmailPreview = memo(
+  InternalEmailPreview,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.template.template === nextProps.template.template &&
+      prevProps.template.subject === nextProps.template.subject &&
+      prevProps.template.engine === nextProps.template.engine &&
+      prevProps.previewData === nextProps.previewData
+    );
+  }
+);

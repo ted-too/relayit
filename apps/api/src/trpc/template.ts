@@ -234,7 +234,7 @@ export const templateRouter = router({
               version: nextVersion,
               schema: (updateData.schema
                 ? updateData.schema
-                : currentVersion?.schema) as (JSONSchema | undefined),
+                : currentVersion?.schema) as JSONSchema | undefined,
             })
             .returning();
 

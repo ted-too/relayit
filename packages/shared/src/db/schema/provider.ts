@@ -57,7 +57,10 @@ export const providerCredential = pgTable(
 
 export type ProviderCredential = InferSelectModel<typeof providerCredential>;
 
-export type SanitizedProviderCredential = Omit<ProviderCredential, "credentials">;
+export type SanitizedProviderCredential = Omit<
+  ProviderCredential,
+  "credentials"
+>;
 
 export const providerCredentialRelations = relations(
   providerCredential,
@@ -82,7 +85,10 @@ export const providerIdentity = pgTable(
       .references(() => providerCredential.id, { onDelete: "cascade" }),
 
     identifier: text("identifier").notNull(),
-    channelData: jsonb("channel_data").$type<ChannelSpecificData>().default({}).notNull(),
+    channelData: jsonb("channel_data")
+      .$type<ChannelSpecificData>()
+      .default({})
+      .notNull(),
     isDefault: boolean("is_default").default(false).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

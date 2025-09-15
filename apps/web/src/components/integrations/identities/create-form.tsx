@@ -74,8 +74,8 @@ export function CreateIdentityForm({
     trpc.identities.create.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.identities.list.queryOptions({ 
-            providerCredentialId: providerCredential.id 
+          queryKey: trpc.identities.list.queryOptions({
+            providerCredentialId: providerCredential.id,
           }).queryKey,
         });
         toast.success("Identity created successfully");

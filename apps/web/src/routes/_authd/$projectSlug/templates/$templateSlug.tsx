@@ -90,7 +90,9 @@ function RouteComponent() {
       name: data.name,
       slug: data.slug,
       category: data.category,
-      schema: data.currentVersion.schema ? JSON.stringify(data.currentVersion.schema, null, 2) : undefined,
+      schema: data.currentVersion.schema
+        ? JSON.stringify(data.currentVersion.schema, null, 2)
+        : undefined,
       channelVersions: data.currentVersion.channelVersions.map((v) => ({
         channel: v.channel,
         content: v.content,
@@ -263,7 +265,7 @@ function RouteComponent() {
                               <EmailPreview
                                 template={content}
                                 // TODO: Allow this to be set by the user
-                                previewData={{}}
+                                previewData={undefined}
                               />
                             ) : null
                           }

@@ -43,7 +43,8 @@ export function IdentityCard({
           <span className="truncate font-medium text-sm">
             {identity.channelData?.email?.name ? (
               <>
-                "{identity.channelData.email.name}" &lt;{identity.identifier}&gt;
+                "{identity.channelData.email.name}" &lt;{identity.identifier}
+                &gt;
               </>
             ) : (
               identity.identifier
@@ -61,7 +62,9 @@ export function IdentityCard({
           )}
         </div>
         <div className="flex items-center gap-3 text-muted-foreground text-xs">
-          <span>Added: {new Date(identity.createdAt).toLocaleDateString()}</span>
+          <span>
+            Added: {new Date(identity.createdAt).toLocaleDateString()}
+          </span>
           {identity.channelData?.email?.name && (
             <span>Display Name: {identity.channelData.email.name}</span>
           )}

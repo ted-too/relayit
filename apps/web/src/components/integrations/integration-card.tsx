@@ -60,12 +60,12 @@ export function IntegrationCard({
             )}
           </div>
           <div className="flex items-center gap-3 text-muted-foreground text-xs">
-            <span>Created: {new Date(integration.createdAt).toLocaleDateString()}</span>
+            <span>
+              Created: {new Date(integration.createdAt).toLocaleDateString()}
+            </span>
             <span>Channel: {integration.channelType}</span>
             <span>Priority: {integration.priority}</span>
-            {data && (
-              <span>Identities: {data.length}</span>
-            )}
+            {data && <span>Identities: {data.length}</span>}
           </div>
         </div>
         <div className="ms-auto flex items-center gap-4">

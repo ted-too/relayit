@@ -6,19 +6,22 @@ import { AVAILABLE_CHANNELS } from "@/providers";
 const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F]/;
 
 // Display name validator for email identities - more permissive than safeString
-export const displayName = z.string()
+export const displayName = z
+  .string()
   .min(1, "Display name is required")
   .max(100, "Display name must be 100 characters or less")
   .trim()
   .refine((val) => !CONTROL_CHARS_REGEX.test(val), {
-    message: "Control characters are not allowed"
+    message: "Control characters are not allowed",
   });
 
 // Channel-specific data schema
 export const channelDataSchema = z.object({
-  email: z.object({
-    name: displayName.optional(),
-  }).optional(),
+  email: z
+    .object({
+      name: displayName.optional(),
+    })
+    .optional(),
 });
 
 export type ChannelSpecificData = z.infer<typeof channelDataSchema>;

@@ -59,13 +59,13 @@ export const sendSES: SendMethod<"email", SESResultDetails> = async ({
       data: null,
     };
   }
-  
+
   // Combine decrypted encrypted fields with unencrypted fields
   const fullCredentials = {
     encrypted: decryptResult.data,
     unencrypted: credentials.credentials.unencrypted,
   };
-  
+
   const credentialsValidation = credentialsSchema.safeParse(fullCredentials);
   if (!credentialsValidation.success) {
     return {

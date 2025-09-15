@@ -93,12 +93,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -251,12 +247,8 @@
           "name": "apikey_user_id_user_id_fk",
           "tableFrom": "apikey",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -302,12 +294,8 @@
           "name": "apikey_organization_apikey_id_apikey_id_fk",
           "tableFrom": "apikey_organization",
           "tableTo": "apikey",
-          "columnsFrom": [
-            "apikey_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["apikey_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -315,12 +303,8 @@
           "name": "apikey_organization_organization_id_organization_id_fk",
           "tableFrom": "apikey_organization",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -385,12 +369,8 @@
           "name": "invitation_organization_id_organization_id_fk",
           "tableFrom": "invitation",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -398,12 +378,8 @@
           "name": "invitation_inviter_id_user_id_fk",
           "tableFrom": "invitation",
           "tableTo": "user",
-          "columnsFrom": [
-            "inviter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["inviter_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -456,12 +432,8 @@
           "name": "member_organization_id_organization_id_fk",
           "tableFrom": "member",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -469,12 +441,8 @@
           "name": "member_user_id_user_id_fk",
           "tableFrom": "member",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -540,9 +508,7 @@
         "organization_slug_unique": {
           "name": "organization_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -610,16 +576,12 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "user_normalized_email_unique": {
           "name": "user_normalized_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "normalized_email"
-          ]
+          "columns": ["normalized_email"]
         }
       },
       "policies": {},
@@ -740,12 +702,8 @@
           "name": "contact_organization_id_organization_id_fk",
           "tableFrom": "contact",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -951,12 +909,8 @@
           "name": "contact_identifier_contact_id_contact_id_fk",
           "tableFrom": "contact_identifier",
           "tableTo": "contact",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1142,12 +1096,8 @@
           "name": "message_api_key_id_apikey_id_fk",
           "tableFrom": "message",
           "tableTo": "apikey",
-          "columnsFrom": [
-            "api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["api_key_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1155,12 +1105,8 @@
           "name": "message_contact_id_contact_id_fk",
           "tableFrom": "message",
           "tableTo": "contact",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1342,12 +1288,8 @@
           "name": "message_event_message_id_message_id_fk",
           "tableFrom": "message_event",
           "tableTo": "message",
-          "columnsFrom": [
-            "message_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["message_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1355,12 +1297,8 @@
           "name": "message_event_identity_id_provider_identity_id_fk",
           "tableFrom": "message_event",
           "tableTo": "provider_identity",
-          "columnsFrom": [
-            "identity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["identity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1444,12 +1382,8 @@
           "name": "message_template_message_id_message_id_fk",
           "tableFrom": "message_template",
           "tableTo": "message",
-          "columnsFrom": [
-            "message_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["message_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1653,12 +1587,8 @@
           "name": "provider_credential_organization_id_organization_id_fk",
           "tableFrom": "provider_credential",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1823,12 +1753,8 @@
           "name": "provider_identity_provider_credential_id_provider_credential_id_fk",
           "tableFrom": "provider_identity",
           "tableTo": "provider_credential",
-          "columnsFrom": [
-            "provider_credential_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["provider_credential_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2099,12 +2025,8 @@
           "name": "template_organization_id_organization_id_fk",
           "tableFrom": "template",
           "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2210,12 +2132,8 @@
           "name": "template_channel_version_template_version_id_template_version_id_fk",
           "tableFrom": "template_channel_version",
           "tableTo": "template_version",
-          "columnsFrom": [
-            "template_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["template_version_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2320,12 +2238,8 @@
           "name": "template_version_template_id_template_id_fk",
           "tableFrom": "template_version",
           "tableTo": "template",
-          "columnsFrom": [
-            "template_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2341,31 +2255,22 @@
     "public.action_type": {
       "name": "action_type",
       "schema": "public",
-      "values": [
-        "send_message"
-      ]
+      "values": ["send_message"]
     },
     "public.channel": {
       "name": "channel",
       "schema": "public",
-      "values": [
-        "email"
-      ]
+      "values": ["email"]
     },
     "public.event_source": {
       "name": "event_source",
       "schema": "public",
-      "values": [
-        "api"
-      ]
+      "values": ["api"]
     },
     "public.message_source": {
       "name": "message_source",
       "schema": "public",
-      "values": [
-        "api",
-        "template"
-      ]
+      "values": ["api", "template"]
     },
     "public.message_status": {
       "name": "message_status",
@@ -2382,34 +2287,22 @@
     "public.provider_type": {
       "name": "provider_type",
       "schema": "public",
-      "values": [
-        "aws"
-      ]
+      "values": ["aws"]
     },
     "public.subscription_status": {
       "name": "subscription_status",
       "schema": "public",
-      "values": [
-        "opted_out",
-        "subscribed",
-        "unsubscribed"
-      ]
+      "values": ["opted_out", "subscribed", "unsubscribed"]
     },
     "public.template_category": {
       "name": "template_category",
       "schema": "public",
-      "values": [
-        "transactional"
-      ]
+      "values": ["transactional"]
     },
     "public.template_status": {
       "name": "template_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "active",
-        "archived"
-      ]
+      "values": ["draft", "active", "archived"]
     }
   },
   "schemas": {},
