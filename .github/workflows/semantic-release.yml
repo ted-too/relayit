@@ -28,10 +28,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun add -g semantic-release@22 
-          bun add -g @semantic-release/changelog@6
-          bun add -g @semantic-release/git@10
-          bun add -g @semantic-release/github@9
+          bun add -g semantic-release
+          bun add -g @semantic-release/changelog
+          bun add -g @semantic-release/git
+          bun add -g @semantic-release/github
+          bun add -g conventional-changelog-conventionalcommits
 
       - name: Release
         env:
