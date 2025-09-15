@@ -39,8 +39,9 @@ WORKDIR /app
 RUN addgroup --system --gid 1003 honojs && \
     adduser --system --uid 1003 --ingroup honojs honojs
 
-COPY --from=builder --chown=honojs:honojs /app/apps/api/package.json ./package.json
-COPY --from=builder --chown=honojs:honojs /app/node_modules ./node_modules
+RUN echo '{"dependencies":{"pino":"9.9.5", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
+    bun install --production
+
 COPY --from=builder --chown=honojs:honojs /app/apps/api/build ./
 
 USER honojs

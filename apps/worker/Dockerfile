@@ -39,8 +39,9 @@ WORKDIR /app
 RUN addgroup --system --gid 1003 worker && \
     adduser --system --uid 1003 --ingroup worker worker
 
-COPY --from=builder --chown=worker:worker /app/apps/worker/package.json ./package.json
-COPY --from=builder --chown=worker:worker /app/node_modules ./node_modules
+RUN echo '{"dependencies":{"pino":"9.9.5"}}' > package.json && \
+    bun install --production
+
 COPY --from=builder --chown=worker:worker /app/apps/worker/build ./
 
 USER worker
