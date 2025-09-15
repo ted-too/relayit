@@ -73,8 +73,7 @@ export const auth = betterAuth({
     }),
   ],
   trustedOrigins: [
-    "https://app.relayit.io",
-    "https://api.relayit.io", 
-    "https://docs.relayit.io"
+    process.env.APP_URL,
+    ...(process.env.DOCS_URL ? [process.env.DOCS_URL] : []),
   ],
 });
