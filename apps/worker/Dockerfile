@@ -11,8 +11,12 @@ FROM base AS deps
 WORKDIR /app
 
 COPY bun.lock* package.json turbo.json ./
-COPY apps/worker/package.json apps/worker/package.json
-COPY packages/*/package.json packages/
+COPY apps apps
+RUN find apps -type f ! -name "package.json" -delete && \
+    find apps -type d -empty -delete
+COPY packages packages
+RUN find packages -type f ! -name "package.json" -delete && \
+    find packages -type d -empty -delete
 
 RUN bun install --frozen-lockfile
 
