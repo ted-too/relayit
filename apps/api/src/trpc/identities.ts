@@ -241,7 +241,7 @@ export const identitiesRouter = router({
           .update(schema.providerIdentity)
           .set({
             identifier: input.identifier,
-            channelData: input.channelData,
+            channelData: input.channelData || {},
             isDefault: input.isDefault,
             isActive: input.isActive,
           })

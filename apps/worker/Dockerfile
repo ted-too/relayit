@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # This is intentionally not using turbo prune - https://turborepo.com/docs/guides/tools/docker#the---docker-flag
 # Because of this issue - https://github.com/vercel/turborepo/issues/10658
 # TODO: Consider switching to it when this gets merged - https://github.com/vercel/turborepo/pull/10729
@@ -8,30 +10,33 @@ WORKDIR /usr/src/app
 FROM base AS deps
 WORKDIR /app
 
-COPY . .
+COPY bun.lock* package.json turbo.json ./
+COPY apps/worker/package.json apps/worker/package.json
+COPY packages/*/package.json packages/
 
 RUN bun install --frozen-lockfile
 
 FROM base AS builder
-ARG TURBO_TOKEN
-ARG TURBO_TEAM
 WORKDIR /app
 
-COPY --from=deps /app .
-
-RUN TURBO_TOKEN=$TURBO_TOKEN TURBO_TEAM=$TURBO_TEAM NODE_ENV=production bun run turbo build --filter=@repo/worker
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json bun.lock* turbo.json ./
+COPY apps/worker ./apps/worker/
+COPY packages ./packages/
+RUN --mount=type=secret,id=turbo_token \
+    --mount=type=secret,id=turbo_team \
+    TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
+    TURBO_TEAM=$(cat /run/secrets/turbo_team 2>/dev/null || echo "") \
+    NODE_ENV=production bun run turbo build --filter=@repo/worker
 
 FROM base AS runner
 WORKDIR /app
 
-# Required for pino logging
-RUN echo '{"dependencies":{"pino":"^9.9.4","pino-pretty":"^13.1.1"}}' > package.json && \
-    bun install --production
-
 RUN addgroup --system --gid 1003 worker && \
-    adduser --system --uid 1003 --ingroup worker worker && \
-    chown -R worker:worker node_modules
+    adduser --system --uid 1003 --ingroup worker worker
 
+COPY --from=builder --chown=worker:worker /app/apps/worker/package.json ./package.json
+COPY --from=builder --chown=worker:worker /app/node_modules ./node_modules
 COPY --from=builder --chown=worker:worker /app/apps/worker/build ./
 
 USER worker

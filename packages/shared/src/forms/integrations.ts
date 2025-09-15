@@ -46,7 +46,7 @@ export const createIntegrationSchema = z.object({
 export const createIdentitySchema = z.object({
   providerCredentialId: z.string().min(1, "Provider credential ID is required"),
   identifier: z.string().min(1, "Identifier is required"),
-  channelData: channelDataSchema.optional(),
+  channelData: channelDataSchema.optional().default({}),
   isDefault: z.boolean().default(false),
   isActive: z.boolean().default(true),
 });
@@ -54,7 +54,7 @@ export const createIdentitySchema = z.object({
 export const updateIdentitySchema = z.object({
   id: z.string().min(1, "Identity ID is required"),
   identifier: z.string().min(1, "Identifier is required").optional(),
-  channelData: channelDataSchema.optional(),
+  channelData: channelDataSchema.optional().default({}),
   isDefault: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });

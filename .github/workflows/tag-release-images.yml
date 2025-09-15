@@ -57,23 +57,70 @@ jobs:
             echo "pr-number=${PR_NUMBER}" >> $GITHUB_OUTPUT
             echo "✅ Found PR number: $PR_NUMBER"
           else
-            echo "⚠️ No PR number found in commit message"
+            echo "⚠️ No PR number found in commit message (likely direct commit)"
             echo "🔧 Will build from scratch instead of retagging"
             echo "pr-number=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Retag PR image as release
+      - name: Validate release tag format
+        id: validate-tag
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          echo "🔍 Validating release tag format: $VERSION"
+          
+          # Expected format: v?X.Y.Z(-prerelease)?
+          # Examples: v1.0.0, 1.0.0, v0.1.0-alpha.1, 2.0.0-beta.2
+          if echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "✅ Valid semantic version tag: $VERSION"
+            
+            # Strip 'v' prefix if present for clean version
+            CLEAN_VERSION=${VERSION#v}
+            echo "clean-version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+            echo "📦 Clean version: $CLEAN_VERSION"
+          else
+            echo "❌ Invalid tag format: $VERSION"
+            echo ""
+            echo "Expected format: v?X.Y.Z(-prerelease)?"
+            echo "Valid examples:"
+            echo "  - v1.0.0"
+            echo "  - 1.0.0" 
+            echo "  - v0.1.0-alpha.1"
+            echo "  - 2.0.0-beta.2"
+            echo ""
+            echo "Your tag '$VERSION' does not match the semantic version pattern."
+            exit 1
+          fi
+
+      - name: Check if PR image exists
         if: steps.extract-pr.outputs.pr-number != ''
+        id: check-pr-image
+        run: |
+          REPO_NAME="${{ github.repository_owner }}/relayit-${{ matrix.app }}"
+          PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
+          SOURCE_IMAGE="${{ env.REGISTRY }}/${REPO_NAME}:pr-${PR_NUMBER}"
+          
+          echo "🔍 Checking if PR image exists: $SOURCE_IMAGE"
+          
+          if docker manifest inspect "$SOURCE_IMAGE" > /dev/null 2>&1; then
+            echo "✅ PR image found: $SOURCE_IMAGE"
+            echo "image-exists=true" >> $GITHUB_OUTPUT
+            echo "source-image=${SOURCE_IMAGE}" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ PR image not found: $SOURCE_IMAGE"
+            echo "🔧 Will build from scratch instead"
+            echo "image-exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Retag PR image as release
+        if: steps.extract-pr.outputs.pr-number != '' && steps.check-pr-image.outputs.image-exists == 'true'
         run: |
           REPO_NAME="${{ github.repository_owner }}/relayit-${{ matrix.app }}"
           VERSION="${{ github.event.release.tag_name }}"
           PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
+          SOURCE_IMAGE="${{ steps.check-pr-image.outputs.source-image }}"
           
-          # Remove 'v' prefix if present (v0.1.0 -> 0.1.0)
-          CLEAN_VERSION=${VERSION#v}
-          
-          # Source image from PR build
-          SOURCE_IMAGE="${{ env.REGISTRY }}/${REPO_NAME}:pr-${PR_NUMBER}"
+          # Use validated clean version from previous step
+          CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
           
           # Target tags
           VERSION_TAG="${{ env.REGISTRY }}/${REPO_NAME}:${CLEAN_VERSION}"
@@ -82,50 +129,44 @@ jobs:
           echo "🚀 Retagging PR image for ${{ matrix.app }}"
           echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}, main"
           
-          # Check if PR image exists
-          if docker manifest inspect "$SOURCE_IMAGE" > /dev/null 2>&1; then
-            # Pull the PR image
-            docker pull "$SOURCE_IMAGE"
-            
-            # Tag with version
-            echo "🏷️ Tagging as: $VERSION_TAG"
-            docker tag "$SOURCE_IMAGE" "$VERSION_TAG"
-            docker push "$VERSION_TAG"
-            
-            # Tag as main
-            echo "🏷️ Tagging as: $MAIN_TAG"
-            docker tag "$SOURCE_IMAGE" "$MAIN_TAG"
-            docker push "$MAIN_TAG"
-            
-            echo "✅ Successfully retagged ${{ matrix.app }} release images"
-          else
-            echo "❌ PR image $SOURCE_IMAGE not found, will build from scratch"
-            exit 1
-          fi
+          # Pull the PR image
+          docker pull "$SOURCE_IMAGE"
+          
+          # Tag with version
+          echo "🏷️ Tagging as: $VERSION_TAG"
+          docker tag "$SOURCE_IMAGE" "$VERSION_TAG"
+          docker push "$VERSION_TAG"
+          
+          # Tag as main
+          echo "🏷️ Tagging as: $MAIN_TAG"
+          docker tag "$SOURCE_IMAGE" "$MAIN_TAG"
+          docker push "$MAIN_TAG"
+          
+          echo "✅ Successfully retagged ${{ matrix.app }} release images"
 
       - name: Build release from scratch (fallback)
-        if: steps.extract-pr.outputs.pr-number == ''
+        if: steps.extract-pr.outputs.pr-number == '' || (steps.extract-pr.outputs.pr-number != '' && steps.check-pr-image.outputs.image-exists == 'false')
         uses: docker/build-push-action@v5
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/relayit-${{ matrix.app }}:${{ github.event.release.tag_name }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/relayit-${{ matrix.app }}:${{ steps.validate-tag.outputs.clean-version }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/relayit-${{ matrix.app }}:main
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
-            TURBO_TEAM=${{ secrets.TURBO_TEAM }}
+          secrets: |
+            turbo_token=${{ secrets.TURBO_TOKEN }}
+            turbo_team=${{ secrets.TURBO_TEAM }}
 
       - name: Release tagging complete
         run: |
           VERSION="${{ github.event.release.tag_name }}"
-          CLEAN_VERSION=${VERSION#v}
+          CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
           
-          echo "🎉 ${{ matrix.app }} tagged with version ${{ github.event.release.tag_name }}"
+          echo "🎉 ${{ matrix.app }} tagged with version $VERSION"
           echo "📦 Available tags:"
           echo "   - ${{ github.repository_owner }}/relayit-${{ matrix.app }}:${CLEAN_VERSION}"
           echo "   - ${{ github.repository_owner }}/relayit-${{ matrix.app }}:main"
