@@ -62,9 +62,24 @@ jobs:
             echo "pr-number=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Normalize repository name
+        id: normalize-repo
+        run: |
+          set -euo pipefail
+          IFS=$'\n\t'
+          
+          # Normalize repository owner to lowercase for GHCR compatibility
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME="${REPO_OWNER_LOWER}/relayit-${{ matrix.app }}"
+          echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          echo "📦 Normalized repo name: ${REPO_NAME}"
+
       - name: Validate release tag format
         id: validate-tag
         run: |
+          set -euo pipefail
+          IFS=$'\n\t'
+          
           VERSION="${{ github.event.release.tag_name }}"
           echo "🔍 Validating release tag format: $VERSION"
           
@@ -77,6 +92,15 @@ jobs:
             CLEAN_VERSION=${VERSION#v}
             echo "clean-version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
             echo "📦 Clean version: $CLEAN_VERSION"
+            
+            # Check if this is a prerelease (contains hyphen after version)
+            if echo "$CLEAN_VERSION" | grep -q '-'; then
+              echo "is-prerelease=true" >> $GITHUB_OUTPUT
+              echo "🚧 Prerelease version detected"
+            else
+              echo "is-prerelease=false" >> $GITHUB_OUTPUT
+              echo "🎯 Stable release version detected"
+            fi
           else
             echo "❌ Invalid tag format: $VERSION"
             echo ""
@@ -95,7 +119,10 @@ jobs:
         if: steps.extract-pr.outputs.pr-number != ''
         id: check-pr-image
         run: |
-          REPO_NAME="${{ github.repository_owner }}/relayit-${{ matrix.app }}"
+          set -euo pipefail
+          IFS=$'\n\t'
+          
+          REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
           PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
           SOURCE_IMAGE="${{ env.REGISTRY }}/${REPO_NAME}:pr-${PR_NUMBER}"
           
@@ -114,10 +141,14 @@ jobs:
       - name: Retag PR image as release
         if: steps.extract-pr.outputs.pr-number != '' && steps.check-pr-image.outputs.image-exists == 'true'
         run: |
-          REPO_NAME="${{ github.repository_owner }}/relayit-${{ matrix.app }}"
+          set -euo pipefail
+          IFS=$'\n\t'
+          
+          REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
           VERSION="${{ github.event.release.tag_name }}"
           PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
           SOURCE_IMAGE="${{ steps.check-pr-image.outputs.source-image }}"
+          IS_PRERELEASE="${{ steps.validate-tag.outputs.is-prerelease }}"
           
           # Use validated clean version from previous step
           CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
@@ -126,8 +157,13 @@ jobs:
           VERSION_TAG="${{ env.REGISTRY }}/${REPO_NAME}:${CLEAN_VERSION}"
           MAIN_TAG="${{ env.REGISTRY }}/${REPO_NAME}:main"
           
-          echo "🚀 Retagging PR image for ${{ matrix.app }}"
-          echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}, main"
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            echo "🚀 Retagging PR image for ${{ matrix.app }} (prerelease)"
+            echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}"
+          else
+            echo "🚀 Retagging PR image for ${{ matrix.app }} (stable release)"
+            echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}, main"
+          fi
           
           # Pull the PR image
           docker pull "$SOURCE_IMAGE"
@@ -137,10 +173,14 @@ jobs:
           docker tag "$SOURCE_IMAGE" "$VERSION_TAG"
           docker push "$VERSION_TAG"
           
-          # Tag as main
-          echo "🏷️ Tagging as: $MAIN_TAG"
-          docker tag "$SOURCE_IMAGE" "$MAIN_TAG"
-          docker push "$MAIN_TAG"
+          # Only tag as main for stable releases
+          if [[ "$IS_PRERELEASE" == "false" ]]; then
+            echo "🏷️ Tagging as: $MAIN_TAG (stable release)"
+            docker tag "$SOURCE_IMAGE" "$MAIN_TAG"
+            docker push "$MAIN_TAG"
+          else
+            echo "⏩ Skipping main tag (prerelease)"
+          fi
           
           echo "✅ Successfully retagged ${{ matrix.app }} release images"
 
@@ -151,22 +191,30 @@ jobs:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/relayit-${{ matrix.app }}:${{ steps.validate-tag.outputs.clean-version }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/relayit-${{ matrix.app }}:main
+          tags: ${{ steps.validate-tag.outputs.is-prerelease == 'false' && format('{0}/{1}:{2},{0}/{1}:main', env.REGISTRY, steps.normalize-repo.outputs.repo-name, steps.validate-tag.outputs.clean-version) || format('{0}/{1}:{2}', env.REGISTRY, steps.normalize-repo.outputs.repo-name, steps.validate-tag.outputs.clean-version) }}
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          secrets: |
-            turbo_token=${{ secrets.TURBO_TOKEN }}
-            turbo_team=${{ secrets.TURBO_TEAM }}
+          build-args: |
+            TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
+            TURBO_TEAM=${{ secrets.TURBO_TEAM }}
 
       - name: Release tagging complete
         run: |
+          set -euo pipefail
+          IFS=$'\n\t'
+          
           VERSION="${{ github.event.release.tag_name }}"
           CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
+          REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
+          IS_PRERELEASE="${{ steps.validate-tag.outputs.is-prerelease }}"
           
           echo "🎉 ${{ matrix.app }} tagged with version $VERSION"
           echo "📦 Available tags:"
-          echo "   - ${{ github.repository_owner }}/relayit-${{ matrix.app }}:${CLEAN_VERSION}"
-          echo "   - ${{ github.repository_owner }}/relayit-${{ matrix.app }}:main"
+          echo "   - ${REPO_NAME}:${CLEAN_VERSION}"
+          
+          if [[ "$IS_PRERELEASE" == "false" ]]; then
+            echo "   - ${REPO_NAME}:main"
+          else
+            echo "   (main tag skipped for prerelease)"
+          fi
