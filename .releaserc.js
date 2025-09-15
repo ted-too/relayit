@@ -1,11 +1,11 @@
 /** biome-ignore-all lint/suspicious/noTemplateCurlyInString: this is fine */
 /** biome-ignore-all lint/style/useFilenamingConvention: this is fine */
+/**
+ * @type {import('semantic-release').GlobalConfig}
+ */
 module.exports = {
   branches: [
-    {
-      name: "main",
-      prerelease: "alpha",
-    },
+    "main"
   ],
   plugins: [
     [
@@ -24,7 +24,7 @@ module.exports = {
           { type: "test", release: false },
           { type: "build", release: false },
           { type: "ci", release: false },
-          { breaking: true, release: "major" },
+          { breaking: true, release: "minor" },
         ],
       },
     ],
