@@ -14,7 +14,13 @@ import {
   findProviderIdentity,
 } from "@/send/utils";
 
-const ajv = new Ajv();
+const ajv = new Ajv({
+  allowUnionTypes: true,
+  strict: false,
+  removeAdditional: false,
+  useDefaults: true,
+  coerceTypes: true,
+});
 
 export const sendTemplateRouter = new Hono<{ Variables: ApiKeyContext }>().post(
   "/email",
