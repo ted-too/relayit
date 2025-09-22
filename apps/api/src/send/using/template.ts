@@ -20,7 +20,7 @@ const ajv = new Ajv({
   strict: false,
   removeAdditional: false,
   useDefaults: true,
-  coerceTypes: true,
+  coerceTypes: false,
 });
 
 export const sendTemplateRouter = new Hono<{ Variables: ApiKeyContext }>().post(

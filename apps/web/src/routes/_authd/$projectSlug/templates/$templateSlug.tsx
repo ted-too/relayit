@@ -190,6 +190,7 @@ function RouteComponent() {
               <field.TextField
                 label="Schema"
                 placeholder="e.g. { name: string, email: string }"
+                className={{ input: "h-96 overflow-y-auto" }}
                 textarea
               />
             )}
@@ -228,7 +229,11 @@ function RouteComponent() {
                         </form.AppField>
                         <form.AppField name={`${baseKey}.content.template`}>
                           {(field) => (
-                            <field.TextField label="Template" textarea />
+                            <field.TextField
+                              label="Template"
+                              className={{ input: "h-96 overflow-y-auto" }}
+                              textarea
+                            />
                           )}
                         </form.AppField>
                       </Fragment>

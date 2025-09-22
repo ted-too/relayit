@@ -99,17 +99,22 @@ export const buildSendTemplateSchema = (channel: ChannelType) =>
               .describe("Template identifier")
               .meta({ example: "user.welcome" }),
             props: z
-              .record(
-                z.string(),
-                z.union([z.string(), z.number(), z.boolean(), z.null()])
-              )
+              .any()
               .optional()
-              .describe("Template variables and data")
+              .describe(
+                "Template variables and data - can be any JSON value including complex objects"
+              )
               .meta({
                 example: {
                   firstName: "John",
                   companyName: "Acme Inc",
                   verificationUrl: "https://app.example.com/verify/abc123",
+                  complexData: {
+                    nested: {
+                      values: [1, 2, 3],
+                      enabled: true,
+                    },
+                  },
                 },
               }),
           })

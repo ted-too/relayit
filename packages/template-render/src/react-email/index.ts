@@ -23,8 +23,13 @@ export interface RenderOptions {
 }
 
 function processTemplate(template: string, props: Record<string, any>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return props[key]?.toString() || match;
+  return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+    // Handle nested object properties like "customer.name" or "hotel.details.name"
+    const value = key.split('.').reduce((obj: any, prop: any) => {
+      return obj && typeof obj === 'object' ? obj[prop] : undefined;
+    }, props);
+    
+    return value?.toString() || match;
   });
 }
 
@@ -40,8 +45,6 @@ export async function renderEmailServer(
   const props = templateData.props ?? {};
 
   try {
-    const processedSubject = processTemplate(templateData.subject, props);
-
     await fs.promises.writeFile(tempFilePath, templateData.template);
 
     const buildResult = await Bun.build({
@@ -124,6 +127,8 @@ export async function renderEmailServer(
     const element = React.createElement(EmailComponent, mergedProps);
     const html = await render(element, { pretty: options.pretty ?? true });
     const text = await render(element, { plainText: true });
+
+    const processedSubject = processTemplate(templateData.subject, mergedProps);
 
     return {
       error: null,
