@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 > **Note**: This project is currently in alpha. Breaking changes may occur between releases.
 
+## [0.1.1](https://github.com/ted-too/relayit/compare/v0.1.0...v0.1.1) (2025-09-22)
+
+### 🐛 Bug Fixes
+
+* update AJV configuration and enhance template variable schema description ([237a129](https://github.com/ted-too/relayit/commit/237a12971dc0a8758d34844e05cbb22697433f8a))
+
 ## [0.1.0](https://github.com/ted-too/relayit/compare/v0.0.0...v0.1.0) (2025-09-22)
 
 ### ⚠ BREAKING CHANGES
