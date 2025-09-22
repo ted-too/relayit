@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 > **Note**: This project is currently in alpha. Breaking changes may occur between releases.
 
+## [0.1.0](https://github.com/ted-too/relayit/compare/v0.0.0...v0.1.0) (2025-09-22)
+
+### ⚠ BREAKING CHANGES
+
+* trigger release
+
+### 🚀 Features
+
+* initial release ([b021eec](https://github.com/ted-too/relayit/commit/b021eec7abac04c741500061b5bc1e1aaf24d7c0))
+* trigger release ([c7b6057](https://github.com/ted-too/relayit/commit/c7b60571207039413c2606e2f0c6b818d3f24671))
+
+### 🐛 Bug Fixes
+
+* ajv config for complex schemas ([16c2b37](https://github.com/ted-too/relayit/commit/16c2b3708be8d0e8579d8e7bc838218dbf839c01))
+
 ## [Unreleased]
 
 ### 🚀 Features
