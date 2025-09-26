@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 > **Note**: This project is currently in alpha. Breaking changes may occur between releases.
 
+## [0.1.2](https://github.com/ted-too/relayit/compare/v0.1.1...v0.1.2) (2025-09-26)
+
+### 🐛 Bug Fixes
+
+* only pass preview props if we are in preview ([dac72ca](https://github.com/ted-too/relayit/commit/dac72caf422255ea9de8b0d33870a8b8d195e087))
+
 ## [0.1.1](https://github.com/ted-too/relayit/compare/v0.1.0...v0.1.1) (2025-09-22)
 
 ### 🐛 Bug Fixes
