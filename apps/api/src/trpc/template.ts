@@ -320,6 +320,7 @@ export const templateRouter = router({
       try {
         const result = await renderEmailServer({
           ...template.content,
+          preview: true,
           props: props || {},
         });
 

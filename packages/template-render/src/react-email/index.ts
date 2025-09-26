@@ -34,7 +34,7 @@ function processTemplate(template: string, props: Record<string, any>): string {
 }
 
 export async function renderEmailServer(
-  templateData: EmailContent & { props?: Record<string, any> },
+  templateData: EmailContent & { props?: Record<string, any>; preview?: boolean },
   options: RenderOptions = {}
 ): Promise<Result<SendRawPayload<"email">>> {
   const tempDir = await fs.promises.mkdtemp(
@@ -121,7 +121,7 @@ export async function renderEmailServer(
     }
 
     // Extract PreviewProps from the component if available and merge with provided props
-    const previewProps = EmailComponent.PreviewProps || {};
+    const previewProps = templateData.preview ? EmailComponent.PreviewProps || {} : {};
     const mergedProps = { ...previewProps, ...props };
 
     const element = React.createElement(EmailComponent, mergedProps);
