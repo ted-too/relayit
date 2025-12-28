@@ -1,5 +1,5 @@
 // Register provider credentials table (JSONB with nested encrypted fields)
-import { schema } from "@/db";
+import { schema } from "@repo/shared/db";
 import { registerEncryptedColumn } from "./registry";
 
 registerEncryptedColumn({

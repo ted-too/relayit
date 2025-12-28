@@ -1,9 +1,9 @@
-import { z } from "zod";
 import {
   AVAILABLE_TEMPLATE_CATEGORIES,
   AVAILABLE_TEMPLATE_STATUSES,
   type ChannelType,
-} from "@/providers";
+} from "@repo/shared/providers";
+import { z } from "zod";
 import { safeString } from "./shared";
 
 // Email template engine types

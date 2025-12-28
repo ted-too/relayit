@@ -1,24 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "jsx": "react-jsx",
-    "module": "ESNext",
-    "lib": ["ES2022"],
+    "target": "ES2021",
+    "module": "ES2022",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": false,
-    "noEmit": true,
-    "skipLibCheck": true,
+    "types": ["bun-types"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
+    "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@repo/shared/*": ["../../packages/shared/src/*"],
-      "@repo/template-render/*": ["../../packages/template-render/src/*"]
+      "@repo/api/*": ["./src/*"],
+      "@repo/api": ["./src/index.ts"],
+      "@repo/shared/*": ["../../packages/shared/src/*"]
     }
   }
 }

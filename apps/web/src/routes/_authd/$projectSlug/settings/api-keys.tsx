@@ -35,7 +35,7 @@ function RouteComponent() {
       </CardHeader>
       <CardContent className="grid gap-4">
         {data.map((key) => (
-          <ApiKeyCard key={key.id} apiKey={key} />
+          <ApiKeyCard apiKey={key} key={key.id} />
         ))}
         {data.length === 0 && (
           <div className="flex flex-col gap-2 py-4">

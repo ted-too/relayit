@@ -25,16 +25,6 @@ export type CreateOrganizationRequest = z.infer<
   typeof createOrganizationSchema
 >;
 
-export const updateOrganizationSchema = z.object({
-  logo: z.url().nullish(),
-  name: safeString.optional(),
-  slug: safeString.optional(),
-});
-
-export type UpdateOrganizationRequest = z.infer<
-  typeof updateOrganizationSchema
->;
-
 export const createApiKeySchema = z.object({
   name: safeString,
   expiresIn: z.number().optional(),

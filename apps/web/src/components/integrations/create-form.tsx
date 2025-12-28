@@ -120,48 +120,48 @@ export function CreateIntegrationForm({
       <form.AppField name="name">
         {(field) => (
           <field.TextField
+            description="A name for the integration (optional)"
             label="Name"
             placeholder={`e.g. ${config.label} Primary`}
-            description="A name for the integration (optional)"
           />
         )}
       </form.AppField>
       <form.AppField name="channels">
         {(field) => (
           <field.MultiSelectField
-            label="Channels"
-            items={channels}
-            disabled={channels.length === 1}
             description="At least one channel must be selected"
+            disabled={channels.length === 1}
+            items={channels}
+            label="Channels"
           />
         )}
       </form.AppField>
       <div className="grid grid-cols-2 gap-4">
         <DynamicZodFormFields
-          schema={config.credentialsSchema}
-          defaultValues={defaultValues.credentials}
           baseKey="credentials"
+          defaultValues={defaultValues.credentials}
           form={form}
+          schema={config.credentialsSchema}
         />
         <form.AppField name="priority">
           {(field) => (
             <field.TextField
-              label="Priority"
-              type="number"
-              placeholder="auto"
               description="Lower priority = higher priority"
+              label="Priority"
               min={0}
+              placeholder="auto"
+              type="number"
             />
           )}
         </form.AppField>
         <form.AppField name="isDefault">
           {(field) => (
             <field.SwitchField
-              label="Is default"
-              description="Always try this provider first"
               className={{
                 input: "h-9 items-center",
               }}
+              description="Always try this provider first"
+              label="Is default"
               orientation="vertical"
             />
           )}
@@ -169,11 +169,11 @@ export function CreateIntegrationForm({
         <form.AppField name="isActive">
           {(field) => (
             <field.SwitchField
-              label="Is active"
-              description="Whether this integration is active"
               className={{
                 input: "h-9 items-center",
               }}
+              description="Whether this integration is active"
+              label="Is active"
               orientation="vertical"
             />
           )}
@@ -201,7 +201,7 @@ export function CreateIntegrationDialog({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog onOpenChange={setOpen} open={open}>
       <Tooltip>
         <DialogTrigger
           render={
@@ -226,10 +226,10 @@ export function CreateIntegrationDialog({
           </DialogDescription>
         </DialogHeader>
         <CreateIntegrationForm
-          type={type}
           config={config}
-          submitWrapper={DialogFooter}
           onSuccess={() => setOpen(false)}
+          submitWrapper={DialogFooter}
+          type={type}
         />
       </DialogContent>
     </Dialog>

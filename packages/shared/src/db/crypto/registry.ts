@@ -1,6 +1,6 @@
+import type { DB } from "@repo/shared/db";
 import { isNotNull } from "drizzle-orm";
 import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
-import type { DB } from "@/db";
 
 /**
  * Registry entry for tracking encrypted columns with Drizzle ORM types

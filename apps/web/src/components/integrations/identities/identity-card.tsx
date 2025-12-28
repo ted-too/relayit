@@ -51,12 +51,12 @@ export function IdentityCard({
             )}
           </span>
           {identity.isDefault && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge className="text-xs" variant="secondary">
               Default
             </Badge>
           )}
           {!identity.isActive && (
-            <Badge variant="outline" className="text-xs">
+            <Badge className="text-xs" variant="outline">
               Inactive
             </Badge>
           )}
@@ -72,13 +72,13 @@ export function IdentityCard({
       </div>
       <div className="flex items-center gap-2">
         <ConfirmAction
+          confirm="Delete"
+          description="Are you sure you want to delete this identity? This action cannot be undone."
           execute={async () => {
             await deleteIdentity({ id: identity.id });
           }}
           isLoading={deleteLoading}
-          confirm="Delete"
           title="Delete Identity"
-          description="Are you sure you want to delete this identity? This action cannot be undone."
           verificationText={identity.identifier}
         >
           <Button size="sm" variant="outline-destructive">

@@ -103,7 +103,7 @@ function InternalEmailPreview({
         <div className="mb-2 flex items-center justify-between">
           <h3 className="font-medium text-red-800">Rendering Error</h3>
           <button
-            type="button"
+            className="rounded border border-red-300 bg-red-100 px-3 py-1 text-red-800 text-sm transition-colors hover:bg-red-200"
             onClick={() => {
               previewTemplate({
                 template: {
@@ -113,7 +113,7 @@ function InternalEmailPreview({
                 props: previewData || {},
               });
             }}
-            className="rounded border border-red-300 bg-red-100 px-3 py-1 text-red-800 text-sm transition-colors hover:bg-red-200"
+            type="button"
           >
             Retry
           </button>
@@ -148,12 +148,12 @@ function InternalEmailPreview({
         </div>
         <div className="overflow-hidden rounded-lg border">
           <iframe
-            ref={iframeRef}
-            srcDoc={renderResult.html}
             className="w-full border-0"
+            ref={iframeRef}
+            sandbox="allow-same-origin"
+            srcDoc={renderResult.html}
             style={{ height: `${iframeHeight}px` }}
             title="Email Preview"
-            sandbox="allow-same-origin"
           />
         </div>
       </div>

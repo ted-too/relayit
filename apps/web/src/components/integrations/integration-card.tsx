@@ -49,12 +49,12 @@ export function IntegrationCard({
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">{integration.name}</span>
             {integration.isDefault && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge className="text-xs" variant="secondary">
                 Default
               </Badge>
             )}
             {!integration.isActive && (
-              <Badge variant="outline" className="text-xs">
+              <Badge className="text-xs" variant="outline">
                 Inactive
               </Badge>
             )}
@@ -71,13 +71,13 @@ export function IntegrationCard({
         <div className="ms-auto flex items-center gap-4">
           <CreateIdentityDialog providerCredential={integration} />
           <ConfirmAction
+            confirm="Delete"
+            description="Are you sure you want to delete this integration? This action cannot be undone."
             execute={async () => {
               await deleteIntegration({ id: integration.id });
             }}
             isLoading={deleteLoading}
-            confirm="Delete"
             title="Delete Integration"
-            description="Are you sure you want to delete this integration? This action cannot be undone."
             verificationText={`${integration.providerType}-${integration.channelType}`}
           >
             <Button size="sm" variant="outline-destructive">
@@ -88,8 +88,8 @@ export function IntegrationCard({
       </Card>
       {data?.map((identity) => (
         <IdentityCard
-          key={identity.id}
           identity={identity}
+          key={identity.id}
           providerCredentialId={integration.id}
         />
       ))}

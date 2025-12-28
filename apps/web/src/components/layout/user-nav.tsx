@@ -44,11 +44,11 @@ export function SideBarUserNav() {
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
-                size="lg"
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                size="lg"
               >
                 <Avatar className="in-data-[state=expanded]:size-6 transition-[width,height] duration-200 ease-in-out">
-                  <AvatarImage src={user.image ?? undefined} alt={user.name} />
+                  <AvatarImage alt={user.name} src={user.image ?? undefined} />
                   <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                 </Avatar>
                 <div className="ms-1 grid flex-1 text-left text-sm leading-tight">
@@ -61,19 +61,19 @@ export function SideBarUserNav() {
             }
           />
           <DropdownMenuContent
+            align="end"
             className={cn(
               "w-full rounded-md transition-[width] duration-200 ease-in-out",
               open ? "min-w-64" : "min-w-56"
             )}
             side={open ? "top" : "right"}
-            align="end"
             sideOffset={4}
           >
             <DropdownMenuItem className="gap-3 px-1">
               <RiUserLine
-                size={20}
-                className="text-muted-foreground/70"
                 aria-hidden="true"
+                className="text-muted-foreground/70"
+                size={20}
               />
               <span>Profile</span>
             </DropdownMenuItem>
@@ -91,9 +91,9 @@ export function SideBarUserNav() {
               }}
             >
               <RiLogoutCircleLine
-                size={20}
-                className="text-muted-foreground/70"
                 aria-hidden="true"
+                className="text-muted-foreground/70"
+                size={20}
               />
               <span>Log out</span>
             </DropdownMenuItem>

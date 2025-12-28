@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { createGenericError, type Result } from "@/utils";
+import { createGenericError, type Result } from "@repo/shared/utils";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // Recommended for GCM

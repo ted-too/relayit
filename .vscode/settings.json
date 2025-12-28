@@ -24,9 +24,7 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "typescript.tsdk": "node_modules/typescript/lib",
-  "biome.lsp.bin": "node_modules/@biomejs/biome/bin/biome",
-  // "editor.formatOnSave": true,
-  // "editor.formatOnPaste": true,
+  "biome.lsp.bin": "./biome",
   "editor.codeActionsOnSave": {
     "source.fixAll.biome": "explicit",
     "source.organizeImports.biome": "explicit"

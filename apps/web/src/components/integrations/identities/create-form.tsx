@@ -118,9 +118,9 @@ export function CreateIdentityForm({
       <form.AppField name="identifier">
         {(field) => (
           <field.TextField
+            description="The from address or identity for this provider"
             label="Identity"
             placeholder="e.g. noreply@example.com"
-            description="The from address or identity for this provider"
           />
         )}
       </form.AppField>
@@ -128,9 +128,9 @@ export function CreateIdentityForm({
         <form.AppField name="channelData.email.name">
           {(field) => (
             <field.TextField
+              description="The name that will appear in the 'From' field of emails"
               label="Display Name"
               placeholder="e.g. Your Company Name"
-              description="The name that will appear in the 'From' field of emails"
             />
           )}
         </form.AppField>
@@ -139,11 +139,11 @@ export function CreateIdentityForm({
         <form.AppField name="isDefault">
           {(field) => (
             <field.SwitchField
-              label="Is default"
-              description="Use this identity as the default for this provider"
               className={{
                 input: "h-9 items-center",
               }}
+              description="Use this identity as the default for this provider"
+              label="Is default"
               orientation="vertical"
             />
           )}
@@ -151,11 +151,11 @@ export function CreateIdentityForm({
         <form.AppField name="isActive">
           {(field) => (
             <field.SwitchField
-              label="Is active"
-              description="Whether this identity is active"
               className={{
                 input: "h-9 items-center",
               }}
+              description="Whether this identity is active"
+              label="Is active"
               orientation="vertical"
             />
           )}
@@ -179,13 +179,13 @@ export function CreateIdentityDialog({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog onOpenChange={setOpen} open={open}>
       <Tooltip>
         <DialogTrigger
           render={
             <TooltipTrigger
               render={
-                <Button variant="secondary" size="sm">
+                <Button size="sm" variant="secondary">
                   <PlusIcon className="size-3" /> Add Identity
                 </Button>
               }
@@ -204,9 +204,9 @@ export function CreateIdentityDialog({
           </DialogDescription>
         </DialogHeader>
         <CreateIdentityForm
+          onSuccess={() => setOpen(false)}
           providerCredential={providerCredential}
           submitWrapper={DialogFooter}
-          onSuccess={() => setOpen(false)}
         />
       </DialogContent>
     </Dialog>

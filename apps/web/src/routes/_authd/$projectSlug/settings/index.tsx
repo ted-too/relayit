@@ -110,10 +110,10 @@ function RouteComponent() {
           >
             {(field) => (
               <field.SlugField
-                label="Slug"
+                generate={generateSlug}
                 isChecking={isCheckingSlug}
                 isGenerating={isGeneratingSlug}
-                generate={generateSlug}
+                label="Slug"
               />
             )}
           </form.AppField>

@@ -1,42 +1,30 @@
 {
   "name": "@repo/api",
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./src/trpc/router.ts"
-    }
-  },
+  "version": "1.0.50",
   "scripts": {
-    "dev": "NODE_ENV=development bun run --hot src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target bun; cp -r ./drizzle ./build/drizzle;",
+    "dev": "NODE_ENV=development bun run --watch ./src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./build --target node; cp -r ./drizzle ./build/drizzle;",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@hono/standard-validator": "^0.1.5",
-    "@hono/trpc-server": "^0.4.0",
+    "@elysiajs/cors": "^1.4.0",
     "@repo/shared": "workspace:*",
     "@repo/template-render": "workspace:*",
-    "@scalar/hono-api-reference": "^0.9.18",
-    "@trpc/server": "^11.5.1",
     "ajv": "^8.17.1",
-    "better-auth": "^1.3.9",
+    "better-auth": "^1.4.9",
     "better-auth-harmony": "^1.2.5",
-    "drizzle-orm": "^0.44.5",
-    "typeid-js": "^1.2.0",
-    "hono": "^4.9.6",
-    "hono-openapi": "^1.0.6",
+    "drizzle-orm": "^0.45.1",
+    "elysia": "latest",
     "pg": "^8.16.3",
-    "pino": "^9.9.4",
+    "pino": "^10.1.0",
     "slugify": "^1.6.6",
-    "superjson": "^2.2.2",
-    "zod": "^4.1.8",
-    "zod-openapi": "^5.4.1"
+    "typeid-js": "^1.2.0",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/pg": "^8.15.5",
-    "drizzle-kit": "^0.31.4"
-  }
+    "bun-types": "latest"
+  },
+  "module": "src/index.js"
 }

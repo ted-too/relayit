@@ -98,7 +98,7 @@ function RouteComponent() {
             GitHub
             {lastMethod === "github" && (
               <Badge
-                className="-right-8 -top-2 absolute w-16"
+                className="absolute -top-2 -right-8 w-16"
                 size="sm"
                 variant="success"
               >
@@ -124,7 +124,7 @@ function RouteComponent() {
               </form.SubmitButton>
               {lastMethod === "email" && (
                 <Badge
-                  className="-right-8 -top-2 absolute w-16"
+                  className="absolute -top-2 -right-8 w-16"
                   size="sm"
                   variant="success"
                 >

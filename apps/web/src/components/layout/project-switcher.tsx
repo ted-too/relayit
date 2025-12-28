@@ -44,13 +44,13 @@ export function ProjectSwitcher() {
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
-                size="lg"
                 className="gap-3 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground [&>svg]:size-auto"
+                size="lg"
               >
                 <Avatar className="in-data-[state=expanded]:size-8 rounded-md transition-[width,height] duration-200 ease-in-out">
                   <AvatarImage
-                    src={session.activeOrganization?.logo ?? undefined}
                     alt={session.activeOrganization?.name}
+                    src={session.activeOrganization?.logo ?? undefined}
                   />
                   <AvatarFallback>
                     {getInitials(session.activeOrganization?.name ?? user.name)}
@@ -62,19 +62,19 @@ export function ProjectSwitcher() {
                   </span>
                 </div>
                 <RiExpandUpDownLine
+                  aria-hidden="true"
                   className="ms-auto text-muted-foreground/60"
                   size={20}
-                  aria-hidden="true"
                 />
               </SidebarMenuButton>
             }
           />
           <DropdownMenuContent
+            align="end"
             className={cn(
               "w-full rounded-md transition-[width] duration-200 ease-in-out",
               open ? "min-w-64" : "min-w-56"
             )}
-            align="end"
             side={open ? "bottom" : "right"}
             sideOffset={4}
           >
@@ -84,6 +84,8 @@ export function ProjectSwitcher() {
               </DropdownMenuGroupLabel>
               {userOrganizations.map((organisation, index) => (
                 <DropdownMenuItem
+                  className="gap-2 p-2"
+                  data-active={projectSlug === organisation.slug}
                   key={organisation.name}
                   onClick={() => {
                     navigate({
@@ -91,13 +93,11 @@ export function ProjectSwitcher() {
                       params: { projectSlug: organisation.slug },
                     });
                   }}
-                  data-active={projectSlug === organisation.slug}
-                  className="gap-2 p-2"
                 >
                   <Avatar className="size-6 rounded-md">
                     <AvatarImage
-                      src={organisation.logo ?? undefined}
                       alt={organisation.name}
+                      src={organisation.logo ?? undefined}
                     />
                     <AvatarFallback>
                       {getInitials(organisation.name)}

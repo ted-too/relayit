@@ -11,7 +11,8 @@
     "./db/crypto": "./src/db/crypto/index.ts",
     "./db/types": "./src/db/types.ts",
     "./providers": "./src/providers/index.ts",
-    "./permissions": "./src/permissions/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./auth/permissions": "./src/auth/permissions/index.ts",
     "./zod": "./src/zod.d.ts"
   },
   "devDependencies": {

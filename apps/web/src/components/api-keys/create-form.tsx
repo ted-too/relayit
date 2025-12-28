@@ -81,9 +81,9 @@ export function CreateApiKeyForm({ submitWrapper }: CreateApiKeyFormProps) {
           <field.TextField
             description="Make sure to copy your API key now. For security reasons, we don't
 						store the full key and you won't be able to see it again."
+            disabled={createdApiKey !== null}
             label="Key Name"
             placeholder="e.g., 2labs"
-            disabled={createdApiKey !== null}
           />
         )}
       </form.AppField>

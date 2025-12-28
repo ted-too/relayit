@@ -109,9 +109,9 @@ function RouteComponent() {
             <form.AppField name="name">
               {(field) => (
                 <field.TextField
+                  className={{ root: "col-span-2" }}
                   label="Name"
                   placeholder="e.g. Welcome"
-                  className={{ root: "col-span-2" }}
                 />
               )}
             </form.AppField>
@@ -126,12 +126,12 @@ function RouteComponent() {
             <form.AppField name="category">
               {(field) => (
                 <field.MultiSelectField
-                  label="Category"
-                  multiple={false}
                   items={AVAILABLE_TEMPLATE_CATEGORIES.map((category) => ({
                     label: category,
                     value: category,
                   }))}
+                  label="Category"
+                  multiple={false}
                 />
               )}
             </form.AppField>
@@ -145,7 +145,7 @@ function RouteComponent() {
               />
             )}
           </form.AppField>
-          <form.Field name="channelVersions" mode="array">
+          <form.Field mode="array" name="channelVersions">
             {(field) => (
               <Tabs defaultValue="template">
                 <TabsList className="w-full rounded-lg border">
@@ -168,14 +168,14 @@ function RouteComponent() {
                                 >
                                   {(field) => (
                                     <field.MultiSelectField
-                                      label="Engine"
-                                      multiple={false}
                                       items={Object.entries(
                                         emailTemplateEngineEnum.enum
                                       ).map(([key, value]) => ({
                                         label: key,
                                         value,
                                       }))}
+                                      label="Engine"
+                                      multiple={false}
                                     />
                                   )}
                                 </form.AppField>

@@ -37,7 +37,7 @@ function RouteComponent() {
           <CardAction>
             <Button
               render={
-                <Link to="/$projectSlug/templates/new" params={{ projectSlug }}>
+                <Link params={{ projectSlug }} to="/$projectSlug/templates/new">
                   <PlusIcon />
                   New Template
                 </Link>

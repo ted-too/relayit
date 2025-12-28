@@ -1,5 +1,5 @@
+import { AVAILABLE_CHANNELS } from "@repo/shared/providers";
 import { z } from "zod";
-import { AVAILABLE_CHANNELS } from "@/providers";
 
 // Control characters regex for display name validation
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Control characters should be explicitly blocked

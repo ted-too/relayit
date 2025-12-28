@@ -48,10 +48,10 @@ function RouteComponent() {
                   const config = PROVIDER_CONFIG[type];
                   return (
                     <CreateIntegrationDialog
+                      config={config}
+                      Icon={Icon}
                       key={type}
                       type={type}
-                      Icon={Icon}
-                      config={config}
                     />
                   );
                 })}
@@ -61,7 +61,7 @@ function RouteComponent() {
         </CardHeader>
         <CardContent className="grid gap-4">
           {data.map((key) => (
-            <IntegrationCard key={key.id} integration={key} />
+            <IntegrationCard integration={key} key={key.id} />
           ))}
           {data.length === 0 && (
             <div className="flex flex-col gap-2 py-4">

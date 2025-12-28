@@ -6,10 +6,10 @@ export const PROVIDER_ICONS: Record<
 > = {
   aws: (props) => (
     <svg
-      width="304"
+      fill="none"
       height="182"
       viewBox="0 0 304 182"
-      fill="none"
+      width="304"
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
@@ -19,16 +19,16 @@ export const PROVIDER_ICONS: Record<
         fill="#252F3E"
       />
       <path
-        fillRule="evenodd"
         clipRule="evenodd"
         d="M273.5 143.7C240.6 168 192.8 180.9 151.7 180.9C94.1 180.9 42.2 159.6 2.99999 124.2C-0.100014 121.4 2.69999 117.6 6.39999 119.8C48.8 144.4 101.1 159.3 155.2 159.3C191.7 159.3 231.8 151.7 268.7 136.1C274.2 133.6 278.9 139.7 273.5 143.7Z"
         fill="#FF9900"
+        fillRule="evenodd"
       />
       <path
-        fillRule="evenodd"
         clipRule="evenodd"
         d="M287.2 128.1C283 122.7 259.4 125.5 248.7 126.8C245.5 127.2 245 124.4 247.9 122.3C266.7 109.1 297.6 112.9 301.2 117.3C304.8 121.8 300.2 152.7 282.6 167.5C279.9 169.8 277.3 168.6 278.5 165.6C282.5 155.7 291.4 133.4 287.2 128.1Z"
         fill="#FF9900"
+        fillRule="evenodd"
       />
     </svg>
   ),

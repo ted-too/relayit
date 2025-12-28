@@ -114,9 +114,9 @@ export function AppSidebar() {
 
   return (
     <SidebarProvider
+      className="shadow-[inset_-1px_0px_rgba(0,0,0,0.06)]"
       defaultOpen={sidebarOpen}
       isMobile={isMobile}
-      className="shadow-[inset_-1px_0px_rgba(0,0,0,0.06)]"
     >
       <Sidebar collapsible="icon" variant="inset">
         <SidebarHeader className="mb-2 h-16 justify-center max-md:mt-2">
@@ -137,16 +137,16 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         className="group/menu-button h-9 gap-3 rounded-md bg-gradient-to-r hover:bg-transparent hover:from-sidebar-accent hover:to-sidebar-accent/40 data-[active=true]:from-primary/20 data-[active=true]:to-primary/5 data-[active=true]:font-medium group-data-[collapsible=icon]:px-[5px]! [&>svg]:size-auto"
-                        tooltip={item.title}
                         isActive={isActiveRoute(item.url, pathname)}
                         isAvailable={!item.comingSoon}
+                        tooltip={item.title}
                       >
                         <Link to={`/${projectSlug}${item.url}` as any}>
                           {item.icon && (
                             <item.icon
+                              aria-hidden="true"
                               className="text-muted-foreground/60 group-data-[active=true]/menu-button:text-primary"
                               size={22}
-                              aria-hidden="true"
                             />
                           )}
                           <span>{item.title}</span>

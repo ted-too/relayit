@@ -37,16 +37,16 @@ export function ApiKeyCard({ apiKey }: { apiKey: ClientParsedApiKey }) {
         </span>
       </div>
       <ConfirmAction
+        confirm="Revoke"
+        description="Are you sure you want to revoke this API key? This action cannot be undone."
         execute={async () => {
           await revokeKey({ id: apiKey.id });
         }}
         isLoading={revokeLoading}
-        confirm="Revoke"
         title="Revoke API Key"
-        description="Are you sure you want to revoke this API key? This action cannot be undone."
         verificationText={apiKey.name ?? undefined}
       >
-        <Button size="sm" variant="outline-destructive" className="ms-auto">
+        <Button className="ms-auto" size="sm" variant="outline-destructive">
           Revoke
         </Button>
       </ConfirmAction>

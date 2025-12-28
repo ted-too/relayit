@@ -18,20 +18,20 @@ export function TemplateCard({ template }: { template: Template }) {
         </span>
       </div>
       <Button
-        size="sm"
-        variant="outline"
         className="ms-auto"
         render={
           <Link
-            to="/$projectSlug/templates/$templateSlug"
             params={{
               projectSlug,
               templateSlug: template.slug,
             }}
+            to="/$projectSlug/templates/$templateSlug"
           >
             Edit
           </Link>
         }
+        size="sm"
+        variant="outline"
       />
     </Card>
   );

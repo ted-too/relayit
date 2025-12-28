@@ -135,18 +135,18 @@ function RouteComponent() {
               <form.AppField name="status">
                 {(field) => (
                   <field.SelectField
-                    multiple={false}
-                    label="Status"
+                    className={{ label: "sr-only", root: "w-24" }}
                     items={AVAILABLE_TEMPLATE_STATUSES.map((status) => ({
                       label: status,
                       value: status,
                     }))}
-                    className={{ label: "sr-only", root: "w-24" }}
+                    label="Status"
+                    multiple={false}
                   />
                 )}
               </form.AppField>
               <form.AppForm>
-                <form.SubmitButton disabled={isPristine} className="w-32">
+                <form.SubmitButton className="w-32" disabled={isPristine}>
                   Update
                 </form.SubmitButton>
               </form.AppForm>
@@ -158,9 +158,9 @@ function RouteComponent() {
             <form.AppField name="name">
               {(field) => (
                 <field.TextField
+                  className={{ root: "col-span-2" }}
                   label="Name"
                   placeholder="e.g. Welcome"
-                  className={{ root: "col-span-2" }}
                 />
               )}
             </form.AppField>
@@ -175,12 +175,12 @@ function RouteComponent() {
             <form.AppField name="category">
               {(field) => (
                 <field.SelectField
-                  label="Category"
-                  multiple={false}
                   items={AVAILABLE_TEMPLATE_CATEGORIES.map((category) => ({
                     label: category,
                     value: category,
                   }))}
+                  label="Category"
+                  multiple={false}
                 />
               )}
             </form.AppField>
@@ -188,14 +188,14 @@ function RouteComponent() {
           <form.AppField name="schema">
             {(field) => (
               <field.TextField
+                className={{ input: "h-96 overflow-y-auto" }}
                 label="Schema"
                 placeholder="e.g. { name: string, email: string }"
-                className={{ input: "h-96 overflow-y-auto" }}
                 textarea
               />
             )}
           </form.AppField>
-          <form.Field name="channelVersions" mode="array">
+          <form.Field mode="array" name="channelVersions">
             {(field) =>
               (field.state.value as ChannelContent[]).map((v, i) => {
                 const baseKey = `channelVersions[${i}]`;
@@ -208,14 +208,14 @@ function RouteComponent() {
                         <form.AppField name={`${baseKey}.content.engine`}>
                           {(field) => (
                             <field.SelectField
-                              label="Engine"
-                              multiple={false}
                               items={Object.entries(
                                 emailTemplateEngineEnum.enum
                               ).map(([key, value]) => ({
                                 label: key,
                                 value,
                               }))}
+                              label="Engine"
+                              multiple={false}
                             />
                           )}
                         </form.AppField>
@@ -230,8 +230,8 @@ function RouteComponent() {
                         <form.AppField name={`${baseKey}.content.template`}>
                           {(field) => (
                             <field.TextField
-                              label="Template"
                               className={{ input: "h-96 overflow-y-auto" }}
+                              label="Template"
                               textarea
                             />
                           )}
@@ -245,9 +245,9 @@ function RouteComponent() {
 
                 return (
                   <Tabs
+                    className="gap-4"
                     defaultValue="template"
                     key={`${v.channel}-${i}-channel-version`}
-                    className="gap-4"
                   >
                     <TabsList className="w-full rounded-lg border">
                       <TabsTab value="template">Template</TabsTab>
@@ -268,9 +268,9 @@ function RouteComponent() {
                           {(content) =>
                             content ? (
                               <EmailPreview
-                                template={content}
-                                // TODO: Allow this to be set by the user
                                 previewData={undefined}
+                                // TODO: Allow this to be set by the user
+                                template={content}
                               />
                             ) : null
                           }

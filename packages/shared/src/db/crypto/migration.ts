@@ -1,6 +1,6 @@
+import { type DB, schema } from "@repo/shared/db";
+import { createGenericError, logger, type Result } from "@repo/shared/utils";
 import { and, eq } from "drizzle-orm";
-import { type DB, schema } from "@/db";
-import { createGenericError, logger, type Result } from "@/utils";
 import { decrypt, decryptRecord, encrypt, encryptRecord } from "../crypto";
 import { encryptedColumnRegistry, getEncryptedRecords } from "./registry";
 
@@ -201,10 +201,10 @@ async function runKeyRotationMigration(
 
               // Navigate to the parent object
               for (let j = 0; j < pathParts.length - 1; j++) {
-                if (!current[pathParts[j]]) {
-                  current[pathParts[j]] = {};
+                if (!current[pathParts[j] as keyof typeof current]) {
+                  current[pathParts[j] as keyof typeof current] = {};
                 }
-                current = current[pathParts[j]];
+                current = current[pathParts[j] as keyof typeof current];
               }
 
               // Set the re-encrypted data
