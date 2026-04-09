@@ -1,9 +1,9 @@
+import { apiKey } from "@better-auth/api-key";
 import { ac, admin, member, owner } from "@repo/shared/auth/permissions";
 import { db, schema } from "@repo/shared/db";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
-  apiKey,
   customSession,
   lastLoginMethod,
   organization,
@@ -13,14 +13,13 @@ import { redis } from "bun";
 
 declare module "bun" {
   interface Env {
-    REDIS_URL: string;
-    DATABASE_URL: string;
-
     APP_URL: string;
+    DATABASE_URL: string;
     DOCS_URL?: string;
 
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
+    REDIS_URL: string;
   }
 }
 

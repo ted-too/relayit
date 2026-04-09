@@ -13,7 +13,7 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
-    "bun-types": "latest",
+    "@types/bun": "latest",
     "@types/babel__standalone": "^7.1.9",
     "@types/react": "^19",
     "@types/react-dom": "^19"

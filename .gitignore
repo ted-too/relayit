@@ -84,3 +84,4 @@ package-lock.json
 **/*.bun
 
 # Web
+temp

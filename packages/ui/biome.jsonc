@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/@biomejs/biome/configuration_schema.json",
+  "root": false,
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noExportedImports": "off"
+      },
+      "performance": {
+        "noNamespaceImport": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
+      }
+    }
+  }
+}

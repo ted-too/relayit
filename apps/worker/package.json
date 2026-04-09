@@ -5,17 +5,17 @@
     "build": "bun build ./src/index.ts --outdir ./build --target bun --external=pino --external=thread-stream --external=real-require"
   },
   "dependencies": {
-    "@aws-sdk/client-ses": "^3.803.0",
-    "@aws-sdk/client-sns": "^3.803.0",
+    "@aws-sdk/client-ses": "^3.1027.0",
+    "@aws-sdk/client-sns": "^3.1027.0",
     "@repo/shared": "workspace:*",
-    "@t3-oss/env-core": "^0.13.8",
-    "drizzle-orm": "^0.45.1",
-    "pg": "^8.16.3",
-    "pino": "^10.1.0",
+    "@t3-oss/env-core": "^0.13.11",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
     "typeid-js": "^1.2.0",
-    "zod": "^4.2.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/bun": "latest"
   }
 }

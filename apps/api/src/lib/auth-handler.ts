@@ -12,7 +12,9 @@ export const betterAuth = new Elysia({ name: "better-auth" })
           headers,
         });
 
-        if (!session) return status(401);
+        if (!session) {
+          return status(401);
+        }
 
         return {
           user: session.user,
@@ -84,7 +86,9 @@ export const betterAuthApiKey = new Elysia({ name: "better-auth-api-key" })
           },
         });
 
-        if (!(valid && key)) return status(401);
+        if (!(valid && key)) {
+          return status(401);
+        }
 
         const organizationsWithApiKey =
           await db.query.apikeyOrganization.findMany({
@@ -94,13 +98,17 @@ export const betterAuthApiKey = new Elysia({ name: "better-auth-api-key" })
             },
           });
 
-        if (organizationsWithApiKey.length === 0) return status(401);
+        if (organizationsWithApiKey.length === 0) {
+          return status(401);
+        }
 
         const organizationForApiKey = organizationsWithApiKey.find(
           (organization) => organization.organization.slug === params.project
         );
 
-        if (!organizationForApiKey) return status(404, "Project not found");
+        if (!organizationForApiKey) {
+          return status(404, "Project not found");
+        }
 
         return {
           organization: organizationForApiKey.organization,

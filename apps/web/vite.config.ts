@@ -1,30 +1,26 @@
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
+import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import viteReact from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import viteTsConfigPaths from "vite-tsconfig-paths";
 
 const config = defineConfig({
-  plugins: [
-    viteTsConfigPaths({
-      projects: [".", "../../packages/ui", "../../packages/shared"],
-    }),
-    tailwindcss(),
-    tanstackStart({
-      customViteReactPlugin: true,
-      target: "bun",
-    }),
-    viteReact(),
-  ],
-  // The code below is required for better-auth to work
-  define: {
-    global: "globalThis",
+  resolve: {
+    tsconfigPaths: true,
   },
   build: {
-    rollupOptions: {
-      external: ["node:async_hooks", "node:crypto", "node:buffer"],
-    },
+    sourcemap: "hidden",
   },
+  plugins: [
+    devtools(),
+    nitro({ preset: "bun" }),
+    tailwindcss(),
+    tanstackStart(),
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+  ],
 });
 
 export default config;
