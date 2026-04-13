@@ -17,18 +17,19 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@repo/ui/components/ui/shad/tooltip";
+import {
+  SIDEBAR_COOKIE_MAX_AGE,
+  SIDEBAR_COOKIE_NAME,
+  SIDEBAR_KEYBOARD_SHORTCUT,
+  SIDEBAR_WIDTH,
+  SIDEBAR_WIDTH_ICON,
+  SIDEBAR_WIDTH_MOBILE,
+} from "@repo/ui/constants";
 import { useIsMobile } from "@repo/ui/hooks/use-mobile";
 import { cn } from "@repo/ui/lib/utils";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-
-const SIDEBAR_COOKIE_NAME = "sidebar_state";
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "Mod+B";
 
 interface SidebarContextProps {
   isMobile: boolean;

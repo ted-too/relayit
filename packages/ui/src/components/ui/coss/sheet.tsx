@@ -3,10 +3,10 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { RiCloseLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { ScrollArea } from "@repo/ui/components/ui/coss/scroll-area";
 import { cn } from "@repo/ui/lib/utils";
-import { XIcon } from "lucide-react";
 import type React from "react";
 
 export const Sheet: typeof SheetPrimitive.Root = SheetPrimitive.Root;
@@ -110,7 +110,7 @@ export function SheetPopup({
               render={<Button size="icon" variant="ghost" />}
               {...closeProps}
             >
-              <XIcon />
+              <RiCloseLine />
             </SheetPrimitive.Close>
           )}
         </SheetPrimitive.Popup>

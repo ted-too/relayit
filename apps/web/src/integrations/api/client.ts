@@ -1,15 +1,16 @@
 import { treaty } from "@elysiajs/eden";
-import type { App } from "@repo/api";
+import type { App } from "@repo/api/server";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
+import { env } from "@/env";
 
 type TreatyConfig = Parameters<typeof treaty>[1];
 
 export const createClient = createIsomorphicFn()
   .server((opts?: TreatyConfig) => {
-    const Cookie = getRequestHeader("Cookie") ?? "";
+    const Cookie = getRequestHeader("Cookie");
 
-    return treaty<App>(process.env.VITE_API_URL ?? "http://localhost:3005", {
+    return treaty<App>(env.VITE_API_URL, {
       ...opts,
       fetch: {
         credentials: "omit",
@@ -20,7 +21,7 @@ export const createClient = createIsomorphicFn()
     });
   })
   .client((opts?: TreatyConfig) =>
-    treaty<App>(import.meta.env.VITE_API_URL ?? "http://localhost:3005", {
+    treaty<App>(env.VITE_API_URL, {
       ...opts,
       fetch: {
         credentials: "include",
@@ -28,4 +29,4 @@ export const createClient = createIsomorphicFn()
     })
   );
 
-export type API = ReturnType<typeof createClient>;
+export type ApiClient = ReturnType<typeof createClient>;

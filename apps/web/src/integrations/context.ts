@@ -1,14 +1,20 @@
-import { makeQueryClient } from "@repo/ui/integrations/tanstack-query/client";
+import { getQueryClient } from "@repo/ui/integrations/tanstack-query/client";
 import type { QueryClient } from "@tanstack/react-query";
-import { type API, createClient as createAPIClient } from "./api";
+import { type ApiClient, createClient as createAPIClient } from "./api";
+import {
+  type BetterAuthClient,
+  createClient as createBetterAuthClient,
+} from "./better-auth";
 
 export interface RouterContext {
-  api: API;
+  api: ApiClient;
+  betterAuth: BetterAuthClient;
   queryClient: QueryClient;
 }
 
 export const getContext = () =>
   ({
-    queryClient: makeQueryClient(),
     api: createAPIClient(),
+    betterAuth: createBetterAuthClient(),
+    queryClient: getQueryClient(),
   }) satisfies RouterContext;

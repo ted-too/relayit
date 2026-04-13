@@ -1,4 +1,4 @@
-// import { mergeQueryKeys } from "@lukemorales/query-key-factory";
-// import { apiKeys } from "./api-keys";
+import { mergeQueryKeys } from "@ted-too/query-key-factory";
+import { session } from "./session";
 
-// export const authQueries = mergeQueryKeys(apiKeys);
+export const auth = mergeQueryKeys(session);

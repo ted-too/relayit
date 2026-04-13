@@ -18,8 +18,8 @@ export const RENDER_ERRORS = {
 } as const;
 
 export interface RenderOptions {
-  pretty?: boolean;
   plainText?: boolean;
+  pretty?: boolean;
 }
 
 function processTemplate(template: string, props: Record<string, any>): string {
@@ -96,11 +96,15 @@ export async function renderEmailServer(
       WritableStream,
       TransformStream,
       require: (moduleName: string) => {
-        if (moduleName === "react") return React;
-        if (moduleName === "@react-email/components")
+        if (moduleName === "react") {
+          return React;
+        }
+        if (moduleName === "@react-email/components") {
           return require("@react-email/components");
-        if (moduleName === "@react-email/render")
+        }
+        if (moduleName === "@react-email/render") {
           return require("@react-email/render");
+        }
         return require(moduleName);
       },
       module: { exports: {} },

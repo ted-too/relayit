@@ -1,36 +1,56 @@
-import { cors } from "@elysiajs/cors";
-import { betterAuth } from "@repo/api/lib/auth-handler";
-import { organizationRoutes } from "@repo/api/routes/organization";
-import { sendRoutes } from "@repo/api/routes/send";
-import { db } from "@repo/shared/db";
-import { logger } from "@repo/shared/utils";
+import { db } from "@repo/api/db";
+import {
+  checkAndRunKeyRotation,
+  validateEncryptionKeysForStartup,
+} from "@repo/api/db/crypto";
+import { env } from "@repo/api/env";
+import { logger } from "@repo/api/utils";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Elysia } from "elysia";
 
-const app = new Elysia()
-  .use(
-    cors({
-      origin: process.env.WEB_URL,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      credentials: true,
-      allowedHeaders: ["Content-Type", "Authorization"],
-    })
-  )
-  .onRequest(({ request }) => {
-    logger.info(`${request.method} ${request.url}`);
-  })
-  .mount(betterAuth)
-  .use(organizationRoutes)
-  .use(sendRoutes);
-
-async function startServer() {
+async function main() {
   await migrate(db, { migrationsFolder: "./drizzle" });
 
-  app.listen(3005, ({ hostname, port }) => {
-    logger.info(`🦊 Elysia is running at ${hostname}:${port}`);
-  });
+  const keyValidationResult = await validateEncryptionKeysForStartup(db);
+  if (keyValidationResult.error) {
+    throw keyValidationResult.error;
+  }
+
+  const keyRotationResult = await checkAndRunKeyRotation(db);
+  if (keyRotationResult.error) {
+    throw keyRotationResult.error;
+  }
+
+  switch (env.RUN_MODE) {
+    case "api": {
+      const { startServer } = await import("./server");
+      await startServer();
+      return;
+    }
+
+    case "worker": {
+      const { startWorker } = await import("./worker");
+      await startWorker();
+      return;
+    }
+
+    case "combined": {
+      const [{ startServer }, { startWorker }] = await Promise.all([
+        import("./server"),
+        import("./worker"),
+      ]);
+
+      await Promise.all([startServer(), startWorker()]);
+      return;
+    }
+
+    default: {
+      const unsupportedRunMode: never = env.RUN_MODE;
+      throw new Error(`Unsupported RUN_MODE: ${unsupportedRunMode}`);
+    }
+  }
 }
 
-await startServer();
-
-export type App = typeof app;
+main().catch((error) => {
+  logger.error({ error, runMode: env.RUN_MODE }, "Failed to start runtime");
+  process.exit(1);
+});

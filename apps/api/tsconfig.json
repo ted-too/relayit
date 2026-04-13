@@ -2,16 +2,16 @@
   "compilerOptions": {
     "target": "ES2021",
     "module": "ES2022",
+    "lib": ["ES2022"],
     "moduleResolution": "bundler",
-    "types": ["bun-types"],
+    "types": ["bun"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
       "@repo/api/*": ["./src/*"],
-      "@repo/api": ["./src/index.ts"],
+      "@repo/api/server": ["./src/server/index.ts"],
       "@repo/shared/*": ["../../packages/shared/src/*"]
     }
   }

@@ -20,11 +20,7 @@ export function buildCredentialSchema<
   });
 }
 
-export type GenericProviderConfig = {
-  label: string;
-  credentialsSchema: ReturnType<
-    typeof buildCredentialSchema<z4.$ZodObject, z4.$ZodObject>
-  >;
+export interface GenericProviderConfig {
   channels: Partial<
     Record<
       ChannelType,
@@ -33,7 +29,11 @@ export type GenericProviderConfig = {
       }
     >
   >;
-};
+  credentialsSchema: ReturnType<
+    typeof buildCredentialSchema<z4.$ZodObject, z4.$ZodObject>
+  >;
+  label: string;
+}
 
 export type GenericProviderCredentials = z4.infer<
   GenericProviderConfig["credentialsSchema"]

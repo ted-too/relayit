@@ -9,8 +9,8 @@
     "@react-email/components": "^0.5.3",
     "@react-email/render": "^1.2.3",
     "@repo/shared": "workspace:*",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@types/bun": "latest",

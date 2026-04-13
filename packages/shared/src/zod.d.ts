@@ -1,8 +1,8 @@
 export interface ZodMeta {
-  title?: string;
   description?: string;
-  placeholder?: string;
   order?: number;
+  placeholder?: string;
+  title?: string;
   type?: "text" | "password" | "email" | "number" | "textarea";
 }
 

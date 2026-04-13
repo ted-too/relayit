@@ -1,24 +1,31 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
-import { treaty } from "@elysiajs/eden";
-import type { App } from "@repo/api";
-import { ac, admin, member, owner } from "@repo/shared/permissions";
+import { BASE_PATH } from "@repo/api/server/lib/auth/constants";
+import {
+  ac,
+  admin,
+  member,
+  owner,
+} from "@repo/api/server/lib/auth/permissions";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import {
   lastLoginMethodClient,
   organizationClient,
 } from "better-auth/client/plugins";
-import { createAuthClient as createBetterAuthClient } from "./index";
+import { createAuthClient as createBetterAuthClient } from "better-auth/react";
+import { env } from "@/env";
 
-const createAuthClient = (
-  baseURL: string,
-  { cookie }: { cookie?: string | null } = {}
-) =>
+const createAuthClient = ({
+  Cookie,
+  baseURL,
+}: {
+  Cookie?: string;
+  baseURL: string;
+}) =>
   createBetterAuthClient({
     baseURL,
-    basePath: "/auth",
+    basePath: BASE_PATH,
     plugins: [
-      apiKeyClient(),
       organizationClient({
         ac,
         roles: {
@@ -28,34 +35,27 @@ const createAuthClient = (
         },
       }),
       lastLoginMethodClient(),
+      apiKeyClient(),
     ],
-    fetchOptions: cookie
+    fetchOptions: Cookie
       ? {
-          headers: { cookie },
+          headers: { Cookie },
         }
       : undefined,
   });
 
 export const createClient = createIsomorphicFn()
-  .server((opts?: TreatyConfig) => {
+  .server(() => {
     const Cookie = getRequestHeader("Cookie") ?? "";
 
-    return treaty<App>(process.env.VITE_API_URL ?? "http://localhost:3005", {
-      ...opts,
-      fetch: {
-        credentials: "omit",
-      },
-      headers: {
-        Cookie,
-      },
+    return createAuthClient({
+      Cookie,
+      baseURL: env.VITE_API_URL,
     });
   })
-  .client((opts?: TreatyConfig) =>
-    treaty<App>(import.meta.env.VITE_API_URL ?? "http://localhost:3005", {
-      ...opts,
-      fetch: {
-        credentials: "include",
-      },
+  .client(() =>
+    createAuthClient({
+      baseURL: env.VITE_API_URL,
     })
   );
 

@@ -9,7 +9,9 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
       const objDef = def as z4.$ZodObjectDef;
 
       for (const [key, value] of Object.entries(objDef.shape)) {
-        if (!value) continue;
+        if (!value) {
+          continue;
+        }
         defaultValues[key] = getDefaultFromZodType(value);
       }
 
@@ -170,7 +172,9 @@ export function generateDefaultFromSchema<T extends z4.$ZodObject>(
   const defaultValues: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(schema._zod.def.shape)) {
-    if (!value) continue;
+    if (!value) {
+      continue;
+    }
     defaultValues[key] = getDefaultFromZodType(value);
   }
 

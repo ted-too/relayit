@@ -6,10 +6,25 @@
     "ultracite/biome/remix",
     "ultracite/biome/vitest"
   ],
+  "javascript": {
+    "globals": ["Bun"]
+  },
   "linter": {
     "rules": {
       "performance": {
-        "noBarrelFile": "off"
+        "noBarrelFile": "off",
+        "noNamespaceImport": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "warn"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noEmptyBlockStatements": "warn",
+        "noArrayIndexKey": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
       }
     }
   }
