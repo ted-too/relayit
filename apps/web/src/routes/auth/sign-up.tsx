@@ -5,7 +5,6 @@ import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { CombinedLogo } from "@repo/ui/components/ui/custom/logo";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { env } from "@/env";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: RouteComponent,
@@ -13,7 +12,7 @@ export const Route = createFileRoute("/auth/sign-up")({
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { betterAuth } = Route.useRouteContext();
+  const { betterAuth, env } = Route.useRouteContext();
 
   const lastMethod = betterAuth.getLastUsedLoginMethod();
 
@@ -118,7 +117,7 @@ function RouteComponent() {
           </form.AppField>
           <form.AppForm>
             <div className="relative mt-4">
-              <form.SubmitButton className={{ root: "w-full" }} size="lg">
+              <form.SubmitButton className="w-full" size="lg">
                 Sign up
               </form.SubmitButton>
               {lastMethod === "email" && (

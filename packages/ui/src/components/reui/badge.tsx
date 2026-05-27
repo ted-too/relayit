@@ -1,7 +1,10 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { RiFileCopyLine } from "@remixicon/react";
+import { Button } from "@repo/ui/components/ui/coss/button";
 import { cn } from "@repo/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
+import { toast } from "sonner";
 
 const badgeVariants = cva(
   "relative inline-flex w-fit shrink-0 items-center justify-center whitespace-nowrap border border-transparent font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*=size-])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -68,6 +71,8 @@ const badgeVariants = cva(
 );
 
 interface BadgeProps extends useRender.ComponentProps<"span"> {
+  copyFirst?: boolean;
+  copyText?: string;
   radius?: VariantProps<typeof badgeVariants>["radius"];
   size?: VariantProps<typeof badgeVariants>["size"];
   variant?: VariantProps<typeof badgeVariants>["variant"];
@@ -75,15 +80,76 @@ interface BadgeProps extends useRender.ComponentProps<"span"> {
 
 function Badge({
   className,
+  copyFirst,
+  copyText,
+  children,
   variant,
   size,
   radius,
   render,
   ...props
 }: BadgeProps) {
+  const copyToClipboard = async () => {
+    if (
+      typeof window === "undefined" ||
+      !navigator.clipboard.writeText ||
+      !copyText
+    ) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(copyText);
+      toast.success("Copied to clipboard");
+    } catch (error) {
+      toast.error("Failed to copy to clipboard", {
+        description: (error as Error)?.message,
+      });
+    }
+  };
+
   const defaultProps = {
     "data-slot": "badge",
-    className: cn(badgeVariants({ variant, size, radius, className })),
+    children: copyText ? (
+      <>
+        {children}
+        <Button
+          className={cn(
+            "p-0! text-muted-foreground hover:text-foreground",
+            {
+              xs: "size-4!",
+              sm: "size-4.5!",
+              default: "size-5!",
+              lg: "size-5.5!",
+              xl: "size-6!",
+            }[size ?? "default"]
+          )}
+          onClick={copyToClipboard}
+          size="icon"
+          variant="ghost"
+        >
+          <RiFileCopyLine
+            className={cn(
+              {
+                xs: "size-2!",
+                sm: "size-2.5!",
+                default: "size-3!",
+                lg: "size-3!",
+                xl: "size-3.5!",
+              }[size ?? "default"]
+            )}
+          />
+        </Button>
+      </>
+    ) : (
+      children
+    ),
+    className: cn(
+      badgeVariants({ variant, size, radius, className }),
+      copyFirst && "flex-row-reverse",
+      copyText && !copyFirst && "pr-0",
+      copyText && copyFirst && "pl-0"
+    ),
   };
 
   return useRender({

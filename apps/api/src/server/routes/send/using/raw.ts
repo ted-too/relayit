@@ -1,5 +1,7 @@
-import { db, queueMessage, schema } from "@repo/api/db";
+import { db, schema } from "@repo/api/db";
+import { queueMessage } from "@repo/api/redis";
 import { betterAuthApiKey } from "@repo/api/server/lib/auth/handler";
+import { apiRedis } from "@repo/api/server/lib/redis";
 import {
   findOrCreateContact,
   findProviderIdentity,
@@ -68,7 +70,7 @@ export const rawRoutes = new Elysia({ prefix: "/raw" })
           });
         }
 
-        await queueMessage(newMessage.messageEvent.id);
+        await queueMessage(apiRedis, newMessage.messageEvent.id);
 
         return status(201, {
           id: newMessage.message.id,

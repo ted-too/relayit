@@ -10,13 +10,11 @@ import {
 } from "@repo/api/server/lib/auth/permissions";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import {
-  customSession,
-  lastLoginMethod,
-  organization,
-} from "better-auth/plugins";
+import { lastLoginMethod, organization } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
-import { redis } from "bun";
+import { RedisClient } from "bun";
+
+const authRedis = new RedisClient(env.REDIS_URL);
 
 function getDomain() {
   const appHostname = new URL(env.APP_URL).hostname.toLowerCase();
@@ -69,15 +67,15 @@ const options = {
     },
   },
   secondaryStorage: {
-    get: async (key) => await redis.get(key),
+    get: async (key) => await authRedis.get(key),
     set: async (key, value, ttl) => {
-      await redis.set(key, value);
+      await authRedis.set(key, value);
       if (ttl) {
-        await redis.expire(key, ttl);
+        await authRedis.expire(key, ttl);
       }
     },
     delete: async (key) => {
-      await redis.del(key);
+      await authRedis.del(key);
     },
   },
   emailAndPassword: {
@@ -111,62 +109,26 @@ const options = {
       },
     }),
     lastLoginMethod(),
-    apiKey({
-      enableSessionForAPIKeys: false,
-      defaultPrefix: "rel_",
-      rateLimit: { enabled: false },
-      enableMetadata: true,
-    }),
+    apiKey([
+      {
+        rateLimit: { enabled: true },
+        configId: "user-keys",
+        defaultPrefix: "rel_user_",
+        references: "user",
+        enableMetadata: false,
+      },
+      {
+        rateLimit: { enabled: false },
+        configId: "org-keys",
+        defaultPrefix: "rel_org_",
+        references: "organization",
+        enableMetadata: true,
+      },
+    ]),
   ],
 } satisfies BetterAuthOptions;
 
 export const auth = betterAuth({
   ...options,
-  plugins: [
-    ...(options.plugins ?? []),
-    customSession(
-      async ({ user, session: { activeOrganizationId, ...session } }) => {
-        const organizations = (
-          await db.query.member.findMany({
-            where: (member, { eq }) => eq(member.userId, user.id),
-            with: {
-              organization: {
-                columns: {
-                  id: true,
-                  slug: true,
-                  name: true,
-                  logo: true,
-                },
-              },
-            },
-          })
-        ).map((member) => member.organization);
-
-        const activeOrganization = activeOrganizationId
-          ? organizations.find(
-              (organization) => organization.id === activeOrganizationId
-            )
-          : undefined;
-
-        return {
-          user: {
-            ...user,
-            organizations,
-          },
-          session: {
-            ...session,
-            activeOrganization: activeOrganization
-              ? {
-                  id: activeOrganization.id,
-                  slug: activeOrganization.slug,
-                  name: activeOrganization.name,
-                  logo: activeOrganization.logo,
-                }
-              : undefined,
-          },
-        };
-      },
-      options
-    ),
-  ],
+  plugins: [...(options.plugins ?? [])],
 });

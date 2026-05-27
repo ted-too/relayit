@@ -13,7 +13,7 @@ export const Route = createFileRoute("/auth/sign-in")({
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { betterAuth } = Route.useRouteContext();
+  const { betterAuth, env } = Route.useRouteContext();
   const lastMethod = betterAuth.getLastUsedLoginMethod();
 
   const { mutate: signInWithGitHub, isPending: isSigningInWithGitHub } =
@@ -21,7 +21,7 @@ function RouteComponent() {
       mutationFn: async () => {
         const { data, error } = await betterAuth.signIn.social({
           provider: "github",
-          disableRedirect: true,
+          callbackURL: `${env.VITE_BASE_URL}/`,
         });
 
         if (error) {
@@ -117,7 +117,7 @@ function RouteComponent() {
               <Badge
                 className="absolute -top-2 -right-8 w-16"
                 size="sm"
-                variant="success"
+                variant="success-light"
               >
                 Last used
               </Badge>
@@ -136,7 +136,7 @@ function RouteComponent() {
           </form.AppField>
           <form.AppForm>
             <div className="relative mt-4">
-              <form.SubmitButton className={{ root: "w-full" }} size="lg">
+              <form.SubmitButton className="w-full" size="lg">
                 Sign in
               </form.SubmitButton>
               {lastMethod === "email" && (

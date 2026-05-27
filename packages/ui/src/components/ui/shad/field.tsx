@@ -171,13 +171,15 @@ function FieldSeparator({
   );
 }
 
+export type FieldErrorsType = Array<{ message?: string } | undefined>;
+
 function FieldError({
   className,
   children,
   errors,
   ...props
 }: React.ComponentProps<"div"> & {
-  errors?: Array<{ message?: string } | undefined>;
+  errors?: FieldErrorsType;
 }) {
   const content = useMemo(() => {
     if (children) {

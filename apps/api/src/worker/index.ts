@@ -6,19 +6,19 @@ import {
   readEvents,
   recoverOrphanedEvents,
   recoverStuckProcessingEvents,
-} from "@repo/api/db";
+} from "@repo/api/redis";
 import { logger } from "@repo/api/utils";
 import { createGenericError } from "@repo/shared/utils";
-import { redis } from "bun";
 import { env } from "./env";
 import { processMessageEvent } from "./lib/process-event";
+import { workerRedis } from "./lib/redis";
 
 let isShuttingDown = false;
 let pendingRecoveryInterval: NodeJS.Timeout | null = null;
 
 interface WorkerOperationResult {
   data: unknown;
-  error: Error | null;
+  error: unknown;
 }
 
 const workerContext: Record<string, unknown> = {
@@ -38,7 +38,7 @@ async function initializeConsumerGroup(): Promise<WorkerOperationResult> {
   );
 
   try {
-    await redis.send("XGROUP", [
+    await workerRedis.send("XGROUP", [
       "CREATE",
       MESSAGE_QUEUE_STREAM,
       env.WORKER_CONSUMER_GROUP_NAME,
@@ -47,7 +47,7 @@ async function initializeConsumerGroup(): Promise<WorkerOperationResult> {
     ]);
 
     const duration = Date.now() - startTime;
-    logger.info(
+    logger.debug(
       {
         ...workerContext,
         operation: "initializeConsumerGroup",
@@ -61,7 +61,7 @@ async function initializeConsumerGroup(): Promise<WorkerOperationResult> {
     const duration = Date.now() - startTime;
 
     if (error instanceof Error && error.message.includes("BUSYGROUP")) {
-      logger.info(
+      logger.debug(
         {
           ...workerContext,
           operation: "initializeConsumerGroup",
@@ -103,6 +103,7 @@ async function checkAndRecoverStuckProcessingEvents(): Promise<void> {
 
   try {
     const recoveryResult = await recoverStuckProcessingEvents(
+      workerRedis,
       env.WORKER_PROCESSING_TIMEOUT_MINUTES,
       env.WORKER_PROCESSING_RECOVERY_LIMIT
     );
@@ -172,6 +173,7 @@ async function checkAndRecoverOrphanedEvents(): Promise<void> {
 
   try {
     const recoveryResult = await recoverOrphanedEvents(
+      workerRedis,
       env.WORKER_CONSUMER_GROUP_NAME,
       env.WORKER_ORPHANED_RECOVERY_LIMIT,
       env.WORKER_ORPHANED_RECOVERY_MAX_AGE_MINUTES,
@@ -249,6 +251,7 @@ async function checkAndClaimPendingEvents(): Promise<void> {
 
   try {
     const pendingResult = await getPendingEvents(
+      workerRedis,
       env.WORKER_CONSUMER_GROUP_NAME,
       10
     );
@@ -267,7 +270,7 @@ async function checkAndClaimPendingEvents(): Promise<void> {
 
     const { summary } = pendingResult.data;
 
-    if (summary?.totalPending > 0) {
+    if (summary && summary.totalPending > 0) {
       logger.info(
         {
           ...workerContext,
@@ -279,6 +282,7 @@ async function checkAndClaimPendingEvents(): Promise<void> {
       );
 
       const claimResult = await claimPendingEvents(
+        workerRedis,
         env.WORKER_CONSUMER_GROUP_NAME,
         env.WORKER_CONSUMER_NAME,
         env.WORKER_MIN_IDLE_TIME_MS,
@@ -332,6 +336,7 @@ async function checkAndClaimPendingEvents(): Promise<void> {
             } finally {
               // Always acknowledge Redis stream entry to prevent reprocessing
               const ackResult = await acknowledgeEvent(
+                workerRedis,
                 streamId,
                 env.WORKER_CONSUMER_GROUP_NAME
               );
@@ -373,7 +378,7 @@ async function processEvents(): Promise<void> {
   let totalEventsProcessed = 0;
   let totalBatchesProcessed = 0;
 
-  logger.info(
+  logger.debug(
     {
       ...workerContext,
       operation: "processEvents",
@@ -385,6 +390,7 @@ async function processEvents(): Promise<void> {
   while (!isShuttingDown) {
     try {
       const eventsResult = await readEvents(
+        workerRedis,
         env.WORKER_CONSUMER_GROUP_NAME,
         env.WORKER_CONSUMER_NAME,
         env.WORKER_READ_COUNT,
@@ -431,6 +437,7 @@ async function processEvents(): Promise<void> {
         } finally {
           // Always acknowledge Redis stream entry to prevent reprocessing
           const ackResult = await acknowledgeEvent(
+            workerRedis,
             event.id,
             env.WORKER_CONSUMER_GROUP_NAME
           );
@@ -521,7 +528,7 @@ async function processEvents(): Promise<void> {
 export async function startWorker() {
   const startTime = Date.now();
 
-  logger.info(
+  logger.debug(
     {
       ...workerContext,
       operation: "startWorker",
@@ -534,7 +541,7 @@ export async function startWorker() {
 
   try {
     const pingStartTime = Date.now();
-    const pong = await redis.send("PING", []);
+    const pong = await workerRedis.send("PING", []);
     const pingDuration = Date.now() - pingStartTime;
 
     if (pong !== "PONG") {
@@ -552,7 +559,7 @@ export async function startWorker() {
       process.exit(1);
     }
 
-    logger.info(
+    logger.debug(
       {
         ...workerContext,
         operation: "startWorker",
@@ -591,7 +598,7 @@ export async function startWorker() {
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-  logger.info(
+  logger.debug(
     {
       ...workerContext,
       operation: "startWorker",
@@ -620,12 +627,11 @@ export async function startWorker() {
 
   logger.info(
     {
-      ...workerContext,
-      operation: "startWorker",
-      stage: "initialization_complete",
+      workerId: env.WORKER_CONSUMER_NAME,
+      consumerGroup: env.WORKER_CONSUMER_GROUP_NAME,
       initDuration: Date.now() - startTime,
     },
-    "Worker initialization complete. Starting event processing."
+    "Worker ready"
   );
 
   await processEvents();
@@ -650,7 +656,7 @@ function gracefulShutdown(signal: string) {
     pendingRecoveryInterval = null;
   }
 
-  redis.close();
+  workerRedis.close();
 
   logger.info(
     {

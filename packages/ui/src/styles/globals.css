@@ -84,7 +84,7 @@
 }
 
 :root {
-  --destructive-foreground: var(--color-red-700);
+  --destructive-foreground: var(--color-red-800);
   --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
   --success: var(--color-emerald-500);
@@ -97,7 +97,7 @@
   --border: --alpha(var(--color-black) / 8%);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
-  --destructive: var(--color-red-500);
+  --destructive: var(--color-red-600);
   --foreground: var(--color-neutral-800);
   --input: --alpha(var(--color-black) / 10%);
   --muted: --alpha(var(--color-black) / 4%);
@@ -122,7 +122,7 @@
   --code-foreground: var(--foreground);
   --code-highlight: --alpha(var(--color-black) / 4%);
   --radius: 0.35rem;
-  --sidebar: var(--color-neutral-50);
+  --sidebar: var(--color-white);
   --sidebar-accent: --alpha(var(--color-black) / 4%);
   --sidebar-accent-foreground: var(--color-neutral-800);
   --sidebar-border: --alpha(var(--color-black) / 6%);
@@ -204,6 +204,19 @@
   --invert-foreground: var(--color-zinc-50);
 }
 
+@layer utilities {
+  /* Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -218,6 +231,6 @@
     font-family: var(--font-mono);
   }
   html {
-    @apply font-sans font-mono;
+    @apply font-sans;
   }
 }

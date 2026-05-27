@@ -1,6 +1,8 @@
-import { db, queueMessage } from "@repo/api/db";
+import { db } from "@repo/api/db";
 import type { MessageEventWithRelations } from "@repo/api/db/types";
+import { queueMessage } from "@repo/api/redis";
 import { logger } from "@repo/api/utils";
+import { workerRedis } from "@repo/api/worker/lib/redis";
 import { PROVIDER_ERRORS } from "@repo/api/worker/providers/errors";
 import type { ProviderError } from "@repo/api/worker/providers/interface";
 import { PROVIDER_REGISTRY } from "@repo/api/worker/providers/registry";
@@ -26,7 +28,7 @@ export async function processMessageEvent(
   const startTime = Date.now();
   let eventDetails: MessageEventWithRelations | null = null;
 
-  const logContext: Record<string, any> = {
+  const logContext: Record<string, unknown> = {
     eventId,
     streamId,
     consumerGroup,
@@ -255,7 +257,7 @@ async function handleSendFailure(
         );
       }
 
-      await queueMessage(retryResult.data.id);
+      await queueMessage(workerRedis, retryResult.data.id);
     }, retryDelay);
 
     return;
@@ -322,7 +324,7 @@ async function handleSendFailure(
     );
   }
 
-  await queueMessage(fallbackEventResult.data.id);
+  await queueMessage(workerRedis, fallbackEventResult.data.id);
 
   logger.info(
     {

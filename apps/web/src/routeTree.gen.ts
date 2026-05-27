@@ -14,6 +14,18 @@ import { Route as AuthdRouteImport } from './routes/_authd'
 import { Route as AuthdIndexRouteImport } from './routes/_authd/index'
 import { Route as AuthSignUpRouteImport } from './routes/auth/sign-up'
 import { Route as AuthSignInRouteImport } from './routes/auth/sign-in'
+import { Route as AuthdUserRouteImport } from './routes/_authd/user'
+import { Route as AuthdCreateProjectRouteImport } from './routes/_authd/create-project'
+import { Route as AuthdOrgSlugRouteImport } from './routes/_authd/$orgSlug'
+import { Route as AuthdOrgSlugIndexRouteImport } from './routes/_authd/$orgSlug/index'
+import { Route as AuthdUserBillingRouteImport } from './routes/_authd/user.billing'
+import { Route as AuthdUserAccountRouteImport } from './routes/_authd/user.account'
+import { Route as AuthdOrgSlugContactsRouteImport } from './routes/_authd/$orgSlug/contacts'
+import { Route as AuthdOrgSlugSettingsProjectRouteImport } from './routes/_authd/$orgSlug/settings.project'
+import { Route as AuthdOrgSlugSettingsIntegrationsRouteImport } from './routes/_authd/$orgSlug/settings.integrations'
+import { Route as AuthdOrgSlugSettingsApiKeysRouteImport } from './routes/_authd/$orgSlug/settings.api-keys'
+import { Route as AuthdOrgSlugAutomationsWorkflowsRouteImport } from './routes/_authd/$orgSlug/automations.workflows'
+import { Route as AuthdOrgSlugAutomationsTemplatesRouteImport } from './routes/_authd/$orgSlug/automations.templates'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -39,39 +51,182 @@ const AuthSignInRoute = AuthSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthdUserRoute = AuthdUserRouteImport.update({
+  id: '/user',
+  path: '/user',
+  getParentRoute: () => AuthdRoute,
+} as any)
+const AuthdCreateProjectRoute = AuthdCreateProjectRouteImport.update({
+  id: '/create-project',
+  path: '/create-project',
+  getParentRoute: () => AuthdRoute,
+} as any)
+const AuthdOrgSlugRoute = AuthdOrgSlugRouteImport.update({
+  id: '/$orgSlug',
+  path: '/$orgSlug',
+  getParentRoute: () => AuthdRoute,
+} as any)
+const AuthdOrgSlugIndexRoute = AuthdOrgSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthdOrgSlugRoute,
+} as any)
+const AuthdUserBillingRoute = AuthdUserBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AuthdUserRoute,
+} as any)
+const AuthdUserAccountRoute = AuthdUserAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AuthdUserRoute,
+} as any)
+const AuthdOrgSlugContactsRoute = AuthdOrgSlugContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => AuthdOrgSlugRoute,
+} as any)
+const AuthdOrgSlugSettingsProjectRoute =
+  AuthdOrgSlugSettingsProjectRouteImport.update({
+    id: '/settings/project',
+    path: '/settings/project',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugSettingsIntegrationsRoute =
+  AuthdOrgSlugSettingsIntegrationsRouteImport.update({
+    id: '/settings/integrations',
+    path: '/settings/integrations',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugSettingsApiKeysRoute =
+  AuthdOrgSlugSettingsApiKeysRouteImport.update({
+    id: '/settings/api-keys',
+    path: '/settings/api-keys',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugAutomationsWorkflowsRoute =
+  AuthdOrgSlugAutomationsWorkflowsRouteImport.update({
+    id: '/automations/workflows',
+    path: '/automations/workflows',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugAutomationsTemplatesRoute =
+  AuthdOrgSlugAutomationsTemplatesRouteImport.update({
+    id: '/automations/templates',
+    path: '/automations/templates',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthdIndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/$orgSlug': typeof AuthdOrgSlugRouteWithChildren
+  '/create-project': typeof AuthdCreateProjectRoute
+  '/user': typeof AuthdUserRouteWithChildren
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
+  '/$orgSlug/contacts': typeof AuthdOrgSlugContactsRoute
+  '/user/account': typeof AuthdUserAccountRoute
+  '/user/billing': typeof AuthdUserBillingRoute
+  '/$orgSlug/': typeof AuthdOrgSlugIndexRoute
+  '/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
+  '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
+  '/$orgSlug/settings/api-keys': typeof AuthdOrgSlugSettingsApiKeysRoute
+  '/$orgSlug/settings/integrations': typeof AuthdOrgSlugSettingsIntegrationsRoute
+  '/$orgSlug/settings/project': typeof AuthdOrgSlugSettingsProjectRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
+  '/create-project': typeof AuthdCreateProjectRoute
+  '/user': typeof AuthdUserRouteWithChildren
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AuthdIndexRoute
+  '/$orgSlug/contacts': typeof AuthdOrgSlugContactsRoute
+  '/user/account': typeof AuthdUserAccountRoute
+  '/user/billing': typeof AuthdUserBillingRoute
+  '/$orgSlug': typeof AuthdOrgSlugIndexRoute
+  '/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
+  '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
+  '/$orgSlug/settings/api-keys': typeof AuthdOrgSlugSettingsApiKeysRoute
+  '/$orgSlug/settings/integrations': typeof AuthdOrgSlugSettingsIntegrationsRoute
+  '/$orgSlug/settings/project': typeof AuthdOrgSlugSettingsProjectRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authd': typeof AuthdRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
+  '/_authd/$orgSlug': typeof AuthdOrgSlugRouteWithChildren
+  '/_authd/create-project': typeof AuthdCreateProjectRoute
+  '/_authd/user': typeof AuthdUserRouteWithChildren
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/_authd/': typeof AuthdIndexRoute
+  '/_authd/$orgSlug/contacts': typeof AuthdOrgSlugContactsRoute
+  '/_authd/user/account': typeof AuthdUserAccountRoute
+  '/_authd/user/billing': typeof AuthdUserBillingRoute
+  '/_authd/$orgSlug/': typeof AuthdOrgSlugIndexRoute
+  '/_authd/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
+  '/_authd/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
+  '/_authd/$orgSlug/settings/api-keys': typeof AuthdOrgSlugSettingsApiKeysRoute
+  '/_authd/$orgSlug/settings/integrations': typeof AuthdOrgSlugSettingsIntegrationsRoute
+  '/_authd/$orgSlug/settings/project': typeof AuthdOrgSlugSettingsProjectRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/auth/sign-in' | '/auth/sign-up'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/$orgSlug'
+    | '/create-project'
+    | '/user'
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/$orgSlug/contacts'
+    | '/user/account'
+    | '/user/billing'
+    | '/$orgSlug/'
+    | '/$orgSlug/automations/templates'
+    | '/$orgSlug/automations/workflows'
+    | '/$orgSlug/settings/api-keys'
+    | '/$orgSlug/settings/integrations'
+    | '/$orgSlug/settings/project'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/auth/sign-in' | '/auth/sign-up' | '/'
+  to:
+    | '/auth'
+    | '/create-project'
+    | '/user'
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/'
+    | '/$orgSlug/contacts'
+    | '/user/account'
+    | '/user/billing'
+    | '/$orgSlug'
+    | '/$orgSlug/automations/templates'
+    | '/$orgSlug/automations/workflows'
+    | '/$orgSlug/settings/api-keys'
+    | '/$orgSlug/settings/integrations'
+    | '/$orgSlug/settings/project'
   id:
     | '__root__'
     | '/_authd'
     | '/auth'
+    | '/_authd/$orgSlug'
+    | '/_authd/create-project'
+    | '/_authd/user'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/_authd/'
+    | '/_authd/$orgSlug/contacts'
+    | '/_authd/user/account'
+    | '/_authd/user/billing'
+    | '/_authd/$orgSlug/'
+    | '/_authd/$orgSlug/automations/templates'
+    | '/_authd/$orgSlug/automations/workflows'
+    | '/_authd/$orgSlug/settings/api-keys'
+    | '/_authd/$orgSlug/settings/integrations'
+    | '/_authd/$orgSlug/settings/project'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -116,14 +271,142 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSignInRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_authd/user': {
+      id: '/_authd/user'
+      path: '/user'
+      fullPath: '/user'
+      preLoaderRoute: typeof AuthdUserRouteImport
+      parentRoute: typeof AuthdRoute
+    }
+    '/_authd/create-project': {
+      id: '/_authd/create-project'
+      path: '/create-project'
+      fullPath: '/create-project'
+      preLoaderRoute: typeof AuthdCreateProjectRouteImport
+      parentRoute: typeof AuthdRoute
+    }
+    '/_authd/$orgSlug': {
+      id: '/_authd/$orgSlug'
+      path: '/$orgSlug'
+      fullPath: '/$orgSlug'
+      preLoaderRoute: typeof AuthdOrgSlugRouteImport
+      parentRoute: typeof AuthdRoute
+    }
+    '/_authd/$orgSlug/': {
+      id: '/_authd/$orgSlug/'
+      path: '/'
+      fullPath: '/$orgSlug/'
+      preLoaderRoute: typeof AuthdOrgSlugIndexRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/user/billing': {
+      id: '/_authd/user/billing'
+      path: '/billing'
+      fullPath: '/user/billing'
+      preLoaderRoute: typeof AuthdUserBillingRouteImport
+      parentRoute: typeof AuthdUserRoute
+    }
+    '/_authd/user/account': {
+      id: '/_authd/user/account'
+      path: '/account'
+      fullPath: '/user/account'
+      preLoaderRoute: typeof AuthdUserAccountRouteImport
+      parentRoute: typeof AuthdUserRoute
+    }
+    '/_authd/$orgSlug/contacts': {
+      id: '/_authd/$orgSlug/contacts'
+      path: '/contacts'
+      fullPath: '/$orgSlug/contacts'
+      preLoaderRoute: typeof AuthdOrgSlugContactsRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/settings/project': {
+      id: '/_authd/$orgSlug/settings/project'
+      path: '/settings/project'
+      fullPath: '/$orgSlug/settings/project'
+      preLoaderRoute: typeof AuthdOrgSlugSettingsProjectRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/settings/integrations': {
+      id: '/_authd/$orgSlug/settings/integrations'
+      path: '/settings/integrations'
+      fullPath: '/$orgSlug/settings/integrations'
+      preLoaderRoute: typeof AuthdOrgSlugSettingsIntegrationsRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/settings/api-keys': {
+      id: '/_authd/$orgSlug/settings/api-keys'
+      path: '/settings/api-keys'
+      fullPath: '/$orgSlug/settings/api-keys'
+      preLoaderRoute: typeof AuthdOrgSlugSettingsApiKeysRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/automations/workflows': {
+      id: '/_authd/$orgSlug/automations/workflows'
+      path: '/automations/workflows'
+      fullPath: '/$orgSlug/automations/workflows'
+      preLoaderRoute: typeof AuthdOrgSlugAutomationsWorkflowsRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/automations/templates': {
+      id: '/_authd/$orgSlug/automations/templates'
+      path: '/automations/templates'
+      fullPath: '/$orgSlug/automations/templates'
+      preLoaderRoute: typeof AuthdOrgSlugAutomationsTemplatesRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
   }
 }
 
+interface AuthdOrgSlugRouteChildren {
+  AuthdOrgSlugContactsRoute: typeof AuthdOrgSlugContactsRoute
+  AuthdOrgSlugIndexRoute: typeof AuthdOrgSlugIndexRoute
+  AuthdOrgSlugAutomationsTemplatesRoute: typeof AuthdOrgSlugAutomationsTemplatesRoute
+  AuthdOrgSlugAutomationsWorkflowsRoute: typeof AuthdOrgSlugAutomationsWorkflowsRoute
+  AuthdOrgSlugSettingsApiKeysRoute: typeof AuthdOrgSlugSettingsApiKeysRoute
+  AuthdOrgSlugSettingsIntegrationsRoute: typeof AuthdOrgSlugSettingsIntegrationsRoute
+  AuthdOrgSlugSettingsProjectRoute: typeof AuthdOrgSlugSettingsProjectRoute
+}
+
+const AuthdOrgSlugRouteChildren: AuthdOrgSlugRouteChildren = {
+  AuthdOrgSlugContactsRoute: AuthdOrgSlugContactsRoute,
+  AuthdOrgSlugIndexRoute: AuthdOrgSlugIndexRoute,
+  AuthdOrgSlugAutomationsTemplatesRoute: AuthdOrgSlugAutomationsTemplatesRoute,
+  AuthdOrgSlugAutomationsWorkflowsRoute: AuthdOrgSlugAutomationsWorkflowsRoute,
+  AuthdOrgSlugSettingsApiKeysRoute: AuthdOrgSlugSettingsApiKeysRoute,
+  AuthdOrgSlugSettingsIntegrationsRoute: AuthdOrgSlugSettingsIntegrationsRoute,
+  AuthdOrgSlugSettingsProjectRoute: AuthdOrgSlugSettingsProjectRoute,
+}
+
+const AuthdOrgSlugRouteWithChildren = AuthdOrgSlugRoute._addFileChildren(
+  AuthdOrgSlugRouteChildren,
+)
+
+interface AuthdUserRouteChildren {
+  AuthdUserAccountRoute: typeof AuthdUserAccountRoute
+  AuthdUserBillingRoute: typeof AuthdUserBillingRoute
+}
+
+const AuthdUserRouteChildren: AuthdUserRouteChildren = {
+  AuthdUserAccountRoute: AuthdUserAccountRoute,
+  AuthdUserBillingRoute: AuthdUserBillingRoute,
+}
+
+const AuthdUserRouteWithChildren = AuthdUserRoute._addFileChildren(
+  AuthdUserRouteChildren,
+)
+
 interface AuthdRouteChildren {
+  AuthdOrgSlugRoute: typeof AuthdOrgSlugRouteWithChildren
+  AuthdCreateProjectRoute: typeof AuthdCreateProjectRoute
+  AuthdUserRoute: typeof AuthdUserRouteWithChildren
   AuthdIndexRoute: typeof AuthdIndexRoute
 }
 
 const AuthdRouteChildren: AuthdRouteChildren = {
+  AuthdOrgSlugRoute: AuthdOrgSlugRouteWithChildren,
+  AuthdCreateProjectRoute: AuthdCreateProjectRoute,
+  AuthdUserRoute: AuthdUserRouteWithChildren,
   AuthdIndexRoute: AuthdIndexRoute,
 }
 

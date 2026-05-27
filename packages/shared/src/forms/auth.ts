@@ -27,7 +27,7 @@ export type CreateOrganizationRequest = z.infer<
 
 export const createApiKeySchema = z.object({
   name: safeString,
-  expiresIn: z.number().optional(),
+  expiresAt: z.iso.datetime().optional(),
 });
 
 export type CreateApiKeyRequest = z.infer<typeof createApiKeySchema>;

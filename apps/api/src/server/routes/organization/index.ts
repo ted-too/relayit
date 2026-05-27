@@ -5,6 +5,7 @@ import {
   betterAuth,
 } from "@repo/api/server/lib/auth/handler";
 import { generateDbSlug } from "@repo/api/server/lib/slug";
+import { apiKeysRoutes } from "@repo/api/server/routes/organization/api-keys";
 import { integrationsRoutes } from "@repo/api/server/routes/organization/integrations";
 import { createOrganizationSchema } from "@repo/shared/forms";
 import { Elysia, status } from "elysia";
@@ -59,5 +60,5 @@ export const organizationRoutes = new Elysia({ prefix: "/organization" })
         slug: z.string(),
       }),
     },
-    (app) => app.use(integrationsRoutes)
+    (app) => app.use(integrationsRoutes).use(apiKeysRoutes)
   );

@@ -16,6 +16,7 @@ export const getRouter = () => {
     defaultPendingComponent: PageLoader,
     defaultNotFoundComponent: NotFound,
     defaultErrorComponent: DefaultCatchBoundary,
+    scrollRestoration: true,
   });
 
   setupRouterSsrQueryIntegration({ router, queryClient: context.queryClient });

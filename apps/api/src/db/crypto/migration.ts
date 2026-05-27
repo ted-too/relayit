@@ -55,7 +55,7 @@ export async function checkAndRunKeyRotation(db: DB): Promise<Result<void>> {
     const currentDbVersion = await getDatabaseKeyVersion(db);
 
     if (currentEnvVersion === currentDbVersion) {
-      logger.info(`Encryption version ${currentEnvVersion} is up to date`);
+      logger.debug(`Encryption version ${currentEnvVersion} is up to date`);
       return { error: null, data: undefined };
     }
 
@@ -127,7 +127,7 @@ export async function validateEncryptionKeysForStartup(
       }
     }
 
-    logger.info(
+    logger.debug(
       {
         currentDbVersion,
         currentEnvVersion,

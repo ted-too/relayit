@@ -1,11 +1,15 @@
 import { Button, type ButtonProps } from "@repo/ui/components/ui/coss/button";
-import { Input } from "@repo/ui/components/ui/coss/input";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
 } from "@repo/ui/components/ui/shad/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@repo/ui/components/ui/shad/input-group";
 import { createFormHook, createFormHookContexts } from "@tanstack/react-form";
 
 export interface BaseFieldProps {
@@ -18,15 +22,22 @@ export interface BaseFieldProps {
   };
   description?: string;
   fieldProps?: Omit<React.ComponentProps<typeof Field>, "className">;
+  hideError?: boolean;
   label: string;
 }
 
-export function TextField(
-  props: BaseFieldProps &
+function TextField(
+  props: Omit<BaseFieldProps, "className"> &
     Omit<
-      React.ComponentProps<typeof Input>,
+      React.ComponentProps<typeof InputGroupInput>,
       "value" | "onValueChange" | "className"
     > & {
+      leftAddon?: React.ReactNode;
+      rightAddon?: React.ReactNode;
+      className?: BaseFieldProps["className"] & {
+        leftAddon?: string;
+        rightAddon?: string;
+      };
       transformer?: {
         set: (value: string) => unknown;
         read: (value: unknown) => string;
@@ -40,6 +51,9 @@ export function TextField(
     transformer,
     fieldProps,
     className = {},
+    hideError = false,
+    leftAddon,
+    rightAddon,
     ...rest
   } = props;
   const field = useFieldContext<unknown>();
@@ -58,31 +72,62 @@ export function TextField(
       <FieldLabel className={className.label} htmlFor={field.name}>
         {label}
       </FieldLabel>
-      <Input
-        className={className.input}
-        id={field.name}
-        onChange={(e) => handleChange(e.target.value)}
-        value={displayValue}
-        {...rest}
-      />
+      <InputGroup>
+        <InputGroupInput
+          className={className.input}
+          id={field.name}
+          onChange={(e) => handleChange(e.target.value)}
+          value={displayValue}
+          {...rest}
+        />
+        {leftAddon && (
+          <InputGroupAddon className={className.leftAddon}>
+            {leftAddon}
+          </InputGroupAddon>
+        )}
+        {rightAddon && (
+          <InputGroupAddon align="inline-end" className={className.rightAddon}>
+            {rightAddon}
+          </InputGroupAddon>
+        )}
+      </InputGroup>
       {description && (
         <FieldDescription className={className.description}>
           {description}
         </FieldDescription>
       )}
-      <FieldError
-        className={className.error}
-        errors={field.state.meta.errors}
-      />
+      {!hideError && (
+        <FieldError
+          className={className.error}
+          errors={field.state.meta.errors}
+        />
+      )}
     </Field>
   );
 }
 
+function ErrorMessage({
+  className,
+  fallback,
+}: {
+  className?: string;
+  fallback?: React.ReactNode;
+}) {
+  const field = useFieldContext<unknown>();
+
+  if (fallback && field.state.meta.errors.length === 0) {
+    return fallback;
+  }
+
+  return <FieldError className={className} errors={field.state.meta.errors} />;
+}
+
 const FIELD_COMPONENTS = {
+  ErrorMessage,
   TextField,
 };
 
-export function SubmitButton({
+function SubmitButton({
   formOptional = false,
   type = "submit",
   hasDefaults = false,
@@ -92,45 +137,36 @@ export function SubmitButton({
 }: Omit<ButtonProps, "className"> & {
   formOptional?: boolean;
   hasDefaults?: boolean;
-  className?: {
-    root?: string;
-    button?: string;
-  };
+  className?: string;
 }) {
   const form = useFormContext();
   return (
-    <Field className={className?.root}>
-      <form.Subscribe
-        selector={(state) => [
-          state.isSubmitting,
-          state.canSubmit,
-          state.isDirty,
-        ]}
-      >
-        {([isSubmitting, canSubmit, isDirty]) => {
-          let disabled = !(canSubmit && isDirty);
+    <form.Subscribe
+      selector={(state) => [state.isSubmitting, state.canSubmit, state.isDirty]}
+    >
+      {([isSubmitting, canSubmit, isDirty]) => {
+        let disabled = !(canSubmit && isDirty);
 
-          // If formOptional, always enabled
-          if (formOptional) {
-            disabled = false;
-          }
-          // If hasDefaults, enable if canSubmit (ignore isDirty)
-          if (hasDefaults) {
-            disabled = !canSubmit;
-          }
+        // If formOptional, always enabled
+        if (formOptional) {
+          disabled = false;
+        }
+        // If hasDefaults, enable if canSubmit (ignore isDirty)
+        if (hasDefaults) {
+          disabled = !canSubmit;
+        }
 
-          return (
-            <Button
-              className={className?.button}
-              disabled={disabled}
-              isLoading={isLoading || isSubmitting}
-              {...props}
-              type={type}
-            />
-          );
-        }}
-      </form.Subscribe>
-    </Field>
+        return (
+          <Button
+            className={className}
+            disabled={disabled}
+            isLoading={isLoading || isSubmitting}
+            {...props}
+            type={type}
+          />
+        );
+      }}
+    </form.Subscribe>
   );
 }
 

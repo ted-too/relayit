@@ -42,6 +42,7 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "typescript.tsdk": "node_modules/typescript/lib",
+  "tailwindCSS.experimental.configFile": "packages/ui/src/styles/globals.css",
   "editor.formatOnPaste": false,
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {

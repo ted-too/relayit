@@ -28,5 +28,3 @@ export const db = drizzle({
 
 export type DB = typeof db;
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-export * from "./redis";

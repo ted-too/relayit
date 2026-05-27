@@ -24,7 +24,8 @@
         "noArrayIndexKey": "off"
       },
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off"
+        "noExcessiveCognitiveComplexity": "off",
+        "noVoid": "off"
       }
     }
   }

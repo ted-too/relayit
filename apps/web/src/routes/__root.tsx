@@ -11,7 +11,6 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
-import { env } from "@/env";
 import { AUTH_COOKIES } from "@/integrations/better-auth";
 import type { RouterContext } from "@/integrations/context";
 
@@ -95,10 +94,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { env } = Route.useRouteContext();
   return (
     <html lang="en">
       <head>
-        {env.VITE_DEBUG === "true" && (
+        {env.VITE_DEBUG && (
           <script
             crossOrigin="anonymous"
             src="//unpkg.com/react-scan/dist/auto.global.js"
@@ -109,8 +109,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="relative">
         <div className="relative isolate flex min-h-svh flex-col">
           {children}
-          <Toaster />
         </div>
+        <Toaster richColors />
         <TanStackDevtools
           config={{
             position: "bottom-right",

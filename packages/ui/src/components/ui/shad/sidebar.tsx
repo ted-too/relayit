@@ -2,7 +2,6 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { RiSideBarLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import { Input } from "@repo/ui/components/ui/coss/input";
 import { Separator } from "@repo/ui/components/ui/coss/separator";
 import {
   Sheet,
@@ -12,6 +11,7 @@ import {
   SheetTitle,
 } from "@repo/ui/components/ui/coss/sheet";
 import { Skeleton } from "@repo/ui/components/ui/coss/skeleton";
+import { Input } from "@repo/ui/components/ui/shad/input";
 import {
   Tooltip,
   TooltipContent,
@@ -54,6 +54,7 @@ function useSidebar() {
 
 function SidebarProvider({
   defaultOpen = true,
+  isMobile: isMobileProp,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -61,11 +62,12 @@ function SidebarProvider({
   children,
   ...props
 }: React.ComponentProps<"div"> & {
+  isMobile?: boolean;
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(isMobileProp);
   const [openMobile, setOpenMobile] = React.useState(false);
 
   // This is the internal state of the sidebar.
@@ -90,9 +92,11 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   // biome-ignore lint/correctness/useExhaustiveDependencies: this is intentional as per ShadCN docs.
-  const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
-  }, [isMobile, setOpen, setOpenMobile]);
+  const toggleSidebar = React.useCallback(
+    () =>
+      isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open),
+    [isMobile, setOpen, setOpenMobile]
+  );
 
   // Adds a keyboard shortcut to toggle the sidebar.
   useHotkey(SIDEBAR_KEYBOARD_SHORTCUT, toggleSidebar);
@@ -324,7 +328,7 @@ function SidebarInput({
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex flex-col gap-2 p-2", className)}
+      className={cn("flex flex-col gap-2 p-3", className)}
       data-sidebar="header"
       data-slot="sidebar-header"
       {...props}
@@ -335,7 +339,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex flex-col gap-2 p-2", className)}
+      className={cn("flex flex-col gap-2 p-3", className)}
       data-sidebar="footer"
       data-slot="sidebar-footer"
       {...props}
@@ -375,7 +379,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative flex w-full min-w-0 flex-col px-2 py-1",
+        "relative flex w-full min-w-0 flex-col px-3 py-1",
         className
       )}
       data-sidebar="group"
@@ -395,7 +399,7 @@ function SidebarGroupLabel({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex h-8 shrink-0 items-center rounded-md px-2 text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
+          "flex h-8 shrink-0 items-center rounded-md px-3 text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
           className
         ),
       },
@@ -496,12 +500,14 @@ function SidebarMenuButton({
   isActive = false,
   variant = "default",
   size = "default",
+  isAvailable = true,
   tooltip,
   className,
   ...props
 }: useRender.ComponentProps<"button"> &
   React.ComponentProps<"button"> & {
     isActive?: boolean;
+    isAvailable?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar();
@@ -513,7 +519,8 @@ function SidebarMenuButton({
       },
       props
     ),
-    render: tooltip ? <TooltipTrigger render={render} /> : render,
+    render:
+      tooltip || !isAvailable ? <TooltipTrigger render={render} /> : render,
     state: {
       slot: "sidebar-menu-button",
       sidebar: "menu-button",
@@ -522,11 +529,15 @@ function SidebarMenuButton({
     },
   });
 
-  if (!tooltip) {
+  if (!tooltip && isAvailable) {
     return comp;
   }
 
-  if (typeof tooltip === "string") {
+  if (!isAvailable) {
+    tooltip = {
+      children: "Coming soon",
+    };
+  } else if (typeof tooltip === "string") {
     tooltip = {
       children: tooltip,
     };
@@ -600,13 +611,13 @@ function SidebarMenuSkeleton({
   showIcon?: boolean;
 }) {
   // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`;
-  });
+  const [width] = React.useState(
+    () => `${Math.floor(Math.random() * 40) + 50}%`
+  );
 
   return (
     <div
-      className={cn("flex h-8 items-center gap-2 rounded-md px-2", className)}
+      className={cn("flex h-8 items-center gap-2 rounded-md px-3", className)}
       data-sidebar="menu-skeleton"
       data-slot="sidebar-menu-skeleton"
       {...props}
@@ -634,7 +645,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
       className={cn(
-        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border border-l px-2.5 py-0.5 group-data-[collapsible=icon]:hidden",
+        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border border-l px-3.5 py-0.5 group-data-[collapsible=icon]:hidden",
         className
       )}
       data-sidebar="menu-sub"
@@ -674,7 +685,7 @@ function SidebarMenuSubButton({
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-hidden ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-sidebar-accent data-[size=md]:text-xs data-[size=sm]:text-xs data-active:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+          "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-3 text-sidebar-foreground outline-hidden ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-sidebar-accent data-[size=md]:text-xs data-[size=sm]:text-xs data-active:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
           className
         ),
       },
