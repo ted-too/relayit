@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 > **Note**: This project is currently in alpha. Breaking changes may occur between releases.
 
+## [0.1.3](https://github.com/ted-too/relayit/compare/v0.1.2...v0.1.3) (2026-07-23)
+
 ## [0.1.2](https://github.com/ted-too/relayit/compare/v0.1.1...v0.1.2) (2025-09-26)
 
 ### 🐛 Bug Fixes
