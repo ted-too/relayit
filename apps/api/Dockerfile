@@ -36,8 +36,8 @@ RUN --mount=type=secret,id=turbo_token \
 FROM base AS runner
 WORKDIR /app
 
-RUN addgroup --system --gid 1003 honojs && \
-    adduser --system --uid 1003 --ingroup honojs honojs
+RUN groupadd --system --gid 1003 honojs && \
+    useradd --system --uid 1003 --gid honojs --no-create-home honojs
 
 RUN echo '{"dependencies":{"pino":"9.9.5", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
     bun install --production

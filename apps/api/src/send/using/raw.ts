@@ -4,6 +4,11 @@ import { logger } from "@repo/shared/utils";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator as zValidator } from "hono-openapi";
+import {
+  cleanupStoredAttachments,
+  createMessageId,
+  ingestAttachments,
+} from "@/send/attachments";
 import type { ApiKeyContext } from "@/send/middleware";
 import { errorResponseSchema, successResponseSchema } from "@/send/schemas";
 import { findOrCreateContact, findProviderIdentity } from "@/send/utils";
@@ -53,8 +58,22 @@ export const sendRawRouter = new Hono<{ Variables: ApiKeyContext }>().post(
     const body = c.req.valid("json");
     const organization = c.get("organization");
     const apiKeyId = c.get("apiKeyId");
+    const messageId = createMessageId();
+    let storedAttachments: Awaited<ReturnType<typeof ingestAttachments>>;
+    let persisted = false;
 
     try {
+      storedAttachments = await ingestAttachments({
+        organizationId: organization.id,
+        messageId,
+        attachments: body.attachments,
+      });
+
+      const payload = {
+        ...body.payload,
+        ...(storedAttachments ? { attachments: storedAttachments } : {}),
+      };
+
       const newMessage = await db.transaction(async (tx) => {
         const contact = await findOrCreateContact({
           dbOrTx: tx,
@@ -74,17 +93,17 @@ export const sendRawRouter = new Hono<{ Variables: ApiKeyContext }>().post(
         const [message] = await tx
           .insert(schema.message)
           .values({
+            id: messageId,
             appSlug: body.app,
             appEnvironment: body.appEnvironment,
             apiKeyId,
             contactId: contact.id,
             channel: "email",
-            payload: body.payload,
+            payload,
             source: "api",
           })
           .returning();
 
-        // Create initial message event for worker processing
         const [messageEvent] = await tx
           .insert(schema.messageEvent)
           .values({
@@ -98,6 +117,7 @@ export const sendRawRouter = new Hono<{ Variables: ApiKeyContext }>().post(
         return { message, messageEvent };
       });
 
+      persisted = true;
       await queueMessage(newMessage.messageEvent.id);
 
       return c.json(
@@ -108,6 +128,10 @@ export const sendRawRouter = new Hono<{ Variables: ApiKeyContext }>().post(
         201
       );
     } catch (error) {
+      if (!persisted) {
+        await cleanupStoredAttachments(storedAttachments);
+      }
+
       if (error instanceof HTTPException) {
         throw error;
       }

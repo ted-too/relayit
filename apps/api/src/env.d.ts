@@ -16,6 +16,12 @@ declare module "bun" {
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
 
+    BUNNY_S3_ENDPOINT: string;
+    BUNNY_S3_REGION: string;
+    BUNNY_S3_ACCESS_KEY_ID: string;
+    BUNNY_S3_SECRET_ACCESS_KEY: string;
+    BUNNY_S3_BUCKET: string;
+
     LOG_LEVEL?: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
     ENABLE_DOCS?: "true";
   }

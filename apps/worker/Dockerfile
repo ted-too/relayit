@@ -36,8 +36,8 @@ RUN --mount=type=secret,id=turbo_token \
 FROM base AS runner
 WORKDIR /app
 
-RUN addgroup --system --gid 1003 worker && \
-    adduser --system --uid 1003 --ingroup worker worker
+RUN groupadd --system --gid 1003 worker && \
+    useradd --system --uid 1003 --gid worker --no-create-home worker
 
 RUN echo '{"dependencies":{"pino":"9.9.5"}}' > package.json && \
     bun install --production

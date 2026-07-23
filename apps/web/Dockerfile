@@ -39,8 +39,8 @@ RUN --mount=type=secret,id=turbo_token \
 FROM oven/bun:1 AS runner
 WORKDIR /app
 
-RUN addgroup --system --gid 1003 vite && \
-    adduser --system --uid 1003 --ingroup vite vite
+RUN groupadd --system --gid 1003 vite && \
+    useradd --system --uid 1003 --gid vite --no-create-home vite
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

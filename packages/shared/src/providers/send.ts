@@ -1,6 +1,10 @@
 import z from "zod";
 import type { ChannelType } from "./base";
 
+/** Max total attachment size after decode/fetch (Resend ballpark). */
+export const MAX_ATTACHMENTS_BYTES = 40 * 1024 * 1024;
+export const MAX_ATTACHMENTS_COUNT = 20;
+
 export const recipientSchema = z
   .object({
     name: z
@@ -30,7 +34,102 @@ export const channelIdentifierValidators = {
   // discord: z.string().regex(/^\d{17,19}$/, "Invalid Discord user ID"),
 } satisfies Partial<Record<ChannelType, z.ZodType>>;
 
+/** Client-facing attachment input (Resend-compatible, camelCase). */
+export const attachmentInputSchema = z
+  .object({
+    content: z
+      .string()
+      .optional()
+      .describe("Base64-encoded file content")
+      .meta({ example: "SGVsbG8gV29ybGQ=" }),
+    path: z
+      .url()
+      .optional()
+      .describe("Public URL to fetch the attachment from")
+      .meta({ example: "https://example.com/files/invoice.pdf" }),
+    filename: z
+      .string()
+      .min(1)
+      .describe("Attachment filename")
+      .meta({ example: "invoice.pdf" }),
+    contentType: z
+      .string()
+      .optional()
+      .describe("MIME type (derived from filename if omitted)")
+      .meta({ example: "application/pdf" }),
+    contentId: z
+      .string()
+      .optional()
+      .describe("Content-ID for inline images (use with cid: in HTML)")
+      .meta({ example: "logo" }),
+  })
+  .refine(
+    (data) =>
+      Number(data.content !== undefined) + Number(data.path !== undefined) ===
+      1,
+    {
+      message: "Exactly one of 'content' or 'path' must be provided",
+      path: ["content"],
+    }
+  )
+  .describe("Email attachment");
+
+export type AttachmentInput = z.infer<typeof attachmentInputSchema>;
+
+/** Persisted attachment metadata (bytes live in object storage). */
+export const storedAttachmentSchema = z
+  .object({
+    storageKey: z.string().describe("Object storage key"),
+    filename: z.string().describe("Attachment filename"),
+    contentType: z.string().describe("MIME type"),
+    contentId: z.string().optional().describe("Content-ID for inline images"),
+    size: z.number().int().nonnegative().describe("Size in bytes"),
+  })
+  .describe("Stored attachment metadata");
+
+export type StoredAttachment = z.infer<typeof storedAttachmentSchema>;
+
+export const attachmentsInputSchema = z
+  .array(attachmentInputSchema)
+  .max(MAX_ATTACHMENTS_COUNT)
+  .optional()
+  .describe("Optional email attachments (max 20, 40MB total)");
+
 export const sendRawPayloadSchemas = {
+  email: z
+    .object({
+      subject: z
+        .string()
+        .describe("Email subject line")
+        .meta({ example: "Welcome to our service!" }),
+      html: z
+        .string()
+        .optional()
+        .describe("HTML email content")
+        .meta({ example: "<h1>Welcome!</h1><p>Thanks for joining us.</p>" }),
+      text: z
+        .string()
+        .optional()
+        .describe("Plain text email content")
+        .meta({ example: "Welcome! Thanks for joining us." }),
+      attachments: z
+        .array(storedAttachmentSchema)
+        .optional()
+        .describe("Stored attachment metadata for delivery"),
+    })
+    .refine((data) => data.html !== undefined || data.text !== undefined, {
+      message: "At least one of 'html' or 'text' must be provided",
+      path: ["html", "text"],
+    })
+    .describe("Email payload content"),
+} satisfies Record<ChannelType, z.ZodObject>;
+
+export type SendRawPayload<T extends ChannelType = ChannelType> = z.infer<
+  (typeof sendRawPayloadSchemas)[T]
+>;
+
+/** Request payload for raw send — content only; attachments are top-level. */
+export const sendRawRequestPayloadSchemas = {
   email: z
     .object({
       subject: z
@@ -55,10 +154,6 @@ export const sendRawPayloadSchemas = {
     .describe("Email payload content"),
 } satisfies Record<ChannelType, z.ZodObject>;
 
-export type SendRawPayload<T extends ChannelType = ChannelType> = z.infer<
-  (typeof sendRawPayloadSchemas)[T]
->;
-
 const buildBaseSendSchema = (channel: ChannelType) =>
   z.object({
     to: channelIdentifierValidators[channel].describe("Recipient address"),
@@ -77,13 +172,14 @@ const buildBaseSendSchema = (channel: ChannelType) =>
       .optional()
       .describe("Application environment for message tagging")
       .meta({ example: "production" }),
+    attachments: attachmentsInputSchema,
   });
 
 export const buildSendRawSchema = (channel: ChannelType) =>
   buildBaseSendSchema(channel)
     .extend(
       z.object({
-        payload: sendRawPayloadSchemas[channel],
+        payload: sendRawRequestPayloadSchemas[channel],
       }).shape
     )
     .describe("Send raw email content");
