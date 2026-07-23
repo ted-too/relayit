@@ -9,6 +9,12 @@ export const env = createEnv({
     ENCRYPTION_KEY_VERSION: z.string().default("v1"),
     CREDENTIAL_ENCRYPTION_KEY_V1: z.string(),
 
+    BUNNY_S3_ENDPOINT: z.string(),
+    BUNNY_S3_REGION: z.string(),
+    BUNNY_S3_ACCESS_KEY_ID: z.string(),
+    BUNNY_S3_SECRET_ACCESS_KEY: z.string(),
+    BUNNY_S3_BUCKET: z.string(),
+
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace"])
       .optional()

@@ -1,6 +1,8 @@
 import { db, queueMessage } from "@repo/shared/db";
 import type { MessageEventWithRelations } from "@repo/shared/db/types";
+import { createBunnyAttachmentStorage } from "@repo/shared/storage";
 import { logger } from "@repo/shared/utils";
+import { env } from "@/env";
 import { PROVIDER_ERRORS } from "@/providers/errors";
 import type { ProviderError } from "@/providers/interface";
 import { PROVIDER_REGISTRY } from "@/providers/registry";
@@ -185,6 +187,32 @@ export async function processMessageEvent(
     status: "sent",
     responseTimeMs,
   });
+
+  const payloadAttachments =
+    "attachments" in eventDetails.message.payload
+      ? eventDetails.message.payload.attachments
+      : undefined;
+  if (payloadAttachments?.length) {
+    try {
+      const storage = createBunnyAttachmentStorage({
+        endpoint: env.BUNNY_S3_ENDPOINT,
+        region: env.BUNNY_S3_REGION,
+        accessKeyId: env.BUNNY_S3_ACCESS_KEY_ID,
+        secretAccessKey: env.BUNNY_S3_SECRET_ACCESS_KEY,
+        bucket: env.BUNNY_S3_BUCKET,
+      });
+      await storage.deleteMany(payloadAttachments.map((a) => a.storageKey));
+    } catch (cleanupError) {
+      logger.warn(
+        {
+          ...logContext,
+          error: cleanupError,
+          stage: "attachment_cleanup",
+        },
+        "Failed to delete attachment objects after successful send"
+      );
+    }
+  }
 }
 
 // Retry and fallback logic for failed sends

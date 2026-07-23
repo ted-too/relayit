@@ -12,6 +12,7 @@
     "./db/types": "./src/db/types.ts",
     "./providers": "./src/providers/index.ts",
     "./permissions": "./src/permissions/index.ts",
+    "./storage": "./src/storage/bunny-s3.ts",
     "./zod": "./src/zod.d.ts"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     }
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.803.0",
     "zod": "^4.1.8"
   }
 }
