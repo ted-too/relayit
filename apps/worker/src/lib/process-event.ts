@@ -193,20 +193,22 @@ export async function processMessageEvent(
       ? eventDetails.message.payload.attachments
       : undefined;
   if (payloadAttachments?.length) {
-    try {
-      const storage = createBunnyAttachmentStorage({
-        endpoint: env.BUNNY_S3_ENDPOINT,
-        region: env.BUNNY_S3_REGION,
-        accessKeyId: env.BUNNY_S3_ACCESS_KEY_ID,
-        secretAccessKey: env.BUNNY_S3_SECRET_ACCESS_KEY,
-        bucket: env.BUNNY_S3_BUCKET,
-      });
-      await storage.deleteMany(payloadAttachments.map((a) => a.storageKey));
-    } catch (cleanupError) {
+    const storage = createBunnyAttachmentStorage({
+      endpoint: env.BUNNY_S3_ENDPOINT,
+      region: env.BUNNY_S3_REGION,
+      accessKeyId: env.BUNNY_S3_ACCESS_KEY_ID,
+      secretAccessKey: env.BUNNY_S3_SECRET_ACCESS_KEY,
+      bucket: env.BUNNY_S3_BUCKET,
+    });
+    const cleanupResult = await storage.deleteMany(
+      payloadAttachments.map((a) => a.storageKey)
+    );
+    if (cleanupResult.error) {
       logger.warn(
         {
           ...logContext,
-          error: cleanupError,
+          error: cleanupResult.error,
+          failedKeys: cleanupResult.error.details,
           stage: "attachment_cleanup",
         },
         "Failed to delete attachment objects after successful send"

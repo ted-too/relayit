@@ -139,8 +139,33 @@ export class BunnyAttachmentStorage {
     }
   }
 
-  async deleteMany(keys: string[]): Promise<void> {
-    await Promise.all(keys.map((key) => this.delete(key)));
+  async deleteMany(keys: string[]): Promise<Result<{ deleted: string[] }>> {
+    const results = await Promise.all(
+      keys.map(async (key) => ({ key, result: await this.delete(key) }))
+    );
+
+    const deleted: string[] = [];
+    const failed: string[] = [];
+
+    for (const { key, result } of results) {
+      if (result.error) {
+        failed.push(key);
+      } else {
+        deleted.push(key);
+      }
+    }
+
+    if (failed.length > 0) {
+      return {
+        error: createGenericError(
+          "Failed to delete some attachment objects from storage",
+          failed
+        ),
+        data: null,
+      };
+    }
+
+    return { error: null, data: { deleted } };
   }
 }
 
