@@ -174,6 +174,26 @@ async function renderReactEmailVariant(input: {
     };
   }
 
+  const variantSubject =
+    typeof variant.content?.subject === "string"
+      ? variant.content.subject.trim()
+      : "";
+  const subject =
+    input.subjectOverride !== undefined && input.subjectOverride.length > 0
+      ? input.subjectOverride
+      : variantSubject;
+
+  if (!subject) {
+    return {
+      ok: false,
+      error: {
+        code: "missing_subject",
+        message:
+          "reactEmail Template is missing content.subject; set subject on the Template email channel.",
+      },
+    };
+  }
+
   const downloaded = await downloadTemplatingArtifactByKey(
     entry.artifactStorageKey
   );
@@ -191,19 +211,10 @@ async function renderReactEmailVariant(input: {
   const rendered = await renderSealedReactEmailArtifact({
     artifact: downloaded.data,
     props: input.values ?? {},
-    subjectOverride: input.subjectOverride,
+    subjectOverride: subject,
   });
 
   if (!rendered.ok) {
-    if (rendered.error.code === "missing_subject") {
-      return {
-        ok: false,
-        error: {
-          code: "missing_subject",
-          message: rendered.error.message,
-        },
-      };
-    }
     return {
       ok: false,
       error: {

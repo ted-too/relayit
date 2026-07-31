@@ -9,10 +9,10 @@ export type TemplatingWorkspaceKindParams = z.infer<
   typeof templatingWorkspaceKindParamsSchema
 >;
 
-export const templatingWorkspaceFileParamsSchema =
-  templatingWorkspaceKindParamsSchema.extend({
-    "*": z.string().min(1),
-  });
+/** Query for reading a single draft file (`GET …/file?path=`). */
+export const templatingWorkspaceFileQuerySchema = z.object({
+  path: z.string().min(1).max(512),
+});
 
 export const templatingWorkspaceEntryParamsSchema =
   templatingWorkspaceKindParamsSchema.extend({

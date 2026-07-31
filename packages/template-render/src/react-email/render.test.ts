@@ -4,20 +4,31 @@ import { renderSealedReactEmailArtifact } from "./render";
 const ARTIFACT = `
 import * as React from "react";
 
-export function subject({ name }) {
-  return "Hello " + name;
+function Email({ name, currency }) {
+  return React.createElement(
+    "div",
+    null,
+    "Hi ",
+    name,
+    " ",
+    currency
+  );
 }
 
-export default function Email({ name }) {
-  return React.createElement("div", null, "Hi ", name);
-}
+Email.PreviewProps = {
+  name: "Joshua",
+  currency: "USD",
+};
+
+export default Email;
 `;
 
 describe("renderSealedReactEmailArtifact", () => {
-  it("renders html/text/subject from a sealed ESM artifact", async () => {
+  it("renders with a caller-provided subject and props", async () => {
     const result = await renderSealedReactEmailArtifact({
       artifact: ARTIFACT,
-      props: { name: "Ada" },
+      props: { name: "Ada", currency: "EUR" },
+      subject: "Hello Ada",
     });
 
     expect(result.ok).toBe(true);
@@ -25,20 +36,46 @@ describe("renderSealedReactEmailArtifact", () => {
       return;
     }
     expect(result.value.subject).toBe("Hello Ada");
-    expect(result.value.html).toContain("Hi");
     expect(result.value.html).toContain("Ada");
-    expect(result.value.text).toContain("Hi");
-    expect(result.value.text).toContain("Ada");
+    expect(result.value.html).toContain("EUR");
+    expect(result.value.props).toEqual({ name: "Ada", currency: "EUR" });
   });
 
-  it("fails when subject is missing and not overridden", async () => {
+  it("does not merge PreviewProps on send (default)", async () => {
     const result = await renderSealedReactEmailArtifact({
-      artifact: `
-import * as React from "react";
-export default function Email() {
-  return React.createElement("div", null, "x");
-}
-`,
+      artifact: ARTIFACT,
+      props: {},
+      subject: "Hello",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    // currency missing — component still renders (undefined stringifies empty)
+    expect(result.value.props).toEqual({});
+  });
+
+  it("merges PreviewProps under caller props when enabled", async () => {
+    const result = await renderSealedReactEmailArtifact({
+      artifact: ARTIFACT,
+      props: { name: "Ted" },
+      subject: "Hello",
+      mergePreviewProps: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.props).toEqual({ name: "Ted", currency: "USD" });
+    expect(result.value.html).toContain("Ted");
+    expect(result.value.html).toContain("USD");
+  });
+
+  it("fails when subject is missing", async () => {
+    const result = await renderSealedReactEmailArtifact({
+      artifact: ARTIFACT,
       props: {},
     });
 

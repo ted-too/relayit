@@ -25,10 +25,6 @@ export type Props = {
   name: string;
 };
 
-export function subject({ name }: Props) {
-  return \`Welcome, \${name}!\`;
-}
-
 export default function WelcomeEmail({ name }: Props) {
   return (
     <Html>

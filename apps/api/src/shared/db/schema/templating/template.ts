@@ -44,6 +44,18 @@ export interface PrimitiveEmailContent {
 }
 
 /**
+ * reactEmail variant payload: subject lives on the Template, not in Entry
+ * source. html/text stay in the sealed Entry artifact.
+ */
+export interface ReactEmailVariantContent {
+  subject: string;
+}
+
+export type TemplateEmailVariantContent =
+  | PrimitiveEmailContent
+  | ReactEmailVariantContent;
+
+/**
  * Resend-shaped primitive Template Variables: map keyed by name.
  * No `required` flag — missing send value with no fallback fails Accept.
  */
@@ -95,7 +107,7 @@ export type Template = typeof template.$inferSelect;
  * One engine + payload per channel on a Template.
  *
  * `primitive`: `content` + `variables`; no workspace link.
- * `reactEmail`: `workspaceEntryId` only (`content` / `variables` null).
+ * `reactEmail`: `workspaceEntryId` + `content: { subject }`; `variables` null.
  */
 export const templateChannelVariant = pgTable(
   "template_channel_variant",
@@ -108,8 +120,11 @@ export const templateChannelVariant = pgTable(
       .references(() => template.id, { onDelete: "cascade" }),
     channel: channelEnum("channel").notNull(),
     engine: templateChannelEngineEnum("engine").notNull(),
-    /** Primitive email body fields. Null for reactEmail. */
-    content: jsonb("content").$type<PrimitiveEmailContent>(),
+    /**
+     * primitive: `{ subject, html?, text? }`.
+     * reactEmail: `{ subject }` only (body lives in the Entry artifact).
+     */
+    content: jsonb("content").$type<TemplateEmailVariantContent>(),
     /** Primitive variable defs. Null for reactEmail. */
     variables: jsonb("variables").$type<PrimitiveTemplateVariables>(),
     /**
@@ -141,8 +156,9 @@ export const templateChannelVariant = pgTable(
         AND ${t.content} IS NOT NULL
       ) OR (
         ${t.engine} = 'reactEmail'
-        AND ${t.content} IS NULL
         AND ${t.variables} IS NULL
+        AND ${t.content} IS NOT NULL
+        AND coalesce(${t.content}->>'subject', '') <> ''
       )`
     ),
   ]

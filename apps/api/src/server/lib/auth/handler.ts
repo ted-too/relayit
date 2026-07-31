@@ -54,9 +54,22 @@ export const betterAuthOrganization = new Elysia({
   .macro({
     organization: {
       async resolve({ params, request }) {
+        // Route-level Zod params schemas (e.g. `{ kind }` / `{ id }`) replace
+        // `params` with their parse output and strip sibling keys — including
+        // `orgSlug` from `/projects/:orgSlug`. Recover it from the path when
+        // that happens so nested Project routes still resolve the org.
+        const orgSlug =
+          typeof params.orgSlug === "string" && params.orgSlug.length > 0
+            ? params.orgSlug
+            : new URL(request.url).pathname.match(/^\/projects\/([^/]+)/)?.[1];
+
+        if (!orgSlug) {
+          return status(404, "Organization not found");
+        }
+
         const organization = await auth.api.getFullOrganization({
           headers: request.headers,
-          query: { organizationSlug: params.orgSlug },
+          query: { organizationSlug: orgSlug },
         });
 
         if (!organization) {

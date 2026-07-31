@@ -72,7 +72,7 @@ describe("renderEmailTemplateVariant", () => {
     const result = await renderEmailTemplateVariant({
       variant: primitiveVariant({
         engine: "reactEmail",
-        content: null,
+        content: { subject: "Welcome" },
         variables: null,
         workspaceEntryId: null,
       }),

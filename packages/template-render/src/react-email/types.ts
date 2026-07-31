@@ -4,6 +4,8 @@ export interface ReactEmailRendered {
   html: string;
   subject: string;
   text?: string;
+  /** Props actually used for the render (PreviewProps merged under caller props). */
+  props: ReactEmailRenderProps;
 }
 
 export interface ReactEmailRenderError {

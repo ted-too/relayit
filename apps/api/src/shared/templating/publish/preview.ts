@@ -18,6 +18,8 @@ export interface PreviewResult {
   html: string;
   subject: string;
   text?: string;
+  /** Resolved props after merging Entry `PreviewProps` under the request props. */
+  props: Record<string, unknown>;
 }
 
 /**
@@ -100,6 +102,8 @@ export function previewHostedWorkspaceEntry(input: {
         artifact: bundled.data,
         props: input.props ?? {},
         subjectOverride: input.subjectOverride,
+        // Preview only — never merge PreviewProps on the send path.
+        mergePreviewProps: true,
       });
       if (!rendered.ok) {
         return {
@@ -111,7 +115,12 @@ export function previewHostedWorkspaceEntry(input: {
       return {
         error: null,
         data: {
-          ...rendered.value,
+          html: rendered.value.html,
+          subject: rendered.value.subject,
+          ...(rendered.value.text === undefined
+            ? {}
+            : { text: rendered.value.text }),
+          props: rendered.value.props,
           commitSha: checkedOut.data.commitSha,
         },
       };

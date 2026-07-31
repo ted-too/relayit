@@ -1,7 +1,7 @@
 import { db, schema } from "@repo/api/db";
 import { auth } from "@repo/api/server/lib/auth";
 import { betterAuthOrganization } from "@repo/api/server/lib/auth/handler";
-import { generateDbSlug } from "@repo/api/slug";
+import { generateDbSlug, isSlugTaken } from "@repo/api/slug";
 import {
   createTemplateBodySchema,
   patchTemplateBodySchema,
@@ -10,6 +10,7 @@ import {
 } from "@repo/api/validators/routes/projects/templating/templates";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { Elysia, status } from "elysia";
+import slugify from "slugify";
 
 function activeTemplateSlugScope(
   organizationId: string,
@@ -205,17 +206,41 @@ export const templatingTemplatesRoutes = new Elysia({
         return status(409, "Archived Templates cannot be updated");
       }
 
-      if (body.name === undefined || body.name === existing.name) {
+      const nextName = body.name ?? existing.name;
+      const nameChanged = nextName !== existing.name;
+
+      let nextSlug = existing.slug;
+      if (body.slug !== undefined) {
+        const normalized =
+          slugify(body.slug, { lower: true, strict: true }) || "";
+        if (!normalized) {
+          return status(400, "Slug is invalid");
+        }
+        if (normalized !== existing.slug) {
+          const taken = await isSlugTaken(schema.template, normalized, {
+            scope: activeTemplateSlugScope(organization.id, existing.id),
+          });
+          if (taken) {
+            return status(
+              409,
+              "A Template with this slug already exists in the Project"
+            );
+          }
+          nextSlug = normalized;
+        }
+      } else if (nameChanged) {
+        nextSlug = await generateDbSlug(schema.template, nextName, {
+          scope: activeTemplateSlugScope(organization.id, existing.id),
+        });
+      }
+
+      if (nextName === existing.name && nextSlug === existing.slug) {
         return serializeTemplate(existing);
       }
 
-      const slug = await generateDbSlug(schema.template, body.name, {
-        scope: activeTemplateSlugScope(organization.id, existing.id),
-      });
-
       const [updated] = await db
         .update(schema.template)
-        .set({ name: body.name, slug })
+        .set({ name: nextName, slug: nextSlug })
         .where(
           and(
             eq(schema.template.id, existing.id),
@@ -352,7 +377,7 @@ export const templatingTemplatesRoutes = new Elysia({
               templateId: existing.id,
               channel: "email" as const,
               engine: "reactEmail" as const,
-              content: null,
+              content: { subject: body.subject },
               variables: null,
               workspaceEntryId: body.workspaceEntryId,
               updatedAt: now,

@@ -7,14 +7,16 @@ export async function bundleReactEmailEntry(input: {
   entryPath: string;
 }): Promise<Result<Uint8Array>> {
   const abs = path.join(input.workspaceDir, input.entryPath);
-  // Isolate host provides React / React Email runtime — keep one React instance.
+  // Isolate host provides a single React instance. React Email packages are
+  // sealed into the artifact — Bun cannot resolve bare `@react-email/*` imports
+  // from the ephemeral /tmp artifact path against the host package.
   const result = await Bun.build({
     entrypoints: [abs],
     target: "bun",
     format: "esm",
     minify: false,
     sourcemap: "none",
-    external: ["react", "react-dom", "react/jsx-runtime", "@react-email/*"],
+    external: ["react", "react-dom", "react/jsx-runtime"],
   });
 
   if (!result.success) {

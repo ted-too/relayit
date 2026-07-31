@@ -8,11 +8,18 @@ const DEFAULT_TIMEOUT_MS = 5000;
 
 /**
  * Render a sealed React Email ESM artifact in a short-lived subprocess isolate.
+ * `subject` is required — supplied by the Template variant / request, not Entry source.
+ *
+ * When `mergePreviewProps` is true (preview only), the isolate merges
+ * `default.PreviewProps` under caller props — never enable this on send.
  */
 export async function renderSealedReactEmailArtifact(input: {
   artifact: Uint8Array | string;
   props?: ReactEmailRenderProps;
+  /** @deprecated Prefer `subject`. */
   subjectOverride?: string;
+  subject?: string;
+  mergePreviewProps?: boolean;
   timeoutMs?: number;
 }): Promise<ReactEmailRenderResult> {
   const tempDir = await fs.mkdtemp(
@@ -32,10 +39,13 @@ export async function renderSealedReactEmailArtifact(input: {
       "isolate-runner.ts"
     );
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const args = [runner, artifactPath, JSON.stringify(input.props ?? {})];
-    if (input.subjectOverride !== undefined) {
-      args.push(input.subjectOverride);
-    }
+    const subject = input.subject ?? input.subjectOverride ?? "";
+    const args = [
+      runner,
+      artifactPath,
+      JSON.stringify(input.props ?? {}),
+      subject,
+    ];
 
     const proc = Bun.spawn(["bun", ...args], {
       cwd: path.dirname(runner),
@@ -43,7 +53,7 @@ export async function renderSealedReactEmailArtifact(input: {
       stderr: "pipe",
       env: {
         ...process.env,
-        // Keep the isolate lean — no inherited network knobs required.
+        RELAYIT_MERGE_PREVIEW_PROPS: input.mergePreviewProps ? "1" : "0",
       },
     });
 

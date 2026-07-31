@@ -77,7 +77,6 @@ const NAV_ITEMS = [
         title: "Templates",
         to: "/$orgSlug/automations/templates",
         icon: BrushSquare,
-        comingSoon: true,
         requiredPermissions: {
           template: ["read"],
         },
@@ -173,7 +172,7 @@ function RouteComponent() {
           linkParams={{ orgSlug }}
           pathname={pathname}
         />
-        <SidebarInset className="grow bg-[hsl(0,0%,98%)] *:data-[slot=balanced-outlet]:mx-auto *:data-[slot=balanced-outlet]:mt-6 *:data-[slot=balanced-outlet]:w-[calc(1200px+3rem)] *:data-[slot=balanced-outlet]:max-w-full *:data-[slot=balanced-outlet]:px-6">
+        <SidebarInset className="grow bg-[hsl(0,0%,98%)] *:data-[slot=balanced-outlet]:mx-auto *:data-[slot=balanced-outlet]:mt-6 *:data-[slot=balanced-outlet]:w-[calc(1200px+3rem)] *:data-[slot=balanced-outlet]:max-w-full *:data-[slot=balanced-outlet]:px-6 *:data-[slot=full-outlet]:mt-0 *:data-[slot=full-outlet]:flex *:data-[slot=full-outlet]:min-h-0 *:data-[slot=full-outlet]:w-full *:data-[slot=full-outlet]:flex-1 *:data-[slot=full-outlet]:flex-col *:data-[slot=full-outlet]:px-4 *:data-[slot=full-outlet]:pb-4 *:data-[slot=full-outlet]:pt-4">
           <AppHeader
             items={FILTERED_NAV_ITEMS}
             linkParams={{ orgSlug }}

@@ -13,10 +13,11 @@ import {
   templatingReadFile,
 } from "@repo/api/templating/builder";
 import { previewHostedWorkspaceEntry } from "@repo/api/templating/publish";
+import { logger } from "@repo/api/utils";
 import {
   templatingWorkspaceCommitBodySchema,
   templatingWorkspaceEntryParamsSchema,
-  templatingWorkspaceFileParamsSchema,
+  templatingWorkspaceFileQuerySchema,
   templatingWorkspaceKindParamsSchema,
   templatingWorkspacePreviewBodySchema,
 } from "@repo/api/validators/routes/projects/templating/workspace";
@@ -143,8 +144,8 @@ export const templatingWorkspaceRoutes = new Elysia({
     { params: templatingWorkspaceKindParamsSchema }
   )
   .get(
-    "/files/*",
-    async ({ params, organization, request }) => {
+    "/file",
+    async ({ params, query, organization, request }) => {
       if (
         !(await requireTemplatePermission(request, organization.id, "read"))
       ) {
@@ -157,7 +158,7 @@ export const templatingWorkspaceRoutes = new Elysia({
       );
       const read = await templatingReadFile({
         workspaceId: workspace.id,
-        path: params["*"],
+        path: query.path,
         redis: apiRedis,
       });
       if (read.error || !read.data) {
@@ -165,7 +166,10 @@ export const templatingWorkspaceRoutes = new Elysia({
       }
       return read.data;
     },
-    { params: templatingWorkspaceFileParamsSchema }
+    {
+      params: templatingWorkspaceKindParamsSchema,
+      query: templatingWorkspaceFileQuerySchema,
+    }
   )
   .put(
     "/files",
@@ -197,7 +201,7 @@ export const templatingWorkspaceRoutes = new Elysia({
     }
   )
   .post(
-    "/deps-sync",
+    "/depsSync",
     async ({ params, organization, request }) => {
       if (
         !(await requireTemplatePermission(request, organization.id, "update"))
@@ -265,6 +269,15 @@ export const templatingWorkspaceRoutes = new Elysia({
         subjectOverride: body.subject,
       });
       if (previewed.error || !previewed.data) {
+        logger.warn(
+          {
+            workspaceId: workspace.id,
+            entryId: params.entryId,
+            error: previewed.error?.message,
+            details: previewed.error?.details,
+          },
+          "Email Workspace preview failed"
+        );
         return status(400, previewed.error?.message ?? "Preview failed");
       }
       return previewed.data;

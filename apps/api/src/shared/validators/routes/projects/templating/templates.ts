@@ -7,9 +7,15 @@ export const createTemplateBodySchema = z.object({
 
 export type CreateTemplateBody = z.infer<typeof createTemplateBodySchema>;
 
-export const patchTemplateBodySchema = z.object({
-  name: safeString.min(1).max(256).optional(),
-});
+export const patchTemplateBodySchema = z
+  .object({
+    name: safeString.min(1).max(256).optional(),
+    /** Explicit send-path slug. Normalized server-side; must be unique among active Templates. */
+    slug: safeString.min(1).max(128).optional(),
+  })
+  .refine((body) => body.name !== undefined || body.slug !== undefined, {
+    message: "At least one of name or slug is required",
+  });
 
 export type PatchTemplateBody = z.infer<typeof patchTemplateBodySchema>;
 
@@ -68,6 +74,8 @@ const putPrimitiveEmailChannelBodySchema = z
 const putReactEmailChannelBodySchema = z.object({
   engine: z.literal("reactEmail"),
   workspaceEntryId: z.string().min(1),
+  /** Subject lives on the Template variant, not in Entry source. */
+  subject: safeString.min(1).max(998),
 });
 
 export const putTemplateEmailChannelBodySchema = z.discriminatedUnion(

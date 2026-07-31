@@ -93,7 +93,7 @@ export async function startWorker() {
               "Failed to prune idle consumers"
             );
           } else if (result.data.length > 0) {
-            logger.info(
+            logger.debug(
               { stream: workerTask.stream, pruned: result.data },
               "Pruned idle consumers"
             );

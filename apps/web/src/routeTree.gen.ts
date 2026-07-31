@@ -31,7 +31,9 @@ import { Route as AuthdOrgSlugDomainsIndexRouteImport } from './routes/_authd/$o
 import { Route as AuthdAdminSettingsIntegrationsRouteImport } from './routes/_authd/admin/settings.integrations'
 import { Route as AuthdOrgSlugDomainsFqdnRouteImport } from './routes/_authd/$orgSlug/domains/$fqdn'
 import { Route as AuthdOrgSlugAutomationsWorkflowsRouteImport } from './routes/_authd/$orgSlug/automations.workflows'
-import { Route as AuthdOrgSlugAutomationsTemplatesRouteImport } from './routes/_authd/$orgSlug/automations.templates'
+import { Route as AuthdOrgSlugAutomationsTemplatesIndexRouteImport } from './routes/_authd/$orgSlug/automations.templates.index'
+import { Route as AuthdOrgSlugAutomationsTemplatesWorkspaceRouteImport } from './routes/_authd/$orgSlug/automations.templates.workspace'
+import { Route as AuthdOrgSlugAutomationsTemplatesTemplateIdRouteImport } from './routes/_authd/$orgSlug/automations.templates.$templateId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -145,10 +147,22 @@ const AuthdOrgSlugAutomationsWorkflowsRoute =
     path: '/automations/workflows',
     getParentRoute: () => AuthdOrgSlugRoute,
   } as any)
-const AuthdOrgSlugAutomationsTemplatesRoute =
-  AuthdOrgSlugAutomationsTemplatesRouteImport.update({
-    id: '/automations/templates',
-    path: '/automations/templates',
+const AuthdOrgSlugAutomationsTemplatesIndexRoute =
+  AuthdOrgSlugAutomationsTemplatesIndexRouteImport.update({
+    id: '/automations/templates/',
+    path: '/automations/templates/',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugAutomationsTemplatesWorkspaceRoute =
+  AuthdOrgSlugAutomationsTemplatesWorkspaceRouteImport.update({
+    id: '/automations/templates/workspace',
+    path: '/automations/templates/workspace',
+    getParentRoute: () => AuthdOrgSlugRoute,
+  } as any)
+const AuthdOrgSlugAutomationsTemplatesTemplateIdRoute =
+  AuthdOrgSlugAutomationsTemplatesTemplateIdRouteImport.update({
+    id: '/automations/templates/$templateId',
+    path: '/automations/templates/$templateId',
     getParentRoute: () => AuthdOrgSlugRoute,
   } as any)
 
@@ -170,11 +184,13 @@ export interface FileRoutesByFullPath {
   '/user/billing': typeof AuthdUserBillingRoute
   '/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/admin/': typeof AuthdAdminIndexRoute
-  '/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
   '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
   '/$orgSlug/domains/$fqdn': typeof AuthdOrgSlugDomainsFqdnRoute
   '/admin/settings/integrations': typeof AuthdAdminSettingsIntegrationsRoute
   '/$orgSlug/domains/': typeof AuthdOrgSlugDomainsIndexRoute
+  '/$orgSlug/automations/templates/$templateId': typeof AuthdOrgSlugAutomationsTemplatesTemplateIdRoute
+  '/$orgSlug/automations/templates/workspace': typeof AuthdOrgSlugAutomationsTemplatesWorkspaceRoute
+  '/$orgSlug/automations/templates/': typeof AuthdOrgSlugAutomationsTemplatesIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
@@ -192,11 +208,13 @@ export interface FileRoutesByTo {
   '/user/billing': typeof AuthdUserBillingRoute
   '/$orgSlug': typeof AuthdOrgSlugIndexRoute
   '/admin': typeof AuthdAdminIndexRoute
-  '/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
   '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
   '/$orgSlug/domains/$fqdn': typeof AuthdOrgSlugDomainsFqdnRoute
   '/admin/settings/integrations': typeof AuthdAdminSettingsIntegrationsRoute
   '/$orgSlug/domains': typeof AuthdOrgSlugDomainsIndexRoute
+  '/$orgSlug/automations/templates/$templateId': typeof AuthdOrgSlugAutomationsTemplatesTemplateIdRoute
+  '/$orgSlug/automations/templates/workspace': typeof AuthdOrgSlugAutomationsTemplatesWorkspaceRoute
+  '/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -218,11 +236,13 @@ export interface FileRoutesById {
   '/_authd/user/billing': typeof AuthdUserBillingRoute
   '/_authd/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/_authd/admin/': typeof AuthdAdminIndexRoute
-  '/_authd/$orgSlug/automations/templates': typeof AuthdOrgSlugAutomationsTemplatesRoute
   '/_authd/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
   '/_authd/$orgSlug/domains/$fqdn': typeof AuthdOrgSlugDomainsFqdnRoute
   '/_authd/admin/settings/integrations': typeof AuthdAdminSettingsIntegrationsRoute
   '/_authd/$orgSlug/domains/': typeof AuthdOrgSlugDomainsIndexRoute
+  '/_authd/$orgSlug/automations/templates/$templateId': typeof AuthdOrgSlugAutomationsTemplatesTemplateIdRoute
+  '/_authd/$orgSlug/automations/templates/workspace': typeof AuthdOrgSlugAutomationsTemplatesWorkspaceRoute
+  '/_authd/$orgSlug/automations/templates/': typeof AuthdOrgSlugAutomationsTemplatesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -244,11 +264,13 @@ export interface FileRouteTypes {
     | '/user/billing'
     | '/$orgSlug/'
     | '/admin/'
-    | '/$orgSlug/automations/templates'
     | '/$orgSlug/automations/workflows'
     | '/$orgSlug/domains/$fqdn'
     | '/admin/settings/integrations'
     | '/$orgSlug/domains/'
+    | '/$orgSlug/automations/templates/$templateId'
+    | '/$orgSlug/automations/templates/workspace'
+    | '/$orgSlug/automations/templates/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -266,11 +288,13 @@ export interface FileRouteTypes {
     | '/user/billing'
     | '/$orgSlug'
     | '/admin'
-    | '/$orgSlug/automations/templates'
     | '/$orgSlug/automations/workflows'
     | '/$orgSlug/domains/$fqdn'
     | '/admin/settings/integrations'
     | '/$orgSlug/domains'
+    | '/$orgSlug/automations/templates/$templateId'
+    | '/$orgSlug/automations/templates/workspace'
+    | '/$orgSlug/automations/templates'
   id:
     | '__root__'
     | '/_authd'
@@ -291,11 +315,13 @@ export interface FileRouteTypes {
     | '/_authd/user/billing'
     | '/_authd/$orgSlug/'
     | '/_authd/admin/'
-    | '/_authd/$orgSlug/automations/templates'
     | '/_authd/$orgSlug/automations/workflows'
     | '/_authd/$orgSlug/domains/$fqdn'
     | '/_authd/admin/settings/integrations'
     | '/_authd/$orgSlug/domains/'
+    | '/_authd/$orgSlug/automations/templates/$templateId'
+    | '/_authd/$orgSlug/automations/templates/workspace'
+    | '/_authd/$orgSlug/automations/templates/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -459,11 +485,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthdOrgSlugAutomationsWorkflowsRouteImport
       parentRoute: typeof AuthdOrgSlugRoute
     }
-    '/_authd/$orgSlug/automations/templates': {
-      id: '/_authd/$orgSlug/automations/templates'
+    '/_authd/$orgSlug/automations/templates/': {
+      id: '/_authd/$orgSlug/automations/templates/'
       path: '/automations/templates'
-      fullPath: '/$orgSlug/automations/templates'
-      preLoaderRoute: typeof AuthdOrgSlugAutomationsTemplatesRouteImport
+      fullPath: '/$orgSlug/automations/templates/'
+      preLoaderRoute: typeof AuthdOrgSlugAutomationsTemplatesIndexRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/automations/templates/workspace': {
+      id: '/_authd/$orgSlug/automations/templates/workspace'
+      path: '/automations/templates/workspace'
+      fullPath: '/$orgSlug/automations/templates/workspace'
+      preLoaderRoute: typeof AuthdOrgSlugAutomationsTemplatesWorkspaceRouteImport
+      parentRoute: typeof AuthdOrgSlugRoute
+    }
+    '/_authd/$orgSlug/automations/templates/$templateId': {
+      id: '/_authd/$orgSlug/automations/templates/$templateId'
+      path: '/automations/templates/$templateId'
+      fullPath: '/$orgSlug/automations/templates/$templateId'
+      preLoaderRoute: typeof AuthdOrgSlugAutomationsTemplatesTemplateIdRouteImport
       parentRoute: typeof AuthdOrgSlugRoute
     }
   }
@@ -474,10 +514,12 @@ interface AuthdOrgSlugRouteChildren {
   AuthdOrgSlugContactsRoute: typeof AuthdOrgSlugContactsRoute
   AuthdOrgSlugProjectRoute: typeof AuthdOrgSlugProjectRoute
   AuthdOrgSlugIndexRoute: typeof AuthdOrgSlugIndexRoute
-  AuthdOrgSlugAutomationsTemplatesRoute: typeof AuthdOrgSlugAutomationsTemplatesRoute
   AuthdOrgSlugAutomationsWorkflowsRoute: typeof AuthdOrgSlugAutomationsWorkflowsRoute
   AuthdOrgSlugDomainsFqdnRoute: typeof AuthdOrgSlugDomainsFqdnRoute
   AuthdOrgSlugDomainsIndexRoute: typeof AuthdOrgSlugDomainsIndexRoute
+  AuthdOrgSlugAutomationsTemplatesTemplateIdRoute: typeof AuthdOrgSlugAutomationsTemplatesTemplateIdRoute
+  AuthdOrgSlugAutomationsTemplatesWorkspaceRoute: typeof AuthdOrgSlugAutomationsTemplatesWorkspaceRoute
+  AuthdOrgSlugAutomationsTemplatesIndexRoute: typeof AuthdOrgSlugAutomationsTemplatesIndexRoute
 }
 
 const AuthdOrgSlugRouteChildren: AuthdOrgSlugRouteChildren = {
@@ -485,10 +527,15 @@ const AuthdOrgSlugRouteChildren: AuthdOrgSlugRouteChildren = {
   AuthdOrgSlugContactsRoute: AuthdOrgSlugContactsRoute,
   AuthdOrgSlugProjectRoute: AuthdOrgSlugProjectRoute,
   AuthdOrgSlugIndexRoute: AuthdOrgSlugIndexRoute,
-  AuthdOrgSlugAutomationsTemplatesRoute: AuthdOrgSlugAutomationsTemplatesRoute,
   AuthdOrgSlugAutomationsWorkflowsRoute: AuthdOrgSlugAutomationsWorkflowsRoute,
   AuthdOrgSlugDomainsFqdnRoute: AuthdOrgSlugDomainsFqdnRoute,
   AuthdOrgSlugDomainsIndexRoute: AuthdOrgSlugDomainsIndexRoute,
+  AuthdOrgSlugAutomationsTemplatesTemplateIdRoute:
+    AuthdOrgSlugAutomationsTemplatesTemplateIdRoute,
+  AuthdOrgSlugAutomationsTemplatesWorkspaceRoute:
+    AuthdOrgSlugAutomationsTemplatesWorkspaceRoute,
+  AuthdOrgSlugAutomationsTemplatesIndexRoute:
+    AuthdOrgSlugAutomationsTemplatesIndexRoute,
 }
 
 const AuthdOrgSlugRouteWithChildren = AuthdOrgSlugRoute._addFileChildren(

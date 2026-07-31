@@ -18,6 +18,14 @@ describe("GET /projects/:orgSlug/templating/templates", () => {
 describe("PATCH /projects/:orgSlug/templating/templates/:id", () => {
   it.todo("updates name and regenerates slug to track the new name");
 
+  it.todo(
+    "updates an explicit slug when it is unique among active Templates"
+  );
+
+  it.todo(
+    "rejects an explicit slug that collides with another active Template"
+  );
+
   it.todo("rejects updates to an archived Template");
 });
 
