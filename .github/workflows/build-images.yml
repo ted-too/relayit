@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [api, worker, web]
-    
+        app: [api, web]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,9 +36,10 @@ jobs:
       - name: Generate PR tags
         id: tags
         run: |
-          REPO_NAME="${{ github.repository_owner }}/relayit-${{ matrix.app }}"
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME="${REPO_OWNER_LOWER}/relayit-${{ matrix.app }}"
           TAGS="${{ env.REGISTRY }}/${REPO_NAME}:pr-${{ github.event.number }}"
-          
+
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
 
@@ -59,4 +60,4 @@ jobs:
       - name: Build complete
         run: |
           echo "✅ ${{ matrix.app }} build completed"
-          echo "📦 Tags: ${{ steps.tags.outputs.tags }}" 
+          echo "📦 Tags: ${{ steps.tags.outputs.tags }}"

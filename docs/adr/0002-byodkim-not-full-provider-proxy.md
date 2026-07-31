@@ -1,0 +1,3 @@
+# Channel providers: setup assistance, not full proxy
+
+Across every Channel, a Provider is a delivery-vendor capability attached to a Project (Relayit-managed or customer-connected). Relayit helps the Project complete the setup required to send (for email: BYODKIM / DNS records in a Resend-style flow; for SMS: origination registration against AWS End User Messaging, etc.). It does not fully proxy the provider’s control plane. Managed and customer-connected Providers for the same channel should present equivalent setup steps where possible. Sending-identity artifacts (Domain, phone number, sender ID, …) are verified or registered per Provider. Chosen because full provider proxying became too meticulous relative to the product value of “complete setup, then send.”

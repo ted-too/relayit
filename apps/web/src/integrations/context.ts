@@ -1,57 +1,29 @@
-import { QueryClient } from "@tanstack/react-query";
-import { createIsomorphicFn } from "@tanstack/react-start";
-import { getWebRequest } from "@tanstack/react-start/server";
-import {
-  createTRPCOptionsProxy,
-  type TRPCOptionsProxy,
-} from "@trpc/tanstack-react-query";
-import superjson from "superjson";
-import type { AuthClient } from "@/integrations/better-auth/client";
-import { createAuthClient } from "@/integrations/better-auth/client";
-import { createTrpcClient } from "@/integrations/trpc/client";
-import type { TRPCRouter } from "@/integrations/trpc/router";
-
-const createTrpc = createIsomorphicFn()
-  .server(() => {
-    const req = getWebRequest();
-
-    const cookie = req.headers.get("cookie");
-    return createTrpcClient(cookie);
-  })
-  .client(() => {
-    return createTrpcClient();
-  });
-
-const createAuth = createIsomorphicFn()
-  .server(() => {
-    const req = getWebRequest();
-    const cookie = req.headers.get("cookie");
-    return createAuthClient(cookie);
-  })
-  .client(() => {
-    return createAuthClient();
-  });
+import { getQueryClient } from "@repo/ui/integrations/tanstack-query/client";
+import type { QueryClient } from "@tanstack/react-query";
+import { type Env, env } from "@/env";
+import { type ApiClient, createApiClient } from "./api";
+import { type BetterAuthClient, createAuthClient } from "./better-auth";
 
 export interface RouterContext {
+  api: ApiClient;
+  betterAuth: BetterAuthClient;
+  env: Env;
   queryClient: QueryClient;
-  trpc: TRPCOptionsProxy<TRPCRouter>;
-  auth: AuthClient;
+  /** From SSR — server `EDITION=cloud`. */
+  isCloudEdition: boolean;
+  isMobile: boolean;
+  isPotentialAuthd: boolean;
+  sidebarOpen: boolean;
 }
 
-export function getContext(): RouterContext {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      dehydrate: { serializeData: superjson.serialize },
-      hydrate: { deserializeData: superjson.deserialize },
-    },
-  });
-
-  return {
-    queryClient,
-    trpc: createTRPCOptionsProxy({
-      client: createTrpc(),
-      queryClient,
-    }),
-    auth: createAuth(),
-  };
-}
+export const getContext = (): RouterContext =>
+  ({
+    env,
+    api: createApiClient(),
+    betterAuth: createAuthClient(),
+    queryClient: getQueryClient(),
+    isCloudEdition: false,
+    isMobile: false,
+    isPotentialAuthd: false,
+    sidebarOpen: false,
+  }) satisfies RouterContext;

@@ -1,30 +1,43 @@
+import "dotenv/config";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
+import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import viteReact from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import viteTsConfigPaths from "vite-tsconfig-paths";
+import { env } from "./src/env";
 
 const config = defineConfig({
-  plugins: [
-    viteTsConfigPaths({
-      projects: [".", "../../packages/ui", "../../packages/shared"],
-    }),
-    tailwindcss(),
-    tanstackStart({
-      customViteReactPlugin: true,
-      target: "bun",
-    }),
-    viteReact(),
-  ],
-  // The code below is required for better-auth to work
-  define: {
-    global: "globalThis",
+  server: {
+    // Portless sets HOST=127.0.0.1 so the proxy can reach Vite over IPv4.
+    host: env.HOST,
+    port: env.PORT,
+    // Polling is used instead of fsevents because Cursor's atomic file
+    // saves (write-to-temp + rename) cause fsevents to drop events on
+    // macOS, which makes HMR detection take 30s+ per change. Polling
+    // sidesteps fsevents entirely. If running on Linux/CI, this is
+    // unnecessary and can be removed.
+    // watch: {
+    //   usePolling: true,
+    //   interval: 300,
+    //   binaryInterval: 1000,
+    // },
+  },
+  resolve: {
+    tsconfigPaths: true,
   },
   build: {
-    rollupOptions: {
-      external: ["node:async_hooks", "node:crypto", "node:buffer"],
-    },
+    sourcemap: "hidden",
   },
+  plugins: [
+    devtools(),
+    nitro({ preset: "bun" }),
+    tailwindcss(),
+    tanstackStart(),
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+  ],
 });
 
 export default config;

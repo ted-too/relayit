@@ -1,0 +1,54 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RelayITSesAccount",
+      "Effect": "Allow",
+      "Action": "ses:GetAccount",
+      "Resource": "*"
+    },
+    {
+      "Sid": "RelayITSesIdentitiesAndSend",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity",
+        "ses:GetEmailIdentity",
+        "ses:DeleteEmailIdentity",
+        "ses:PutEmailIdentityMailFromAttributes",
+        "ses:SendEmail"
+      ],
+      "Resource": "arn:aws:ses:*:ACCOUNT_ID:identity/*"
+    },
+    {
+      "Sid": "RelayITSesConfigurationSets",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateConfigurationSet",
+        "ses:CreateConfigurationSetEventDestination"
+      ],
+      "Resource": "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-default"
+    },
+    {
+      "Sid": "RelayITSesInboundReceiving",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateReceiptRuleSet",
+        "ses:CreateReceiptRule",
+        "ses:DescribeReceiptRuleSet",
+        "ses:SetActiveReceiptRuleSet"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RelayITSnsWebhooks",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Resource": "arn:aws:sns:*:ACCOUNT_ID:relayit-*"
+    }
+  ]
+}

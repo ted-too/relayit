@@ -1,58 +1,48 @@
-import { Toaster } from "@repo/ui/components/custom/sonner";
-import {
-  type Theme,
-  ThemeProvider,
-  useTheme,
-} from "@repo/ui/components/custom/theme-provider";
-import { SIDEBAR_COOKIE_NAME, THEME_COOKIE_NAME } from "@repo/ui/constants";
-import appCss from "@repo/ui/globals.css?url";
+import { Toaster } from "@repo/ui/components/ui/shad/sonner";
+import { SIDEBAR_COOKIE_NAME } from "@repo/ui/constants";
+import { TanStackQueryDevtools } from "@repo/ui/integrations/tanstack-query/devtools";
+import appCss from "@repo/ui/styles/globals.css?url";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import {
   createRootRouteWithContext,
   HeadContent,
-  Outlet,
   Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
-import { getCookie, getWebRequest } from "@tanstack/react-start/server";
-import z from "zod";
-import { AUTH_COOKIES } from "@/integrations/better-auth/client";
+import { getCookie, getRequest } from "@tanstack/react-start/server";
+import { env } from "@/env";
+import { AUTH_COOKIES } from "@/integrations/better-auth";
 import type { RouterContext } from "@/integrations/context";
-
-export const getSSRCookie = createServerFn({ method: "POST" })
-  .validator(
-    z.object({
-      name: z.string(),
-    })
-  )
-  .handler(({ data }) => {
-    const value = getCookie(data.name);
-
-    return value;
-  });
 
 const MOBILE_REGEX =
   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i;
 const SCREEN_SIZE_REGEX = /Mobile.*Safari|Android.*Mobile/i;
 
-export const getSSRMobileDetection = createServerFn({ method: "GET" }).handler(
-  () => {
-    const request = getWebRequest();
-    const userAgent = request.headers.get("user-agent") || "";
+export const getSSRContext = createServerFn().handler(() => {
+  const request = getRequest();
+  const userAgent = request.headers.get("user-agent") || "";
 
-    const isMobile = MOBILE_REGEX.test(userAgent);
-    const hasScreenSizeHints = SCREEN_SIZE_REGEX.test(userAgent);
+  const isMobile = MOBILE_REGEX.test(userAgent);
+  const hasScreenSizeHints = SCREEN_SIZE_REGEX.test(userAgent);
 
-    return {
-      isMobile: isMobile || hasScreenSizeHints,
-      userAgent,
-    };
-  }
-);
+  const sidebarOpen = getCookie(SIDEBAR_COOKIE_NAME);
+  const sessionCookies = AUTH_COOKIES.map((cookie) => getCookie(cookie));
+
+  return {
+    isCloudEdition: env.EDITION === "cloud",
+    isMobile: isMobile || hasScreenSizeHints,
+    isPotentialAuthd: sessionCookies.filter(Boolean).length > 0,
+    sidebarOpen: sidebarOpen === "true",
+  };
+});
 
 export const Route = createRootRouteWithContext<RouterContext>()({
+  beforeLoad: async () => {
+    const ssrContext = await getSSRContext();
+
+    return { ...ssrContext };
+  },
   head: () => ({
     meta: [
       {
@@ -60,10 +50,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        content: "width=device-width, initial-scale=1, maximum-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        name: "robots",
+        content: "noindex, nofollow",
+      },
+      {
+        name: "apple-mobile-web-app-title",
+        content: "RelayIt",
       },
     ],
     links: [
@@ -71,51 +66,52 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         rel: "stylesheet",
         href: appCss,
       },
+      {
+        rel: "icon",
+        type: "image/png",
+        href: "/favicon-96x96.png",
+        sizes: "96x96",
+      },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: "/favicon.svg",
+      },
+      {
+        rel: "shortcut icon",
+        href: "/favicon.ico",
+      },
+      {
+        rel: "apple-touch-icon",
+        sizes: "180x180",
+        href: "/apple-touch-icon.png",
+      },
+      {
+        rel: "manifest",
+        href: "/site.webmanifest",
+      },
     ],
   }),
-  beforeLoad: async () => {
-    const [{ isMobile }, sidebarOpen = "false", theme, ...sessionCookies] =
-      await Promise.all([
-        getSSRMobileDetection(),
-        getSSRCookie({ data: { name: SIDEBAR_COOKIE_NAME } }),
-        getSSRCookie({ data: { name: THEME_COOKIE_NAME } }),
-        ...AUTH_COOKIES.map((cookie) =>
-          getSSRCookie({ data: { name: cookie } })
-        ),
-      ]);
-
-    return {
-      isMobile,
-      isPotentialAuthd: sessionCookies.filter(Boolean).length > 0,
-      sidebarOpen: sidebarOpen === "true",
-      theme,
-    };
-  },
-  component: RootComponent,
+  shellComponent: RootDocument,
 });
 
-function RootComponent() {
-  const data = Route.useRouteContext();
-  const theme = data?.theme as Theme | undefined;
-
-  return (
-    <ThemeProvider defaultTheme={theme}>
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
-    </ThemeProvider>
-  );
-}
-
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { theme } = useTheme();
+  const { env } = Route.useRouteContext();
   return (
-    <html className={theme} lang="en" suppressHydrationWarning>
+    <html lang="en">
       <head>
+        {env.VITE_DEBUG && (
+          <script
+            crossOrigin="anonymous"
+            src="//unpkg.com/react-scan/dist/auto.global.js"
+          />
+        )}
         <HeadContent />
       </head>
-      <body className="antialiased">
-        <div className="Root">{children}</div>
+      <body className="relative">
+        <div className="relative isolate flex min-h-svh flex-col">
+          {children}
+        </div>
         <Toaster richColors />
         <TanStackDevtools
           config={{
@@ -126,10 +122,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               name: "Tanstack Router",
               render: <TanStackRouterDevtoolsPanel />,
             },
-            {
-              name: "React Query",
-              render: <ReactQueryDevtoolsPanel />,
-            },
+            TanStackQueryDevtools,
           ]}
         />
         <Scripts />

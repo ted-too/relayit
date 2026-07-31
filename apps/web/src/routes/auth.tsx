@@ -4,11 +4,12 @@ import {
   redirect,
   useLocation,
 } from "@tanstack/react-router";
+import { Image } from "@unpic/react";
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: ({ context }) => {
     if (context.isPotentialAuthd) {
-      throw redirect({ to: "/auth/finish" });
+      throw redirect({ to: "/" });
     }
   },
   component: RouteComponent,
@@ -37,9 +38,10 @@ function RouteComponent() {
     <div className="flex h-svh w-full flex-col items-center justify-between gap-8 p-4 md:flex-row md:p-8">
       {image && (
         <div className="relative hidden shrink-0 overflow-hidden rounded-2xl md:h-full md:w-[48svw] lg:block">
-          <img
+          <Image
             alt="Auth background"
             className="size-full object-cover"
+            layout="fullWidth"
             src={image.src}
           />
           <a

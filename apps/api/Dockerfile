@@ -1,32 +1,19 @@
 # syntax=docker/dockerfile:1.4
-
-# This is intentionally not using turbo prune - https://turborepo.com/docs/guides/tools/docker#the---docker-flag
-# Because of this issue - https://github.com/vercel/turborepo/issues/10658
-# TODO: Consider switching to it when this gets merged - https://github.com/vercel/turborepo/pull/10729
+# https://turborepo.dev/docs/guides/tools/docker
 
 FROM oven/bun:1 AS base
-WORKDIR /usr/src/app
-
-FROM base AS deps
 WORKDIR /app
 
-COPY bun.lock* package.json turbo.json ./
-COPY apps apps
-RUN find apps -type f ! -name "package.json" -delete && \
-    find apps -type d -empty -delete
-COPY packages packages
-RUN find packages -type f ! -name "package.json" -delete && \
-    find packages -type d -empty -delete
-
-RUN bun install --frozen-lockfile
+FROM base AS prepare
+RUN bun add -g turbo@2.10.6
+COPY . .
+RUN turbo prune @repo/api --docker
 
 FROM base AS builder
-WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json bun.lock* turbo.json ./
-COPY apps/api ./apps/api/
-COPY packages ./packages/
+# Install pruned deps first (changes less often than source).
+COPY --from=prepare /app/out/json/ .
+RUN bun install --frozen-lockfile
+COPY --from=prepare /app/out/full/ .
 RUN --mount=type=secret,id=turbo_token \
     --mount=type=secret,id=turbo_team \
     TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
@@ -36,15 +23,17 @@ RUN --mount=type=secret,id=turbo_token \
 FROM base AS runner
 WORKDIR /app
 
-RUN groupadd --system --gid 1003 honojs && \
-    useradd --system --uid 1003 --gid honojs --no-create-home honojs
+RUN groupadd --system --gid 953 relayit && \
+    useradd --system --uid 953 --gid relayit --no-create-home relayit
 
-RUN echo '{"dependencies":{"pino":"9.9.5", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
+# Runtime extras not fully inlined by bun build (pino transports / react-email).
+RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
     bun install --production
 
-COPY --from=builder --chown=honojs:honojs /app/apps/api/build ./
+COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
 
-USER honojs
+# Deploy sets RUN_MODE (combined | api | worker | builder). Default: combined.
+USER relayit
 EXPOSE 3005
 
 ENTRYPOINT ["bun", "run", "index.js"]

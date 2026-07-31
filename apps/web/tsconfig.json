@@ -6,23 +6,27 @@
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
+
+    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
     "noEmit": true,
+
+    /* Linting */
     "skipLibCheck": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "baseUrl": ".",
+
     "paths": {
       "@/*": ["./src/*"],
-      "@repo/api/*": ["../api/src/*"],
-      "@repo/shared/*": ["../../packages/shared/src/*"],
       "@repo/ui/*": ["../../packages/ui/src/*"],
-      "@repo/template-render/*": ["../../packages/template-render/src/*"]
+      "@repo/api/server": ["../api/src/server/index.ts"],
+      "@repo/api/server/*": ["../api/src/server/*"],
+      "@repo/api/*": ["../api/src/shared/*"]
     }
   }
 }

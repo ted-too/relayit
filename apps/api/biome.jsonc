@@ -1,0 +1,72 @@
+{
+  "$schema": "../../node_modules/@biomejs/biome/configuration_schema.json",
+  "root": false,
+  "extends": "//",
+  "overrides": [
+    {
+      "includes": ["src/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@repo/api/server",
+                      "@repo/api/server/**",
+                      "@repo/api/worker",
+                      "@repo/api/worker/**"
+                    ],
+                    "message": "shared must not import process packages (server/worker). Inject process deps at the call site."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@repo/api/worker", "@repo/api/worker/**"],
+                    "message": "server must not import worker."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/worker/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@repo/api/server", "@repo/api/server/**"],
+                    "message": "worker must not import server."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

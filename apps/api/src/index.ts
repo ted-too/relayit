@@ -1,118 +1,131 @@
-import { trpcServer } from "@hono/trpc-server";
-import { db } from "@repo/shared/db";
-import { checkAndRunKeyRotation } from "@repo/shared/db/crypto";
-import { logger } from "@repo/shared/utils";
-import { Scalar } from "@scalar/hono-api-reference";
+import cluster from "node:cluster";
+import os from "node:os";
+import { db } from "@repo/api/db";
+import {
+  checkAndRunKeyRotation,
+  validateEncryptionKeysForStartup,
+} from "@repo/api/db/crypto";
+import { env } from "@repo/api/env";
+import { logger } from "@repo/api/utils";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { logger as honoLogger } from "hono/logger";
-import { openAPIRouteHandler } from "hono-openapi";
-import { auth } from "@/lib/auth";
-import { sendRouter } from "@/send";
-import type { Context } from "@/trpc";
-import { appRouter } from "@/trpc/router";
 
-const app = new Hono<{ Variables: Context }>();
+async function startServers() {
+  // In dev, run a single in-process server so `--watch` stays simple and we
+  // avoid a fleet of forks. In production, fork one server per core.
+  if (env.DEV === "true") {
+    const { startServer } = await import("./server");
+    startServer();
+    return;
+  }
 
-app.use(honoLogger((msg, ...args) => logger.info(args, msg)));
-
-// FIXME: Put these behind CORS from the project db
-app.route("/", sendRouter);
-
-if (process.env.ENABLE_DOCS === "true") {
-  app.get(
-    "/openapi",
-    openAPIRouteHandler(sendRouter, {
-      documentation: {
-        info: {
-          title: "RelayIt API",
-          version: "1.0.0",
-          description: "RelayIt API",
-        },
-        servers: [
-          { url: process.env.BETTER_AUTH_URL, description: "Local Server" },
-        ],
-        components: {
-          securitySchemes: {
-            apiKey: {
-              type: "apiKey",
-              in: "header",
-              name: "X-API-Key",
-            },
-          },
-        },
-        security: [
-          {
-            apiKey: [],
-          },
-        ],
-      },
-    })
-  );
-
-  app.get("/reference", Scalar({ url: "/openapi" }));
+  for (let i = 0; i < os.availableParallelism(); i++) {
+    cluster.fork();
+  }
 }
 
-app.use(
-  "*",
-  cors({
-    origin: [process.env.APP_URL],
-    allowHeaders: ["Content-Type", "Authorization", "TRPC-Accept"],
-    allowMethods: ["POST", "GET", "OPTIONS"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 600,
-    credentials: true,
-  })
-);
+// Upper bound on the whole shutdown sequence so a stuck step (slow Redis,
+// draining connection) can never wedge the process forever.
+const SHUTDOWN_TIMEOUT_MS = 8000;
 
-app.use("*", async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) {
-    c.set("user", null);
-    c.set("session", null);
-    return next();
-  }
-  c.set("user", session.user);
-  c.set("session", session.session);
-  return next();
-});
+function registerGracefulShutdown(steps: Array<() => Promise<void>>) {
+  let shuttingDown = false;
 
-app.on(["POST", "GET"], "/auth/*", (c) => {
-  return auth.handler(c.req.raw);
-});
+  const run = async (signal: string) => {
+    if (shuttingDown) {
+      logger.warn({ signal }, "Shutdown already in progress; forcing exit");
+      process.exit(1);
+    }
+    shuttingDown = true;
 
-app.use(
-  "/trpc/*",
-  trpcServer({
-    router: appRouter,
-    createContext: (_, c) => {
-      const session = c.get("session");
-      const user = c.get("user");
+    logger.info({ signal }, "Received signal. Starting graceful shutdown");
 
-      return {
-        user,
-        session,
-        req: c.req.raw,
-      };
-    },
-  })
-);
+    try {
+      await Promise.race([
+        (async () => {
+          for (const step of steps) {
+            await step();
+          }
+        })(),
+        new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+      ]);
+    } catch (error) {
+      logger.error({ error }, "Error during graceful shutdown");
+    }
 
-async function startServer() {
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => void run("SIGTERM"));
+  process.on("SIGINT", () => void run("SIGINT"));
+}
+
+async function runBootstrap() {
   await migrate(db, { migrationsFolder: "./drizzle" });
 
-  const rotationResult = await checkAndRunKeyRotation(db);
-  if (rotationResult.error) {
-    throw new Error(`Key rotation failed: ${rotationResult.error.message}`);
+  const keyValidationResult = await validateEncryptionKeysForStartup(db);
+  if (keyValidationResult.error) {
+    throw keyValidationResult.error;
   }
 
-  logger.info("Server initialization complete");
-
-  Bun.serve({
-    port: 3005,
-    fetch: app.fetch,
-  });
+  const keyRotationResult = await checkAndRunKeyRotation(db);
+  if (keyRotationResult.error) {
+    throw keyRotationResult.error;
+  }
 }
 
-export default await startServer();
+async function main() {
+  // Forked children only serve HTTP. They re-enter this entrypoint, so we bail
+  // out here before bootstrap (migrations must run once) and before the worker
+  // (the queue consumer must not be duplicated per fork).
+  if (!cluster.isPrimary) {
+    const { startServer } = await import("./server");
+    startServer();
+    return;
+  }
+
+  await runBootstrap();
+
+  switch (env.RUN_MODE) {
+    case "worker": {
+      const { startWorker, shutdownWorker } = await import("./worker");
+      registerGracefulShutdown([shutdownWorker]);
+      return startWorker();
+    }
+
+    case "api": {
+      const { stopServer } = await import("./server");
+      registerGracefulShutdown([stopServer]);
+      return startServers();
+    }
+
+    case "combined": {
+      // The single worker lives in the primary; its run loops block forever, so
+      // it is started without awaiting before starting the server(s).
+      const { startWorker, shutdownWorker } = await import("./worker");
+      const { stopServer } = await import("./server");
+      // Drain HTTP first (stops new work + closes apiRedis), then wind down the
+      // worker loops and unregister its consumers.
+      registerGracefulShutdown([stopServer, shutdownWorker]);
+      startWorker().catch((error) => {
+        logger.error(error, "Worker runtime crashed");
+        process.exit(1);
+      });
+      return startServers();
+    }
+
+    case "builder": {
+      const { startBuilder, stopBuilder } = await import("./builder");
+      registerGracefulShutdown([stopBuilder]);
+      return startBuilder();
+    }
+
+    default: {
+      throw new Error(`Unsupported RUN_MODE: ${env.RUN_MODE}`);
+    }
+  }
+}
+
+main().catch((error) => {
+  logger.error(error, "Failed to start runtime");
+  process.exit(1);
+});

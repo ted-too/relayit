@@ -8,7 +8,6 @@
       "env": [
         "NODE_ENV",
         "VITE_API_URL",
-        "VITE_DOCS_URL",
         "VITE_BASE_URL",
         "VITE_EDITION",
         "BETTER_AUTH_URL",
@@ -27,17 +26,10 @@
       "env": [
         "NODE_ENV",
         "VITE_API_URL",
-        "VITE_DOCS_URL",
         "VITE_BASE_URL",
         "VITE_EDITION"
       ],
       "outputs": [".output/**"]
-    },
-    "@repo/worker#build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "env": ["NODE_ENV"],
-      "outputs": ["build/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]

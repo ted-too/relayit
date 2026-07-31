@@ -1,35 +1,24 @@
 # syntax=docker/dockerfile:1.4
-
-# This is intentionally not using turbo prune - https://turborepo.com/docs/guides/tools/docker#the---docker-flag
-# Because of this issue - https://github.com/vercel/turborepo/issues/10658
-# TODO: Consider switching to it when this gets merged - https://github.com/vercel/turborepo/pull/10729
+# https://turborepo.dev/docs/guides/tools/docker
 
 FROM oven/bun:1 AS base
-WORKDIR /usr/src/app
-
-FROM base AS deps
 WORKDIR /app
 
-COPY bun.lock* package.json turbo.json ./
-COPY apps apps
-RUN find apps -type f ! -name "package.json" -delete && \
-    find apps -type d -empty -delete
-COPY packages packages
-RUN find packages -type f ! -name "package.json" -delete && \
-    find packages -type d -empty -delete
-
-RUN bun install --frozen-lockfile
+FROM base AS prepare
+RUN bun add -g turbo@2.10.6
+COPY . .
+RUN turbo prune @repo/web --docker
 
 FROM base AS builder
+# Placeholders replaced at container start by scripts/entrypoint-vite.sh from
+# VITE_API_URL / VITE_BASE_URL. Bake once; redeploy with different public URLs.
 ENV VITE_API_URL=BAKED_VITE_API_URL \
-    VITE_DOCS_URL=BAKED_VITE_DOCS_URL \
     VITE_BASE_URL=BAKED_VITE_BASE_URL
-WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json bun.lock* turbo.json ./
-COPY apps/web ./apps/web/
-COPY packages ./packages/
+# Install pruned deps first (changes less often than source).
+COPY --from=prepare /app/out/json/ .
+RUN bun install --frozen-lockfile
+COPY --from=prepare /app/out/full/ .
 RUN --mount=type=secret,id=turbo_token \
     --mount=type=secret,id=turbo_team \
     TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
@@ -39,8 +28,8 @@ RUN --mount=type=secret,id=turbo_token \
 FROM oven/bun:1 AS runner
 WORKDIR /app
 
-RUN groupadd --system --gid 1003 vite && \
-    useradd --system --uid 1003 --gid vite --no-create-home vite
+RUN groupadd --system --gid 953 vite && \
+    useradd --system --uid 953 --gid vite --no-create-home vite
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

@@ -12,12 +12,12 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  tag-images:
+  build-images:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [api, worker, web]
-    
+        app: [api, web]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,166 +32,63 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract PR number from merge commit
-        id: extract-pr
-        run: |
-          # Try multiple patterns to extract PR number
-          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
-          echo "🔍 Analyzing commit: $COMMIT_MSG"
-          
-          # Pattern 1: Squash merge - "feat: add feature (#123)"
-          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oE '\(#([0-9]+)\)' | grep -oE '[0-9]+' || echo "")
-          
-          # Pattern 2: Merge commit - "Merge pull request #123 from..."
-          if [ -z "$PR_NUMBER" ]; then
-            PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oE 'pull request #([0-9]+)' | grep -oE '[0-9]+' || echo "")
-          fi
-          
-          # Pattern 3: Look at merge commit parents (if it's a merge commit)
-          if [ -z "$PR_NUMBER" ]; then
-            # Check if this is a merge commit by looking for PR in merge message
-            PR_NUMBER=$(git log --merges -1 --pretty=format:"%s" | grep -oE '#([0-9]+)' | grep -oE '[0-9]+' | head -1 || echo "")
-          fi
-          
-          if [ -n "$PR_NUMBER" ]; then
-            echo "pr-number=${PR_NUMBER}" >> $GITHUB_OUTPUT
-            echo "✅ Found PR number: $PR_NUMBER"
-          else
-            echo "⚠️ No PR number found in commit message (likely direct commit)"
-            echo "🔧 Will build from scratch instead of retagging"
-            echo "pr-number=" >> $GITHUB_OUTPUT
-          fi
-
       - name: Normalize repository name
         id: normalize-repo
         run: |
           set -euo pipefail
-          IFS=$'\n\t'
-          
-          # Normalize repository owner to lowercase for GHCR compatibility
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO_NAME="${REPO_OWNER_LOWER}/relayit-${{ matrix.app }}"
           echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
-          echo "📦 Normalized repo name: ${REPO_NAME}"
 
       - name: Validate release tag format
         id: validate-tag
         run: |
           set -euo pipefail
-          IFS=$'\n\t'
-          
+
           VERSION="${{ github.event.release.tag_name }}"
-          echo "🔍 Validating release tag format: $VERSION"
-          
-          # Expected format: v?X.Y.Z(-prerelease)?
-          # Examples: v1.0.0, 1.0.0, v0.1.0-alpha.1, 2.0.0-beta.2
+          echo "Validating release tag: $VERSION"
+
           if echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "✅ Valid semantic version tag: $VERSION"
-            
-            # Strip 'v' prefix if present for clean version
             CLEAN_VERSION=${VERSION#v}
             echo "clean-version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
-            echo "📦 Clean version: $CLEAN_VERSION"
-            
-            # Check if this is a prerelease (contains hyphen after version)
+
             if echo "$CLEAN_VERSION" | grep -q '-'; then
               echo "is-prerelease=true" >> $GITHUB_OUTPUT
-              echo "🚧 Prerelease version detected"
             else
               echo "is-prerelease=false" >> $GITHUB_OUTPUT
-              echo "🎯 Stable release version detected"
             fi
           else
-            echo "❌ Invalid tag format: $VERSION"
-            echo ""
-            echo "Expected format: v?X.Y.Z(-prerelease)?"
-            echo "Valid examples:"
-            echo "  - v1.0.0"
-            echo "  - 1.0.0" 
-            echo "  - v0.1.0-alpha.1"
-            echo "  - 2.0.0-beta.2"
-            echo ""
-            echo "Your tag '$VERSION' does not match the semantic version pattern."
+            echo "Invalid tag format: $VERSION"
+            echo "Expected: v?X.Y.Z(-prerelease)?"
             exit 1
           fi
 
-      - name: Check if PR image exists
-        if: steps.extract-pr.outputs.pr-number != ''
-        id: check-pr-image
+      - name: Compute image tags
+        id: image-tags
         run: |
           set -euo pipefail
-          IFS=$'\n\t'
-          
+          REGISTRY="${{ env.REGISTRY }}"
           REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
-          PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
-          SOURCE_IMAGE="${{ env.REGISTRY }}/${REPO_NAME}:pr-${PR_NUMBER}"
-          
-          echo "🔍 Checking if PR image exists: $SOURCE_IMAGE"
-          
-          if docker manifest inspect "$SOURCE_IMAGE" > /dev/null 2>&1; then
-            echo "✅ PR image found: $SOURCE_IMAGE"
-            echo "image-exists=true" >> $GITHUB_OUTPUT
-            echo "source-image=${SOURCE_IMAGE}" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ PR image not found: $SOURCE_IMAGE"
-            echo "🔧 Will build from scratch instead"
-            echo "image-exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Retag PR image as release
-        if: steps.extract-pr.outputs.pr-number != '' && steps.check-pr-image.outputs.image-exists == 'true'
-        run: |
-          set -euo pipefail
-          IFS=$'\n\t'
-          
-          REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
-          VERSION="${{ github.event.release.tag_name }}"
-          PR_NUMBER="${{ steps.extract-pr.outputs.pr-number }}"
-          SOURCE_IMAGE="${{ steps.check-pr-image.outputs.source-image }}"
-          IS_PRERELEASE="${{ steps.validate-tag.outputs.is-prerelease }}"
-          
-          # Use validated clean version from previous step
           CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
-          
-          # Target tags
-          VERSION_TAG="${{ env.REGISTRY }}/${REPO_NAME}:${CLEAN_VERSION}"
-          MAIN_TAG="${{ env.REGISTRY }}/${REPO_NAME}:main"
-          
-          if [[ "$IS_PRERELEASE" == "true" ]]; then
-            echo "🚀 Retagging PR image for ${{ matrix.app }} (prerelease)"
-            echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}"
-          else
-            echo "🚀 Retagging PR image for ${{ matrix.app }} (stable release)"
-            echo "📦 Source: pr-${PR_NUMBER} → ${CLEAN_VERSION}, main"
-          fi
-          
-          # Pull the PR image
-          docker pull "$SOURCE_IMAGE"
-          
-          # Tag with version
-          echo "🏷️ Tagging as: $VERSION_TAG"
-          docker tag "$SOURCE_IMAGE" "$VERSION_TAG"
-          docker push "$VERSION_TAG"
-          
-          # Only tag as main for stable releases
-          if [[ "$IS_PRERELEASE" == "false" ]]; then
-            echo "🏷️ Tagging as: $MAIN_TAG (stable release)"
-            docker tag "$SOURCE_IMAGE" "$MAIN_TAG"
-            docker push "$MAIN_TAG"
-          else
-            echo "⏩ Skipping main tag (prerelease)"
-          fi
-          
-          echo "✅ Successfully retagged ${{ matrix.app }} release images"
+          IS_PRERELEASE="${{ steps.validate-tag.outputs.is-prerelease }}"
 
-      - name: Build release from scratch (fallback)
-        if: steps.extract-pr.outputs.pr-number == '' || (steps.extract-pr.outputs.pr-number != '' && steps.check-pr-image.outputs.image-exists == 'false')
+          TAGS="${REGISTRY}/${REPO_NAME}:${CLEAN_VERSION}"
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # Floating channel tag — always points at the newest alpha.
+            TAGS="${TAGS},${REGISTRY}/${REPO_NAME}:alpha"
+          else
+            TAGS="${TAGS},${REGISTRY}/${REPO_NAME}:main"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+      - name: Build and push release image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           push: true
-          tags: ${{ steps.validate-tag.outputs.is-prerelease == 'false' && format('{0}/{1}:{2},{0}/{1}:main', env.REGISTRY, steps.normalize-repo.outputs.repo-name, steps.validate-tag.outputs.clean-version) || format('{0}/{1}:{2}', env.REGISTRY, steps.normalize-repo.outputs.repo-name, steps.validate-tag.outputs.clean-version) }}
+          tags: ${{ steps.image-tags.outputs.tags }}
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -202,19 +99,13 @@ jobs:
       - name: Release tagging complete
         run: |
           set -euo pipefail
-          IFS=$'\n\t'
-          
-          VERSION="${{ github.event.release.tag_name }}"
           CLEAN_VERSION="${{ steps.validate-tag.outputs.clean-version }}"
           REPO_NAME="${{ steps.normalize-repo.outputs.repo-name }}"
           IS_PRERELEASE="${{ steps.validate-tag.outputs.is-prerelease }}"
-          
-          echo "🎉 ${{ matrix.app }} tagged with version $VERSION"
-          echo "📦 Available tags:"
-          echo "   - ${REPO_NAME}:${CLEAN_VERSION}"
-          
-          if [[ "$IS_PRERELEASE" == "false" ]]; then
-            echo "   - ${REPO_NAME}:main"
+
+          echo "${{ matrix.app }} published as ${REPO_NAME}:${CLEAN_VERSION}"
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            echo "Also tagged ${REPO_NAME}:alpha (floating newest alpha)"
           else
-            echo "   (main tag skipped for prerelease)"
+            echo "Also tagged ${REPO_NAME}:main"
           fi

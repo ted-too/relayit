@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { setCookie } from "@tanstack/react-start/server";
-import { AUTH_COOKIES } from "@/integrations/better-auth/client";
+import { AUTH_COOKIES } from "@/integrations/better-auth";
+import { queries } from "@/integrations/queries";
 
 const clearAuthCookies = createServerFn({ method: "POST" }).handler(() => {
   for (const cookie of AUTH_COOKIES) {
@@ -16,14 +17,12 @@ export const Route = createFileRoute("/_authd")({
     }
 
     try {
-      const data = await context.queryClient.ensureQueryData(
-        context.trpc.auth.getSession.queryOptions()
-      );
-
-      return data;
+      await context.queryClient.ensureQueryData(queries.session.me);
     } catch (error) {
       clearAuthCookies();
-      if (import.meta.env.DEV) console.error(error);
+      if (context.env.VITE_DEBUG) {
+        console.error(error);
+      }
       throw redirect({ to: "/auth/sign-in" });
     }
   },
@@ -31,5 +30,9 @@ export const Route = createFileRoute("/_authd")({
 });
 
 function RouteComponent() {
-  return <Outlet />;
+  return (
+    <div className="min-h-svh bg-[hsl(0,0%,98%)]">
+      <Outlet />
+    </div>
+  );
 }

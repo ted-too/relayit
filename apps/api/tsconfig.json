@@ -1,24 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "jsx": "react-jsx",
-    "module": "ESNext",
+    "target": "ES2021",
+    "module": "ES2022",
     "lib": ["ES2022"],
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": false,
-    "noEmit": true,
-    "skipLibCheck": true,
+    "types": ["bun"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-    "baseUrl": ".",
+    "skipLibCheck": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@repo/shared/*": ["../../packages/shared/src/*"],
-      "@repo/template-render/*": ["../../packages/template-render/src/*"]
+      "@repo/api/server": ["./src/server/index.ts"],
+      "@repo/api/server/*": ["./src/server/*"],
+      "@repo/api/worker": ["./src/worker/index.ts"],
+      "@repo/api/worker/*": ["./src/worker/*"],
+      "@repo/api/send": ["./src/shared/messages/send/index.ts"],
+      "@repo/api/send/*": ["./src/shared/messages/send/*"],
+      "@repo/api/*": ["./src/shared/*"]
     }
   }
 }
