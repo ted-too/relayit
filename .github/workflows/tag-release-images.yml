@@ -1,8 +1,17 @@
 name: Tag Release Images
 
+# Kept for manual backfill / external release events. New releases from
+# Semantic Release build images in that workflow (GITHUB_TOKEN cannot chain
+# `on: release` workflows).
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.1.4-alpha.1)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +30,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -38,24 +49,28 @@ jobs:
           set -euo pipefail
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO_NAME="${REPO_OWNER_LOWER}/relayit-${{ matrix.app }}"
-          echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          echo "repo-name=${REPO_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Validate release tag format
         id: validate-tag
         run: |
           set -euo pipefail
 
-          VERSION="${{ github.event.release.tag_name }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.tag }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
           echo "Validating release tag: $VERSION"
 
           if echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
             CLEAN_VERSION=${VERSION#v}
-            echo "clean-version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+            echo "clean-version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
 
             if echo "$CLEAN_VERSION" | grep -q '-'; then
-              echo "is-prerelease=true" >> $GITHUB_OUTPUT
+              echo "is-prerelease=true" >> "$GITHUB_OUTPUT"
             else
-              echo "is-prerelease=false" >> $GITHUB_OUTPUT
+              echo "is-prerelease=false" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "Invalid tag format: $VERSION"
@@ -74,13 +89,12 @@ jobs:
 
           TAGS="${REGISTRY}/${REPO_NAME}:${CLEAN_VERSION}"
           if [[ "$IS_PRERELEASE" == "true" ]]; then
-            # Floating channel tag — always points at the newest alpha.
             TAGS="${TAGS},${REGISTRY}/${REPO_NAME}:alpha"
           else
             TAGS="${TAGS},${REGISTRY}/${REPO_NAME}:main"
           fi
 
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push release image
         uses: docker/build-push-action@v5

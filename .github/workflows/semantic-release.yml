@@ -14,11 +14,19 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
   release:
     runs-on: ubuntu-latest
     if: github.repository_owner != 'dependabot[bot]'
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+      new_release_git_tag: ${{ steps.semantic.outputs.new_release_git_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,9 +34,73 @@ jobs:
           fetch-depth: 0
 
       - name: Create semantic release
+        id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
           extra_plugins: |
             conventional-changelog-conventionalcommits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # GITHUB_TOKEN releases do not trigger `on: release` workflows, so build
+  # images in this same workflow when a version is published.
+  build-images:
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [api, web]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: image-tags
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.release.outputs.new_release_version }}"
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME="${REPO_OWNER_LOWER}/relayit-${{ matrix.app }}"
+
+          TAGS="${{ env.REGISTRY }}/${REPO_NAME}:${VERSION}"
+          if [[ "$VERSION" == *-* ]]; then
+            TAGS="${TAGS},${{ env.REGISTRY }}/${REPO_NAME}:alpha"
+          else
+            TAGS="${TAGS},${{ env.REGISTRY }}/${REPO_NAME}:main"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "repo-name=${REPO_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push release image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.image-tags.outputs.tags }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          secrets: |
+            turbo_token=${{ secrets.TURBO_TOKEN }}
+            turbo_team=${{ secrets.TURBO_TEAM }}
+
+      - name: Release tagging complete
+        run: |
+          set -euo pipefail
+          echo "${{ matrix.app }} published as ${{ steps.image-tags.outputs.repo-name }}:${{ steps.image-tags.outputs.version }}"
+          echo "Tags: ${{ steps.image-tags.outputs.tags }}"
