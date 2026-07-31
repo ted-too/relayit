@@ -1,8 +1,10 @@
 /**
- * semantic-release config (no changelog commits; GitHub Releases only).
+ * semantic-release config (GitHub Releases only — no changelog commits).
  *
- * `main` publishes alpha prereleases: v1.0.0-alpha.N
- * Seeded from baseline tag v1.0.0-alpha.0 after the release pipeline lands.
+ * `main` → alpha prereleases (v1.0.0-alpha.N)
+ * `stable` → required non-prerelease branch (placeholder until GA; do not push here)
+ *
+ * semantic-release rejects configs with only prerelease branches (ERELEASEBRANCHES).
  */
 const commitAnalyzer = [
   "@semantic-release/commit-analyzer",
@@ -60,17 +62,16 @@ const githubPlugin = [
   "@semantic-release/github",
   {
     successComment: false,
-    failComment: false,
+    failCommentCondition: false,
     releasedLabels: false,
   },
 ];
 
 module.exports = {
   branches: [
-    {
-      name: "main",
-      prerelease: "alpha",
-    },
+    // Must exist on the remote — semantic-release requires ≥1 non-prerelease branch.
+    { name: "stable" },
+    { name: "main", prerelease: "alpha" },
   ],
   plugins: [commitAnalyzer, releaseNotes, githubPlugin],
 };
