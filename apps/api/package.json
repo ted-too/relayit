@@ -28,7 +28,6 @@
     "@better-auth/stripe": "^1.6.13",
     "@elysiajs/cors": "^1.4.2",
     "@t3-oss/env-core": "^0.13.11",
-    "ajv": "^8.20.0",
     "better-auth": "^1.6.13",
     "better-auth-harmony": "^1.3.2",
     "cloudflare": "^6.3.0",
