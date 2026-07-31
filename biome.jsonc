@@ -16,7 +16,8 @@
         "noNamespaceImport": "off"
       },
       "style": {
-        "noNonNullAssertion": "warn"
+        "noNonNullAssertion": "warn",
+        "noNestedTernary": "off"
       },
       "suspicious": {
         "noExplicitAny": "warn",

@@ -1,21 +1,28 @@
 {
   "name": "@repo/template-render",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
+    "./primitive": "./src/primitive/index.ts",
     "./react-email": "./src/react-email/index.ts"
   },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
+  },
   "dependencies": {
-    "@react-email/components": "^0.5.3",
-    "@react-email/render": "^1.2.3",
-    "@repo/shared": "workspace:*",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "@react-email/render": "^1.4.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/babel__standalone": "^7.1.9",
-    "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

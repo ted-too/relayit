@@ -20,15 +20,13 @@ export function buildCredentialSchema<
   });
 }
 
+export interface GenericProviderChannelConfig {
+  domainConfigSchema?: z4.$ZodType;
+  label: string;
+}
+
 export interface GenericProviderConfig {
-  channels: Partial<
-    Record<
-      ChannelType,
-      {
-        label: string;
-      }
-    >
-  >;
+  channels: Partial<Record<ChannelType, GenericProviderChannelConfig>>;
   credentialsSchema: ReturnType<
     typeof buildCredentialSchema<z4.$ZodObject, z4.$ZodObject>
   >;

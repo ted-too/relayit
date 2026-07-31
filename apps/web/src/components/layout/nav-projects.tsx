@@ -1,4 +1,4 @@
-import { RiAddLine, RiExpandUpDownLine } from "@remixicon/react";
+import { RiAddLine, RiAdminLine, RiExpandUpDownLine } from "@remixicon/react";
 import {
   Menu,
   MenuGroup,
@@ -17,8 +17,8 @@ import {
   useSidebar,
 } from "@repo/ui/components/ui/shad/sidebar";
 import { cn } from "@repo/ui/lib/utils";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { useSuspenseQueries } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Image } from "@unpic/react";
 import { queries } from "@/integrations/queries";
 
@@ -51,22 +51,19 @@ export function OrganizationLogo({
   );
 }
 
-export function NavProject() {
+export function NavProject({
+  linkParams,
+}: {
+  linkParams?: { orgSlug: string };
+}) {
   const { isMobile } = useSidebar();
-  const { orgSlug } = useParams({
-    from: "/_authd/$orgSlug",
+  const [{ data: organizations }, { data: me }] = useSuspenseQueries({
+    queries: [queries.organizations.list, queries.session.me],
   });
-  const { data: organizations } = useSuspenseQuery(
-    queries.session.me.organizations.list
-  );
 
   const activeOrganization = organizations.find(
-    (organization) => organization.slug === orgSlug
+    (organization) => organization.slug === linkParams?.orgSlug
   );
-
-  if (!activeOrganization) {
-    return null;
-  }
 
   return (
     <SidebarMenu>
@@ -81,16 +78,20 @@ export function NavProject() {
             }
           >
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg text-sidebar-primary-foreground">
-              <OrganizationLogo
-                className="size-6!"
-                logo={activeOrganization.logo}
-                name={activeOrganization.name}
-                size={24}
-              />
+              {activeOrganization ? (
+                <OrganizationLogo
+                  className="size-6!"
+                  logo={activeOrganization.logo}
+                  name={activeOrganization.name}
+                  size={24}
+                />
+              ) : (
+                <RiAdminLine className="size-5! text-primary" />
+              )}
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">
-                {activeOrganization.name}
+              <span className="truncate font-medium text-sidebar-accent-foreground">
+                {activeOrganization?.name ?? "Admin"}
               </span>
               {/* <span className="truncate text-xs">{activeTeam.plan}</span> */}
             </div>
@@ -102,9 +103,20 @@ export function NavProject() {
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
           >
+            {me.user.role === "admin" && (
+              <>
+                <MenuItem className="gap-2 p-2" render={<Link to="/admin" />}>
+                  <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
+                    <RiAdminLine className="size-4 text-primary" />
+                  </div>
+                  <div className="font-medium text-muted-foreground">Admin</div>
+                </MenuItem>
+                <MenuSeparator />
+              </>
+            )}
             <MenuGroup>
               <MenuGroupLabel className="text-muted-foreground text-xs">
-                Teams
+                Projects
               </MenuGroupLabel>
               {organizations.map((organization, index) => (
                 <MenuItem

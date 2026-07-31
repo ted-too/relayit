@@ -79,7 +79,9 @@ export function NavUser({
           <AvatarFallback>{getInitials(data.user.name)}</AvatarFallback>
         </Avatar>
         <div className="grid flex-1 text-left text-sm leading-tight">
-          <span className="truncate font-medium">{data.user.name}</span>
+          <span className="truncate font-medium text-sidebar-accent-foreground">
+            {data.user.name}
+          </span>
           <span className="truncate text-xs">{data.user.email}</span>
         </div>
         {triggerIcon ?? <RiExpandUpDownLine className="ml-auto" />}

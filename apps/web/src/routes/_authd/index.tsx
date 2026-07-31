@@ -1,6 +1,6 @@
-import { RiArrowRightSLine, RiMore2Line } from "@remixicon/react";
+import { RiAdminLine, RiArrowRightSLine, RiMore2Line } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { OrganizationLogo } from "@/components/layout/nav-projects";
 import { NavUser } from "@/components/layout/nav-user";
@@ -9,7 +9,7 @@ import { queries } from "@/integrations/queries";
 export const Route = createFileRoute("/_authd/")({
   beforeLoad: async ({ context }) => {
     const organizations = await context.queryClient.ensureQueryData(
-      queries.session.me.organizations.list
+      queries.organizations.list
     );
 
     if (organizations.length === 0) {
@@ -32,9 +32,9 @@ export const Route = createFileRoute("/_authd/")({
 });
 
 function RouteComponent() {
-  const { data: organizations } = useSuspenseQuery(
-    queries.session.me.organizations.list
-  );
+  const [{ data: organizations }, { data: me }] = useSuspenseQueries({
+    queries: [queries.organizations.list, queries.session.me],
+  });
 
   return (
     <div className="flex h-svh w-full flex-col items-center justify-between px-4">
@@ -46,6 +46,16 @@ function RouteComponent() {
           You have access to the following projects:
         </p>
         <div className="flex w-full flex-col gap-4">
+          {me.user.role === "admin" && (
+            <Link
+              className="flex w-full items-center gap-4 rounded-lg bg-background p-3 ring-1 ring-foreground/10 transition-shadow hover:shadow-sm"
+              to="/admin"
+            >
+              <RiAdminLine className="size-4 text-primary" />
+              <span className="font-medium text-lg">Admin</span>
+              <RiArrowRightSLine className="ml-auto size-4" />
+            </Link>
+          )}
           {organizations.map((organization) => (
             <Link
               className="flex w-full items-center gap-4 rounded-lg bg-background p-3 ring-1 ring-foreground/10 transition-shadow hover:shadow-sm"

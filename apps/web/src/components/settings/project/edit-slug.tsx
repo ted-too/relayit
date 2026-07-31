@@ -1,4 +1,4 @@
-import { safeString } from "@repo/shared/forms";
+import { safeString } from "@repo/api/validators/shared";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { InputGroupText } from "@repo/ui/components/ui/shad/input-group";
 import { useMutation, useSuspenseQueries } from "@tanstack/react-query";
@@ -30,10 +30,7 @@ export function ProjectEditSlug() {
   const { betterAuth, env } = useRouteContext({ from: "/_authd/$orgSlug" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [{ data: me }, { data: organization }] = useSuspenseQueries({
-    queries: [
-      queries.session.me,
-      queries.session.me.organizations.bySlug(orgSlug),
-    ],
+    queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
   });
   const member = organization?.members.find(
     (member) => member.userId === me.user.id
@@ -53,15 +50,15 @@ export function ProjectEditSlug() {
     },
     onSuccess: (data, __, ___, { client }) => {
       toast.success("Project URL updated successfully");
-      client.setQueryData(
-        queries.session.me.organizations.bySlug(orgSlug).queryKey,
-        { ...organization, slug: data.slug }
-      );
+      client.setQueryData(queries.organizations.bySlug(orgSlug).queryKey, {
+        ...organization,
+        slug: data.slug,
+      });
       client.invalidateQueries({
-        queryKey: queries.session.me.organizations.queryKey,
+        queryKey: queries.organizations.queryKey,
       });
       navigate({
-        to: "/$orgSlug/settings/project",
+        to: "/$orgSlug/project",
         params: { orgSlug: data.slug },
       });
     },

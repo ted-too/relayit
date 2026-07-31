@@ -11,3 +11,7 @@ Default vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 ### Domain docs
 
 Multi-context — `CONTEXT-MAP.md` at the root points at per-context docs. See `docs/agents/domain.md`.
+
+### Drizzle migrations
+
+Never hand-edit `apps/api/drizzle/`. Schema TS → `bun run db:generate`; if generate needs a TTY, ask a human. See `docs/agents/drizzle-migrations.md`.

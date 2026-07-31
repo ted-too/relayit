@@ -10,9 +10,13 @@
     "strict": true,
     "skipLibCheck": true,
     "paths": {
-      "@repo/api/*": ["./src/*"],
       "@repo/api/server": ["./src/server/index.ts"],
-      "@repo/shared/*": ["../../packages/shared/src/*"]
+      "@repo/api/server/*": ["./src/server/*"],
+      "@repo/api/worker": ["./src/worker/index.ts"],
+      "@repo/api/worker/*": ["./src/worker/*"],
+      "@repo/api/send": ["./src/shared/messages/send/index.ts"],
+      "@repo/api/send/*": ["./src/shared/messages/send/*"],
+      "@repo/api/*": ["./src/shared/*"]
     }
   }
 }

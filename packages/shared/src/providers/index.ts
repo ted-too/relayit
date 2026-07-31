@@ -1,14 +1,8 @@
-import { AWS_PROVIDER_CONFIG } from "./aws";
-
-export const PROVIDER_CONFIG = {
-  aws: AWS_PROVIDER_CONFIG,
-} as const;
-
-export type ProviderType = keyof typeof PROVIDER_CONFIG;
-export const AVAILABLE_PROVIDER_TYPES = Object.keys(PROVIDER_CONFIG) as [
-  ProviderType,
-  ...ProviderType[],
-];
+export {
+  AVAILABLE_PROVIDER_TYPES,
+  PROVIDER_CONFIG,
+  type ProviderType,
+} from "./config";
 
 // Message status types
 export const AVAILABLE_MESSAGE_STATUSES = [
@@ -18,6 +12,12 @@ export const AVAILABLE_MESSAGE_STATUSES = [
   "failed",
   "delivered",
   "malformed",
+  "bounced",
+  "complained",
+  "opened",
+  "clicked",
+  "rejected",
+  "rendering_failed",
 ] as const;
 
 export type MessageStatus = (typeof AVAILABLE_MESSAGE_STATUSES)[number];
@@ -80,11 +80,45 @@ export const AVAILABLE_ACTION_TYPES = [
 
 export type ActionType = (typeof AVAILABLE_ACTION_TYPES)[number];
 
+export const AVAILABLE_PROVIDER_SCOPES = ["org", "platform"] as const;
+
+export type ProviderScope = (typeof AVAILABLE_PROVIDER_SCOPES)[number];
+
+export const AVAILABLE_DOMAIN_STATUSES = [
+  "pending",
+  "verifying",
+  "verified",
+  "failed",
+  "paused",
+] as const;
+export type DomainStatus = (typeof AVAILABLE_DOMAIN_STATUSES)[number];
+
+export const AVAILABLE_DOMAIN_KINDS = ["custom", "sandbox_subdomain"] as const;
+
+export type DomainKind = (typeof AVAILABLE_DOMAIN_KINDS)[number];
+
+export const AVAILABLE_DNS_RECORD_PURPOSES = ["dkim", "spf", "dmarc"] as const;
+
+export type DnsRecordPurpose = (typeof AVAILABLE_DNS_RECORD_PURPOSES)[number];
+
+export const AVAILABLE_DNS_RECORD_TYPES = ["CNAME", "TXT", "MX"] as const;
+
+export type DnsRecordType = (typeof AVAILABLE_DNS_RECORD_TYPES)[number];
+
+export { awsEmailDomainConfigSchema } from "./aws";
 export {
   AVAILABLE_CHANNELS,
   type ChannelType,
+  type GenericProviderChannelConfig,
   type GenericProviderConfig,
   type GenericProviderCredentials,
 } from "./base";
+export {
+  type DomainProviderData,
+  domainProviderDataSchema,
+  getDomainConfigSchema,
+  type InferChannelDomainConfig,
+  parseDomainProviderData,
+} from "./domain";
 export * from "./send";
 export * from "./zod-helpers";

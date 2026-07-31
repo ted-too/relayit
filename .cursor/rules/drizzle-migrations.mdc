@@ -1,0 +1,13 @@
+---
+description: Never hand-edit Drizzle migrations; ask a human for interactive generate
+alwaysApply: true
+---
+
+# Drizzle migrations
+
+- **Never** manually create, patch, rewrite, or “fix up” files under `apps/api/drizzle/` (SQL, `meta/*_snapshot.json`, or `_journal.json`).
+- Schema changes belong only in Drizzle schema TypeScript under `apps/api/src/shared/db/schema/`.
+- After schema edits, generate with `bun run db:generate` (from `apps/api`).
+- If `drizzle-kit generate` needs a TTY / interactive rename-vs-create choices, **stop and ask the human** to run the command locally and paste the result (or confirm the files appeared). Do not simulate TTY input, pipe answers, or invent migration SQL/snapshots.
+- Prefer answering generate prompts as **create** new objects when cutting over / nuking old shapes, unless the human says otherwise.
+- Apply with `bun run db:migrate` only when the human asks (or as part of an agreed migrate step).

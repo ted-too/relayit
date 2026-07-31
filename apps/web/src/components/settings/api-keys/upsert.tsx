@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/style/noNestedTernary: we need to nest ternaries here */
 import {
-  type CreateApiKeyRequest,
-  createApiKeySchema,
-} from "@repo/shared/forms";
+  type CreateApiKeyBody,
+  createApiKeyBodySchema,
+} from "@repo/api/validators/routes/projects/api-keys";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
@@ -38,30 +38,27 @@ import {
 import { queries } from "@/integrations/queries";
 import { FieldExpiresAt } from "./field-expires-at";
 
+type ApiKeysGet = ReturnType<ApiClient["projects"]>["apiKeys"]["get"];
+type ApiKeysPost = ReturnType<ApiClient["projects"]>["apiKeys"]["post"];
+
 async function optimisticUpdate({
   client,
   data,
   orgSlug,
 }: {
   client: QueryClient;
-  data: InferData<
-    ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["post"]
-  >["data"];
+  data: InferData<ApiKeysPost>["data"];
   orgSlug: string;
 }) {
   client.setQueryData(
-    queries.session.me.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-    (
-      old: InferData<
-        ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["get"]
-      >
-    ) => [...old, data]
+    queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
+    (old: InferData<ApiKeysGet>) => [...old, data]
   );
   await client.invalidateQueries({
-    queryKey:
-      queries.session.me.organizations.bySlug(orgSlug).listApiKeys.queryKey,
+    queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
   });
 }
+
 export function UpsertApiKey({
   initialData,
   render,
@@ -69,9 +66,7 @@ export function UpsertApiKey({
   open: _openProp,
   setOpen: _setOpenProp,
 }: {
-  initialData?: InferData<
-    ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["get"]
-  >[number];
+  initialData?: InferData<ApiKeysGet>[number];
   render?: DialogTriggerProps["render"];
   children?: React.ReactNode;
   open?: boolean;
@@ -87,10 +82,10 @@ export function UpsertApiKey({
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   const { mutateAsync: upsertApiKey } = useMutation({
-    mutationFn: async (body: CreateApiKeyRequest) => {
+    mutationFn: async (body: CreateApiKeyBody) => {
       if (initialData) {
-        const { data, error } = await api.organization
-          .bySlug({ slug: orgSlug })
+        const { data, error } = await api
+          .projects({ orgSlug })
           .apiKeys({ id: initialData.id })
           .put(body);
 
@@ -101,8 +96,8 @@ export function UpsertApiKey({
         return data;
       }
 
-      const { data, error } = await api.organization
-        .bySlug({ slug: orgSlug })
+      const { data, error } = await api
+        .projects({ orgSlug })
         .apiKeys.post(body);
 
       if (error) {
@@ -125,11 +120,7 @@ export function UpsertApiKey({
         setOpen(false);
       }
     },
-    onError: (
-      error: InferError<
-        ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["post"]
-      >
-    ) => {
+    onError: (error: InferError<ApiKeysPost>) => {
       toast.error(...formatToastError(error));
     },
   });
@@ -138,9 +129,9 @@ export function UpsertApiKey({
     defaultValues: {
       name: initialData?.name ?? "",
       expiresAt: initialData?.expiresAt ?? undefined,
-    } as CreateApiKeyRequest,
+    } as CreateApiKeyBody,
     validators: {
-      onSubmit: createApiKeySchema,
+      onSubmit: createApiKeyBodySchema,
     },
     onSubmit: async ({ value }) => await upsertApiKey(value),
   });

@@ -19,10 +19,10 @@ import {
   ItemDescription,
   ItemTitle,
 } from "@repo/ui/components/ui/shad/item";
-import { getInitials } from "@repo/ui/lib/utils";
+import { formatDateTime, getInitials } from "@repo/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useParams, useRouteContext } from "@tanstack/react-router";
-import { formatRelative } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
@@ -30,12 +30,12 @@ import type { ApiClient, InferData } from "@/integrations/api";
 import { queries } from "@/integrations/queries";
 import { UpsertApiKey } from "./upsert";
 
+type ApiKeysGet = ReturnType<ApiClient["projects"]>["apiKeys"]["get"];
+
 export function ApiKeyItem({
   apiKey,
 }: {
-  apiKey: InferData<
-    ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["get"]
-  >[number];
+  apiKey: InferData<ApiKeysGet>[number];
 }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const { betterAuth } = useRouteContext({ from: "__root__" });
@@ -55,16 +55,12 @@ export function ApiKeyItem({
     },
     onSuccess: (_, __, ___, { client }) => {
       client.setQueryData(
-        queries.session.me.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-        (
-          old: InferData<
-            ReturnType<ApiClient["organization"]["bySlug"]>["apiKeys"]["get"]
-          >
-        ) => old.filter((key) => key.id !== apiKey.id)
+        queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
+        (old: InferData<ApiKeysGet>) =>
+          old.filter((key) => key.id !== apiKey.id)
       );
       client.invalidateQueries({
-        queryKey:
-          queries.session.me.organizations.bySlug(orgSlug).listApiKeys.queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
       });
     },
     onError: (error) => {
@@ -86,12 +82,14 @@ export function ApiKeyItem({
             ...{apiKey.end ?? apiKey.start}
           </Badge>
         </ItemTitle>
-        <ItemDescription>{apiKey.createdAt.toLocaleString()}</ItemDescription>
+        <ItemDescription>{formatDateTime(apiKey.createdAt)}</ItemDescription>
       </ItemContent>
       <ItemActions className="gap-3">
         <span className="font-light text-sm">
           {apiKey.lastRequest
-            ? formatRelative(apiKey.lastRequest, new Date())
+            ? `last used: ${formatDistanceToNow(apiKey.lastRequest, {
+                addSuffix: true,
+              })}`
             : "Never used"}
         </span>
         <Avatar className="h-6 w-6 rounded-full">

@@ -12,33 +12,21 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@repo/ui/components/ui/shad/sidebar";
-import { useSuspenseQueries } from "@tanstack/react-query";
-import {
-  Link,
-  useLocation,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
-import {
-  BrushSquare,
-  Category2,
-  Cloud,
-  GlobalEdit,
-  Hierarchy,
-  type Icon,
-  Key,
-  Personalcard,
-} from "iconsax-reactjs";
+import { Link } from "@tanstack/react-router";
+import type { Icon } from "iconsax-reactjs";
 import type { PermissionStatements } from "@/integrations/better-auth";
-import { queries } from "@/integrations/queries";
 import { NavProject } from "./nav-projects";
 import { SidebarNavUser } from "./nav-user";
 
-type RequiredPermissions = {
+export type RequiredPermissions = {
   [K in keyof PermissionStatements]?: PermissionStatements[K][number][];
 };
 
-interface NavItem {
+export interface NavItem {
+  breadcrumb?: {
+    /** Include the sidebar group headerTitle in the breadcrumb trail */
+    includeGroup?: boolean;
+  };
   comingSoon?: boolean;
   icon: Icon;
   match?: string[];
@@ -47,90 +35,15 @@ interface NavItem {
   to: string;
 }
 
-interface NavItemGroup {
+export interface NavItemGroup {
   headerTitle?: string;
   items: NavItem[];
 }
 
-const NAV_ITEMS = [
-  {
-    items: [
-      {
-        title: "Overview",
-        to: "/$orgSlug",
-        icon: Category2,
-        requiredPermissions: {
-          message: ["read"],
-        },
-      },
-      {
-        title: "Contacts",
-        to: "/$orgSlug/contacts",
-        icon: Personalcard,
-        comingSoon: true,
-        requiredPermissions: {
-          contact: ["read"],
-        },
-      },
-    ],
-  },
-  {
-    headerTitle: "Automations",
-    items: [
-      {
-        title: "Templates",
-        to: "/$orgSlug/automations/templates",
-        icon: BrushSquare,
-        requiredPermissions: {
-          template: ["read"],
-        },
-      },
-      {
-        title: "Workflows",
-        to: "/$orgSlug/automations/workflows",
-        icon: Hierarchy,
-        comingSoon: true,
-        requiredPermissions: {
-          workflow: ["read"],
-        },
-      },
-    ],
-  },
-  {
-    headerTitle: "Settings",
-    items: [
-      {
-        title: "Project details",
-        to: "/$orgSlug/settings/project",
-        icon: GlobalEdit,
-        requiredPermissions: {
-          organization: ["update"],
-        },
-      },
-      {
-        title: "API keys",
-        to: "/$orgSlug/settings/api-keys",
-        icon: Key,
-        requiredPermissions: {
-          apiKey: ["read"],
-        },
-      },
-      {
-        title: "Integrations",
-        to: "/$orgSlug/settings/integrations",
-        icon: Cloud,
-        requiredPermissions: {
-          integration: ["read"],
-        },
-      },
-    ],
-  },
-] as const satisfies NavItemGroup[];
-
-const navItemToPath = (to: string): string =>
+export const navItemToPath = (to: string): string =>
   to.replace("/$orgSlug/", "/").replace("/$orgSlug", "/");
 
-function isActiveRoute(
+export function isActiveRoute(
   itemUrl: string,
   pathname: string,
   match = [] as string[]
@@ -154,10 +67,16 @@ function isActiveRoute(
   return false;
 }
 
-function findActiveNavItem(pathname: string) {
-  let best: { group: NavItemGroup; item: NavItem; path: string } | null = null;
+export function findActiveNavItem({
+  items,
+  pathname,
+}: {
+  items: NavItemGroup[];
+  pathname: string;
+}) {
+  let best: { item: NavItem; path: string } | null = null;
 
-  for (const group of NAV_ITEMS) {
+  for (const group of items) {
     for (const item of group.items) {
       const itemPath = navItemToPath(item.to);
       const match = "match" in item ? (item.match as string[]) : undefined;
@@ -167,7 +86,7 @@ function findActiveNavItem(pathname: string) {
       }
 
       if (!best || itemPath.length > best.path.length) {
-        best = { group, item, path: itemPath };
+        best = { item, path: itemPath };
       }
     }
   }
@@ -175,81 +94,24 @@ function findActiveNavItem(pathname: string) {
   return best;
 }
 
-export function getBreadcrumbSegments(pathname: string) {
-  const active = findActiveNavItem(pathname);
-  if (!active) {
-    return [];
-  }
-
-  const segments: { title: string; to?: string }[] = [];
-
-  if ("headerTitle" in active.group && active.group.headerTitle) {
-    segments.push({ title: active.group.headerTitle });
-  }
-
-  segments.push({ title: active.item.title, to: active.item.to });
-
-  return segments;
-}
-
-export function AppSidebar() {
-  const { betterAuth } = useRouteContext({
-    from: "/_authd",
-  });
-  const { orgSlug } = useParams({
-    from: "/_authd/$orgSlug",
-  });
-  const pathname = useLocation({
-    select: (location) => {
-      const prefix = `/${orgSlug}`;
-      return location.pathname.startsWith(prefix)
-        ? location.pathname.slice(prefix.length) || "/"
-        : location.pathname;
-    },
-  });
-  const [{ data: me }, { data: organization }] = useSuspenseQueries({
-    queries: [
-      queries.session.me,
-      queries.session.me.organizations.bySlug(orgSlug),
-    ],
-  });
-
-  const member = organization?.members.find(
-    (member) => member.userId === me.user.id
-  );
-
-  if (!member) {
-    return null;
-  }
-
-  const canShowNavItem = (item: NavItem) => {
-    if (!item.requiredPermissions) {
-      return true;
-    }
-
-    const check = (permissions: RequiredPermissions) =>
-      betterAuth.organization.checkRolePermission({
-        permissions,
-        role: member.role,
-      });
-
-    return Array.isArray(item.requiredPermissions)
-      ? item.requiredPermissions.some(check)
-      : check(item.requiredPermissions);
-  };
-
-  const FILTERED_NAV_ITEMS = NAV_ITEMS.map((group) => ({
-    ...group,
-    items: group.items.filter(canShowNavItem),
-  })).filter((group) => group.items.length > 0);
+export function AppSidebar({
+  items,
+  pathname,
+  linkParams,
+}: {
+  items: NavItemGroup[];
+  pathname: string;
+  linkParams?: { orgSlug: string };
+}) {
+  const activeNavItem = findActiveNavItem({ items, pathname });
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <NavProject />
+        <NavProject linkParams={linkParams} />
       </SidebarHeader>
       <SidebarContent>
-        {FILTERED_NAV_ITEMS.map((item, idx) => (
+        {items.map((item, idx) => (
           <SidebarGroup
             key={`${"headerTitle" in item ? item.headerTitle : "default"}-${idx}`}
           >
@@ -264,15 +126,11 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
-                        isActive={isActiveRoute(
-                          navItemToPath(item.to),
-                          pathname,
-                          "match" in item ? (item.match as string[]) : undefined
-                        )}
+                        isActive={activeNavItem?.item.to === item.to}
                         isAvailable={isAvailable}
                         render={
                           isAvailable ? (
-                            <Link params={{ orgSlug }} to={item.to} />
+                            <Link params={linkParams} to={item.to} />
                           ) : (
                             <button
                               className="text-sidebar-foreground/50 hover:bg-transparent hover:text-sidebar-foreground/50"

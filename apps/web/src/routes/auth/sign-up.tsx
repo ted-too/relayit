@@ -1,4 +1,7 @@
-import { type SignUpRequest, signUpSchema } from "@repo/shared/forms/auth";
+import {
+  type SignUpBody,
+  signUpBodySchema,
+} from "@repo/api/validators/routes/auth";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
@@ -21,9 +24,9 @@ function RouteComponent() {
       email: "",
       password: "",
       name: "",
-    } as SignUpRequest,
+    } as SignUpBody,
     validators: {
-      onSubmit: signUpSchema,
+      onSubmit: signUpBodySchema,
     },
     onSubmit: async ({ value }) => {
       const { error } = await betterAuth.signUp.email({

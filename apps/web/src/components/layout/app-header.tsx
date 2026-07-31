@@ -15,24 +15,62 @@ import {
   MenuTrigger,
 } from "@repo/ui/components/ui/coss/menu";
 import { useSidebar } from "@repo/ui/components/ui/shad/sidebar";
-import { Link, useLocation, useParams } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { Fragment, type ReactNode } from "react";
-import { getBreadcrumbSegments } from "./app-sidebar";
+import { findActiveNavItem, type NavItemGroup } from "./app-sidebar";
 
-export function AppHeader() {
-  const { orgSlug } = useParams({
-    from: "/_authd/$orgSlug",
-  });
+function getBreadcrumbSegments({
+  items,
+  pathname,
+}: {
+  items: NavItemGroup[];
+  pathname: string;
+}) {
+  const active = findActiveNavItem({ items, pathname });
+  if (!active) {
+    return [];
+  }
+
+  const activeGroup = items.find((group) =>
+    group.items.some((item) => item.to === active.item.to)
+  );
+
+  const segments: { title: string; to?: string }[] = [];
+
+  const includeGroup = active.item.breadcrumb?.includeGroup;
+
+  if (
+    includeGroup &&
+    activeGroup &&
+    "headerTitle" in activeGroup &&
+    activeGroup.headerTitle
+  ) {
+    segments.push({ title: activeGroup.headerTitle });
+  }
+
+  segments.push({ title: active.item.title, to: active.item.to });
+
+  const trailingPath = pathname.slice(active.path.length);
+  if (trailingPath.length > 0) {
+    for (const segment of trailingPath.split("/").filter(Boolean)) {
+      segments.push({ title: decodeURIComponent(segment) });
+    }
+  }
+
+  return segments;
+}
+
+export function AppHeader({
+  items,
+  pathname,
+  linkParams,
+}: {
+  items: NavItemGroup[];
+  pathname: string;
+  linkParams?: { orgSlug: string };
+}) {
   const { toggleSidebar } = useSidebar();
-  const pathname = useLocation({
-    select: (location) => {
-      const prefix = `/${orgSlug}`;
-      return location.pathname.startsWith(prefix)
-        ? location.pathname.slice(prefix.length) || "/"
-        : location.pathname;
-    },
-  });
-  const breadcrumbs = getBreadcrumbSegments(pathname);
+  const breadcrumbs = getBreadcrumbSegments({ items, pathname });
 
   return (
     <div className="@container sticky top-0 z-50 flex h-14 flex-row items-center justify-between gap-2 bg-background-100 before:absolute before:inset-x-0 before:top-full before:h-px before:bg-gray-alpha-300 before:content-[&quot;&quot;] md:border-gray-100 md:border-b md:border-solid md:bg-background-200 md:before:content-[unset]">
@@ -40,7 +78,6 @@ export function AppHeader() {
         <Button onClick={toggleSidebar} size="icon" variant="ghost">
           <RiLayoutLeftLine aria-hidden="true" />
         </Button>
-        {/* TODO: Something here */}
       </div>
       <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 items-center justify-center">
         {breadcrumbs.length > 0 && (
@@ -55,7 +92,13 @@ export function AppHeader() {
                 } else if (crumb.to) {
                   label = (
                     <BreadcrumbLink
-                      render={<Link params={{ orgSlug }} to={crumb.to} />}
+                      render={
+                        <Link
+                          className="hover:underline"
+                          params={linkParams}
+                          to={crumb.to}
+                        />
+                      }
                     >
                       {crumb.title}
                     </BreadcrumbLink>

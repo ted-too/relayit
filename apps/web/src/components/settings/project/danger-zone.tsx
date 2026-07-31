@@ -22,7 +22,7 @@ export function ProjectDangerZone() {
   const { betterAuth } = useRouteContext({ from: "/_authd/$orgSlug" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const { data: organization } = useSuspenseQuery(
-    queries.session.me.organizations.bySlug(orgSlug)
+    queries.organizations.bySlug(orgSlug)
   );
   const { mutateAsync: deleteProject, isPending: isDeletingProject } =
     useMutation({
@@ -37,7 +37,7 @@ export function ProjectDangerZone() {
       },
       onSuccess: (_, __, ___, { client }) => {
         client.invalidateQueries({
-          queryKey: queries.session.me.organizations.queryKey,
+          queryKey: queries.organizations.queryKey,
         });
         navigate({ to: "/", reloadDocument: true });
       },

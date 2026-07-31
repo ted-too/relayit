@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_authd")({
 
 function RouteComponent() {
   return (
-    <div className="bg-[hsl(0,0%,98%)]">
+    <div className="min-h-svh bg-[hsl(0,0%,98%)]">
       <Outlet />
     </div>
   );

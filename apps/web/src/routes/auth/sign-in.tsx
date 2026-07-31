@@ -1,4 +1,7 @@
-import { type SignInRequest, signInSchema } from "@repo/shared/forms/auth";
+import {
+  type SignInBody,
+  signInBodySchema,
+} from "@repo/api/validators/routes/auth";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
@@ -47,9 +50,9 @@ function RouteComponent() {
       email: "",
       password: "",
       rememberMe: true,
-    } as SignInRequest,
+    } as SignInBody,
     validators: {
-      onSubmit: signInSchema,
+      onSubmit: signInBodySchema,
     },
     onSubmit: async ({ value }) => {
       const { error } = await betterAuth.signIn.email({

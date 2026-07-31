@@ -1,9 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute('/_authd/$orgSlug/automations/templates')({
+export const Route = createFileRoute("/_authd/$orgSlug/automations/templates")({
   component: RouteComponent,
-})
+});
 
 function RouteComponent() {
-  return <div>Hello "/_authd/$orgSlug/templates"!</div>
+  return (
+    <div data-slot="balanced-outlet">Hello "/_authd/$orgSlug/templates"!</div>
+  );
 }

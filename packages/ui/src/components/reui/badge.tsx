@@ -2,9 +2,9 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { RiFileCopyLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
+import { useCopyToClipboard } from "@repo/ui/hooks/use-copy-to-clipboard";
 import { cn } from "@repo/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import { toast } from "sonner";
 
 const badgeVariants = cva(
   "relative inline-flex w-fit shrink-0 items-center justify-center whitespace-nowrap border border-transparent font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*=size-])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -70,12 +70,14 @@ const badgeVariants = cva(
   }
 );
 
+export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
 interface BadgeProps extends useRender.ComponentProps<"span"> {
   copyFirst?: boolean;
   copyText?: string;
   radius?: VariantProps<typeof badgeVariants>["radius"];
   size?: VariantProps<typeof badgeVariants>["size"];
-  variant?: VariantProps<typeof badgeVariants>["variant"];
+  variant?: BadgeVariant;
 }
 
 function Badge({
@@ -89,24 +91,7 @@ function Badge({
   render,
   ...props
 }: BadgeProps) {
-  const copyToClipboard = async () => {
-    if (
-      typeof window === "undefined" ||
-      !navigator.clipboard.writeText ||
-      !copyText
-    ) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(copyText);
-      toast.success("Copied to clipboard");
-    } catch (error) {
-      toast.error("Failed to copy to clipboard", {
-        description: (error as Error)?.message,
-      });
-    }
-  };
+  const copyToClipboard = useCopyToClipboard(copyText);
 
   const defaultProps = {
     "data-slot": "badge",

@@ -2,7 +2,10 @@ import { createEnv } from "@t3-oss/env-core";
 import * as z from "zod";
 
 export const env = createEnv({
-  server: {},
+  server: {
+    PORT: z.coerce.number().int().positive().optional(),
+    HOST: z.string().optional(),
+  },
   clientPrefix: "VITE_",
   client: {
     VITE_DEBUG: z
@@ -19,3 +22,5 @@ export const env = createEnv({
 });
 
 export type Env = typeof env;
+
+export const IS_CLOUD_EDITION = env.VITE_EDITION === "cloud";

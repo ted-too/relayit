@@ -1,8 +1,8 @@
 import { RiArrowLeftSLine, RiMore2Line } from "@remixicon/react";
 import {
-  type CreateOrganizationRequest,
-  createOrganizationSchema,
-} from "@repo/shared/forms";
+  type CreateProjectBody,
+  createProjectBodySchema,
+} from "@repo/api/validators/routes/projects/project";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
@@ -17,9 +17,7 @@ import { queries } from "@/integrations/queries";
 export const Route = createFileRoute("/_authd/create-project")({
   loader: ({ context }) => {
     void context.queryClient.prefetchQuery(queries.session.me);
-    void context.queryClient.prefetchQuery(
-      queries.session.me.organizations.list
-    );
+    void context.queryClient.prefetchQuery(queries.organizations.list);
   },
   component: RouteComponent,
 });
@@ -27,13 +25,11 @@ export const Route = createFileRoute("/_authd/create-project")({
 function RouteComponent() {
   const navigate = Route.useNavigate();
   const { api } = Route.useRouteContext();
-  const { data: organizations } = useSuspenseQuery(
-    queries.session.me.organizations.list
-  );
+  const { data: organizations } = useSuspenseQuery(queries.organizations.list);
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: CreateOrganizationRequest) => {
-      const { data, error } = await api.organization.create.post(body);
+    mutationFn: async (body: CreateProjectBody) => {
+      const { data, error } = await api.projects.post(body);
 
       if (error) {
         return Promise.reject(error);
@@ -44,16 +40,16 @@ function RouteComponent() {
     onSuccess: (data, _, __, { client }) => {
       toast.success("Project created successfully");
       client.setQueryData(
-        queries.session.me.organizations.bySlug(data.slug).queryKey,
+        queries.organizations.bySlug(data.slug).queryKey,
         data
       );
       client.invalidateQueries({
-        queryKey: queries.session.me.organizations.queryKey,
+        queryKey: queries.organizations.queryKey,
       });
       // TODO: Redirect to onboarding page of org
       navigate({ to: "/$orgSlug", params: { orgSlug: data.slug } });
     },
-    onError: (error: InferError<typeof api.organization.create.post>) => {
+    onError: (error: InferError<typeof api.projects.post>) => {
       toast.error(...formatToastError(error));
     },
   });
@@ -61,9 +57,9 @@ function RouteComponent() {
   const form = useAppForm({
     defaultValues: {
       name: "",
-    } as CreateOrganizationRequest,
+    } as CreateProjectBody,
     validators: {
-      onSubmit: createOrganizationSchema,
+      onSubmit: createProjectBodySchema,
     },
     onSubmit: async ({ value }) => await mutateAsync(value),
   });

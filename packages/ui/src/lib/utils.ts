@@ -25,3 +25,10 @@ export function formatCompactNumber(value: number) {
   }
   return value.toString(); // Optionally handle numbers less than 100 if needed
 }
+
+export function formatDateTime(date: Date) {
+  return date.toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}

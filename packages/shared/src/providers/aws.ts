@@ -76,12 +76,20 @@ export const awsCredentialsSchema = buildCredentialSchema({
   }),
 });
 
+export const awsEmailDomainConfigSchema = z.object({
+  identityArn: z.string().optional(),
+  mailFromDomain: z.string().optional(),
+  /** SES DKIM tokens while identity is pending verification */
+  dkimTokens: z.array(z.string()).max(3).optional(),
+});
+
 export const AWS_PROVIDER_CONFIG = {
   label: "AWS",
   credentialsSchema: awsCredentialsSchema,
   channels: {
     email: {
       label: "SES",
+      domainConfigSchema: awsEmailDomainConfigSchema,
     },
   },
 } as const satisfies GenericProviderConfig;

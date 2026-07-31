@@ -6,10 +6,13 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import "./src/env";
+import { env } from "./src/env";
 
 const config = defineConfig({
   server: {
+    // Portless sets HOST=127.0.0.1 so the proxy can reach Vite over IPv4.
+    host: env.HOST,
+    port: env.PORT,
     // Polling is used instead of fsevents because Cursor's atomic file
     // saves (write-to-temp + rename) cause fsevents to drop events on
     // macOS, which makes HMR detection take 30s+ per change. Polling

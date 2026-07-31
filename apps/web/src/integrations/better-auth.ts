@@ -1,4 +1,5 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
+import { stripeClient } from "@better-auth/stripe/client";
 import { BASE_PATH, COOKIE_PREFIX } from "@repo/api/server/lib/auth/constants";
 import {
   ac,
@@ -10,11 +11,12 @@ import {
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import {
+  adminClient,
   lastLoginMethodClient,
   organizationClient,
 } from "better-auth/client/plugins";
 import { createAuthClient as createBetterAuthClient } from "better-auth/react";
-import { env } from "@/env";
+import { env, IS_CLOUD_EDITION } from "@/env";
 
 const createClient = ({
   Cookie,
@@ -27,6 +29,14 @@ const createClient = ({
     baseURL,
     basePath: BASE_PATH,
     plugins: [
+      adminClient(),
+      ...(IS_CLOUD_EDITION
+        ? [
+            stripeClient({
+              subscription: true,
+            }),
+          ]
+        : []),
       organizationClient({
         ac,
         roles: {

@@ -1,5 +1,7 @@
 import { db } from "@repo/api/db";
 import { auth } from "@repo/api/server/lib/auth";
+import { logger } from "@repo/api/utils";
+import { apiKeyHeadersSchema } from "@repo/api/validators";
 import { Elysia, status } from "elysia";
 import z from "zod";
 
@@ -24,94 +26,112 @@ export const betterAuth = new Elysia({ name: "better-auth" })
     },
   });
 
-export const activeOrganization = new Elysia({ name: "active-organization" })
+export const betterAuthIsAdmin = new Elysia({ name: "better-auth-is-admin" })
+  .use(betterAuth)
+  .guard({
+    auth: true,
+  })
+  .macro({
+    isAdmin: {
+      resolve({ user }) {
+        if (user?.role !== "admin") {
+          return status(403, "Forbidden");
+        }
+      },
+    },
+  });
+
+export const betterAuthOrganization = new Elysia({
+  name: "better-auth-organization",
+})
   .use(betterAuth)
   .guard({
     auth: true,
     params: z.object({
-      slug: z.string(),
+      orgSlug: z.string(),
     }),
   })
   .macro({
-    activeOrganization: {
+    organization: {
       async resolve({ params, request }) {
-        let activeOrganization = await auth.api.getFullOrganization({
+        const organization = await auth.api.getFullOrganization({
           headers: request.headers,
-          query: { organizationSlug: params.slug },
+          query: { organizationSlug: params.orgSlug },
         });
 
-        if (!activeOrganization || activeOrganization.slug !== params.slug) {
-          const organizationToSet = await db.query.organization.findFirst({
-            where: (table, { eq }) => eq(table.slug, params.slug),
-          });
-
-          if (!organizationToSet) {
-            return status(404, "Organization not found");
-          }
-
-          await auth.api.setActiveOrganization({
-            body: {
-              organizationId: organizationToSet.id,
-            },
-            headers: request.headers,
-          });
-
-          activeOrganization = await auth.api.getFullOrganization({
-            headers: request.headers,
-            query: { organizationId: organizationToSet.id },
-          });
+        if (!organization) {
+          return status(404, "Organization not found");
         }
 
-        return { organization: activeOrganization! };
+        const organizationOwner = organization.members.find(
+          (member) => member.role === "owner"
+        );
+
+        if (!organizationOwner) {
+          return status(500, "Organization owner not found");
+        }
+
+        return { organization, organizationOwner };
       },
     },
   });
 
 export const betterAuthApiKey = new Elysia({ name: "better-auth-api-key" })
-  .use(betterAuth)
   .guard({
-    headers: z.object({
-      "X-API-KEY": z.string(),
-    }),
-    params: z.object({
-      project: z.string(),
-    }),
+    headers: apiKeyHeadersSchema,
   })
   .macro({
     auth: {
-      async resolve({ params, headers }) {
+      async resolve({ headers, request }) {
+        logger.info({ headers }, "Verifying API key");
         const { valid, key } = await auth.api.verifyApiKey({
+          headers: request.headers,
           body: {
-            key: headers["X-API-KEY"],
+            key: headers["x-api-key"],
+            configId: "org-keys",
           },
         });
 
         if (!(valid && key)) {
-          return status(401);
-        }
-
-        const organizationsWithApiKey =
-          await db.query.apikeyOrganization.findMany({
-            where: (table, { eq }) => eq(table.apikeyId, key.id),
-            with: {
-              organization: true,
-            },
+          return status(403, {
+            code: "invalid_api_key",
+            message: "Invalid API key",
           });
-
-        if (organizationsWithApiKey.length === 0) {
-          return status(401);
         }
 
-        const organizationForApiKey = organizationsWithApiKey.find(
-          (organization) => organization.organization.slug === params.project
-        );
+        const organization = await db.query.organization.findFirst({
+          where: (table, { eq }) => eq(table.id, key.referenceId),
+        });
 
-        if (!organizationForApiKey) {
-          return status(404, "Project not found");
+        if (!organization) {
+          return status(403, {
+            code: "invalid_api_key",
+            message: "Invalid API key",
+          });
+        }
+
+        const organizationOwner = await db.query.member.findFirst({
+          where: (table, { eq, and }) =>
+            and(
+              eq(table.organizationId, organization.id),
+              eq(table.role, "owner")
+            ),
+        });
+
+        if (!organizationOwner) {
+          logger.error(
+            { apiKeyId: key.id, organizationId: organization.id },
+            "API Key is not associated with an organization owner"
+          );
+          return status(500, {
+            code: "internal_server_error",
+            message: "Internal server error",
+          });
         }
 
         return {
-          organization: organizationForApiKey.organization,
+          organization,
+          organizationOwnerUserId: organizationOwner.userId,
           apiKeyId: key.id,
         };
       },

@@ -14,6 +14,13 @@ const statement = {
   contact: ["create", "read", "update", "delete"],
   apiKey: ["create", "read", "update", "delete"],
   integration: ["create", "read", "update", "delete"],
+  appEnvironment: ["read", "delete"],
+  topic: ["create", "read", "update", "delete"],
+  segment: ["create", "read", "update", "delete"],
+  campaign: ["create", "read", "update"],
+  usage: ["read"],
+  billingUser: ["update"],
+  webhookEndpoint: ["create", "read", "update", "delete"],
 } as const;
 
 const ac = createAccessControl(statement);
@@ -26,6 +33,12 @@ const member = ac.newRole({
   contact: ["read"],
   integration: ["read"],
   apiKey: ["read"],
+  appEnvironment: ["read"],
+  topic: ["read"],
+  segment: ["read"],
+  campaign: ["read"],
+  usage: ["read"],
+  webhookEndpoint: ["read"],
 });
 
 const admin = ac.newRole({
@@ -36,6 +49,12 @@ const admin = ac.newRole({
   contact: ["create", "read", "update"],
   apiKey: ["create", "read", "update", "delete"],
   integration: ["create", "read", "update", "delete"],
+  appEnvironment: ["read", "delete"],
+  topic: ["create", "read", "update", "delete"],
+  segment: ["create", "read", "update", "delete"],
+  campaign: ["create", "read", "update"],
+  usage: ["read"],
+  webhookEndpoint: ["create", "read", "update", "delete"],
 });
 
 const owner = ac.newRole({
@@ -46,6 +65,13 @@ const owner = ac.newRole({
   contact: ["create", "read", "update", "delete"],
   apiKey: admin.statements.apiKey,
   integration: admin.statements.integration,
+  appEnvironment: ["read", "delete"],
+  topic: ["create", "read", "update", "delete"],
+  segment: ["create", "read", "update", "delete"],
+  campaign: ["create", "read", "update"],
+  usage: ["read"],
+  billingUser: ["update"],
+  webhookEndpoint: ["create", "read", "update", "delete"],
 });
 
 export { ac, admin, member, owner, statement };
