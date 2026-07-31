@@ -6,8 +6,13 @@ import { s3, subBucket } from "@repo/api/object-storage";
 import { eq } from "drizzle-orm";
 import { XMLParser } from "fast-xml-parser";
 
-/** Inbound DMARC aggregate reports: `dmarc.<CF_ROOT_DOMAIN>`. */
-export const dmarcReportDomain = `dmarc.${env.CF_ROOT_DOMAIN}`;
+/** Inbound DMARC aggregate reports: `dmarc.<CF_ROOT_DOMAIN>` (cloud only). */
+export function getDmarcReportDomain(): string {
+  if (!env.CF_ROOT_DOMAIN) {
+    throw new Error("CF_ROOT_DOMAIN is required for DMARC report inbound");
+  }
+  return `dmarc.${env.CF_ROOT_DOMAIN}`;
+}
 
 const dmarcReports = subBucket({
   name: "email.dmarc-reports",

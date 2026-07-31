@@ -1,67 +1,46 @@
 services:
   api:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-api:${IMAGE_TAG:-latest}
-    expose:
-      - 3005
+    image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
+    ports:
+      - "${API_PORT:-3005}:3005"
     environment:
       - PORT=3005
-      - NODE_ENV=production
+      - RUN_MODE=combined
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${API_URL:-http://localhost:3005}
-      - FRONTEND_URL=${WEB_URL:-http://localhost:3000}
-      - DOCS_URL=${DOCS_URL:-http://localhost:3002}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-relayit}
+      - API_URL=${API_URL:-http://localhost:3005}
+      - APP_URL=${WEB_URL:-http://localhost:3000}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       - ENCRYPTION_KEY_VERSION=${ENCRYPTION_KEY_VERSION:-v1}
-      - CREDENTIAL_ENCRYPTION_KEY_V1=${CREDENTIAL_ENCRYPTION_KEY_V1}
-      - CREDENTIAL_ENCRYPTION_KEY_V2=${CREDENTIAL_ENCRYPTION_KEY_V2}
-      - CREDENTIAL_ENCRYPTION_KEY_V3=${CREDENTIAL_ENCRYPTION_KEY_V3}
+      - CREDENTIAL_ENCRYPTION_KEY_V1=${CREDENTIAL_ENCRYPTION_KEY_V1:?set CREDENTIAL_ENCRYPTION_KEY_V1 in .env}
+      - S3_ENDPOINT=${S3_ENDPOINT:?set S3_ENDPOINT in .env}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in .env}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+      - S3_BUCKET=${S3_BUCKET:-relayit}
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - relayit-network
-
-  worker:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-worker:${IMAGE_TAG:-latest}
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${API_URL:-http://localhost:3005}
-      - FRONTEND_URL=${WEB_URL:-http://localhost:3000}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-relayit}
-      - ENCRYPTION_KEY_VERSION=${ENCRYPTION_KEY_VERSION:-v1}
-      - CREDENTIAL_ENCRYPTION_KEY_V1=${CREDENTIAL_ENCRYPTION_KEY_V1}
-      - CREDENTIAL_ENCRYPTION_KEY_V2=${CREDENTIAL_ENCRYPTION_KEY_V2}
-      - CREDENTIAL_ENCRYPTION_KEY_V3=${CREDENTIAL_ENCRYPTION_KEY_V3}
-    depends_on:
-      postgres:
-        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - relayit-network
 
   web:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-ted-too}/relayit-web:${IMAGE_TAG:-latest}
-    expose:
-      - 3000
+    image: ghcr.io/ted-too/relayit-web:${IMAGE_TAG:-alpha}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:3005}
-      - NEXT_PUBLIC_FRONTEND_URL=${WEB_URL:-http://localhost:3000}
+      - VITE_API_URL=${API_URL:-http://localhost:3005}
+      - VITE_BASE_URL=${WEB_URL:-http://localhost:3000}
     depends_on:
       - api
     networks:
       - relayit-network
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}

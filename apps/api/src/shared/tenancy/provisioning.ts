@@ -2,7 +2,7 @@ import { db, schema } from "@repo/api/db";
 import { IS_CLOUD_EDITION } from "@repo/api/env";
 import { ensureUserLimits } from "@repo/api/tenancy/plans";
 import { provisionProjectEmailChannel } from "@repo/api/tenancy/project-email";
-import { stripeClient } from "@repo/api/tenancy/stripe";
+import { getStripeClient } from "@repo/api/tenancy/stripe";
 import { logger } from "@repo/api/utils";
 import { and, eq, isNull } from "drizzle-orm";
 
@@ -23,6 +23,7 @@ async function ensureStripeCustomer(userId: string): Promise<void> {
     return;
   }
 
+  const stripeClient = getStripeClient();
   const existing = await stripeClient.customers.list({
     email: user.email,
     limit: 1,

@@ -1,4 +1,9 @@
-import { sharedEnvOptions, sharedServerEnvSchema } from "@repo/api/env";
+import {
+  assertCloudCloudflareEnv,
+  assertCloudStripeEnv,
+  sharedEnvOptions,
+  sharedServerEnvSchema,
+} from "@repo/api/env";
 import { createEnv } from "@t3-oss/env-core";
 import { typeid } from "typeid-js";
 import { z } from "zod";
@@ -13,5 +18,8 @@ export const env = createEnv({
   },
   ...sharedEnvOptions,
 });
+
+assertCloudStripeEnv();
+assertCloudCloudflareEnv();
 
 export { IS_CLOUD_EDITION } from "@repo/api/env";

@@ -16,7 +16,7 @@ import {
   organizationClient,
 } from "better-auth/client/plugins";
 import { createAuthClient as createBetterAuthClient } from "better-auth/react";
-import { env, IS_CLOUD_EDITION } from "@/env";
+import { env } from "@/env";
 
 const createClient = ({
   Cookie,
@@ -30,13 +30,11 @@ const createClient = ({
     basePath: BASE_PATH,
     plugins: [
       adminClient(),
-      ...(IS_CLOUD_EDITION
-        ? [
-            stripeClient({
-              subscription: true,
-            }),
-          ]
-        : []),
+      // Client methods stay registered for typing; the API only mounts Stripe
+      // when EDITION=cloud. Gate billing UI with route context `isCloudEdition`.
+      stripeClient({
+        subscription: true,
+      }),
       organizationClient({
         ac,
         roles: {

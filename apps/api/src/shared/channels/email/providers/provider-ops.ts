@@ -1,7 +1,11 @@
 import type { ChannelCredentials } from "@repo/api/channels/base";
 import type { Provider, ProviderScope } from "@repo/api/db";
 import { schema } from "@repo/api/db";
-import { env, WEBHOOK_BASE_URL } from "@repo/api/env";
+import {
+  IS_CLOUD_EDITION,
+  requireCloudflareEnv,
+  WEBHOOK_BASE_URL,
+} from "@repo/api/env";
 import type { TaskContext } from "@repo/api/tasks";
 import { createGenericError, logger, type Result } from "@repo/api/utils";
 import { and, eq } from "drizzle-orm";
@@ -116,10 +120,11 @@ export function createProviderOps({
         }
       }
 
-      if (params.scope === "platform") {
+      if (params.scope === "platform" && IS_CLOUD_EDITION) {
         try {
+          const cf = requireCloudflareEnv();
           const existing = await db.query.sandboxDomain.findFirst({
-            where: (table, { eq }) => eq(table.rootDomain, env.CF_ROOT_DOMAIN),
+            where: (table, { eq }) => eq(table.rootDomain, cf.rootDomain),
           });
 
           if (existing) {
@@ -138,8 +143,8 @@ export function createProviderOps({
             const { sandboxDomainId } = await sandboxDomainOps.create({
               params: {
                 provider,
-                rootDomain: env.CF_ROOT_DOMAIN,
-                cloudflareZoneId: env.CF_ZONE_ID,
+                rootDomain: cf.rootDomain,
+                cloudflareZoneId: cf.zoneId,
               },
               ctx: { db, redis },
             });

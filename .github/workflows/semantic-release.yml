@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,31 +24,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Create semantic release
+        uses: cycjimmy/semantic-release-action@v4
         with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: |
-          bun add -g semantic-release
-          bun add -g @semantic-release/changelog
-          bun add -g @semantic-release/git
-          bun add -g @semantic-release/github
-          bun add -g conventional-changelog-conventionalcommits
-
-      - name: Release
+          extra_plugins: |
+            conventional-changelog-conventionalcommits
         env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: |
-          git config --global user.name "${GIT_AUTHOR_NAME}"
-          git config --global user.email "${GIT_AUTHOR_EMAIL}"
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
-          bunx semantic-release 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

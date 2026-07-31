@@ -7,9 +7,9 @@ import {
 } from "@aws-sdk/client-ses";
 import { CreateTopicCommand, SubscribeCommand } from "@aws-sdk/client-sns";
 import type { ChannelCredentials } from "@repo/api/channels/base";
-import { dmarcReportDomain } from "@repo/api/channels/email/deliverability/dmarc";
-import { unsubscribeInboundDomain } from "@repo/api/channels/email/unsubscribe";
-import { env } from "@repo/api/env";
+import { getDmarcReportDomain } from "@repo/api/channels/email/deliverability/dmarc";
+import { getUnsubscribeInboundDomain } from "@repo/api/channels/email/unsubscribe";
+import { requireCloudflareEnv } from "@repo/api/env";
 import { logger } from "@repo/api/utils";
 import Cloudflare from "cloudflare";
 import { awsSesRegion, buildAwsSdkConfig, buildSnsClient } from "./clients";
@@ -42,6 +42,7 @@ export async function ensureDmarcInboundReceiving({
 }) {
   const sns = buildSnsClient(credentials);
   const ses = buildSesInboundClient(credentials);
+  const dmarcReportDomain = getDmarcReportDomain();
 
   const topicResult = await sns.send(
     new CreateTopicCommand({ Name: DMARC_INBOUND_SNS_TOPIC_NAME })
@@ -117,11 +118,12 @@ export async function ensureInboundMxRecord({
   domain: string;
   region: string;
 }) {
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cf = requireCloudflareEnv();
+  const cloudflare = new Cloudflare({ apiToken: cf.apiToken });
   const mxValue = `inbound-smtp.${region}.amazonaws.com`;
 
   const existing = await cloudflare.dns.records.list({
-    zone_id: env.CF_ZONE_ID,
+    zone_id: cf.zoneId,
     name: { exact: domain },
     type: "MX",
   });
@@ -135,7 +137,7 @@ export async function ensureInboundMxRecord({
   }
 
   await cloudflare.dns.records.create({
-    zone_id: env.CF_ZONE_ID,
+    zone_id: cf.zoneId,
     type: "MX",
     name: domain,
     content: mxValue,
@@ -149,7 +151,7 @@ export async function ensureDmarcReportMxRecord({
 }: {
   region: string;
 }) {
-  await ensureInboundMxRecord({ domain: dmarcReportDomain, region });
+  await ensureInboundMxRecord({ domain: getDmarcReportDomain(), region });
 }
 
 async function resolveInboundTopicArn(sns: ReturnType<typeof buildSnsClient>) {
@@ -213,6 +215,7 @@ export async function ensureUnsubscribeInboundReceiving({
   credentials: ChannelCredentials;
 }) {
   const region = awsSesRegion(credentials);
+  const unsubscribeInboundDomain = getUnsubscribeInboundDomain();
   await ensureInboundMxRecord({ domain: unsubscribeInboundDomain, region });
 
   const sns = buildSnsClient(credentials);

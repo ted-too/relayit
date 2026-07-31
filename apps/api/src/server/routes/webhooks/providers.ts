@@ -1,7 +1,7 @@
 import { ingestDmarcReportEmail } from "@repo/api/channels/email/deliverability/dmarc";
 import { ingestDeliveryEvents } from "@repo/api/channels/email/deliverability/notifications";
 import type { EmailWebhookOps } from "@repo/api/channels/email/types";
-import { unsubscribeInboundDomain } from "@repo/api/channels/email/unsubscribe";
+import { parseUnsubscribeRecipient } from "@repo/api/channels/email/unsubscribe";
 import { ingestUnsubscribeInbound } from "@repo/api/contacts/unsubscribe";
 import { db } from "@repo/api/db";
 import {
@@ -12,12 +12,8 @@ import { apiRedis } from "@repo/api/server/lib/redis";
 import { logger } from "@repo/api/utils";
 import { Elysia, status } from "elysia";
 
-const UNSUBSCRIBE_DOMAIN_SUFFIX = `@${unsubscribeInboundDomain}`;
-
 function isUnsubscribeInbound(recipients: string[]) {
-  return recipients.some((recipient) =>
-    recipient.trim().toLowerCase().endsWith(UNSUBSCRIBE_DOMAIN_SUFFIX)
-  );
+  return recipients.some((recipient) => parseUnsubscribeRecipient(recipient));
 }
 
 /**

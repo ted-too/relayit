@@ -8,11 +8,11 @@ import type {
 } from "@repo/api/db";
 import { type DbOrTx, schema } from "@repo/api/db";
 import { decrypt, encrypt } from "@repo/api/db/crypto/utils";
-import { env, IS_CLOUD_EDITION } from "@repo/api/env";
+import { IS_CLOUD_EDITION, requireCloudflareEnv } from "@repo/api/env";
 import { createGenericError } from "@repo/api/utils";
 import Cloudflare from "cloudflare";
 import { eq } from "drizzle-orm";
-import { dmarcReportDomain } from "../deliverability/dmarc";
+import { getDmarcReportDomain } from "../deliverability/dmarc";
 import type {
   DomainReadinessResult,
   DomainReadinessType,
@@ -180,7 +180,7 @@ function buildDirectDnsRecords(
 ): DomainDnsSpec[] {
   const dmarcValue =
     IS_CLOUD_EDITION && customDomainId
-      ? `v=DMARC1; p=none; rua=mailto:${customDomainId}@${dmarcReportDomain}`
+      ? `v=DMARC1; p=none; rua=mailto:${customDomainId}@${getDmarcReportDomain()}`
       : "v=DMARC1; p=none;";
 
   // No SPF record on the domain root: our mail always uses the custom MAIL FROM
@@ -217,13 +217,15 @@ async function publishDmarcReportAuthorization({
     return;
   }
 
+  const cf = requireCloudflareEnv();
+  const dmarcReportDomain = getDmarcReportDomain();
   const authName = `${fqdn}._report._dmarc.${dmarcReportDomain}`;
   const authValue = formatTxtRecordContent("v=DMARC1");
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cloudflare = new Cloudflare({ apiToken: cf.apiToken });
 
   const cloudflareRecordId = await upsertCloudflareDnsRecord({
     cloudflare,
-    zoneId: env.CF_ZONE_ID,
+    zoneId: cf.zoneId,
     rootDomain: dmarcReportDomain,
     record: {
       type: "TXT",
@@ -237,7 +239,7 @@ async function publishDmarcReportAuthorization({
     recordType: "TXT",
     name: authName,
     value: authValue,
-    cloudflareZoneId: env.CF_ZONE_ID,
+    cloudflareZoneId: cf.zoneId,
     cloudflareRecordId,
     customDomainId,
     purpose: "dmarc_report_auth",
@@ -257,14 +259,15 @@ async function publishSandboxDnsRecords({
   cloudflareZoneId: string;
   records: DomainDnsSpec[];
 }) {
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cf = requireCloudflareEnv();
+  const cloudflare = new Cloudflare({ apiToken: cf.apiToken });
 
   const rows: EmailDnsRecordInsert[] = [];
   for (const record of records) {
     const cloudflareRecordId = await upsertCloudflareDnsRecord({
       cloudflare,
       zoneId: cloudflareZoneId,
-      rootDomain: env.CF_ROOT_DOMAIN,
+      rootDomain: cf.rootDomain,
       record: {
         type: record.recordType,
         name: record.name,
@@ -304,13 +307,14 @@ async function publishBrandedDkimProxy({
     return;
   }
 
+  const cf = requireCloudflareEnv();
   const proxyName = dkimBrandedProxyName(dkimSelector);
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cloudflare = new Cloudflare({ apiToken: cf.apiToken });
 
   const cloudflareRecordId = await upsertCloudflareDnsRecord({
     cloudflare,
-    zoneId: env.CF_ZONE_ID,
-    rootDomain: env.CF_ROOT_DOMAIN,
+    zoneId: cf.zoneId,
+    rootDomain: cf.rootDomain,
     record: {
       type: "TXT",
       name: proxyName,
@@ -323,7 +327,7 @@ async function publishBrandedDkimProxy({
     recordType: "TXT",
     name: proxyName,
     value: formatDkimTxtRecord(dkimPublicKey),
-    cloudflareZoneId: env.CF_ZONE_ID,
+    cloudflareZoneId: cf.zoneId,
     cloudflareRecordId,
     customDomainId:
       domain.type === "custom-domain" ? domain.customDomainId : null,
@@ -375,7 +379,7 @@ export async function materializeCustomDomainDns({
     throw new Error("Missing DKIM record spec");
   }
 
-  const brandedFqdn = `${dkimBrandedProxyName(dkimSelector)}.${env.CF_ROOT_DOMAIN}`;
+  const brandedFqdn = `${dkimBrandedProxyName(dkimSelector)}.${requireCloudflareEnv().rootDomain}`;
 
   await publishBrandedDkimProxy({
     client,
@@ -463,7 +467,7 @@ async function materializeMailFromRecords({
   // side and never requires the customer to touch their DNS again.
   const resolveMailFromValue = (record: MailFromSpec["records"][number]) =>
     record.purpose === "mail_from_spf" && IS_CLOUD_EDITION
-      ? formatTxtRecordContent(`v=spf1 include:_spf.${env.CF_ROOT_DOMAIN} ~all`)
+      ? formatTxtRecordContent(`v=spf1 include:_spf.${requireCloudflareEnv().rootDomain} ~all`)
       : record.value;
 
   switch (domain.type) {
@@ -499,7 +503,9 @@ async function materializeMailFromRecords({
         throw new Error(`Sandbox domain ${domain.sandboxDomainId} not found`);
       }
 
-      const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+      const cloudflare = new Cloudflare({
+        apiToken: requireCloudflareEnv().apiToken,
+      });
       const rows: EmailDnsRecordInsert[] = [];
 
       for (const record of mailFrom.records) {
@@ -1002,7 +1008,9 @@ async function deleteManagedCloudflareRecords({
     return;
   }
 
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cloudflare = new Cloudflare({
+    apiToken: requireCloudflareEnv().apiToken,
+  });
   for (const [zoneId, ids] of byZone) {
     await cloudflare.dns.records.batch({
       zone_id: zoneId,
@@ -1039,7 +1047,8 @@ export async function refreshPlatformSpfRecord({ db }: { db: DbOrTx }) {
   ];
 
   const value = formatTxtRecordContent(`v=spf1 ${includes.join(" ")} ~all`);
-  const cloudflare = new Cloudflare({ apiToken: env.CF_API_TOKEN });
+  const cf = requireCloudflareEnv();
+  const cloudflare = new Cloudflare({ apiToken: cf.apiToken });
 
   const existing = await db.query.emailDnsRecord.findFirst({
     where: (table, { eq, and }) =>
@@ -1064,8 +1073,8 @@ export async function refreshPlatformSpfRecord({ db }: { db: DbOrTx }) {
 
   const cloudflareRecordId = await upsertCloudflareDnsRecord({
     cloudflare,
-    zoneId: env.CF_ZONE_ID,
-    rootDomain: env.CF_ROOT_DOMAIN,
+    zoneId: cf.zoneId,
+    rootDomain: cf.rootDomain,
     record: { type: "TXT", name: "_spf", content: value },
   });
 
@@ -1074,7 +1083,7 @@ export async function refreshPlatformSpfRecord({ db }: { db: DbOrTx }) {
     recordType: "TXT",
     name: "_spf",
     value,
-    cloudflareZoneId: env.CF_ZONE_ID,
+    cloudflareZoneId: cf.zoneId,
     cloudflareRecordId,
     purpose: "spf",
     status: "active",

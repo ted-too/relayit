@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.4
+# https://turborepo.dev/docs/guides/tools/docker
+
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+FROM base AS prepare
+RUN bun add -g turbo@2.10.6
+COPY . .
+RUN turbo prune @repo/web --docker
+
+FROM base AS builder
+# Placeholders replaced at container start by scripts/entrypoint-vite.sh from
+# VITE_API_URL / VITE_BASE_URL. Bake once; redeploy with different public URLs.
+ENV VITE_API_URL=BAKED_VITE_API_URL \
+    VITE_BASE_URL=BAKED_VITE_BASE_URL
+
+# Install pruned deps first (changes less often than source).
+COPY --from=prepare /app/out/json/ .
+RUN bun install --frozen-lockfile
+COPY --from=prepare /app/out/full/ .
+RUN --mount=type=secret,id=turbo_token \
+    --mount=type=secret,id=turbo_team \
+    TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
+    TURBO_TEAM=$(cat /run/secrets/turbo_team 2>/dev/null || echo "") \
+    NODE_ENV=production bun run turbo build --filter=@repo/web
+
+FROM oven/bun:1 AS runner
+WORKDIR /app
+
+RUN groupadd --system --gid 953 vite && \
+    useradd --system --uid 953 --gid vite --no-create-home vite
+
+COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY --from=builder --chown=vite:vite /app/apps/web/.output ./
+
+USER vite
+EXPOSE 3000
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh", "--target-dir", "/app"]
+CMD ["bun", "run", "server/index.mjs"]

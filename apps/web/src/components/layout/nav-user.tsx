@@ -45,7 +45,7 @@ export function NavUser({
 }) {
   const { data } = useSuspenseQuery(queries.session.me);
   const navigate = useNavigate();
-  const { betterAuth } = useRouteContext({
+  const { betterAuth, isCloudEdition } = useRouteContext({
     from: "/_authd",
   });
   const { mutateAsync } = useMutation({
@@ -122,10 +122,12 @@ export function NavUser({
           <RiUserLine aria-hidden="true" />
           <span>Account</span>
         </MenuItem>
-        <MenuItem render={<Link to="/user/billing" />}>
-          <RiWalletLine aria-hidden="true" />
-          <span>Usage & Billing</span>
-        </MenuItem>
+        {isCloudEdition && (
+          <MenuItem render={<Link to="/user/billing" />}>
+            <RiWalletLine aria-hidden="true" />
+            <span>Usage & Billing</span>
+          </MenuItem>
+        )}
         <MenuSeparator />
         <MenuItem onClick={async () => await mutateAsync()}>
           <RiLogoutBoxLine aria-hidden="true" />

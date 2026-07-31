@@ -1,4 +1,9 @@
-import { sharedEnvOptions, sharedServerEnvSchema } from "@repo/api/env";
+import {
+  assertCloudCloudflareEnv,
+  assertCloudStripeEnv,
+  sharedEnvOptions,
+  sharedServerEnvSchema,
+} from "@repo/api/env";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
@@ -11,3 +16,6 @@ export const env = createEnv({
   },
   ...sharedEnvOptions,
 });
+
+assertCloudStripeEnv();
+assertCloudCloudflareEnv();

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import {
+  getUnsubscribeInboundDomain,
   parseUnsubscribeRecipient,
-  unsubscribeInboundDomain,
 } from "@repo/api/channels/email/unsubscribe";
 import type { DbOrTx } from "@repo/api/db";
 import { schema } from "@repo/api/db";
@@ -85,9 +85,15 @@ export function verifyUnsubscribeMailtoToken({
   return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
-export function buildUnsubscribeMailtoAddress(contactId: string) {
+export function buildUnsubscribeMailtoAddress(
+  contactId: string
+): string | null {
+  if (!env.CF_ROOT_DOMAIN) {
+    return null;
+  }
+
   const sig = signUnsubscribeMailtoToken(contactId);
-  return `${contactId}.${sig}@${unsubscribeInboundDomain}`;
+  return `${contactId}.${sig}@${getUnsubscribeInboundDomain()}`;
 }
 
 export function buildListUnsubscribeHeaders({

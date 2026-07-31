@@ -18,7 +18,7 @@ import {
 import { ensureUserLimits, plans } from "@repo/api/tenancy/plans";
 import { provisionProjectEmailChannel } from "@repo/api/tenancy/project-email";
 import { ensureUserProvisioned } from "@repo/api/tenancy/provisioning";
-import { stripeClient } from "@repo/api/tenancy/stripe";
+import { getStripeClient } from "@repo/api/tenancy/stripe";
 import { logger } from "@repo/api/utils";
 import { APIError, type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -38,14 +38,17 @@ async function assertNotBillingUser(organizationId: string, userId: string) {
 
 const authRedis = new RedisClient(env.REDIS_URL);
 
+/** Docs SSO is cloud-only; ignore DOCS_URL on OSS even if present. */
+const docsUrl = IS_CLOUD_EDITION ? env.DOCS_URL : undefined;
+
 const options = {
   basePath: BASE_PATH,
   baseURL: {
     allowedHosts: (() => {
       const apiHostname = new URL(env.API_URL).hostname.toLowerCase();
       const appHostname = new URL(env.APP_URL).hostname.toLowerCase();
-      const docsHostname = env.DOCS_URL
-        ? new URL(env.DOCS_URL).hostname.toLowerCase()
+      const docsHostname = docsUrl
+        ? new URL(docsUrl).hostname.toLowerCase()
         : undefined;
 
       return [
@@ -121,17 +124,12 @@ const options = {
     }),
   },
   advanced: {
-    crossSubDomainCookies: env.DOCS_URL
+    crossSubDomainCookies: docsUrl
       ? {
           enabled: true,
           domain: (() => {
             const appHostname = new URL(env.APP_URL).hostname.toLowerCase();
-
-            if (!env.DOCS_URL) {
-              return appHostname;
-            }
-
-            const docsHostname = new URL(env.DOCS_URL).hostname.toLowerCase();
+            const docsHostname = new URL(docsUrl).hostname.toLowerCase();
 
             if (appHostname === docsHostname) {
               return appHostname;
@@ -167,12 +165,15 @@ const options = {
     },
     cookiePrefix: COOKIE_PREFIX,
   },
-  socialProviders: {
-    github: {
-      clientId: env.GITHUB_CLIENT_ID,
-      clientSecret: env.GITHUB_CLIENT_SECRET,
-    },
-  },
+  socialProviders:
+    IS_CLOUD_EDITION && env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+      ? {
+          github: {
+            clientId: env.GITHUB_CLIENT_ID,
+            clientSecret: env.GITHUB_CLIENT_SECRET,
+          },
+        }
+      : {},
   user: {
     additionalFields: {
       limitOrganizations: {
@@ -187,14 +188,14 @@ const options = {
       },
     },
   },
-  trustedOrigins: [env.APP_URL, ...(env.DOCS_URL ? [env.DOCS_URL] : [])],
+  trustedOrigins: [env.APP_URL, ...(docsUrl ? [docsUrl] : [])],
   plugins: [
     admin(),
     ...(IS_CLOUD_EDITION
       ? [
           stripe({
-            stripeClient,
-            stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+            stripeClient: getStripeClient(),
+            stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET as string,
             createCustomerOnSignUp: true,
             subscription: {
               enabled: true,

@@ -12,10 +12,13 @@ import {
   schema,
   type UserLimits,
 } from "@repo/api/db";
-import { env } from "@repo/api/env";
+import { env, IS_CLOUD_EDITION } from "@repo/api/env";
 import type { RedisClient } from "bun";
 import { eq } from "drizzle-orm";
-import { emailLimitsForEdition } from "./entitlements";
+import {
+  emailLimitsForEdition,
+  SELF_HOSTED_UNLIMITED_USER_LIMITS,
+} from "./entitlements";
 
 const FREE_PLAN = {
   name: "free",
@@ -38,53 +41,94 @@ const FREE_PLAN = {
   } satisfies UserLimits,
 } satisfies StripePlan;
 
-const SIGNAL_PLAN = {
-  name: "signal",
-  priceId: env.STRIPE_PRICE_SIGNAL_MONTHLY,
-  annualDiscountPriceId: env.STRIPE_PRICE_SIGNAL_ANNUAL,
-  limits: {
-    projects: 3,
-    retention: 30,
-    email: {
-      byoProviders: false,
-      customDomains: null,
-      transactional: {
-        managed: { monthlySends: 40_000, dailySends: null },
-        byo: { monthlySends: 200_000, dailySends: null },
-      },
-      marketing: {
-        managed: { monthlySends: 10_000, dailySends: null },
-        byo: { monthlySends: 50_000, dailySends: null },
-      },
+const SIGNAL_LIMITS = {
+  projects: 3,
+  retention: 30,
+  email: {
+    byoProviders: false,
+    customDomains: null,
+    transactional: {
+      managed: { monthlySends: 40_000, dailySends: null },
+      byo: { monthlySends: 200_000, dailySends: null },
     },
-  } satisfies UserLimits,
-};
-
-const BROADCAST_PLAN = {
-  name: "broadcast",
-  priceId: env.STRIPE_PRICE_BROADCAST_MONTHLY,
-  annualDiscountPriceId: env.STRIPE_PRICE_BROADCAST_ANNUAL,
-  limits: {
-    projects: 5,
-    retention: 90,
-    email: {
-      byoProviders: true,
-      customDomains: null,
-      transactional: {
-        managed: { monthlySends: 200_000, dailySends: null },
-        byo: { monthlySends: 1_000_000, dailySends: null },
-      },
-      marketing: {
-        managed: { monthlySends: 50_000, dailySends: null },
-        byo: { monthlySends: 250_000, dailySends: null },
-      },
+    marketing: {
+      managed: { monthlySends: 10_000, dailySends: null },
+      byo: { monthlySends: 50_000, dailySends: null },
     },
-  } satisfies UserLimits,
-};
+  },
+} satisfies UserLimits;
 
-export const plans = [FREE_PLAN, SIGNAL_PLAN, BROADCAST_PLAN];
+const BROADCAST_LIMITS = {
+  projects: 5,
+  retention: 90,
+  email: {
+    byoProviders: true,
+    customDomains: null,
+    transactional: {
+      managed: { monthlySends: 200_000, dailySends: null },
+      byo: { monthlySends: 1_000_000, dailySends: null },
+    },
+    marketing: {
+      managed: { monthlySends: 50_000, dailySends: null },
+      byo: { monthlySends: 250_000, dailySends: null },
+    },
+  },
+} satisfies UserLimits;
 
-export type PlanName = (typeof plans)[number]["name"];
+function requireCloudPrice(
+  value: string | undefined,
+  name: string
+): string {
+  if (!value) {
+    throw new Error(`${name} is required when EDITION=cloud`);
+  }
+  return value;
+}
+
+/** Cloud Stripe plans. OSS only exposes the free fallback (no Stripe price ids). */
+export const plans: StripePlan[] = IS_CLOUD_EDITION
+  ? [
+      FREE_PLAN,
+      {
+        name: "signal",
+        priceId: requireCloudPrice(
+          env.STRIPE_PRICE_SIGNAL_MONTHLY,
+          "STRIPE_PRICE_SIGNAL_MONTHLY"
+        ),
+        annualDiscountPriceId: requireCloudPrice(
+          env.STRIPE_PRICE_SIGNAL_ANNUAL,
+          "STRIPE_PRICE_SIGNAL_ANNUAL"
+        ),
+        limits: SIGNAL_LIMITS,
+      },
+      {
+        name: "broadcast",
+        priceId: requireCloudPrice(
+          env.STRIPE_PRICE_BROADCAST_MONTHLY,
+          "STRIPE_PRICE_BROADCAST_MONTHLY"
+        ),
+        annualDiscountPriceId: requireCloudPrice(
+          env.STRIPE_PRICE_BROADCAST_ANNUAL,
+          "STRIPE_PRICE_BROADCAST_ANNUAL"
+        ),
+        limits: BROADCAST_LIMITS,
+      },
+    ]
+  : [FREE_PLAN];
+
+export type PlanName = "free" | "signal" | "broadcast";
+
+function asPlanName(name: string | undefined | null): PlanName {
+  const normalized = name?.toLowerCase();
+  if (
+    normalized === "free" ||
+    normalized === "signal" ||
+    normalized === "broadcast"
+  ) {
+    return normalized;
+  }
+  return "free";
+}
 
 export interface BillingPeriod {
   end: Date;
@@ -174,13 +218,12 @@ export async function resolveBillingPeriod(
   );
 
   if (subscription?.periodStart && subscription.periodEnd) {
-    const planName =
-      plans.find((p) => p.name === subscription.plan?.toLowerCase())?.name ??
-      "free";
     return {
       start: subscription.periodStart,
       end: subscription.periodEnd,
-      planName,
+      planName: asPlanName(
+        plans.find((p) => p.name === subscription.plan?.toLowerCase())?.name
+      ),
     };
   }
 
@@ -285,7 +328,11 @@ export async function rollbackChannelSendQuota({
   period: BillingPeriod;
   redis: RedisClient;
 }) {
-  const bucket = getBucketLimits(limits, purpose, providerKind);
+  const bucket = getBucketLimits(
+    emailLimitsForEdition(limits),
+    purpose,
+    providerKind
+  );
 
   if (bucket.dailySends !== null) {
     await decrQuotaKey(
@@ -327,7 +374,12 @@ export async function consumeChannelSendQuota({
   period: BillingPeriod;
   redis: RedisClient;
 }) {
-  const bucket = getBucketLimits(limits, purpose, providerKind);
+  // OSS/self-host: null buckets → no Redis metering (unlimited).
+  const bucket = getBucketLimits(
+    emailLimitsForEdition(limits),
+    purpose,
+    providerKind
+  );
 
   if (bucket.dailySends !== null) {
     const key = dailyQuotaKey({
@@ -426,10 +478,8 @@ export async function getUsageSnapshot({
     billingUserId,
     now
   );
-  const plan =
-    plans.find((p) => p.name === planName) ??
-    (FREE_PLAN as (typeof plans)[number]);
-  const limits = plan.limits as UserLimits;
+  const plan = plans.find((p) => p.name === planName) ?? FREE_PLAN;
+  const limits = (plan.limits ?? FREE_PLAN.limits) as unknown as UserLimits;
 
   const channelRow = await db.query.userChannel.findFirst({
     where: (table, { eq: equals, and: andFn }) =>
@@ -480,13 +530,17 @@ export async function getUsageSnapshot({
     }
   }
 
+  const effectiveUserLimits = IS_CLOUD_EDITION
+    ? limits
+    : SELF_HOSTED_UNLIMITED_USER_LIMITS;
+
   return {
     billingUserId,
     plan: planName,
     period: { start: start.toISOString(), end: end.toISOString() },
     limits: {
-      projects: limits.projects,
-      retention: limits.retention,
+      projects: effectiveUserLimits.projects,
+      retention: effectiveUserLimits.retention,
       customDomains: emailLimits.customDomains,
       byoProviders: emailLimits.byoProviders,
     },
@@ -502,15 +556,20 @@ export async function getUsageSnapshot({
  * per channel. Runs in one transaction; sequential (not Promise.all) because the
  * writes share a single tx connection.
  *
- * `planName` is resolved (case-insensitive) to the canonical plan; an unknown
- * or absent name (e.g. a deleted subscription) falls back to the free plan.
+ * On OSS/self-host, always writes unlimited entitlements (no Stripe packaging).
+ * On cloud, `planName` is resolved (case-insensitive) to the canonical plan; an
+ * unknown or absent name (e.g. a deleted subscription) falls back to free.
  */
 export async function ensureUserLimits(
   userId: string,
   planName?: string | null
 ) {
   const plan = plans.find((p) => p.name === planName?.toLowerCase());
-  const limits = (plan?.limits ?? FREE_PLAN.limits) as UserLimits;
+  const limits = (
+    IS_CLOUD_EDITION
+      ? (plan?.limits ?? FREE_PLAN.limits)
+      : SELF_HOSTED_UNLIMITED_USER_LIMITS
+  ) as UserLimits;
 
   await db.transaction(async (tx) => {
     await tx
@@ -523,7 +582,10 @@ export async function ensureUserLimits(
 
     for (const channelType of AVAILABLE_CHANNELS) {
       const channelLimits =
-        limits[channelType] ?? FREE_PLAN.limits[channelType];
+        limits[channelType] ??
+        (IS_CLOUD_EDITION
+          ? FREE_PLAN.limits[channelType]
+          : SELF_HOSTED_UNLIMITED_USER_LIMITS[channelType]);
 
       await tx
         .insert(schema.userChannel)

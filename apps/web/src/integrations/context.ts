@@ -9,12 +9,21 @@ export interface RouterContext {
   betterAuth: BetterAuthClient;
   env: Env;
   queryClient: QueryClient;
+  /** From SSR — server `EDITION=cloud`. */
+  isCloudEdition: boolean;
+  isMobile: boolean;
+  isPotentialAuthd: boolean;
+  sidebarOpen: boolean;
 }
 
-export const getContext = () =>
+export const getContext = (): RouterContext =>
   ({
     env,
     api: createApiClient(),
     betterAuth: createAuthClient(),
     queryClient: getQueryClient(),
+    isCloudEdition: false,
+    isMobile: false,
+    isPotentialAuthd: false,
+    sidebarOpen: false,
   }) satisfies RouterContext;

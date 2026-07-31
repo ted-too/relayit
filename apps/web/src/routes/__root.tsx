@@ -11,6 +11,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
+import { env } from "@/env";
 import { AUTH_COOKIES } from "@/integrations/better-auth";
 import type { RouterContext } from "@/integrations/context";
 
@@ -29,6 +30,7 @@ export const getSSRContext = createServerFn().handler(() => {
   const sessionCookies = AUTH_COOKIES.map((cookie) => getCookie(cookie));
 
   return {
+    isCloudEdition: env.EDITION === "cloud",
     isMobile: isMobile || hasScreenSizeHints,
     isPotentialAuthd: sessionCookies.filter(Boolean).length > 0,
     sidebarOpen: sidebarOpen === "true",
