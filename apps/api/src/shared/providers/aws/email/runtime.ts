@@ -3,6 +3,7 @@ import {
   DeleteEmailIdentityCommand,
   GetAccountCommand,
   GetEmailIdentityCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityMailFromAttributesCommand,
   SendEmailCommand,
 } from "@aws-sdk/client-sesv2";
@@ -34,12 +35,23 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
         })
       );
     } catch (error) {
-      // The identity can be left behind in SES if a prior create succeeded here
-      // but a later DB step rolled back. Adopt the existing identity instead of
-      // failing so re-adding the domain is idempotent.
+      // Identity may already exist (orphaned create after DB rollback, or a
+      // domain verified earlier via Easy DKIM / another BYODKIM pair). Adopt it
+      // and overwrite DKIM so SES expects the same selector/key Relayit shows.
       if ((error as { name?: string }).name !== "AlreadyExistsException") {
         throw error;
       }
+
+      await client.send(
+        new PutEmailIdentityDkimSigningAttributesCommand({
+          EmailIdentity: fqdn,
+          SigningAttributesOrigin: "EXTERNAL",
+          SigningAttributes: {
+            DomainSigningSelector: dkimSelector,
+            DomainSigningPrivateKey: dkimPrivateKey,
+          },
+        })
+      );
     }
 
     const mailFromDomain = `send.${fqdn}`;
