@@ -38,7 +38,8 @@ RUN groupadd --system --gid 953 vite && \
 ENV HOME=/home/vite \
     TMPDIR=/tmp \
     BUN_TMPDIR=/tmp \
-    XDG_CACHE_HOME=/home/vite/.cache
+    XDG_CACHE_HOME=/home/vite/.cache \
+    NODE_ENV=production
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

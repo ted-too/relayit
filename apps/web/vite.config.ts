@@ -6,7 +6,8 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import { env } from "./src/env";
+import { env } from "./src/env.ts";
+import { resolveUseSyncExternalStoreFromReact } from "./vite/resolve-use-sync-external-store-from-react.ts";
 
 const config = defineConfig({
   server: {
@@ -26,11 +27,13 @@ const config = defineConfig({
   },
   resolve: {
     tsconfigPaths: true,
+    dedupe: ["react", "react-dom"],
   },
   build: {
     sourcemap: "hidden",
   },
   plugins: [
+    resolveUseSyncExternalStoreFromReact(),
     devtools(),
     nitro({ preset: "bun" }),
     tailwindcss(),

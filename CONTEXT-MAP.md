@@ -33,6 +33,7 @@ See also:
 - [ADR-0005](./docs/adr/0005-template-workspace-sealed-artifacts.md) — Templates are the send catalog; React Email (and future engines) use a static workspace-kind registry under `/templating/` (`reactEmail/<slug>.tsx` entries); Git objects in S3 + refs in Postgres per Email Workspace (+ optional GitHub source seam); explicit build → sealed artifacts; Message create sandboxes the artifact.
 - [ADR-0006](./docs/adr/0006-project-owned-byo-providers.md) — BYO Providers are Project-owned (like Domains); managed backends stay ops-wired.
 - [ADR-0007](./docs/adr/0007-sticky-managed-provider-baseline.md) — omit Provider on Domain create uses the current ops default managed backend (no per-Project sticky store).
+- [ADR-0008](./docs/adr/0008-ssr-use-sync-external-store-react-resolve.md) — web SSR: resolve Base UI’s `use-sync-external-store/shim` to app React until Nitro rewrites leaked `createRequire("react")`.
 - Route Zod schemas live under [`apps/api/src/shared/validators/`](./apps/api/src/shared/validators/) (`@repo/api/validators`).
 
 ## Deferred (not in glossary yet)
