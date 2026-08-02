@@ -6,6 +6,7 @@ import { parseBetterAuthSecretsEnv } from "@repo/api/db/crypto";
 import { IS_CLOUD_EDITION } from "@repo/api/env";
 import { env } from "@repo/api/server/env";
 import { BASE_PATH, COOKIE_PREFIX } from "@repo/api/server/lib/auth/constants";
+import { sharedCookieDomain } from "@repo/api/server/lib/auth/cookie-domain";
 import {
   ac as organizationAc,
   admin as organizationAdminRole,
@@ -126,42 +127,17 @@ const options = {
     }),
   },
   advanced: {
-    crossSubDomainCookies: docsUrl
-      ? {
-          enabled: true,
-          domain: (() => {
-            const appHostname = new URL(env.APP_URL).hostname.toLowerCase();
-            const docsHostname = new URL(docsUrl).hostname.toLowerCase();
-
-            if (appHostname === docsHostname) {
-              return appHostname;
-            }
-
-            const appLabels = appHostname.split(".");
-            const docsLabels = docsHostname.split(".");
-            const sharedLabels: string[] = [];
-
-            let appIndex = appLabels.length - 1;
-            let docsIndex = docsLabels.length - 1;
-
-            while (
-              appIndex >= 0 &&
-              docsIndex >= 0 &&
-              appLabels[appIndex] === docsLabels[docsIndex]
-            ) {
-              sharedLabels.unshift(appLabels[appIndex]);
-              appIndex -= 1;
-              docsIndex -= 1;
-            }
-
-            if (sharedLabels.length >= 2) {
-              return `.${sharedLabels.join(".")}`;
-            }
-
-            return appHostname;
-          })(),
-        }
-      : undefined,
+    // Share session cookies across app/api/(docs) when they share a parent
+    // domain — required for web SSR, which forwards Cookie from APP_URL to
+    // the API. See https://better-auth.com/docs/concepts/cookies
+    crossSubDomainCookies: (() => {
+      const domain = sharedCookieDomain(
+        env.APP_URL,
+        env.API_URL,
+        ...(docsUrl ? [docsUrl] : [])
+      );
+      return domain ? { enabled: true, domain } : undefined;
+    })(),
     database: {
       generateId: false,
     },

@@ -1,19 +1,30 @@
+import { sharedCookieDomain } from "@repo/api/server/lib/auth/cookie-domain";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { setCookie } from "@tanstack/react-start/server";
+import { env } from "@/env";
 import { AUTH_COOKIES } from "@/integrations/better-auth";
 import { queries } from "@/integrations/queries";
 
 const clearAuthCookies = createServerFn({ method: "POST" }).handler(() => {
+  const domain = sharedCookieDomain(env.VITE_BASE_URL, env.VITE_API_URL);
+
   for (const cookie of AUTH_COOKIES) {
     // `__Secure-` / `__Host-` names require the Secure attribute or Bun throws.
+    // `__Host-` forbids Domain; we only emit `__Secure-` variants.
     const requiresSecure =
       cookie.startsWith("__Secure-") || cookie.startsWith("__Host-");
-    setCookie(cookie, "", {
+    const base = {
       maxAge: 0,
       path: "/",
       ...(requiresSecure ? { secure: true } : {}),
-    });
+    } as const;
+
+    // Host-only (legacy / same-origin) and parent-domain (cross-subdomain).
+    setCookie(cookie, "", base);
+    if (domain) {
+      setCookie(cookie, "", { ...base, domain });
+    }
   }
 });
 
