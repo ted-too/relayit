@@ -28,8 +28,17 @@ RUN --mount=type=secret,id=turbo_token \
 FROM oven/bun:1 AS runner
 WORKDIR /app
 
+# Bun writes runtime cache under $HOME; without a home dir it resolves to "/"
+# and crashes with "bun is unable to write files: AccessDenied".
 RUN groupadd --system --gid 953 vite && \
-    useradd --system --uid 953 --gid vite --no-create-home vite
+    useradd --system --uid 953 --gid vite --home-dir /home/vite --create-home vite && \
+    mkdir -p /home/vite/.cache && \
+    chown -R vite:vite /home/vite
+
+ENV HOME=/home/vite \
+    TMPDIR=/tmp \
+    BUN_TMPDIR=/tmp \
+    XDG_CACHE_HOME=/home/vite/.cache
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

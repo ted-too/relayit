@@ -23,17 +23,27 @@ RUN --mount=type=secret,id=turbo_token \
 FROM base AS runner
 WORKDIR /app
 
+# Bun writes runtime cache under $HOME; without a home dir it resolves to "/"
+# and can crash with "bun is unable to write files: AccessDenied".
 RUN groupadd --system --gid 953 relayit && \
-    useradd --system --uid 953 --gid relayit --no-create-home relayit
+    useradd --system --uid 953 --gid relayit --home-dir /home/relayit --create-home relayit && \
+    mkdir -p /home/relayit/.cache && \
+    chown -R relayit:relayit /home/relayit
+
+ENV HOME=/home/relayit \
+    TMPDIR=/tmp \
+    BUN_TMPDIR=/tmp \
+    XDG_CACHE_HOME=/home/relayit/.cache
 
 # Runtime extras not fully inlined by bun build (pino transports / react-email).
 RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
-    bun install --production
+    bun install --production && \
+    chown -R relayit:relayit /app
 
 COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
 
-# Deploy sets RUN_MODE (combined | api | worker | builder). Default: combined.
+# Deploy sets RUN_MODE (combined | api | worker | builder). Railway sets PORT.
 USER relayit
-EXPOSE 3005
+EXPOSE 8080
 
 ENTRYPOINT ["bun", "run", "index.js"]

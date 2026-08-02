@@ -6,7 +6,14 @@ import { queries } from "@/integrations/queries";
 
 const clearAuthCookies = createServerFn({ method: "POST" }).handler(() => {
   for (const cookie of AUTH_COOKIES) {
-    setCookie(cookie, "", { maxAge: 0 });
+    // `__Secure-` / `__Host-` names require the Secure attribute or Bun throws.
+    const requiresSecure =
+      cookie.startsWith("__Secure-") || cookie.startsWith("__Host-");
+    setCookie(cookie, "", {
+      maxAge: 0,
+      path: "/",
+      ...(requiresSecure ? { secure: true } : {}),
+    });
   }
 });
 
@@ -19,7 +26,7 @@ export const Route = createFileRoute("/_authd")({
     try {
       await context.queryClient.ensureQueryData(queries.session.me);
     } catch (error) {
-      clearAuthCookies();
+      await clearAuthCookies();
       if (context.env.VITE_DEBUG) {
         console.error(error);
       }
