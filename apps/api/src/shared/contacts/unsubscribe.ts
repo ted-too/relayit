@@ -5,6 +5,7 @@ import {
 } from "@repo/api/channels/email/unsubscribe";
 import type { DbOrTx } from "@repo/api/db";
 import { schema } from "@repo/api/db";
+import { getCurrentAuthSecretValue } from "@repo/api/db/crypto";
 import { env } from "@repo/api/env";
 import type { EmailHeaders } from "@repo/api/validators/routes/messages";
 import { eq } from "drizzle-orm";
@@ -17,7 +18,7 @@ function signUnsubscribePayload({
   messageId: string;
 }) {
   return crypto
-    .createHmac("sha256", env.BETTER_AUTH_SECRET)
+    .createHmac("sha256", getCurrentAuthSecretValue())
     .update(`${contactId}:${messageId}`)
     .digest("base64url");
 }
@@ -60,7 +61,7 @@ const MAILTO_TOKEN_BYTES = 12;
 
 function signUnsubscribeMailtoToken(contactId: string) {
   return crypto
-    .createHmac("sha256", env.BETTER_AUTH_SECRET)
+    .createHmac("sha256", getCurrentAuthSecretValue())
     .update(`unsub-mailto:${contactId}`)
     .digest()
     .subarray(0, MAILTO_TOKEN_BYTES)

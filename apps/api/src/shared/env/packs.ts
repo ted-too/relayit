@@ -22,10 +22,9 @@ export const processBasePack = {
   REDIS_URL: z.string().min(1),
 } satisfies z.ZodRawShape;
 
-/** Postgres + encryption key version. */
+/** Postgres. */
 export const dbPack = {
   DATABASE_URL: z.string().min(1),
-  ENCRYPTION_KEY_VERSION: z.string().optional().default("v1"),
 } satisfies z.ZodRawShape;
 
 /** Object storage (R2 / S3-compatible). */
@@ -38,13 +37,20 @@ export const s3Pack = {
 } satisfies z.ZodRawShape;
 
 /**
- * Public API URL + HMAC secret for tokenized links (unsubscribe).
+ * Public API URL + versioned Better Auth secrets (auth, sealing, unsubscribe HMAC).
  * Required for api / worker / combined — not builder.
+ * Format: `2:current,1:previous` (first entry = current).
+ * @see https://better-auth.com/docs/reference/security
  */
 export const publicUrlPack = {
   API_URL: z.url(),
   API_PROXY_URL: z.url().optional(),
-  BETTER_AUTH_SECRET: z.string().min(1),
+  BETTER_AUTH_SECRETS: z
+    .string()
+    .min(1)
+    .refine((value) => value.includes(":"), {
+      message: 'Expected "<version>:<secret>[,<version>:<secret>…]"',
+    }),
 } satisfies z.ZodRawShape;
 
 /** Cloudflare DNS (sandbox / inbound). Optional at parse; asserted when EDITION=cloud. */

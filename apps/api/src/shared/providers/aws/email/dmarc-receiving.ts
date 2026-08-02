@@ -23,8 +23,8 @@ function isAlreadyExists(error: unknown) {
   return (error as { name?: string }).name === "AlreadyExistsException";
 }
 
-function buildSesInboundClient(credentials: ChannelCredentials) {
-  return new SESClient(buildAwsSdkConfig(credentials));
+async function buildSesInboundClient(credentials: ChannelCredentials) {
+  return new SESClient(await buildAwsSdkConfig(credentials));
 }
 
 const TRAILING_SLASH_RE = /\/$/;
@@ -40,8 +40,8 @@ export async function ensureDmarcInboundReceiving({
   credentials: ChannelCredentials;
   webhookUrl: string;
 }) {
-  const sns = buildSnsClient(credentials);
-  const ses = buildSesInboundClient(credentials);
+  const sns = await buildSnsClient(credentials);
+  const ses = await buildSesInboundClient(credentials);
   const dmarcReportDomain = getDmarcReportDomain();
 
   const topicResult = await sns.send(
@@ -154,7 +154,9 @@ export async function ensureDmarcReportMxRecord({
   await ensureInboundMxRecord({ domain: getDmarcReportDomain(), region });
 }
 
-async function resolveInboundTopicArn(sns: ReturnType<typeof buildSnsClient>) {
+async function resolveInboundTopicArn(
+  sns: Awaited<ReturnType<typeof buildSnsClient>>
+) {
   const topicResult = await sns.send(
     new CreateTopicCommand({ Name: DMARC_INBOUND_SNS_TOPIC_NAME })
   );
@@ -176,7 +178,7 @@ async function ensureInboundReceiptRule({
   recipients: string[];
   topicArn: string;
 }) {
-  const ses = buildSesInboundClient(credentials);
+  const ses = await buildSesInboundClient(credentials);
 
   const existingRuleSet = await ses.send(
     new DescribeReceiptRuleSetCommand({
@@ -214,11 +216,11 @@ export async function ensureUnsubscribeInboundReceiving({
 }: {
   credentials: ChannelCredentials;
 }) {
-  const region = awsSesRegion(credentials);
+  const region = await awsSesRegion(credentials);
   const unsubscribeInboundDomain = getUnsubscribeInboundDomain();
   await ensureInboundMxRecord({ domain: unsubscribeInboundDomain, region });
 
-  const sns = buildSnsClient(credentials);
+  const sns = await buildSnsClient(credentials);
   const topicArn = await resolveInboundTopicArn(sns);
 
   await ensureInboundReceiptRule({
@@ -237,7 +239,9 @@ export async function bootstrapDmarcReceiving({
   webhookUrl: string;
 }) {
   try {
-    await ensureDmarcReportMxRecord({ region: awsSesRegion(credentials) });
+    await ensureDmarcReportMxRecord({
+      region: await awsSesRegion(credentials),
+    });
     await ensureDmarcInboundReceiving({ credentials, webhookUrl });
     await ensureUnsubscribeInboundReceiving({ credentials });
   } catch (error) {

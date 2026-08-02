@@ -1,10 +1,6 @@
 import cluster from "node:cluster";
 import os from "node:os";
 import { db } from "@repo/api/db";
-import {
-  checkAndRunKeyRotation,
-  validateEncryptionKeysForStartup,
-} from "@repo/api/db/crypto";
 import { env } from "@repo/api/env";
 import { logger } from "@repo/api/utils";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -61,16 +57,6 @@ function registerGracefulShutdown(steps: Array<() => Promise<void>>) {
 
 async function runBootstrap() {
   await migrate(db, { migrationsFolder: "./drizzle" });
-
-  const keyValidationResult = await validateEncryptionKeysForStartup(db);
-  if (keyValidationResult.error) {
-    throw keyValidationResult.error;
-  }
-
-  const keyRotationResult = await checkAndRunKeyRotation(db);
-  if (keyRotationResult.error) {
-    throw keyRotationResult.error;
-  }
 }
 
 async function main() {

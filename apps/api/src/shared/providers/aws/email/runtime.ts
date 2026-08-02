@@ -22,7 +22,7 @@ import {
 export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
   clientConfig: SES_CLIENT_CONFIG,
   async createIdentity({ credentials, fqdn, dkimSelector, dkimPrivateKey }) {
-    const client = buildSesClient(credentials);
+    const client = await buildSesClient(credentials);
 
     try {
       await client.send(
@@ -64,7 +64,7 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
       })
     );
 
-    const region = awsSesRegion(credentials);
+    const region = await awsSesRegion(credentials);
     const mxValue = `feedback-smtp.${region}.amazonses.com`;
 
     const providerData = SES_CLIENT_CONFIG.domainConfigSchema.parse({
@@ -95,7 +95,7 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
   },
 
   async getIdentityStatus({ credentials, fqdn }) {
-    const client = buildSesClient(credentials);
+    const client = await buildSesClient(credentials);
 
     const identity = await client.send(
       new GetEmailIdentityCommand({ EmailIdentity: fqdn })
@@ -108,7 +108,7 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
   },
 
   async deleteIdentity({ credentials, fqdn }) {
-    const client = buildSesClient(credentials);
+    const client = await buildSesClient(credentials);
     try {
       await client.send(
         new DeleteEmailIdentityCommand({ EmailIdentity: fqdn })
@@ -123,7 +123,7 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
 
   async checkConnection({ credentials }) {
     try {
-      const client = buildSesClient(credentials);
+      const client = await buildSesClient(credentials);
       await client.send(new GetAccountCommand({}));
       return { ok: true };
     } catch {
@@ -134,7 +134,7 @@ export const SES_RUNTIME_CONFIG = buildRuntimeEmailRegistryConfig({
   send: {
     async raw({ credentials, message }) {
       try {
-        const client = buildSesClient(credentials);
+        const client = await buildSesClient(credentials);
 
         const result = await client.send(
           new SendEmailCommand({

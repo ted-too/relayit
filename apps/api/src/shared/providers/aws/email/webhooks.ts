@@ -39,7 +39,7 @@ function isNotFound(error: unknown) {
 }
 
 async function resolveTopicArn(
-  sns: ReturnType<typeof buildSnsClient>,
+  sns: Awaited<ReturnType<typeof buildSnsClient>>,
   topicName: string
 ) {
   const createResult = await sns.send(
@@ -58,7 +58,7 @@ async function ensureHttpsSubscription({
   topicArn,
   webhookUrl,
 }: {
-  sns: ReturnType<typeof buildSnsClient>;
+  sns: Awaited<ReturnType<typeof buildSnsClient>>;
   topicArn: string;
   webhookUrl: string;
 }) {
@@ -252,8 +252,8 @@ export async function ensureSesEventNotifications({
   credentials: ChannelCredentials;
   webhookUrl: string;
 }) {
-  const sns = buildSnsClient(credentials);
-  const ses = buildSesClient(credentials);
+  const sns = await buildSnsClient(credentials);
+  const ses = await buildSesClient(credentials);
   const topicArn = await resolveTopicArn(sns, SES_EVENTS_SNS_TOPIC_NAME);
   await ensureHttpsSubscription({ sns, topicArn, webhookUrl });
   await ensureConfigurationSetEvents({ ses, topicArn });
@@ -266,7 +266,7 @@ export async function teardownSesEventNotifications({
   credentials: ChannelCredentials;
   webhookUrl: string;
 }) {
-  const sns = buildSnsClient(credentials);
+  const sns = await buildSnsClient(credentials);
 
   try {
     const topicArn = await resolveTopicArn(sns, SES_EVENTS_SNS_TOPIC_NAME);

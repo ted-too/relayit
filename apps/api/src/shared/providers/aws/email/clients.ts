@@ -7,8 +7,12 @@ import type * as z from "zod";
 
 type AwsCredentials = z.infer<typeof awsCredentialsSchema>;
 
-function parseAwsCredentials(credentials: ChannelCredentials): AwsCredentials {
-  const decryptResult = decryptRecord(credentials.encrypted);
+async function parseAwsCredentials(
+  credentials: ChannelCredentials
+): Promise<AwsCredentials> {
+  const decryptResult = await decryptRecord(
+    credentials.encrypted as Record<string, unknown>
+  );
   if (decryptResult.error) {
     throw decryptResult.error;
   }
@@ -25,8 +29,8 @@ function parseAwsCredentials(credentials: ChannelCredentials): AwsCredentials {
   return parseResult.data;
 }
 
-function sdkClientConfig(credentials: ChannelCredentials) {
-  const aws = parseAwsCredentials(credentials);
+async function sdkClientConfig(credentials: ChannelCredentials) {
+  const aws = await parseAwsCredentials(credentials);
   return {
     region: aws.unencrypted.region,
     credentials: {
@@ -36,18 +40,18 @@ function sdkClientConfig(credentials: ChannelCredentials) {
   };
 }
 
-export function awsSesRegion(credentials: ChannelCredentials) {
-  return parseAwsCredentials(credentials).unencrypted.region;
+export async function awsSesRegion(credentials: ChannelCredentials) {
+  return (await parseAwsCredentials(credentials)).unencrypted.region;
 }
 
-export function buildSesClient(credentials: ChannelCredentials) {
-  return new SESv2Client(sdkClientConfig(credentials));
+export async function buildSesClient(credentials: ChannelCredentials) {
+  return new SESv2Client(await sdkClientConfig(credentials));
 }
 
-export function buildSnsClient(credentials: ChannelCredentials) {
-  return new SNSClient(sdkClientConfig(credentials));
+export async function buildSnsClient(credentials: ChannelCredentials) {
+  return new SNSClient(await sdkClientConfig(credentials));
 }
 
-export function buildAwsSdkConfig(credentials: ChannelCredentials) {
+export async function buildAwsSdkConfig(credentials: ChannelCredentials) {
   return sdkClientConfig(credentials);
 }

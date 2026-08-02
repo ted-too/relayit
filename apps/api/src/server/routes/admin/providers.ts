@@ -64,7 +64,7 @@ export const adminProvidersRoutes = new Elysia({ prefix: "/providers" })
       }
 
       const rawCredentials = parseResult.data;
-      const encryptedCredentialsResult = encryptRecord(
+      const encryptedCredentialsResult = await encryptRecord(
         rawCredentials.encrypted
       );
 
@@ -208,7 +208,7 @@ export const adminProvidersRoutes = new Elysia({ prefix: "/providers" })
           return status(400, "Invalid credentials");
         }
 
-        const encryptedCredentialsResult = encryptRecord(
+        const encryptedCredentialsResult = await encryptRecord(
           parseResult.data.encrypted
         );
         if (encryptedCredentialsResult.error) {

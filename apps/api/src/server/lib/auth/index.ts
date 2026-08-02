@@ -2,6 +2,7 @@
 import { apiKey } from "@better-auth/api-key";
 import { stripe } from "@better-auth/stripe";
 import { db, schema } from "@repo/api/db";
+import { parseBetterAuthSecretsEnv } from "@repo/api/db/crypto";
 import { IS_CLOUD_EDITION } from "@repo/api/env";
 import { env } from "@repo/api/server/env";
 import { BASE_PATH, COOKIE_PREFIX } from "@repo/api/server/lib/auth/constants";
@@ -58,6 +59,7 @@ const options = {
       ];
     })(),
   },
+  secrets: parseBetterAuthSecretsEnv(env.BETTER_AUTH_SECRETS),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,

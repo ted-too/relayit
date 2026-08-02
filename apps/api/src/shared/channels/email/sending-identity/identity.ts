@@ -156,16 +156,16 @@ export function createDomainKeyMaterial(): DomainKeyMaterial {
   };
 }
 
-export function encryptDomainPrivateKey(privateKey: string) {
-  const result = encrypt(privateKey);
+export async function encryptDomainPrivateKey(privateKey: string) {
+  const result = await encrypt(privateKey);
   if (result.error) {
     throw result.error;
   }
   return result.data;
 }
 
-export function decryptDomainPrivateKey(encrypted: string) {
-  const result = decrypt(encrypted);
+export async function decryptDomainPrivateKey(encrypted: string) {
+  const result = await decrypt(encrypted);
   if (result.error) {
     throw result.error;
   }

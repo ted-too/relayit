@@ -25,8 +25,7 @@ API_URL=http://localhost:3005
 WEB_URL=http://localhost:3000
 
 POSTGRES_PASSWORD=your-secure-password
-BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-CREDENTIAL_ENCRYPTION_KEY_V1=$(openssl rand -hex 32)
+BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
 
 S3_ENDPOINT=...
 S3_ACCESS_KEY_ID=...
@@ -104,7 +103,7 @@ docker run -d \
 
 ### Required environment (api)
 
-Validated at process start (`apps/api` shared + server schemas). Compose maps `WEB_URL` → `APP_URL`.
+Validated at process start (`apps/api` env packs). Compose maps `WEB_URL` → `APP_URL`.
 
 | Variable | Description |
 | --- | --- |
@@ -112,8 +111,7 @@ Validated at process start (`apps/api` shared + server schemas). Compose maps `W
 | `REDIS_URL` | Redis connection string |
 | `API_URL` | Public API URL |
 | `APP_URL` | Public web URL (trusted origin / cookies) |
-| `BETTER_AUTH_SECRET` | Auth secret |
-| `CREDENTIAL_ENCRYPTION_KEY_V1` | 64-char hex key (`ENCRYPTION_KEY_VERSION=v1`) |
+| `BETTER_AUTH_SECRETS` | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`) |
 | `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Object storage (`S3_BUCKET`, `S3_REGION` optional) |
 
 Optional: `LOG_LEVEL`. Compose pins `RUN_MODE=combined` (builder in-process).
@@ -173,9 +171,7 @@ WEB_URL=https://app.your-domain.com
 IMAGE_TAG=alpha
 # Or pin: IMAGE_TAG=1.0.0-alpha.3
 
-BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-ENCRYPTION_KEY_VERSION=v1
-CREDENTIAL_ENCRYPTION_KEY_V1=$(openssl rand -hex 32)
+BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
 ```
 
 Plus S3 (and other required) values from [env.example](env.example). Compose always uses `RUN_MODE=combined`.
