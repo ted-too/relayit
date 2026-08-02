@@ -1,5 +1,8 @@
-import { env } from "@repo/api/env";
+import { dbPack } from "./src/shared/env/packs";
+import { parseEnv } from "./src/shared/env/parse";
 import { defineConfig } from "drizzle-kit";
+
+const env = parseEnv(dbPack);
 
 export default defineConfig({
   dialect: "postgresql",
