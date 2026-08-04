@@ -72,11 +72,16 @@ const options = {
     },
   },
   secondaryStorage: {
-    get: async (key) => await authRedis.get(`relayit:auth:${key}`),
+    get: async (key) => {
+      const value = await authRedis.get(`relayit:auth:${key}`);
+      return value ?? null;
+    },
     set: async (key, value, ttl) => {
-      await authRedis.set(`relayit:auth:${key}`, value);
+      const redisKey = `relayit:auth:${key}`;
       if (ttl) {
-        await authRedis.expire(`relayit:auth:${key}`, ttl);
+        await authRedis.setex(redisKey, ttl, value);
+      } else {
+        await authRedis.set(redisKey, value);
       }
     },
     delete: async (key) => {
@@ -117,6 +122,26 @@ const options = {
 
       if (!userId) {
         return;
+      }
+
+      // Host-only cookies on api.* shadow Domain=relayit.io session cookies and
+      // break SSR on app.* — expire the host-only copies whenever we mint a
+      // cross-subdomain session.
+      const sessionToken = ctx.context.authCookies.sessionToken;
+      if (sessionToken.attributes.domain) {
+        for (const cookie of [
+          sessionToken,
+          ctx.context.authCookies.sessionData,
+          ctx.context.authCookies.dontRememberToken,
+        ]) {
+          ctx.setCookie(cookie.name, "", {
+            path: cookie.attributes.path ?? "/",
+            secure: cookie.attributes.secure,
+            httpOnly: cookie.attributes.httpOnly,
+            sameSite: cookie.attributes.sameSite,
+            maxAge: 0,
+          });
+        }
       }
 
       try {

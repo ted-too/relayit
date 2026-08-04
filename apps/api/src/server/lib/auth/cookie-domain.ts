@@ -1,10 +1,11 @@
 /**
  * Parent `Domain` for Better Auth `crossSubDomainCookies`.
  *
- * Returns a leading-dot parent (e.g. `.relayit.io`) when the given absolute
- * URLs span different hostnames that share a ≥2-label suffix. Returns
- * `undefined` when every hostname matches (host-only cookies are enough) or
- * when there is no shared parent (e.g. unrelated hosts / bare localhost).
+ * Returns the shared parent (e.g. `relayit.io`) when the given absolute URLs
+ * span different hostnames that share a ≥2-label suffix. No leading dot —
+ * Better Auth / modern browsers treat `Domain=relayit.io` as covering
+ * subdomains. Returns `undefined` when every hostname matches (host-only
+ * cookies are enough) or when there is no shared parent.
  */
 export function sharedCookieDomain(
   ...absoluteUrls: string[]
@@ -42,5 +43,5 @@ export function sharedCookieDomain(
     return;
   }
 
-  return `.${sharedLabels.join(".")}`;
+  return sharedLabels.join(".");
 }

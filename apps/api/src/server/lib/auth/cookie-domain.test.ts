@@ -5,7 +5,7 @@ describe("sharedCookieDomain", () => {
   it("returns the shared parent for app + api subdomains", () => {
     expect(
       sharedCookieDomain("https://app.relayit.io", "https://api.relayit.io")
-    ).toBe(".relayit.io");
+    ).toBe("relayit.io");
   });
 
   it("includes docs on the apex in the shared parent", () => {
@@ -15,7 +15,7 @@ describe("sharedCookieDomain", () => {
         "https://api.relayit.io",
         "https://relayit.io"
       )
-    ).toBe(".relayit.io");
+    ).toBe("relayit.io");
   });
 
   it("returns undefined when every hostname matches", () => {

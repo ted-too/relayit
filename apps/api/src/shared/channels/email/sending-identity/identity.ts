@@ -44,6 +44,8 @@ type DomainDnsSpec = Pick<
 
 // Cloudflare returns this when a create would duplicate an existing record.
 const CF_IDENTICAL_RECORD_ERROR_CODE = 81_058;
+// Cloudflare returns this when updating/deleting a record id that no longer exists.
+const CF_RECORD_DOES_NOT_EXIST_ERROR_CODE = 81_044;
 const TRAILING_DOT_REGEX = /\.$/;
 
 function isCloudflareIdenticalRecordError(error: unknown): boolean {
@@ -53,6 +55,17 @@ function isCloudflareIdenticalRecordError(error: unknown): boolean {
       (entry) => entry.code === CF_IDENTICAL_RECORD_ERROR_CODE
     ) ??
       false)
+  );
+}
+
+function isCloudflareMissingRecordError(error: unknown): boolean {
+  return (
+    error instanceof Cloudflare.APIError &&
+    (error.status === 404 ||
+      (error.errors?.some(
+        (entry) => entry.code === CF_RECORD_DOES_NOT_EXIST_ERROR_CODE
+      ) ??
+        false))
   );
 }
 
@@ -1056,19 +1069,26 @@ export async function refreshPlatformSpfRecord({ db }: { db: DbOrTx }) {
   });
 
   if (existing?.cloudflareZoneId && existing.cloudflareRecordId) {
-    await cloudflare.dns.records.update(existing.cloudflareRecordId, {
-      zone_id: existing.cloudflareZoneId,
-      type: "TXT",
-      name: existing.name,
-      content: value,
-      ttl: 1,
-    });
+    try {
+      await cloudflare.dns.records.update(existing.cloudflareRecordId, {
+        zone_id: existing.cloudflareZoneId,
+        type: "TXT",
+        name: existing.name,
+        content: value,
+        ttl: 1,
+      });
 
-    await db
-      .update(schema.emailDnsRecord)
-      .set({ value, status: "active", lastCheckedAt: new Date() })
-      .where(eq(schema.emailDnsRecord.id, existing.id));
-    return;
+      await db
+        .update(schema.emailDnsRecord)
+        .set({ value, status: "active", lastCheckedAt: new Date() })
+        .where(eq(schema.emailDnsRecord.id, existing.id));
+      return;
+    } catch (error) {
+      // Record was deleted out-of-band; fall through and recreate.
+      if (!isCloudflareMissingRecordError(error)) {
+        throw error;
+      }
+    }
   }
 
   const cloudflareRecordId = await upsertCloudflareDnsRecord({
@@ -1077,6 +1097,20 @@ export async function refreshPlatformSpfRecord({ db }: { db: DbOrTx }) {
     rootDomain: cf.rootDomain,
     record: { type: "TXT", name: "_spf", content: value },
   });
+
+  if (existing) {
+    await db
+      .update(schema.emailDnsRecord)
+      .set({
+        value,
+        cloudflareZoneId: cf.zoneId,
+        cloudflareRecordId,
+        status: "active",
+        lastCheckedAt: new Date(),
+      })
+      .where(eq(schema.emailDnsRecord.id, existing.id));
+    return;
+  }
 
   await db.insert(schema.emailDnsRecord).values({
     role: "shared",
