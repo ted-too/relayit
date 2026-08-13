@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -43,6 +44,11 @@ export const emailDnsRecordStatusEnum = pgEnum("email_dns_record_status", [
 export type EmailDnsRecordStatus =
   (typeof emailDnsRecordStatusEnum.enumValues)[number];
 
+export interface DnsRecordWarning {
+  readonly code: "multiple_dmarc_records";
+  readonly recordCount: number;
+}
+
 /**
  * Every DNS record the platform tracks for email sending, whether it lives in a
  * customer's zone or in ours.
@@ -74,6 +80,10 @@ export const emailDnsRecord = pgTable(
     cloudflareZoneId: text("cloudflare_zone_id"),
     cloudflareRecordId: text("cloudflare_record_id"),
     status: emailDnsRecordStatusEnum("status").notNull().default("pending"),
+    warnings: jsonb("warnings")
+      .$type<DnsRecordWarning[]>()
+      .notNull()
+      .default([]),
     priority: integer("priority"),
     /**
      * Logical grouping key for managed DNS reconcile/remove (e.g.

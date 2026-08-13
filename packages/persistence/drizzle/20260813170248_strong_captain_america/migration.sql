@@ -1,0 +1,1 @@
+ALTER TABLE "email_dns_record" ADD COLUMN "warnings" jsonb DEFAULT '[]' NOT NULL;

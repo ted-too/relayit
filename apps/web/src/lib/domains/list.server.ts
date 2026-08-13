@@ -70,6 +70,7 @@ export const listCustomDomainsForProject = (input: {
                   recordType: true,
                   status: true,
                   value: true,
+                  warnings: true,
                 },
                 orderBy: { priority: "asc" },
                 where: { role: "direct" },
@@ -116,6 +117,7 @@ export const listCustomDomainsForProject = (input: {
             recordType: "TXT",
             status: ownershipStatus,
             value: ownershipChallengeValue(link.ownershipToken),
+            warnings: [],
           } satisfies ProjectDomainDnsRecord)
         : null;
 

@@ -1,3 +1,9 @@
+import { RiErrorWarningFill } from "@remixicon/react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
 import {
   DataGrid,
@@ -6,6 +12,7 @@ import {
 import { DataGridScrollArea } from "@repo/ui/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@repo/ui/components/reui/data-grid/data-grid-table";
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { dnsRecordWarningCopy } from "./dns-record-warnings";
 import { columns } from "./dns-records-columns";
 import type { DNSRecord } from "./types";
 
@@ -22,6 +29,8 @@ export function DNSRecordsTable({
   optional?: boolean;
   hasPriority?: boolean;
 }) {
+  const warnings = records.flatMap((record) => record.warnings ?? []);
+
   const table = useReactTable({
     columns,
     data: records,
@@ -48,6 +57,19 @@ export function DNSRecordsTable({
           {optional ? "Optional" : "Required"}
         </Badge>
       </div>
+      {warnings.map((warning) => {
+        const copy = dnsRecordWarningCopy(warning);
+        return (
+          <Alert
+            key={`${warning.code}-${warning.recordCount}`}
+            variant="warning"
+          >
+            <RiErrorWarningFill />
+            <AlertTitle>{copy.title}</AlertTitle>
+            <AlertDescription>{copy.description}</AlertDescription>
+          </Alert>
+        );
+      })}
       <DataGrid
         data={records}
         recordCount={records.length}

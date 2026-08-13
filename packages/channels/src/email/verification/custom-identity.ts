@@ -25,8 +25,8 @@ import {
   mergeVerificationStatus,
 } from "./cadence";
 import {
+  evaluateLiveDnsRecord,
   lookupTxtRecords,
-  recordMatchesLiveDns,
   txtRecordsIncludeValue,
 } from "./live-dns";
 
@@ -109,7 +109,7 @@ const verifyCustomDomainDnsRecords = (
       );
 
     for (const record of records) {
-      const matches = yield* Effect.tryPromise({
+      const evaluation = yield* Effect.tryPromise({
         catch: (cause) =>
           new VerifyCustomDomainError({
             cause,
@@ -117,17 +117,17 @@ const verifyCustomDomainDnsRecords = (
             message: "Live DNS lookup failed.",
             operation: "dns",
           }),
-        try: () => recordMatchesLiveDns(record),
+        try: () => evaluateLiveDnsRecord(record),
       });
 
-      if (matches) {
+      if (evaluation.matches) {
         activeRecords += 1;
       } else {
         missingRecords += 1;
       }
 
       let nextStatus: "active" | "missing" | "pending";
-      if (matches) {
+      if (evaluation.matches) {
         nextStatus = "active";
       } else if (record.status === "pending") {
         nextStatus = "pending";
@@ -137,7 +137,11 @@ const verifyCustomDomainDnsRecords = (
 
       yield* db
         .update(emailDnsRecord)
-        .set({ lastCheckedAt: now, status: nextStatus })
+        .set({
+          lastCheckedAt: now,
+          status: nextStatus,
+          warnings: [...evaluation.warnings],
+        })
         .where(eq(emailDnsRecord.id, record.id))
         .pipe(
           Effect.mapError(

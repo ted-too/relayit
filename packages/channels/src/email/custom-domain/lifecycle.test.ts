@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import * as dns from "node:dns";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -10,6 +9,7 @@ import {
   EmailProviderRegistry,
   type EmailProviderRegistryService,
 } from "../provider-registry";
+import { stubResolverNs } from "../verification/resolver-test-stub";
 import {
   createCustomDomain,
   pauseCustomDomain,
@@ -56,14 +56,7 @@ const testEmailProvider = {
 } as never;
 
 const stubCloudflareNs = () => {
-  spyOn(dns.promises, "resolveNs").mockImplementation((host) => {
-    if (host === "acme.test") {
-      return Promise.resolve(["ada.ns.cloudflare.com"]);
-    }
-    return Promise.reject(
-      Object.assign(new Error("not found"), { code: "ENOTFOUND" })
-    );
-  });
+  stubResolverNs({ "acme.test": ["ada.ns.cloudflare.com"] });
 };
 
 describe("pauseCustomDomain / unpauseCustomDomain", () => {

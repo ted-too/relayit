@@ -17,7 +17,7 @@ import {
   defaultVerifyCadenceConfig,
   mergeVerificationStatus,
 } from "./cadence";
-import { recordMatchesLiveDns } from "./live-dns";
+import { evaluateLiveDnsRecord } from "./live-dns";
 
 export class VerifyIdentityError extends Data.TaggedError(
   "VerifyIdentityError"
@@ -97,7 +97,7 @@ const verifySandboxDnsRecords = (
       );
 
     for (const record of records) {
-      const matches = yield* Effect.tryPromise({
+      const evaluation = yield* Effect.tryPromise({
         catch: (cause) =>
           new VerifyIdentityError({
             cause,
@@ -105,17 +105,17 @@ const verifySandboxDnsRecords = (
             operation: "dns",
             sandboxDomainId,
           }),
-        try: () => recordMatchesLiveDns(record),
+        try: () => evaluateLiveDnsRecord(record),
       });
 
-      if (matches) {
+      if (evaluation.matches) {
         activeRecords += 1;
       } else {
         missingRecords += 1;
       }
 
       let nextStatus: "active" | "missing" | "pending";
-      if (matches) {
+      if (evaluation.matches) {
         nextStatus = "active";
       } else if (record.status === "pending") {
         nextStatus = "pending";
@@ -125,7 +125,11 @@ const verifySandboxDnsRecords = (
 
       yield* db
         .update(emailDnsRecord)
-        .set({ lastCheckedAt: now, status: nextStatus })
+        .set({
+          lastCheckedAt: now,
+          status: nextStatus,
+          warnings: [...evaluation.warnings],
+        })
         .where(eq(emailDnsRecord.id, record.id))
         .pipe(
           Effect.mapError(

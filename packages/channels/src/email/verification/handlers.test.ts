@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import * as dns from "node:dns";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { DB } from "@repo/persistence/db/effect";
@@ -9,6 +8,7 @@ import {
   type EmailProviderRegistryService,
 } from "../provider-registry";
 import { emailVerifyCustomDomainHandler } from "./handlers";
+import { stubResolverNs } from "./resolver-test-stub";
 
 const unsupported = () => Effect.die("unused");
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
@@ -19,14 +19,7 @@ afterEach(() => {
 
 describe("emailVerifyCustomDomainHandler", () => {
   test("updates the stored DNS host when nameservers have changed", () => {
-    spyOn(dns.promises, "resolveNs").mockImplementation((host) => {
-      if (host === "acme.test") {
-        return Promise.resolve(["ns-1234.awsdns-12.com"]);
-      }
-      return Promise.reject(
-        Object.assign(new Error("not found"), { code: "ENOTFOUND" })
-      );
-    });
+    stubResolverNs({ "acme.test": ["ns-1234.awsdns-12.com"] });
 
     const providerUpdates: unknown[] = [];
     const db: any = {

@@ -1,4 +1,7 @@
-import type { DomainProvider } from "@repo/persistence/db/schema";
+import type {
+  DnsRecordWarning,
+  DomainProvider,
+} from "@repo/persistence/db/schema";
 
 export interface ProjectDomainDnsRecord {
   readonly lastCheckedAt: Date | null;
@@ -8,6 +11,7 @@ export interface ProjectDomainDnsRecord {
   readonly recordType: string;
   readonly status: string;
   readonly value: string;
+  readonly warnings: readonly DnsRecordWarning[];
 }
 
 export interface ProjectDomainListItem {
