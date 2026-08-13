@@ -49,6 +49,7 @@ export function DNSRecordsTable({
         </Badge>
       </div>
       <DataGrid
+        data={records}
         recordCount={records.length}
         table={table}
         tableClassNames={{

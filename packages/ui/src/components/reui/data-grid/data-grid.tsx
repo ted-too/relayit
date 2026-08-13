@@ -71,6 +71,12 @@ export interface DataGridProps<TData extends object> {
   allRowsLoadedMessage?: ReactNode | string;
   children?: ReactNode;
   className?: string;
+  /**
+   * Row data bound to `table`. Pass this when using a stable `useReactTable`
+   * instance so the grid re-renders when cell values change without the row
+   * count changing.
+   */
+  data?: readonly TData[];
   emptyMessage?: ReactNode | string;
   fetchingMoreMessage?: ReactNode | string;
   isLoading?: boolean;
@@ -138,6 +144,8 @@ function DataGridProvider<TData extends object>({
     table.options.columnResizeMode = resolvedColumnsResizeMode;
   }
 
+  const rowData = props.data ?? table.options.data;
+
   // Memoize context value so consumers don't re-render during column resize.
   // Column sizing state is intentionally excluded from deps -- CSS variables
   // on the <table> element handle width updates without React re-renders.
@@ -151,6 +159,7 @@ function DataGridProvider<TData extends object>({
     }),
     [
       table,
+      rowData,
       props.recordCount,
       props.isLoading,
       props.loadingMode,
