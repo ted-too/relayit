@@ -282,6 +282,50 @@ describe("authoritative live DNS lookups", () => {
     ).toBe(true);
   });
 
+  test("accepts a stricter existing DMARC policy instead of p=none", async () => {
+    installFakeResolver({
+      authTxtByHost: {
+        "_dmarc.acme.test": [
+          [
+            "v=DMARC1; p=quarantine; rua=mailto:security@acme.test; ruf=mailto:security@acme.test; sp=none; adkim=r; aspf=r",
+          ],
+        ],
+      },
+    });
+
+    expect(
+      await evaluateLiveDnsRecord({
+        name: "_dmarc.acme.test",
+        purpose: "dmarc",
+        recordType: "TXT",
+        value: '"v=DMARC1; p=none;"',
+      })
+    ).toEqual({
+      matches: true,
+      warnings: [],
+    });
+  });
+
+  test("does not treat a missing DMARC policy as verified", async () => {
+    installFakeResolver({
+      authTxtByHost: {
+        "_dmarc.acme.test": [["google-site-verification=abc"]],
+      },
+    });
+
+    expect(
+      await evaluateLiveDnsRecord({
+        name: "_dmarc.acme.test",
+        purpose: "dmarc",
+        recordType: "TXT",
+        value: '"v=DMARC1; p=none;"',
+      })
+    ).toEqual({
+      matches: false,
+      warnings: [],
+    });
+  });
+
   test("reports multiple DMARC policies without failing our record match", async () => {
     installFakeResolver({
       authTxtByHost: {

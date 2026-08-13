@@ -207,12 +207,13 @@ export const txtRecordsIncludeValue = (
 const joinedTxt = (chunks: readonly string[]): string =>
   chunks.join("").replace(/^"|"$/g, "");
 
+const isDmarcTxt = (chunks: readonly string[]): boolean =>
+  DMARC_VERSION_REGEX.test(joinedTxt(chunks));
+
 export const inspectDmarcTxtRecords = (
   records: string[][]
 ): DnsRecordWarning[] => {
-  const dmarcCount = records.filter((chunks) =>
-    DMARC_VERSION_REGEX.test(joinedTxt(chunks))
-  ).length;
+  const dmarcCount = records.filter(isDmarcTxt).length;
 
   if (dmarcCount > 1) {
     return [{ code: "multiple_dmarc_records", recordCount: dmarcCount }];
@@ -245,8 +246,12 @@ export const evaluateLiveDnsRecord = async (record: {
     }
     case "TXT": {
       const txtRecords = await lookupTxtRecords(record.name);
+      const matches =
+        record.purpose === "dmarc"
+          ? txtRecords.some(isDmarcTxt)
+          : txtRecordsIncludeValue(txtRecords, record.value);
       return {
-        matches: txtRecordsIncludeValue(txtRecords, record.value),
+        matches,
         warnings:
           record.purpose === "dmarc" ? inspectDmarcTxtRecords(txtRecords) : [],
       };
