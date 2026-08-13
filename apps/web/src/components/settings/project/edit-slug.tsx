@@ -12,6 +12,7 @@ import {
   SettingsCardHeader,
   SettingsCardTitle,
 } from "@/components/settings/card";
+import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";
 import { safeString } from "@/lib/projects/schemas";
 import { queries } from "@/lib/queries";
@@ -76,8 +77,7 @@ export function ProjectEditSlug() {
     return null;
   }
 
-  // biome-ignore lint/correctness/noUndeclaredVariables: this is a vite constant
-  const rawBaseUrl = __BASE_URL__;
+  const rawBaseUrl = env.VITE_BASE_URL;
   const appURL = new URL(rawBaseUrl);
   let baseUrl = new URL(rawBaseUrl).hostname;
 

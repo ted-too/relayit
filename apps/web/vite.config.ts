@@ -9,10 +9,6 @@ import { defineConfig } from "vite";
 import { resolveUseSyncExternalStoreFromReact } from "./vite/resolve-use-sync-external-store-from-react.ts";
 
 const config = defineConfig({
-  define: {
-    // Public URL only — Docker bakes BAKED_VITE_BASE_URL; entrypoint rewrites at start.
-    __BASE_URL__: JSON.stringify(process.env.VITE_BASE_URL ?? ""),
-  },
   server: {
     // Portless sets HOST=127.0.0.1 so the proxy can reach Vite over IPv4.
     host: process.env.HOST,

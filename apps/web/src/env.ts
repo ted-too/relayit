@@ -5,7 +5,6 @@ export const env = createEnv({
   server: {
     PORT: z.coerce.number().int().positive().optional(),
     HOST: z.string().optional(),
-    BETTER_AUTH_URL: z.string().min(1),
     BETTER_AUTH_SECRETS: z.string().min(1),
     DATABASE_URL: z.string().min(1),
     REDIS_URL: z.string().min(1),
@@ -33,6 +32,7 @@ export const env = createEnv({
   },
   clientPrefix: "VITE_",
   client: {
+    VITE_BASE_URL: z.string().min(1),
     VITE_DEBUG: z
       .enum(["true", "false"])
       .optional()
@@ -42,7 +42,6 @@ export const env = createEnv({
   runtimeEnv: {
     PORT: process.env.PORT,
     HOST: process.env.HOST,
-    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     BETTER_AUTH_SECRETS: process.env.BETTER_AUTH_SECRETS,
     DATABASE_URL: process.env.DATABASE_URL,
     REDIS_URL: process.env.REDIS_URL,
@@ -60,6 +59,7 @@ export const env = createEnv({
     CF_ZONE_ID: process.env.CF_ZONE_ID,
     TEMPLATING_BUILDER_URL: process.env.TEMPLATING_BUILDER_URL,
     TEMPLATING_BUILDER_SECRET: process.env.TEMPLATING_BUILDER_SECRET,
+    VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
     VITE_DEBUG: import.meta.env.VITE_DEBUG,
   },
   emptyStringAsUndefined: true,

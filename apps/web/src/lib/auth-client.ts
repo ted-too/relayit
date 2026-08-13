@@ -1,6 +1,6 @@
 import { createAuthClient } from "@repo/persistence/auth/client";
+import { env } from "@/env";
 
 export const authClient = createAuthClient({
-  // biome-ignore lint/correctness/noUndeclaredVariables: this is a vite constant
-  baseURL: __BASE_URL__,
+  baseURL: env.VITE_BASE_URL,
 });
