@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@effect-aws/client-s3": "2.0.0-beta.6",
-    "effect": "4.0.0-beta.102",
+    "effect": "4.0.0-rc.108",
     "zod": "^4.4.3"
   }
 }

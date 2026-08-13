@@ -8,8 +8,19 @@ import { makeDbLive } from "@repo/persistence/db/effect";
 import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Logger, Redacted, References } from "effect";
 import { env } from "@/env";
+import { logEffectFailure } from "@/lib/log-failure.server";
+
+const loggingLive = Layer.mergeAll(
+  Logger.layer([
+    process.env.NODE_ENV === "production"
+      ? Logger.consoleJson
+      : Logger.consolePretty(),
+    Logger.tracerLogger,
+  ]),
+  Layer.succeed(References.MinimumLogLevel, env.LOG_LEVEL ?? "Info")
+);
 
 const secrets = parseBetterAuthSecrets(env.BETTER_AUTH_SECRETS);
 
@@ -62,7 +73,8 @@ export const AppLive = Layer.mergeAll(
   symmetricCryptoLive,
   emailProviderRegistryLive,
   managedDnsLive,
-  templatingBuilderLive
+  templatingBuilderLive,
+  loggingLive
 );
 
 /** Cloudflare zone id when sandbox capability is configured; else null. */
@@ -70,5 +82,8 @@ export const sandboxCloudflareZoneId = cloudflareConfigured?.zoneId ?? null;
 
 export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.runPromise(
-    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
+    effect.pipe(
+      Effect.tapCause(logEffectFailure("Server function failed")),
+      Effect.provide(AppLive as unknown as Layer.Layer<R>)
+    )
   );

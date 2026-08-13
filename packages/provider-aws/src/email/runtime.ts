@@ -3,7 +3,6 @@ import { SNS } from "@effect-aws/client-sns";
 import type {
   EmailProviderAdapter,
   EmailProviderFactory,
-  IdentityResult,
 } from "@repo/channels/email/provider-adapter";
 import type { ProviderInstanceErrorContext } from "@repo/channels/provider-errors";
 import {
@@ -18,6 +17,7 @@ import {
   createAwsErrorMapper,
   createAwsWebhookErrorMapper,
 } from "../errors";
+import { ensureSesDomainIdentity } from "./identity";
 import {
   createAwsSesInfrastructure,
   SES_CONFIGURATION_SET_NAME,
@@ -84,57 +84,11 @@ export const awsSesProviderFactory = {
               .getAccount({})
               .pipe(Effect.as(true), Effect.mapError(mapAwsError)),
             createIdentity: ({ dkimPrivateKey, dkimSelector, fqdn }) =>
-              Effect.gen(function* () {
-                yield* ses
-                  .createEmailIdentity({
-                    DkimSigningAttributes: {
-                      DomainSigningPrivateKey: dkimPrivateKey,
-                      DomainSigningSelector: dkimSelector,
-                    },
-                    EmailIdentity: fqdn,
-                  })
-                  .pipe(
-                    Effect.catchTag("AlreadyExistsException", () =>
-                      ses.putEmailIdentityDkimSigningAttributes({
-                        EmailIdentity: fqdn,
-                        SigningAttributes: {
-                          DomainSigningPrivateKey: dkimPrivateKey,
-                          DomainSigningSelector: dkimSelector,
-                        },
-                        SigningAttributesOrigin: "EXTERNAL",
-                      })
-                    )
-                  );
-
-                const mailFromDomain = `send.${fqdn}`;
-                yield* ses.putEmailIdentityMailFromAttributes({
-                  BehaviorOnMxFailure: "USE_DEFAULT_VALUE",
-                  EmailIdentity: fqdn,
-                  MailFromDomain: mailFromDomain,
-                });
-
-                return {
-                  mailFrom: {
-                    domain: mailFromDomain,
-                    records: [
-                      {
-                        name: mailFromDomain,
-                        priority: 10,
-                        purpose: "mail_from_mx",
-                        recordType: "MX",
-                        value: `feedback-smtp.${region}.amazonses.com`,
-                      },
-                      {
-                        name: mailFromDomain,
-                        priority: null,
-                        purpose: "mail_from_spf",
-                        recordType: "TXT",
-                        value: '"v=spf1 include:amazonses.com ~all"',
-                      },
-                    ],
-                  },
-                  providerData: { dkimSelector },
-                } satisfies IdentityResult;
+              ensureSesDomainIdentity(ses, {
+                dkimPrivateKey,
+                dkimSelector,
+                fqdn,
+                region,
               }).pipe(Effect.mapError(mapAwsError)),
             definition: awsSesProviderDefinition,
             deleteIdentity: ({ fqdn }) =>

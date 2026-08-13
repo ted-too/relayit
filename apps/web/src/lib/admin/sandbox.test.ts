@@ -95,6 +95,65 @@ describe("createSandboxDomainForOps", () => {
     );
   });
 
+  test("surfaces the provision failure message", () => {
+    const db = {
+      query: {
+        provider: {
+          findFirst: () =>
+            Effect.succeed({
+              channelType: "email",
+              id: "prov_1",
+              scope: "platform",
+            }),
+        },
+      },
+    };
+
+    return Effect.runPromise(
+      createSandboxDomainForOps({
+        cloudflareZoneId: "zone_1",
+        providerId: "prov_1",
+        rootDomain: "snd.example.test",
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(DB, db as never),
+            Layer.succeed(EmailManagedDns, {
+              cloudflareEnabled: true,
+              reconcile: unsupported,
+              remove: unsupported,
+            } satisfies EmailManagedDnsService),
+            Layer.succeed(EmailProviderRegistry, {
+              get: unsupported,
+            } satisfies EmailProviderRegistryService),
+            Layer.succeed(Jobs, {
+              cancel: unsupported,
+              enqueue: unsupported,
+              schedule: unsupported,
+            } satisfies JobsService),
+            Layer.succeed(ProviderCredentialsVault, {
+              open: unsupported,
+              seal: unsupported,
+            } as never),
+            Layer.succeed(SymmetricCrypto, {
+              decrypt: unsupported,
+              encrypt: () =>
+                Effect.fail(new Error("encrypt failed")) as never,
+            } as never)
+          )
+        ),
+        Effect.flip,
+        Effect.map((error) => {
+          expect(error).toMatchObject({
+            code: "failed",
+            message: "Failed to encrypt sandbox DKIM private key.",
+          });
+          return error;
+        })
+      )
+    );
+  });
+
   test("rejects project-scoped Providers", () => {
     const db = {
       query: {

@@ -1,8 +1,9 @@
 import { handleProviderWebhook } from "@repo/channels/email/deliverability";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { Elysia, status } from "elysia";
 import { z } from "zod";
 import type { RunApiEffect } from "../../lib/effect";
+import { logEffectFailure } from "../../lib/log-failure";
 
 const providerWebhookParamsSchema = z.object({
   productId: z.string().min(1),
@@ -26,6 +27,10 @@ export const createProviderWebhookRoutes = (
           rawBody,
           vendorId: params.vendorId,
         }).pipe(
+          Effect.annotateLogs({
+            productId: params.productId,
+            vendorId: params.vendorId,
+          }),
           Effect.map(() => status(200, { ok: true as const })),
           Effect.catch((error) =>
             Effect.gen(function* () {
@@ -48,14 +53,8 @@ export const createProviderWebhookRoutes = (
                     }
                   }
                 default:
-                  yield* Effect.logError(
-                    "Provider webhook handling failed"
-                  ).pipe(
-                    Effect.annotateLogs({
-                      error: error._tag,
-                      productId: params.productId,
-                      vendorId: params.vendorId,
-                    })
+                  yield* logEffectFailure("Provider webhook handling failed")(
+                    Cause.fail(error)
                   );
                   return status(500, {
                     code: "internal_server_error",

@@ -9,6 +9,7 @@ export const apiConfig = Config.all({
   cfZoneId: Config.string("CF_ZONE_ID").pipe(Config.option),
   databaseUrl: Config.redacted("DATABASE_URL"),
   hostname: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+  logLevel: Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")),
   port: Config.port("PORT").pipe(Config.withDefault(3005)),
   redisUrl: Config.redacted("REDIS_URL"),
   s3AccessKeyId: Config.redacted("S3_ACCESS_KEY_ID"),

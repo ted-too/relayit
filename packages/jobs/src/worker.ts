@@ -1,6 +1,6 @@
 import { makeSchemaJsonCodec, Redis } from "@repo/redis";
 import type { StreamReadEntry } from "@repo/redis/stream";
-import { Clock, Duration, Effect, Schedule } from "effect";
+import { Cause, Clock, Duration, Effect, Schedule } from "effect";
 import { type DeadLetterFailure, DeadLetterStore } from "./dead-letter";
 import { JobProcessingError, JobWorkerRuntimeError } from "./errors";
 import type { JobDispatch, JobHandler, JobRetryPolicy, JobSchema } from "./job";
@@ -215,6 +215,9 @@ export const processJob = <
           wireVersion: 0,
         })
         .pipe(Effect.mapError(processingError("dead-letter")));
+      yield* Effect.logError("Job envelope could not be decoded").pipe(
+        Effect.annotateLogs({ code: "JOB_ENVELOPE_INVALID" })
+      );
       yield* redis
         .acknowledge({
           group: keys.workers,
@@ -251,6 +254,9 @@ export const processJob = <
           wireVersion: envelope.wireVersion,
         })
         .pipe(Effect.mapError(processingError("dead-letter")));
+      yield* Effect.logError("Job payload could not be decoded").pipe(
+        Effect.annotateLogs({ code: "JOB_PAYLOAD_INVALID" })
+      );
       yield* redis
         .acknowledge({
           group: keys.workers,
@@ -297,6 +303,12 @@ export const processJob = <
             score: now + retryDelay(attempt, handler.contract.retry.backoff),
           })
           .pipe(Effect.mapError(processingError("schedule-retry")));
+        yield* Effect.logDebug("Job scheduled for retry").pipe(
+          Effect.annotateLogs({
+            attempt,
+            disposition: "retryable",
+          })
+        );
       } else {
         if (handler.onDeadLetter) {
           yield* handler
@@ -317,6 +329,15 @@ export const processJob = <
             wireVersion: envelope.wireVersion,
           })
           .pipe(Effect.mapError(processingError("dead-letter")));
+        yield* Effect.logError(
+          "Job moved to dead letter",
+          Cause.fail(outcome.error)
+        ).pipe(
+          Effect.annotateLogs({
+            attempt,
+            disposition: "terminal",
+          })
+        );
       }
     }
 
@@ -327,7 +348,12 @@ export const processJob = <
         stream: keys.ready,
       })
       .pipe(Effect.mapError(processingError("acknowledge")));
-  }) as Effect.Effect<
+  }).pipe(
+    Effect.annotateLogs({
+      entryId: entry.id,
+      jobName: handler.contract.name,
+    })
+  ) as Effect.Effect<
     void,
     Failure | JobProcessingError,
     Requirements | Redis | DeadLetterStore

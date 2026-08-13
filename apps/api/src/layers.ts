@@ -9,9 +9,30 @@ import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
 import { makeRedisLive } from "@repo/redis";
-import { Layer, ManagedRuntime, type Option, Redacted } from "effect";
+import {
+  Effect,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  type Option,
+  Redacted,
+  References,
+} from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
-import type { ApiConfig } from "./env";
+import { type ApiConfig, apiConfig } from "./env";
+
+export const loggingLive = (config: ApiConfig) =>
+  Layer.mergeAll(
+    Logger.layer([
+      Bun.env.NODE_ENV === "production"
+        ? Logger.consoleJson
+        : Logger.consolePretty(),
+      Logger.tracerLogger,
+    ]),
+    Layer.succeed(References.MinimumLogLevel, config.logLevel)
+  );
+
+export const LoggingLive = Layer.unwrap(Effect.map(apiConfig, loggingLive));
 
 export interface ApiLayerConfig {
   readonly betterAuthSecrets: string;
@@ -100,7 +121,8 @@ export const makeRuntime = (config: ApiConfig) => {
       credentialsVaultLive,
       symmetricCryptoLive,
       emailProviderRegistryLive,
-      managedDnsLive
+      managedDnsLive,
+      loggingLive(config)
     )
   );
 };

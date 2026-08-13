@@ -11,7 +11,7 @@
     "@effect-aws/client-sesv2": "2.0.0-beta.6",
     "@effect-aws/client-sns": "2.0.0-beta.4",
     "@repo/channels": "workspace:*",
-    "effect": "4.0.0-beta.102",
+    "effect": "4.0.0-rc.108",
     "sns-validator": "^0.3.5",
     "zod": "^4.3.6"
   },

@@ -19,6 +19,6 @@
     "@repo/persistence": "workspace:*",
     "@repo/redis": "workspace:*",
     "@repo/templating": "workspace:*",
-    "effect": "4.0.0-beta.102"
+    "effect": "4.0.0-rc.108"
   }
 }

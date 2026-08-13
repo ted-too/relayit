@@ -14,6 +14,8 @@ export interface RedisCodec<Value, Requirements = never> {
   ) => Effect.Effect<string, RedisCodecError, Requirements>;
 }
 
+const unknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
+
 export const makeSchemaJsonCodec = <ValueSchema extends Schema.Top>(
   schema: ValueSchema
 ): RedisCodec<
@@ -21,7 +23,7 @@ export const makeSchemaJsonCodec = <ValueSchema extends Schema.Top>(
   ValueSchema["DecodingServices"] | ValueSchema["EncodingServices"]
 > => ({
   decode: (value) =>
-    Schema.decodeEffect(Schema.UnknownFromJsonString)(value).pipe(
+    Schema.decodeEffect(unknownFromJsonString)(value).pipe(
       Effect.flatMap(Schema.decodeEffect(schema)),
       Effect.mapError(
         (cause) => new RedisCodecError({ cause, operation: "decode" })
@@ -29,7 +31,7 @@ export const makeSchemaJsonCodec = <ValueSchema extends Schema.Top>(
     ),
   encode: (value) =>
     Schema.encodeEffect(schema)(value).pipe(
-      Effect.flatMap(Schema.encodeEffect(Schema.UnknownFromJsonString)),
+      Effect.flatMap(Schema.encodeEffect(unknownFromJsonString)),
       Effect.mapError(
         (cause) => new RedisCodecError({ cause, operation: "encode" })
       )
