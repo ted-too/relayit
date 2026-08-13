@@ -1,5 +1,6 @@
+import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Redacted } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { templateBuilderConfig } from "./env";
@@ -8,6 +9,10 @@ import { makeAppLayers } from "./layers";
 const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* templateBuilderConfig;
+    yield* Effect.promise(() =>
+      migrateOnStartup(Redacted.value(config.databaseUrl))
+    );
+    yield* Effect.logInfo("Database migrations up to date");
     const appLayers = makeAppLayers(config);
 
     const rpcHttpEffect = yield* RpcServer.toHttpEffect(

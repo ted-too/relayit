@@ -20,3 +20,4 @@ agent-transcripts
 **/.tanstack
 apps/web/.output
 apps/api/build
+apps/template-builder/build

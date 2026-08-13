@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -8,16 +9,30 @@ import { Client } from "pg";
 const LOCK_KEY1 = 872_014_331;
 const LOCK_KEY2 = 1;
 
-const migrationsFolder = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../drizzle"
-);
+/**
+ * Source-relative path works for unbundled `bun run`. Bundled images set
+ * `DRIZZLE_MIGRATIONS_FOLDER` because `import.meta.url` is the output file.
+ */
+const resolveMigrationsFolder = (): string => {
+  const fromEnv = process.env.DRIZZLE_MIGRATIONS_FOLDER;
+  if (fromEnv !== undefined && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  return join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+};
 
 /**
  * Apply pending Drizzle migrations under a Postgres session advisory lock.
  * Safe to call from every deployable on startup; losers wait, then no-op.
  */
 export const migrateOnStartup = async (databaseUrl: string): Promise<void> => {
+  const migrationsFolder = resolveMigrationsFolder();
+  if (!existsSync(migrationsFolder)) {
+    throw new Error(
+      `Drizzle migrations folder not found at ${migrationsFolder}`
+    );
+  }
+
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
