@@ -45,6 +45,7 @@ const stripeConfig =
     : undefined;
 
 export const auth = createAuth({
+  baseUrl: env.VITE_BASE_URL,
   db,
   redis,
   socialProviders:
