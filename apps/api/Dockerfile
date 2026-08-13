@@ -14,6 +14,7 @@ FROM base AS builder
 COPY --from=prepare /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prepare /app/out/full/ .
+COPY --from=prepare /app/tsconfig.json ./tsconfig.json
 RUN --mount=type=secret,id=turbo_token \
     --mount=type=secret,id=turbo_team \
     TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
