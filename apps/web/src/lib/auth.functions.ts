@@ -1,6 +1,7 @@
 import { ROLES } from "@repo/persistence/auth/constants";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth.server";
 
 const readSession = async () => {
@@ -31,4 +32,41 @@ export const adminMiddleware = createMiddleware({ type: "function" })
       throw new Error("Unauthorized");
     }
     return next();
+  });
+
+export const listOrganizations = createServerFn({ method: "GET" })
+  .middleware([sessionMiddleware])
+  .handler(async () => {
+    const headers = getRequestHeaders();
+    return await auth.api.listOrganizations({ headers });
+  });
+
+export const getFullOrganization = createServerFn({ method: "GET" })
+  .middleware([sessionMiddleware])
+  .validator(z.object({ organizationSlug: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const headers = getRequestHeaders();
+    try {
+      return await auth.api.getFullOrganization({
+        headers,
+        query: { organizationSlug: data.organizationSlug },
+      });
+    } catch (error) {
+      const statusCode =
+        error instanceof Error &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number"
+          ? error.statusCode
+          : undefined;
+
+      switch (statusCode) {
+        case 400:
+        case 401:
+        case 403:
+        case 404:
+          return null;
+        default:
+          throw error;
+      }
+    }
   });

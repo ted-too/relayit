@@ -1,5 +1,5 @@
 import * as q from "@ted-too/query-key-factory/query";
-import { authClient } from "@/lib/auth-client";
+import { getFullOrganization, listOrganizations } from "@/lib/auth.functions";
 import {
   listCustomDomainsFn,
   listProjectProvidersFn,
@@ -15,33 +15,20 @@ import {
 
 export const organizations = q.createQueryKeys("organizations", {
   list: q.static({
-    queryFn: async ({ signal }) => {
-      const { data, error } = await authClient.organization.list({
-        fetchOptions: { signal },
-      });
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    queryFn: async () => await listOrganizations(),
   }),
   bySlug: q.dynamic((slug: string) => ({
     queryKey: [slug],
-    queryFn: async ({ signal }) => {
-      const { data, error } = await authClient.organization.getFullOrganization(
-        {
-          query: { organizationSlug: slug },
-          fetchOptions: { signal },
-        }
-      );
+    queryFn: async () => {
+      const organization = await getFullOrganization({
+        data: { organizationSlug: slug },
+      });
 
-      if (error) {
-        return Promise.reject(error);
+      if (!organization) {
+        return Promise.reject(new Error("No organization found"));
       }
 
-      return data;
+      return organization;
     },
     listApiKeys: q.static({
       queryFn: async () => await listApiKeysFn({ data: { orgSlug: slug } }),
