@@ -1,7 +1,7 @@
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Effect, Exit, Layer, Redacted } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { Cause, Effect, Layer, Redacted } from "effect";
+import { HttpEffect } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { templateBuilderConfig } from "./env";
 import { loggingLive, makeAppLayers } from "./layers";
@@ -22,6 +22,13 @@ const program = Effect.scoped(
       Effect.provide(Layer.mergeAll(appLayers, RpcSerialization.layerNdjson))
     );
 
+    // Keep the request Scope open until the NDJSON body stream ends. A per-request
+    // Effect.scoped + toWeb() closes that Scope as soon as the response object is
+    // created, so the client sees an empty HTTP body.
+    const handleRpc = HttpEffect.toWebHandler(
+      rpcHttpEffect.pipe(Effect.tapCause(logEffectFailure("Rpc request failed")))
+    );
+
     const hostname = config.hostname;
     const port = config.port;
 
@@ -30,7 +37,7 @@ const program = Effect.scoped(
         Bun.serve({
           hostname,
           port,
-          fetch: async (request) => {
+          fetch: (request) => {
             const url = new URL(request.url);
             if (request.method === "GET" && url.pathname === "/health") {
               return Response.json({
@@ -40,28 +47,7 @@ const program = Effect.scoped(
             }
 
             if (request.method === "POST" && url.pathname === "/rpc") {
-              const exit = await Effect.runPromiseExit(
-                rpcHttpEffect.pipe(
-                  Effect.provideService(
-                    HttpServerRequest.HttpServerRequest,
-                    HttpServerRequest.fromWeb(request)
-                  ),
-                  Effect.tapCause(logEffectFailure("Rpc request failed")),
-                  Effect.scoped
-                )
-              );
-
-              if (Exit.isSuccess(exit)) {
-                return HttpServerResponse.toWeb(exit.value);
-              }
-
-              return new Response(
-                JSON.stringify({ error: "Internal Rpc failure" }),
-                {
-                  headers: { "content-type": "application/json" },
-                  status: 500,
-                }
-              );
+              return handleRpc(request);
             }
 
             return new Response("Not Found", { status: 404 });
