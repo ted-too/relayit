@@ -85,6 +85,9 @@ export const sandboxCloudflare = cloudflareConfigured
     }
   : null;
 
+/** Public API origin for Provider delivery-webhook scaffolding. */
+export const apiOrigin = env.API_URL ?? null;
+
 export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.runPromise(
     effect.pipe(

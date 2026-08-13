@@ -2,6 +2,7 @@ export {
   computeNextCheckAt,
   defaultVerifyCadenceConfig,
   mergeVerificationStatus,
+  nextDomainVerifyAt,
   type VerifyCadenceConfig,
 } from "./cadence";
 export {

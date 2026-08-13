@@ -32,6 +32,7 @@ services:
     environment:
       - VITE_API_URL=${API_URL:-http://localhost:3005}
       - VITE_BASE_URL=${WEB_URL:-http://localhost:3000}
+      - API_URL=${API_URL:-http://localhost:3005}
     depends_on:
       - api
     networks:

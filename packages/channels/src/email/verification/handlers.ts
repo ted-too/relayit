@@ -2,6 +2,7 @@ import { defineJobHandler, Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { Data, Effect } from "effect";
 import { sweepIfSandboxAllocatable } from "../sandbox/allocate";
+import { nextDomainVerifyAt } from "./cadence";
 import {
   verifyCustomDomainOwnership,
   verifyCustomDomainProviderIdentity,
@@ -89,7 +90,7 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
       }
 
       if (identity.sandboxDomain) {
-        yield* verifySandboxProviderIdentity({
+        const result = yield* verifySandboxProviderIdentity({
           db,
           fqdn: identity.sandboxDomain.rootDomain,
           identity,
@@ -106,8 +107,25 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
               })
           )
         );
+        yield* jobs
+          .schedule(
+            emailVerifySandboxDomainJob,
+            { sandboxDomainId: identity.sandboxDomain.id },
+            nextDomainVerifyAt(result).getTime()
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new VerifyProviderIdentityHandlerError({
+                  cause,
+                  identityId: payload.identityId,
+                  message: "Failed to schedule sandbox verify after identity.",
+                  operation: "schedule",
+                })
+            )
+          );
       } else if (identity.customDomain) {
-        yield* verifyCustomDomainProviderIdentity({
+        const result = yield* verifyCustomDomainProviderIdentity({
           customDomainId: identity.customDomain.id,
           db,
           fqdn: identity.customDomain.fqdn,
@@ -124,6 +142,23 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
               })
           )
         );
+        yield* jobs
+          .schedule(
+            emailVerifyCustomDomainJob,
+            { customDomainId: identity.customDomain.id },
+            nextDomainVerifyAt(result).getTime()
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new VerifyProviderIdentityHandlerError({
+                  cause,
+                  identityId: payload.identityId,
+                  message: "Failed to schedule domain verify after identity.",
+                  operation: "schedule",
+                })
+            )
+          );
       } else {
         return;
       }
@@ -254,7 +289,7 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
         return;
       }
 
-      let earliestIdentityCheckAt: Date | null = null;
+      let earliestDomainCheckAt: Date | null = null;
 
       for (const identity of sandbox.providerIdentities) {
         if (!identity.provider) {
@@ -279,11 +314,9 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
           )
         );
 
-        if (
-          !earliestIdentityCheckAt ||
-          result.identityNextCheckAt < earliestIdentityCheckAt
-        ) {
-          earliestIdentityCheckAt = result.identityNextCheckAt;
+        const domainCheckAt = nextDomainVerifyAt(result);
+        if (!earliestDomainCheckAt || domainCheckAt < earliestDomainCheckAt) {
+          earliestDomainCheckAt = domainCheckAt;
         }
 
         // Schedule the identity's own cadence — do not enqueue an immediate
@@ -319,12 +352,12 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
         )
       );
 
-      if (earliestIdentityCheckAt) {
+      if (earliestDomainCheckAt) {
         yield* jobs
           .schedule(
             emailVerifySandboxDomainJob,
             { sandboxDomainId: sandbox.id },
-            earliestIdentityCheckAt.getTime()
+            earliestDomainCheckAt.getTime()
           )
           .pipe(
             Effect.mapError(
@@ -428,7 +461,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
         return;
       }
 
-      let earliestIdentityCheckAt: Date | null = null;
+      let earliestDomainCheckAt: Date | null = null;
 
       for (const identity of domain.providerIdentities) {
         if (!identity.provider) {
@@ -453,11 +486,9 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
           )
         );
 
-        if (
-          !earliestIdentityCheckAt ||
-          result.identityNextCheckAt < earliestIdentityCheckAt
-        ) {
-          earliestIdentityCheckAt = result.identityNextCheckAt;
+        const domainCheckAt = nextDomainVerifyAt(result);
+        if (!earliestDomainCheckAt || domainCheckAt < earliestDomainCheckAt) {
+          earliestDomainCheckAt = domainCheckAt;
         }
 
         yield* jobs
@@ -479,12 +510,12 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
           );
       }
 
-      if (earliestIdentityCheckAt) {
+      if (earliestDomainCheckAt) {
         yield* jobs
           .schedule(
             emailVerifyCustomDomainJob,
             { customDomainId: domain.id },
-            earliestIdentityCheckAt.getTime()
+            earliestDomainCheckAt.getTime()
           )
           .pipe(
             Effect.mapError(

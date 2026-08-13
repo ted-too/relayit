@@ -76,3 +76,20 @@ export const mergeVerificationStatus = ({
 
   return status;
 };
+
+/**
+ * Domain-level verify jobs must run at the sooner of Provider cadence and
+ * DNS cadence. A verified Provider (12h) must not starve incomplete DNS (2m).
+ */
+export const nextDomainVerifyAt = (input: {
+  readonly identityNextCheckAt: Date;
+  readonly nextCheckAt: Date | null;
+}): Date => {
+  if (
+    input.nextCheckAt !== null &&
+    input.nextCheckAt < input.identityNextCheckAt
+  ) {
+    return input.nextCheckAt;
+  }
+  return input.identityNextCheckAt;
+};

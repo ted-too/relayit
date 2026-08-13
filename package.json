@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "format": "bunx ultracite fix",
     "syncpack": "syncpack",
+    "check-types": "turbo run check-types",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "prepare": "effect-tsgo patch"

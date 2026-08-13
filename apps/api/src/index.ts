@@ -3,6 +3,7 @@ import cluster from "node:cluster";
 import os from "node:os";
 import { setTimeout as scheduleTimeout } from "node:timers";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
+import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
 import {
   emailVerifyCustomDomainHandler,
   emailVerifyOwnershipHandler,
@@ -45,6 +46,20 @@ const jobWorkerOptions = {
   },
 } as const;
 
+const ensureEmailProvidersOnStartup = (
+  runtime: ReturnType<typeof makeRuntime>,
+  apiOrigin: string
+) =>
+  Effect.promise(() =>
+    runtime.runPromise(
+      ensureAllEmailProviderInfrastructure(apiOrigin).pipe(
+        Effect.catchCause(
+          logEffectFailure("Failed to ensure email Provider infrastructure")
+        )
+      )
+    )
+  );
+
 const makeJobWorkerProgram = (listUnsubscribe: {
   readonly secret: string;
   readonly webOrigin: string;
@@ -85,6 +100,7 @@ const apiProgram = (startWorker: boolean) =>
       );
       yield* Effect.promise(runtime.context);
       if (startWorker) {
+        yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
         const jobWorkerProgram = makeJobWorkerProgram({
           secret: getCurrentBetterAuthSecret(
             Redacted.value(config.betterAuthSecrets)
@@ -267,6 +283,7 @@ const primaryProgram = Effect.scoped(
       (apiRuntime) => apiRuntime.disposeEffect
     );
     yield* Effect.promise(runtime.context);
+    yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
     const jobWorkerProgram = makeJobWorkerProgram({
       secret: getCurrentBetterAuthSecret(
         Redacted.value(config.betterAuthSecrets)

@@ -5,7 +5,7 @@ First concrete channel. Tenants send email through Relayit using managed or BYO 
 ## Language
 
 **Provider**:
-Credentials used to talk to an upstream email vendor (e.g. SES). Managed Providers are platform-owned; BYO Providers are Project-owned.
+Credentials used to talk to an upstream email vendor (e.g. SES). Managed Providers are platform-owned; BYO Providers are Project-owned. Create and delete provision and tear down that vendor's delivery-event infrastructure; API startup re-ensures every email Provider.
 _Avoid_: integration, backend, vendor account (except as informal speech)
 
 **Domain**:

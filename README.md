@@ -123,6 +123,7 @@ Optional: `LOG_LEVEL`. Compose pins `RUN_MODE=combined` (builder in-process).
 | Variable | Description |
 | --- | --- |
 | `VITE_API_URL` | Public API URL (compose: from `API_URL`) |
+| `API_URL` | Public API URL; used to scaffold Provider delivery webhooks. |
 | `VITE_BASE_URL` | Public web URL (compose: from `WEB_URL`) |
 
 `VITE_DEBUG` is optional. Product edition defaults to `oss` (server-only `EDITION`).

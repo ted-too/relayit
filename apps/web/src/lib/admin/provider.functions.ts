@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { Effect } from "effect";
 import {
   createPlatformProviderBodySchema,
   platformProviderIdSchema,
@@ -8,11 +9,19 @@ import {
   createPlatformProvider,
   deletePlatformProvider,
   listPlatformProviders,
+  PlatformProviderError,
   setDefaultPlatformProvider,
   updatePlatformProvider,
 } from "@/lib/admin/providers.server";
 import { adminMiddleware } from "@/lib/auth.functions";
-import { runApp, sandboxCloudflare } from "@/lib/layers.server";
+import { apiOrigin, runApp, sandboxCloudflare } from "@/lib/layers.server";
+
+const apiOriginOrFail = apiOrigin
+  ? Effect.succeed(apiOrigin)
+  : new PlatformProviderError({
+      code: "failed",
+      message: "API origin is not configured.",
+    });
 
 export const listPlatformProvidersFn = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
@@ -23,9 +32,13 @@ export const createPlatformProviderFn = createServerFn({ method: "POST" })
   .validator(createPlatformProviderBodySchema)
   .handler(async ({ data }) =>
     runApp(
-      createPlatformProvider({
-        ...data,
-        sandboxCloudflare,
+      Effect.gen(function* () {
+        const origin = yield* apiOriginOrFail;
+        return yield* createPlatformProvider({
+          ...data,
+          apiOrigin: origin,
+          sandboxCloudflare,
+        });
       })
     )
   );
@@ -33,7 +46,17 @@ export const createPlatformProviderFn = createServerFn({ method: "POST" })
 export const updatePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(updatePlatformProviderBodySchema)
-  .handler(async ({ data }) => runApp(updatePlatformProvider(data)));
+  .handler(async ({ data }) =>
+    runApp(
+      Effect.gen(function* () {
+        const origin = yield* apiOriginOrFail;
+        return yield* updatePlatformProvider({
+          ...data,
+          apiOrigin: origin,
+        });
+      })
+    )
+  );
 
 export const setDefaultPlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
@@ -45,4 +68,11 @@ export const setDefaultPlatformProviderFn = createServerFn({ method: "POST" })
 export const deletePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(platformProviderIdSchema)
-  .handler(async ({ data }) => runApp(deletePlatformProvider(data.providerId)));
+  .handler(async ({ data }) =>
+    runApp(
+      Effect.gen(function* () {
+        const origin = yield* apiOriginOrFail;
+        return yield* deletePlatformProvider(data.providerId, origin);
+      })
+    )
+  );

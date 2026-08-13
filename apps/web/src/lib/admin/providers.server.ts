@@ -1,4 +1,9 @@
 import {
+  emailProviderDeliveryWebhookUrl,
+  ensureEmailProviderInfrastructure,
+  teardownEmailProviderInfrastructure,
+} from "@repo/channels/email/ensure-provider-infrastructure";
+import {
   ensureSandboxForProvider,
   removeSandboxProviderIdentity,
   type SandboxDomainError,
@@ -129,6 +134,7 @@ const clearEmailDefaults = (db: DatabaseExecutor) =>
 
 export const createPlatformProvider = (
   input: CreatePlatformProviderBody & {
+    readonly apiOrigin: string;
     readonly sandboxCloudflare: SandboxCloudflareConfig | null;
   }
 ) =>
@@ -204,6 +210,23 @@ export const createPlatformProvider = (
       });
     }
 
+    yield* ensureEmailProviderInfrastructure(row, {
+      deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
+        input.apiOrigin,
+        row.vendorId,
+        row.productId
+      ),
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new PlatformProviderError({
+            cause,
+            code: "failed",
+            message: "Failed to provision Provider infrastructure.",
+          })
+      )
+    );
+
     yield* ensureSandboxForProvider({
       cloudflareZoneId: input.sandboxCloudflare?.zoneId ?? null,
       provider: row,
@@ -213,7 +236,11 @@ export const createPlatformProvider = (
     return toListItem(row);
   });
 
-export const updatePlatformProvider = (input: UpdatePlatformProviderBody) =>
+export const updatePlatformProvider = (
+  input: UpdatePlatformProviderBody & {
+    readonly apiOrigin: string;
+  }
+) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const vault = yield* ProviderCredentialsVault;
@@ -305,6 +332,25 @@ export const updatePlatformProvider = (input: UpdatePlatformProviderBody) =>
       });
     }
 
+    if (input.credentials) {
+      yield* ensureEmailProviderInfrastructure(row, {
+        deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
+          input.apiOrigin,
+          row.vendorId,
+          row.productId
+        ),
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new PlatformProviderError({
+              cause,
+              code: "failed",
+              message: "Failed to provision Provider infrastructure.",
+            })
+        )
+      );
+    }
+
     return toListItem(row);
   });
 
@@ -357,7 +403,7 @@ export const setDefaultPlatformProvider = (providerId: string) =>
     return { id: providerId, isDefault: true as const };
   });
 
-export const deletePlatformProvider = (providerId: string) =>
+export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const existing = yield* db.query.provider
@@ -407,6 +453,23 @@ export const deletePlatformProvider = (providerId: string) =>
 
     yield* removeSandboxProviderIdentity(existing).pipe(
       Effect.mapError(mapSandboxDomainError)
+    );
+
+    yield* teardownEmailProviderInfrastructure(existing, {
+      deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
+        apiOrigin,
+        existing.vendorId,
+        existing.productId
+      ),
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new PlatformProviderError({
+            cause,
+            code: "failed",
+            message: "Failed to tear down Provider infrastructure.",
+          })
+      )
     );
 
     yield* db

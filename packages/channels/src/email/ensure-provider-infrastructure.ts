@@ -10,6 +10,15 @@ export interface EmailProviderInfrastructureConfig {
   readonly deliveryWebhookUrl: string;
 }
 
+const TRAILING_SLASH = /\/$/;
+
+export const emailProviderDeliveryWebhookUrl = (
+  apiOrigin: string,
+  vendorId: string,
+  productId: string
+) =>
+  `${apiOrigin.replace(TRAILING_SLASH, "")}/webhooks/providers/${vendorId}/${productId}`;
+
 export const ensureEmailProviderInfrastructure = (
   provider: Provider,
   config: EmailProviderInfrastructureConfig
@@ -41,9 +50,7 @@ export const ensureEmailProviderInfrastructure = (
     });
   });
 
-export const ensureAllEmailProviderInfrastructure = (
-  config: EmailProviderInfrastructureConfig
-) =>
+export const ensureAllEmailProviderInfrastructure = (apiOrigin: string) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const configuredProviders = yield* db.query.provider.findMany({
@@ -52,7 +59,14 @@ export const ensureAllEmailProviderInfrastructure = (
 
     yield* Effect.forEach(
       configuredProviders,
-      (provider) => ensureEmailProviderInfrastructure(provider, config),
+      (provider) =>
+        ensureEmailProviderInfrastructure(provider, {
+          deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
+            apiOrigin,
+            provider.vendorId,
+            provider.productId
+          ),
+        }),
       { concurrency: "unbounded" }
     );
   });
