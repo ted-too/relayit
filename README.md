@@ -38,7 +38,7 @@ Self-hosted usage is unlimited (no send metering / Stripe). Sign-in is email/pas
 
 ### 2. Deploy with Docker Compose
 
-Compose runs **api** (`RUN_MODE=combined`) + **web** + Postgres 18 + Redis.
+Compose runs **api** (HTTP + job worker in one process) + **web** + Postgres 18 + Redis.
 
 ```bash
 docker compose pull
@@ -57,47 +57,36 @@ docker compose logs -f
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>`
-- `ghcr.io/ted-too/relayit-web:<tag>`
+- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, provider webhooks) and the job worker
+- `ghcr.io/ted-too/relayit-web:<tag>` — dashboard and Better Auth
+- `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)
 
-There is no separate worker image. The api image runs HTTP, workers, or both based on `RUN_MODE`. Prefer an env file (same keys as [env.example](env.example)):
+Prefer an env file (same keys as [env.example](env.example)):
 
 ```bash
 docker run -d \
   --name relayit-api \
   -p 3005:3005 \
   --env-file .env \
-  -e RUN_MODE=combined \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
   -e APP_URL="http://localhost:3000" \
   ghcr.io/ted-too/relayit-api:alpha
 ```
 
-### Dedicated worker (same image)
-
-```bash
-docker run -d \
-  --name relayit-worker \
-  --env-file .env \
-  -e RUN_MODE=worker \
-  -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
-  -e REDIS_URL="redis://redis:6379" \
-  ghcr.io/ted-too/relayit-api:alpha
-```
-
-Pair with `RUN_MODE=api` on the HTTP container when you split roles.
-
 ### Web dashboard
 
-Build once; change public URLs at deploy time via `VITE_API_URL` and `VITE_BASE_URL`.
+Auth and session-authenticated ops run in this process. Change the public web URL at deploy time via `VITE_BASE_URL` (no rebuild).
 
 ```bash
 docker run -d \
   --name relayit-web \
   -p 3000:3000 \
-  -e VITE_API_URL="http://localhost:3005" \
+  --env-file .env \
   -e VITE_BASE_URL="http://localhost:3000" \
+  -e API_URL="http://localhost:3005" \
+  -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
+  -e REDIS_URL="redis://redis:6379" \
   ghcr.io/ted-too/relayit-web:alpha
 ```
 
@@ -116,17 +105,19 @@ Validated at process start (`apps/api` env packs). Compose maps `WEB_URL` → `A
 | `BETTER_AUTH_SECRETS` | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`) |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
 
-Optional: `LOG_LEVEL`. Compose pins `RUN_MODE=combined` (builder in-process).
+Optional: `LOG_LEVEL`, `WEB_CONCURRENCY` (Linux production: HTTP child processes; the job worker stays on the primary).
 
 ### Required environment (web)
 
 | Variable | Description |
 | --- | --- |
-| `VITE_API_URL` | Public API URL (compose: from `API_URL`) |
-| `API_URL` | Public API URL; used to scaffold Provider delivery webhooks. |
 | `VITE_BASE_URL` | Public web URL (compose: from `WEB_URL`) |
+| `DATABASE_URL` | Postgres connection string |
+| `REDIS_URL` | Redis connection string |
+| `BETTER_AUTH_SECRETS` | Same versioned secrets as api |
+| `API_URL` | Public API URL; used to scaffold Provider delivery webhooks |
 
-`VITE_DEBUG` is optional. Product edition defaults to `oss` (server-only `EDITION`).
+`VITE_DEBUG` is optional. Stripe keys are optional; when they are absent, entitlements are unlimited (self-hosted). Template workspace Git ops also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`.
 
 ### Image tags
 
@@ -177,20 +168,11 @@ IMAGE_TAG=alpha
 BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
 ```
 
-Plus S3 (and other required) values from [env.example](env.example). Compose always uses `RUN_MODE=combined`.
+Plus S3 (and other required) values from [env.example](env.example).
 
-### Scaling workers
+### Scaling
 
-```bash
-docker run -d --name relayit-worker-2 \
-  --env-file .env \
-  -e RUN_MODE=worker \
-  -e DATABASE_URL="..." \
-  -e REDIS_URL="..." \
-  ghcr.io/ted-too/relayit-api:alpha
-```
-
-Use `RUN_MODE=api` on the HTTP tier when splitting roles.
+The api process serves HTTP and runs the job worker together. Scale by running more api replicas; HTTP and worker capacity move as one.
 
 ## Monitoring & Logs
 
@@ -210,11 +192,11 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u ted-too --password-stdin
 docker pull ghcr.io/ted-too/relayit-api:alpha
 ```
 
-**Web pointing at the wrong API** — restart web with updated `VITE_API_URL` / `VITE_BASE_URL` (no rebuild).
+**Web pointing at the wrong origin** — restart web with updated `VITE_BASE_URL` / `API_URL` (no rebuild).
 
 ## Contributing
 
-- Open a PR against `main`. PR CI builds `relayit-api` and `relayit-web`.
+- Open a PR against `main`. PR CI builds `relayit-api`, `relayit-web`, and `relayit-template-builder`.
 - After merge, semantic-release cuts the next `v1.0.0-alpha.N` and publishes GHCR images (including `:alpha`).
 - Use [Conventional Commits](https://conventionalcommits.org/) (`feat:`, `fix:`, etc.).
 

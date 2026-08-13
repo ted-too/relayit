@@ -19,3 +19,7 @@ export {
   type UnpauseCustomDomainInput,
   unpauseCustomDomain,
 } from "./lifecycle";
+export {
+  detectDnsProvider,
+  providerFromNameservers,
+} from "./provider-detection";

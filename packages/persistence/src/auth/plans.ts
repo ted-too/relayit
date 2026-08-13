@@ -67,36 +67,96 @@ export const BROADCAST_LIMITS = {
   },
 } satisfies UserLimits;
 
+const UNLIMITED_SENDS = {
+  dailySends: null,
+  monthlySends: null,
+} as const;
+
+export const SELF_HOSTED_LIMITS = {
+  projects: null,
+  retention: null,
+  email: {
+    byoProviders: true,
+    customDomains: null,
+    transactional: {
+      managed: UNLIMITED_SENDS,
+      byo: UNLIMITED_SENDS,
+    },
+    marketing: {
+      managed: UNLIMITED_SENDS,
+      byo: UNLIMITED_SENDS,
+    },
+  },
+} satisfies UserLimits;
+
 export type PlanName = "free" | "signal" | "broadcast";
+
+export type LimitsForInput =
+  | { planName?: string | null; selfHosted?: false }
+  | { selfHosted: true };
+
+export const limitsFor = (input: LimitsForInput): UserLimits => {
+  if ("selfHosted" in input && input.selfHosted) {
+    return SELF_HOSTED_LIMITS;
+  }
+
+  switch (input.planName?.toLowerCase()) {
+    case "signal":
+      return SIGNAL_LIMITS;
+    case "broadcast":
+      return BROADCAST_LIMITS;
+    default:
+      return FREE_LIMITS;
+  }
+};
+
+export const resolveUserPlanName = async (
+  db: PromiseDb,
+  userId: string,
+  now: Date = new Date()
+): Promise<PlanName> => {
+  const subscriptions = await db.query.subscription.findMany({
+    where: { referenceId: userId },
+  });
+
+  const asDate = (value: Date | string) =>
+    value instanceof Date ? value : new Date(value);
+
+  const subscription = subscriptions.find((row) => {
+    if (
+      (row.status !== "active" && row.status !== "trialing") ||
+      !row.periodStart ||
+      !row.periodEnd
+    ) {
+      return false;
+    }
+
+    return asDate(row.periodEnd) > now;
+  });
+
+  const normalized = subscription?.plan.toLowerCase();
+  if (normalized === "signal" || normalized === "broadcast") {
+    return normalized;
+  }
+
+  return "free";
+};
 
 /**
  * Sync a billing user's plan limits onto the rows the send path actually reads:
  * `user.limitOrganizations` / `user.limitRetention`, and a `user_channel` row
  * per channel. Runs in one transaction; sequential (not Promise.all) because the
  * writes share a single tx connection.
+ *
+ * Cloud: `planName` is resolved (case-insensitive) to free / signal / broadcast;
+ * unknown or absent falls back to free. Self-hosted: pass `{ selfHosted: true }`
+ * for unlimited entitlements (no Plans).
  */
 export async function ensureUserLimits(
   db: PromiseDb,
-  {
-    userId,
-    planName,
-  }: {
-    userId: string;
-    planName?: string | null;
-  }
+  input: LimitsForInput & { userId: string }
 ) {
-  let limits: UserLimits = FREE_LIMITS;
-  switch (planName) {
-    case "signal":
-      limits = SIGNAL_LIMITS;
-      break;
-    case "broadcast":
-      limits = BROADCAST_LIMITS;
-      break;
-    default:
-      limits = FREE_LIMITS;
-      break;
-  }
+  const limits = limitsFor(input);
 
   await db.transaction(async (tx) => {
     await tx
@@ -105,7 +165,7 @@ export async function ensureUserLimits(
         limitOrganizations: limits.projects,
         limitRetention: limits.retention,
       })
-      .where(eq(user.id, userId));
+      .where(eq(user.id, input.userId));
 
     for (const channelType of AVAILABLE_CHANNELS) {
       const channelLimits = limits[channelType];
@@ -113,7 +173,7 @@ export async function ensureUserLimits(
       await tx
         .insert(userChannel)
         .values({
-          userId,
+          userId: input.userId,
           channelType,
           limits: channelLimits,
         })
@@ -126,6 +186,23 @@ export async function ensureUserLimits(
     }
   });
 }
+
+export const syncSessionUserLimits = async (
+  db: PromiseDb,
+  {
+    now,
+    stripeConfigured,
+    userId,
+  }: { now?: Date; stripeConfigured: boolean; userId: string }
+) => {
+  if (stripeConfigured) {
+    const planName = await resolveUserPlanName(db, userId, now);
+    await ensureUserLimits(db, { planName, userId });
+    return;
+  }
+
+  await ensureUserLimits(db, { selfHosted: true, userId });
+};
 
 // function asPlanName(name: string | undefined | null): PlanName {
 //   const normalized = name?.toLowerCase();

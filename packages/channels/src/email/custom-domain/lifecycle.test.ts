@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import * as dns from "node:dns";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -40,6 +41,30 @@ const unusedCreateServices = Layer.mergeAll(
     encrypt: unsupported,
   } as never)
 );
+
+afterEach(() => {
+  mock.restore();
+});
+
+const testEmailProvider = {
+  channelType: "email",
+  credentials: { ciphertext: "x", keyVersion: 1, nonce: "n" },
+  id: "prov_1",
+  productId: "ses",
+  scope: "platform",
+  vendorId: "aws",
+} as never;
+
+const stubCloudflareNs = () => {
+  spyOn(dns.promises, "resolveNs").mockImplementation((host) => {
+    if (host === "acme.test") {
+      return Promise.resolve(["ada.ns.cloudflare.com"]);
+    }
+    return Promise.reject(
+      Object.assign(new Error("not found"), { code: "ENOTFOUND" })
+    );
+  });
+};
 
 describe("pauseCustomDomain / unpauseCustomDomain", () => {
   test("rejects pause when the Project is not linked to the domain", () => {
@@ -208,6 +233,143 @@ describe("createCustomDomain claim guard", () => {
             customDomainId: "dom_1",
             kind: "existing",
           });
+          return result;
+        })
+      )
+    );
+  });
+
+  test("detects the DNS host when reclaiming an unknown domain", () => {
+    stubCloudflareNs();
+    const providerUpdates: unknown[] = [];
+    const db: any = {
+      insert: () => ({
+        values: () => Effect.void,
+      }),
+      query: {
+        customDomain: {
+          findFirst: () =>
+            Effect.succeed({
+              fqdn: "acme.test",
+              id: "dom_1",
+              organizations: [],
+              provider: "unknown",
+              providerIdentities: [],
+            }),
+        },
+      },
+      update: () => ({
+        set: (values: unknown) => ({
+          where: () => {
+            providerUpdates.push(values);
+            return Effect.void;
+          },
+        }),
+      }),
+    };
+
+    return Effect.runPromise(
+      createCustomDomain({
+        fqdn: "acme.test",
+        organizationId: "org_1",
+        provider: testEmailProvider,
+      }).pipe(
+        Effect.provide(
+          Layer.merge(Layer.succeed(DB, db), unusedCreateServices)
+        ),
+        Effect.map((result) => {
+          expect(result).toEqual({
+            customDomainId: "dom_1",
+            kind: "existing",
+          });
+          expect(providerUpdates).toEqual([{ provider: "cloudflare" }]);
+          return result;
+        })
+      )
+    );
+  });
+
+  test("persists the detected DNS host on a new custom domain", () => {
+    stubCloudflareNs();
+    const domainInserts: Array<{ provider?: string }> = [];
+    const db: any = {
+      insert: () => ({
+        values: (values: { provider?: string }) => {
+          const effect = Effect.succeed([{ id: "dom_new" }]);
+          if (values.provider !== undefined) {
+            domainInserts.push(values);
+          }
+          return Object.assign(effect, {
+            returning: () =>
+              Effect.succeed([
+                {
+                  dkimPrivateKey: "enc",
+                  dkimPublicKey: "pub",
+                  dkimSelector: "sel",
+                  fqdn: "acme.test",
+                  id: values.provider === undefined ? "epid_1" : "dom_new",
+                },
+              ]),
+          });
+        },
+      }),
+      query: {
+        customDomain: {
+          findFirst: () => Effect.succeed(null),
+        },
+        emailDomainProviderIdentity: {
+          findMany: () => Effect.succeed([]),
+        },
+      },
+    };
+
+    const createServices = Layer.mergeAll(
+      Layer.succeed(EmailManagedDns, {
+        cloudflareEnabled: false,
+        reconcile: () => Effect.void,
+        remove: unsupported,
+      } satisfies EmailManagedDnsService),
+      Layer.succeed(EmailProviderRegistry, {
+        get: () =>
+          Effect.succeed({
+            create: () =>
+              Effect.succeed({
+                createIdentity: () =>
+                  Effect.succeed({
+                    mailFrom: { domain: "bounce.acme.test", records: [] },
+                    providerData: {},
+                  }),
+              }),
+          }),
+      } as never),
+      Layer.succeed(Jobs, {
+        cancel: unsupported,
+        enqueue: unsupported,
+        schedule: () => Effect.void,
+      } satisfies JobsService),
+      Layer.succeed(ProviderCredentialsVault, {
+        open: () => Effect.succeed({ encrypted: {}, unencrypted: {} }),
+        seal: unsupported,
+      } as never),
+      Layer.succeed(SymmetricCrypto, {
+        decrypt: unsupported,
+        encrypt: () => Effect.succeed("encrypted"),
+      } as never)
+    );
+
+    return Effect.runPromise(
+      createCustomDomain({
+        fqdn: "acme.test",
+        organizationId: "org_1",
+        provider: testEmailProvider,
+      }).pipe(
+        Effect.provide(Layer.merge(Layer.succeed(DB, db), createServices)),
+        Effect.map((result) => {
+          expect(result).toEqual({
+            customDomainId: "dom_new",
+            kind: "created",
+          });
+          expect(domainInserts[0]?.provider).toBe("cloudflare");
           return result;
         })
       )

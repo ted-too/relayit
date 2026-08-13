@@ -48,6 +48,33 @@ export const lookupMxRecords = async (
   }
 };
 
+export const lookupNsRecords = async (host: string): Promise<string[]> => {
+  try {
+    return await dns.promises.resolveNs(host);
+  } catch (error) {
+    if (isDnsNotFound(error)) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+export const lookupAuthoritativeNameservers = async (
+  fqdn: string
+): Promise<string[]> => {
+  const labels = fqdn.toLowerCase().split(".");
+
+  for (let index = 0; index < labels.length - 1; index += 1) {
+    const host = labels.slice(index).join(".");
+    const records = await lookupNsRecords(host);
+    if (records.length > 0) {
+      return records;
+    }
+  }
+
+  return [];
+};
+
 export const txtRecordsIncludeValue = (
   records: string[][],
   expected: string

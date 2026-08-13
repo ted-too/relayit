@@ -1,5 +1,5 @@
 import { allocateSandboxDomain } from "@repo/channels/email/sandbox";
-import { ensureUserLimits } from "@repo/persistence/auth/plans";
+import { syncSessionUserLimits } from "@repo/persistence/auth/plans";
 import {
   APIError,
   type AuthConfig,
@@ -160,9 +160,10 @@ export const auth = createAuth({
         return;
       }
 
-      // FIXME: resolve the user's current plan before syncing — calling
-      // without planName resets paid users to free limits.
-      await ensureUserLimits(db, { userId });
+      await syncSessionUserLimits(db, {
+        stripeConfigured: Boolean(stripeConfig),
+        userId,
+      });
 
       if (stripeConfig) {
         const row = await db.query.user.findFirst({

@@ -21,6 +21,7 @@ import { LoggingLive, makeRuntime } from "./layers";
 import { createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
 import { logEffectFailure } from "./lib/log-failure";
+import { createLegacySendRoutes } from "./routes/compat/send";
 import { createEmailRoutes } from "./routes/messages/email";
 import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
 
@@ -125,6 +126,7 @@ const apiProgram = (startWorker: boolean) =>
 
       const app = new Elysia()
         .get("/health", () => ({ status: "ok" as const }))
+        .use(createLegacySendRoutes(auth, runEffect))
         .group("/messages", (group) =>
           group.use(createEmailRoutes(auth, runEffect))
         )

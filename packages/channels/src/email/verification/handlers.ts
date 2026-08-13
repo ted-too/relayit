@@ -1,6 +1,9 @@
 import { defineJobHandler, Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
+import { customDomain } from "@repo/persistence/db/schema";
+import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
+import { detectDnsProvider } from "../custom-domain/provider-detection";
 import { sweepIfSandboxAllocatable } from "../sandbox/allocate";
 import { nextDomainVerifyAt } from "./cadence";
 import {
@@ -459,6 +462,35 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
 
       if (!domain) {
         return;
+      }
+
+      const detectedProvider = yield* Effect.tryPromise({
+        catch: (cause) =>
+          new VerifyCustomDomainHandlerError({
+            cause,
+            customDomainId: domain.id,
+            message: "Failed to detect custom domain DNS host.",
+            operation: "persist",
+          }),
+        try: () => detectDnsProvider(domain.fqdn),
+      });
+
+      if (detectedProvider !== domain.provider) {
+        yield* db
+          .update(customDomain)
+          .set({ provider: detectedProvider })
+          .where(eq(customDomain.id, domain.id))
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new VerifyCustomDomainHandlerError({
+                  cause,
+                  customDomainId: domain.id,
+                  message: "Failed to persist detected DNS host.",
+                  operation: "persist",
+                })
+            )
+          );
       }
 
       let earliestDomainCheckAt: Date | null = null;

@@ -30,6 +30,7 @@ import {
   customDomainRootDnsOwner,
   resolveCustomDomainMailFromRecords,
 } from "./dns";
+import { detectDnsProvider } from "./provider-detection";
 
 export class CustomDomainError extends Data.TaggedError("CustomDomainError")<{
   readonly cause?: unknown;
@@ -453,6 +454,39 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         return { customDomainId: existing.id, kind: "existing" as const };
       }
 
+      if (existing.provider === "unknown") {
+        const detected = yield* Effect.tryPromise({
+          catch: (cause) =>
+            new CustomDomainError({
+              cause,
+              customDomainId: existing.id,
+              message: "Failed to detect custom domain DNS host.",
+              operation: "persist",
+              organizationId: input.organizationId,
+            }),
+          try: () => detectDnsProvider(existing.fqdn),
+        });
+
+        if (detected !== "unknown") {
+          yield* db
+            .update(customDomain)
+            .set({ provider: detected })
+            .where(eq(customDomain.id, existing.id))
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new CustomDomainError({
+                    cause,
+                    customDomainId: existing.id,
+                    message: "Failed to persist detected DNS host.",
+                    operation: "persist",
+                    organizationId: input.organizationId,
+                  })
+              )
+            );
+        }
+      }
+
       const verifiedOwner = existing.organizations.find(
         (organization) =>
           organization.ownershipVerificationStatus === "verified"
@@ -541,6 +575,18 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         )
       );
 
+    const detectedProvider = yield* Effect.tryPromise({
+      catch: (cause) =>
+        new CustomDomainError({
+          cause,
+          message: "Failed to detect custom domain DNS host.",
+          operation: "create",
+          organizationId: input.organizationId,
+          providerId: input.provider.id,
+        }),
+      try: () => detectDnsProvider(input.fqdn),
+    });
+
     const [row] = yield* db
       .insert(customDomain)
       .values({
@@ -548,7 +594,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         dkimPublicKey: keyMaterial.dkimPublicKey,
         dkimSelector: keyMaterial.dkimSelector,
         fqdn: input.fqdn,
-        provider: "unknown",
+        provider: detectedProvider,
         verificationStatus: "not_verified",
         verifyBackoffLevel: 0,
       })

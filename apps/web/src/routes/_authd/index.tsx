@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authd/")({
       });
     }
 
-    if (organizations[0]?.slug) {
+    if (organizations.length === 1 && organizations[0]?.slug) {
       throw redirect({
         to: "/$orgSlug",
         params: { orgSlug: organizations[0].slug },
