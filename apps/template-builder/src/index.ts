@@ -1,7 +1,7 @@
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
 import { Cause, Effect, Layer, Redacted } from "effect";
-import { HttpEffect } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { templateBuilderConfig } from "./env";
 import { loggingLive, makeAppLayers } from "./layers";
@@ -14,19 +14,29 @@ const program = Effect.scoped(
       migrateOnStartup(Redacted.value(config.databaseUrl))
     );
     yield* Effect.logInfo("Database migrations up to date");
-    const appLayers = makeAppLayers(config);
 
-    const rpcHttpEffect = yield* RpcServer.toHttpEffect(
-      TemplatingBuilderRpcs
-    ).pipe(
-      Effect.provide(Layer.mergeAll(appLayers, RpcSerialization.layerNdjson))
+    const httpApp = Layer.mergeAll(
+      RpcServer.layer(TemplatingBuilderRpcs).pipe(
+        Layer.provide(makeAppLayers(config)),
+        Layer.provide(
+          RpcServer.layerProtocolHttp({ path: "/rpc" }).pipe(
+            Layer.provide(RpcSerialization.layerNdjson)
+          )
+        )
+      ),
+      HttpRouter.add(
+        "GET",
+        "/health",
+        HttpServerResponse.jsonUnsafe({
+          role: "template-builder",
+          status: "ok",
+        })
+      )
     );
 
-    // Keep the request Scope open until the NDJSON body stream ends. A per-request
-    // Effect.scoped + toWeb() closes that Scope as soon as the response object is
-    // created, so the client sees an empty HTTP body.
-    const handleRpc = HttpEffect.toWebHandler(
-      rpcHttpEffect.pipe(Effect.tapCause(logEffectFailure("Rpc request failed")))
+    const { dispose, handler } = HttpRouter.toWebHandler(httpApp);
+    yield* Effect.promise(() =>
+      handler(new Request("http://127.0.0.1/health"))
     );
 
     const hostname = config.hostname;
@@ -35,28 +45,15 @@ const program = Effect.scoped(
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         Bun.serve({
+          fetch: (request) => handler(request),
           hostname,
           port,
-          fetch: (request) => {
-            const url = new URL(request.url);
-            if (request.method === "GET" && url.pathname === "/health") {
-              return Response.json({
-                role: "template-builder",
-                status: "ok",
-              });
-            }
-
-            if (request.method === "POST" && url.pathname === "/rpc") {
-              return handleRpc(request);
-            }
-
-            return new Response("Not Found", { status: 404 });
-          },
         })
       ),
       (server) =>
-        Effect.sync(() => {
+        Effect.promise(async () => {
           server.stop(true);
+          await dispose();
         })
     );
 

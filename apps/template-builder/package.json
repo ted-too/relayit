@@ -12,6 +12,7 @@
     "dev:app": "bun run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "check-types": "tsc --noEmit",
+    "test": "bun test",
     "start": "bun ./src/index.ts"
   },
   "dependencies": {
