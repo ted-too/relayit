@@ -1,5 +1,7 @@
-import type { TemplateListItem } from "@/lib/templating/catalog";
-import type { WorkspaceEntryListItem } from "@/lib/templating/workspace";
+import type {
+  TemplateListItem,
+  WorkspaceEntryListItem,
+} from "@/lib/templating/types";
 
 export type Template = TemplateListItem;
 

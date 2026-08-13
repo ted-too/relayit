@@ -28,7 +28,7 @@ import {
   deletePlatformProviderFn,
   setDefaultPlatformProviderFn,
 } from "@/lib/admin/provider.functions";
-import type { PlatformProviderListItem } from "@/lib/admin/providers";
+import type { PlatformProviderListItem } from "@/lib/admin/provider-types";
 import { queries } from "@/lib/queries";
 import { PROVIDER_ICONS } from "./icons";
 import { UpsertProvider } from "./upsert";

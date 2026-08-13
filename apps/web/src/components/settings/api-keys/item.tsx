@@ -27,7 +27,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { authClient } from "@/lib/auth-client";
-import type { HydratedApiKey } from "@/lib/projects/api-keys";
+import type { HydratedApiKey } from "@/lib/projects/api-key-types";
 import { queries } from "@/lib/queries";
 import { UpsertApiKey } from "./upsert";
 

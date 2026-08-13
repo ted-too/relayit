@@ -33,7 +33,7 @@ import {
   type ApiKeyFormValues,
   apiKeyFormSchema,
 } from "@/lib/projects/api-key-schemas";
-import type { HydratedApiKey } from "@/lib/projects/api-keys";
+import type { HydratedApiKey } from "@/lib/projects/api-key-types";
 import { queries } from "@/lib/queries";
 import { FieldExpiresAt } from "./field-expires-at";
 

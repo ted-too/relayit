@@ -15,7 +15,7 @@ import {
   deleteCustomDomainFn,
   refreshCustomDomainFn,
 } from "@/lib/domains/custom-domain.functions";
-import type { ProjectDomainListItem } from "@/lib/domains/list";
+import type { ProjectDomainListItem } from "@/lib/domains/types";
 import { queries } from "@/lib/queries";
 import type { Domain } from "./types";
 

@@ -15,7 +15,7 @@ import { Effect, Layer } from "effect";
 import {
   createCustomDomainForProject,
   pauseCustomDomainForProject,
-} from "./custom-domain";
+} from "./custom-domain.server";
 
 const unsupported = () => Effect.die("unused");
 

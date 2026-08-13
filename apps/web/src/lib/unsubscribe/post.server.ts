@@ -1,8 +1,8 @@
-import type { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
+import { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
 import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
 import { Effect } from "effect";
 import { env } from "@/env";
-import { AppLive } from "@/lib/layers";
+import { AppLive } from "@/lib/layers.server";
 
 const unsubscribeQuery = (url: URL) => ({
   messageId: url.searchParams.get("msg") ?? "",
@@ -106,3 +106,7 @@ export const createUnsubscribePostHandler = (
     return Effect.runPromise(responseEffect.pipe(Effect.provide(AppLive)));
   };
 };
+
+export const postUnsubscribe = createUnsubscribePostHandler(
+  handleListUnsubscribeOneClick
+);

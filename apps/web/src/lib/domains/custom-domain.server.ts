@@ -7,8 +7,8 @@ import {
 import { DB } from "@repo/persistence/db/effect";
 import type { Provider } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
-import { listCustomDomainsForProject } from "./list";
-import { resolveDefaultManagedEmailProviderId } from "./providers";
+import { listCustomDomainsForProject } from "./list.server";
+import { resolveDefaultManagedEmailProviderId } from "./providers.server";
 
 export class CustomDomainAdminError extends Data.TaggedError(
   "CustomDomainAdminError"

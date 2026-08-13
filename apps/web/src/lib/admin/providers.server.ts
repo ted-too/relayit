@@ -7,6 +7,10 @@ import type {
   CreatePlatformProviderBody,
   UpdatePlatformProviderBody,
 } from "./provider-schemas";
+import type {
+  PlatformProviderListItem,
+  SerializableUnencryptedCredentials,
+} from "./provider-types";
 
 export class PlatformProviderError extends Data.TaggedError(
   "PlatformProviderError"
@@ -16,24 +20,6 @@ export class PlatformProviderError extends Data.TaggedError(
   /** Static human-readable summary — do not interpolate identifiers into this. */
   readonly message: string;
 }> {}
-
-/** JSON-serializable unencrypted credential fields for server fn responses. */
-export type SerializableUnencryptedCredentials = Record<string, string>;
-
-export interface PlatformProviderListItem {
-  readonly channelType: "email";
-  readonly createdAt: Date;
-  readonly credentials: {
-    readonly unencrypted: SerializableUnencryptedCredentials;
-  };
-  readonly id: string;
-  readonly isDefault: boolean;
-  readonly name: string | null;
-  readonly productId: string;
-  readonly scope: "platform" | "project";
-  readonly updatedAt: Date;
-  readonly vendorId: string;
-}
 
 const toSerializableUnencrypted = (
   value: Record<string, unknown> | undefined

@@ -8,6 +8,7 @@ import {
 import { generateDbSlug, slugify } from "@repo/persistence/db/slug";
 import { and, count, eq, isNull, ne } from "drizzle-orm";
 import { Data, Effect } from "effect";
+import type { TemplateListItem } from "./types";
 
 export class TemplateCatalogError extends Data.TaggedError(
   "TemplateCatalogError"
@@ -17,27 +18,6 @@ export class TemplateCatalogError extends Data.TaggedError(
   /** Static human-readable summary — do not interpolate identifiers into this. */
   readonly message: string;
 }> {}
-
-export interface TemplateListItem {
-  readonly archivedAt: Date | null;
-  readonly channelVariants: readonly {
-    readonly broken: boolean;
-    readonly channel: string;
-    readonly content: TemplateEmailVariantContent | null;
-    readonly createdAt: Date;
-    readonly engine: string;
-    readonly id: string;
-    readonly updatedAt: Date;
-    readonly variables: PrimitiveTemplateVariables | null;
-    readonly workspaceEntryId: string | null;
-  }[];
-  readonly createdAt: Date;
-  readonly id: string;
-  readonly name: string;
-  readonly organizationId: string;
-  readonly slug: string;
-  readonly updatedAt: Date;
-}
 
 const serializeTemplate = (row: {
   archivedAt: Date | null;

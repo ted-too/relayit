@@ -1,6 +1,6 @@
 import { DB } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
-import { CustomDomainAdminError } from "./custom-domain";
+import { CustomDomainAdminError } from "./custom-domain.server";
 
 export interface ManagedEmailProviderSummary {
   readonly channelType: "email";

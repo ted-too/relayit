@@ -16,7 +16,7 @@ import {
   attachSandboxProviderForOps,
   createSandboxDomainForOps,
   SandboxAdminError,
-} from "./sandbox";
+} from "./sandbox.server";
 
 const unsupported = () => Effect.die("unused");
 

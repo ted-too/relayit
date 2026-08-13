@@ -18,12 +18,12 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import type { TemplateListItem } from "@/lib/templating/catalog";
 import {
   type CreateTemplateFormValues,
   createTemplateFormSchema,
 } from "@/lib/templating/schemas";
 import { createTemplateFn } from "@/lib/templating/template.functions";
+import type { TemplateListItem } from "@/lib/templating/types";
 
 export function CreateTemplate({
   render,

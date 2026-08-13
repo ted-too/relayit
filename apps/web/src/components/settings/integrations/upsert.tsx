@@ -47,7 +47,7 @@ import {
   createPlatformProviderBodySchema,
   updatePlatformProviderBodySchema,
 } from "@/lib/admin/provider-schemas";
-import type { PlatformProviderListItem } from "@/lib/admin/providers";
+import type { PlatformProviderListItem } from "@/lib/admin/provider-types";
 import { queries } from "@/lib/queries";
 import { PROVIDER_ICONS } from "./icons";
 

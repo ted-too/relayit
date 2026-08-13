@@ -4,7 +4,7 @@ import {
   ListUnsubscribeError,
 } from "@repo/channels/email/deliverability";
 import { Effect } from "effect";
-import { createUnsubscribePostHandler } from "./post";
+import { createUnsubscribePostHandler } from "./post.server";
 
 const postUnsubscribe = (
   handle: typeof handleListUnsubscribeOneClick,

@@ -1,10 +1,5 @@
-import { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
 import { createFileRoute } from "@tanstack/react-router";
-import { createUnsubscribePostHandler } from "@/lib/unsubscribe/post";
-
-const postUnsubscribe = createUnsubscribePostHandler(
-  handleListUnsubscribeOneClick
-);
+import { postUnsubscribe } from "@/lib/unsubscribe/post.server";
 
 export const Route = createFileRoute("/unsubscribe/$orgSlug/$contactId")({
   server: {

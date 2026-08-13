@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { Effect, type Layer } from "effect";
 import {
   createPlatformProviderBodySchema,
   platformProviderIdSchema,
@@ -11,39 +10,32 @@ import {
   listPlatformProviders,
   setDefaultPlatformProvider,
   updatePlatformProvider,
-} from "@/lib/admin/providers";
+} from "@/lib/admin/providers.server";
 import { adminMiddleware } from "@/lib/auth.functions";
-import { AppLive } from "@/lib/layers";
-
-const runAdmin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.runPromise(
-    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
-  );
+import { runApp } from "@/lib/layers.server";
 
 export const listPlatformProvidersFn = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
-  .handler(async () => runAdmin(listPlatformProviders));
+  .handler(async () => runApp(listPlatformProviders));
 
 export const createPlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(createPlatformProviderBodySchema)
-  .handler(async ({ data }) => runAdmin(createPlatformProvider(data)));
+  .handler(async ({ data }) => runApp(createPlatformProvider(data)));
 
 export const updatePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(updatePlatformProviderBodySchema)
-  .handler(async ({ data }) => runAdmin(updatePlatformProvider(data)));
+  .handler(async ({ data }) => runApp(updatePlatformProvider(data)));
 
 export const setDefaultPlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(platformProviderIdSchema)
   .handler(async ({ data }) =>
-    runAdmin(setDefaultPlatformProvider(data.providerId))
+    runApp(setDefaultPlatformProvider(data.providerId))
   );
 
 export const deletePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(platformProviderIdSchema)
-  .handler(async ({ data }) =>
-    runAdmin(deletePlatformProvider(data.providerId))
-  );
+  .handler(async ({ data }) => runApp(deletePlatformProvider(data.providerId)));

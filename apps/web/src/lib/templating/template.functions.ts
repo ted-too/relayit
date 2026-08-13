@@ -1,11 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { Effect, type Layer } from "effect";
-import { auth } from "@/lib/auth";
 import { sessionMiddleware } from "@/lib/auth.functions";
-import { AppLive } from "@/lib/layers";
-import { requireOrganizationBySlug } from "@/lib/projects/org";
-import { runTemplatingBuilder } from "@/lib/templating/builder";
+import { auth } from "@/lib/auth.server";
+import { runApp } from "@/lib/layers.server";
+import { requireOrganizationBySlug } from "@/lib/projects/org.server";
+import { runTemplatingBuilder } from "@/lib/templating/builder.server";
 import {
   archiveTemplateForProject,
   createTemplateForProject,
@@ -13,7 +12,7 @@ import {
   listTemplatesForProject,
   putReactEmailChannelForProject,
   updateTemplateSlugForProject,
-} from "@/lib/templating/catalog";
+} from "@/lib/templating/catalog.server";
 import {
   archiveTemplateInputSchema,
   commitWorkspaceFilesInputSchema,
@@ -32,12 +31,7 @@ import {
 import {
   getOrCreateHostedWorkspaceMeta,
   listWorkspaceEntriesForProject,
-} from "@/lib/templating/workspace";
-
-const runTemplating = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.runPromise(
-    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
-  );
+} from "@/lib/templating/workspace.server";
 
 const assertTemplatePermission = async (input: {
   readonly organizationId: string;
@@ -61,24 +55,24 @@ export const listTemplatesFn = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])
   .validator(listTemplatesInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "read",
     });
-    return runTemplating(listTemplatesForProject(org.id));
+    return runApp(listTemplatesForProject(org.id));
   });
 
 export const getTemplateFn = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])
   .validator(getTemplateInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "read",
     });
-    return runTemplating(
+    return runApp(
       getTemplateForProject({
         organizationId: org.id,
         templateId: data.templateId,
@@ -90,12 +84,12 @@ export const createTemplateFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(createTemplateInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "create",
     });
-    return runTemplating(
+    return runApp(
       createTemplateForProject({
         name: data.name,
         organizationId: org.id,
@@ -107,12 +101,12 @@ export const archiveTemplateFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(archiveTemplateInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "update",
     });
-    return runTemplating(
+    return runApp(
       archiveTemplateForProject({
         organizationId: org.id,
         templateId: data.templateId,
@@ -124,12 +118,12 @@ export const updateTemplateSlugFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(updateTemplateSlugInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "update",
     });
-    return runTemplating(
+    return runApp(
       updateTemplateSlugForProject({
         organizationId: org.id,
         slug: data.slug,
@@ -142,12 +136,12 @@ export const putReactEmailChannelFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(putReactEmailChannelInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "update",
     });
-    return runTemplating(
+    return runApp(
       putReactEmailChannelForProject({
         organizationId: org.id,
         subject: data.subject,
@@ -161,12 +155,12 @@ export const getWorkspaceFn = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])
   .validator(getWorkspaceInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "read",
     });
-    const workspace = await runTemplating(
+    const workspace = await runApp(
       getOrCreateHostedWorkspaceMeta({
         kind: data.kind,
         organizationId: org.id,
@@ -187,12 +181,12 @@ export const listWorkspaceEntriesFn = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])
   .validator(listWorkspaceEntriesInputSchema)
   .handler(async ({ data }) => {
-    const org = await runTemplating(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertTemplatePermission({
       organizationId: org.id,
       permission: "read",
     });
-    return runTemplating(
+    return runApp(
       listWorkspaceEntriesForProject({
         kind: data.kind,
         organizationId: org.id,
@@ -205,12 +199,12 @@ const requireWorkspaceForOrg = async (input: {
   readonly orgSlug: string;
   readonly permission: "read" | "update";
 }) => {
-  const org = await runTemplating(requireOrganizationBySlug(input.orgSlug));
+  const org = await runApp(requireOrganizationBySlug(input.orgSlug));
   await assertTemplatePermission({
     organizationId: org.id,
     permission: input.permission,
   });
-  const workspace = await runTemplating(
+  const workspace = await runApp(
     getOrCreateHostedWorkspaceMeta({
       kind: input.kind,
       organizationId: org.id,

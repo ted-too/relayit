@@ -1,21 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { Effect, type Layer } from "effect";
-import { auth } from "@/lib/auth";
+import { Effect } from "effect";
 import { sessionMiddleware } from "@/lib/auth.functions";
-import { AppLive } from "@/lib/layers";
+import { auth } from "@/lib/auth.server";
+import { runApp } from "@/lib/layers.server";
 import {
   createApiKeyInputSchema,
   listApiKeysInputSchema,
   updateApiKeyInputSchema,
 } from "@/lib/projects/api-key-schemas";
-import { hydrateApiKey } from "@/lib/projects/api-keys";
-import { requireOrganizationBySlug } from "@/lib/projects/org";
-
-const runProject = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.runPromise(
-    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
-  );
+import { hydrateApiKey } from "@/lib/projects/api-keys.server";
+import { requireOrganizationBySlug } from "@/lib/projects/org.server";
 
 const assertApiKeyPermission = async (input: {
   readonly organizationId: string;
@@ -39,7 +34,7 @@ export const listApiKeysFn = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])
   .validator(listApiKeysInputSchema)
   .handler(async ({ data }) => {
-    const org = await runProject(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertApiKeyPermission({
       organizationId: org.id,
       permission: "read",
@@ -51,7 +46,7 @@ export const listApiKeysFn = createServerFn({ method: "GET" })
       query: { organizationId: org.id },
     });
 
-    return await runProject(
+    return await runApp(
       Effect.forEach(listed.apiKeys, hydrateApiKey, {
         concurrency: "unbounded",
       })
@@ -62,7 +57,7 @@ export const createApiKeyFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(createApiKeyInputSchema)
   .handler(async ({ data, context }) => {
-    const org = await runProject(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertApiKeyPermission({
       organizationId: org.id,
       permission: "create",
@@ -98,7 +93,7 @@ export const createApiKeyFn = createServerFn({ method: "POST" })
       headers,
     });
 
-    const hydrated = await runProject(hydrateApiKey({ ...rest, metadata }));
+    const hydrated = await runApp(hydrateApiKey({ ...rest, metadata }));
 
     return { data: hydrated, key };
   });
@@ -107,7 +102,7 @@ export const updateApiKeyFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(updateApiKeyInputSchema)
   .handler(async ({ data }) => {
-    const org = await runProject(requireOrganizationBySlug(data.orgSlug));
+    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
     await assertApiKeyPermission({
       organizationId: org.id,
       permission: "update",
@@ -128,6 +123,6 @@ export const updateApiKeyFn = createServerFn({ method: "POST" })
       headers,
     });
 
-    const hydrated = await runProject(hydrateApiKey(apiKey));
+    const hydrated = await runApp(hydrateApiKey(apiKey));
     return { data: hydrated };
   });

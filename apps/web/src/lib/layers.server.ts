@@ -8,7 +8,7 @@ import { makeDbLive } from "@repo/persistence/db/effect";
 import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
-import { Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { env } from "@/env";
 
 const secrets = parseBetterAuthSecrets(env.BETTER_AUTH_SECRETS);
@@ -67,3 +67,8 @@ export const AppLive = Layer.mergeAll(
 
 /** Cloudflare zone id when sandbox capability is configured; else null. */
 export const sandboxCloudflareZoneId = cloudflareConfigured?.zoneId ?? null;
+
+export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.runPromise(
+    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
+  );

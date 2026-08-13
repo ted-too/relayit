@@ -4,8 +4,8 @@ import {
 } from "@repo/channels/email/verification";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
-import { CustomDomainAdminError } from "./custom-domain";
-import { listCustomDomainsForProject } from "./list";
+import { CustomDomainAdminError } from "./custom-domain.server";
+import { listCustomDomainsForProject } from "./list.server";
 
 const isPendingClaim = (link: {
   ownershipVerificationStatus: string;

@@ -18,11 +18,11 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createCustomDomainFn } from "@/lib/domains/custom-domain.functions";
-import type { ProjectDomainListItem } from "@/lib/domains/list";
 import {
   type CreateCustomDomainFormValues,
   createCustomDomainFormSchema,
 } from "@/lib/domains/schemas";
+import type { ProjectDomainListItem } from "@/lib/domains/types";
 import { queries } from "@/lib/queries";
 
 export function CreateDomain({

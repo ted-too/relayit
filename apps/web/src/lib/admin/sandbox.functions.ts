@@ -1,17 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import { Effect, type Layer } from "effect";
 import { z } from "zod";
 import {
   attachSandboxProviderForOps,
   createSandboxDomainForOps,
-} from "@/lib/admin/sandbox";
+} from "@/lib/admin/sandbox.server";
 import { adminMiddleware } from "@/lib/auth.functions";
-import { AppLive, sandboxCloudflareZoneId } from "@/lib/layers";
+import { runApp, sandboxCloudflareZoneId } from "@/lib/layers.server";
 
-const runSandboxAdmin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.runPromise(
-    effect.pipe(Effect.provide(AppLive as unknown as Layer.Layer<R>))
-  );
 const createSandboxBodySchema = z.object({
   providerId: z.string().min(1),
   rootDomain: z.string().min(1),
@@ -27,7 +22,7 @@ export const createSandboxDomainFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(createSandboxBodySchema)
   .handler(async ({ data }) =>
-    runSandboxAdmin(
+    runApp(
       createSandboxDomainForOps({
         cloudflareZoneId: sandboxCloudflareZoneId,
         providerId: data.providerId,
@@ -41,7 +36,7 @@ export const attachSandboxProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(attachSandboxBodySchema)
   .handler(async ({ data }) =>
-    runSandboxAdmin(
+    runApp(
       attachSandboxProviderForOps({
         providerId: data.providerId,
         sandboxDomainId: data.sandboxDomainId,

@@ -1,22 +1,6 @@
 import { DB } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
-
-export interface ApiKeyCreatedBy {
-  readonly email: string;
-  readonly image: string | null;
-  readonly name: string;
-}
-
-export interface HydratedApiKey {
-  readonly createdAt: Date;
-  readonly createdBy: ApiKeyCreatedBy | null;
-  readonly end: string | null;
-  readonly expiresAt: Date | null;
-  readonly id: string;
-  readonly lastRequest: Date | null;
-  readonly name: string | null;
-  readonly start: string | null;
-}
+import type { HydratedApiKey } from "./api-key-types";
 
 interface ApiKeyMetadata {
   readonly createdBy?: string;

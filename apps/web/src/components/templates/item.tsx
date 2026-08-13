@@ -21,8 +21,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { queries } from "@/lib/queries";
-import type { TemplateListItem } from "@/lib/templating/catalog";
 import { archiveTemplateFn } from "@/lib/templating/template.functions";
+import type { TemplateListItem } from "@/lib/templating/types";
 import type { Template } from "./types";
 
 export function TemplateItem({ template }: { template: Template }) {

@@ -1,6 +1,7 @@
 import { DB } from "@repo/persistence/db/effect";
 import { templatingWorkspace } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
+import type { WorkspaceEntryListItem } from "./types";
 
 export class TemplateWorkspaceError extends Data.TaggedError(
   "TemplateWorkspaceError"
@@ -9,18 +10,6 @@ export class TemplateWorkspaceError extends Data.TaggedError(
   readonly code: "not_found" | "failed";
   readonly message: string;
 }> {}
-
-export interface WorkspaceEntryListItem {
-  readonly artifactCommitSha: string | null;
-  readonly artifactStorageKey: string | null;
-  readonly builtAt: Date | null;
-  readonly createdAt: Date;
-  readonly deletedAt: Date | null;
-  readonly id: string;
-  readonly path: string;
-  readonly pickable: boolean;
-  readonly updatedAt: Date;
-}
 
 /** Catalog-side workspace metadata (Postgres). Git scaffold happens via builder. */
 export const getOrCreateHostedWorkspaceMeta = (input: {

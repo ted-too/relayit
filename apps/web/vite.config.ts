@@ -22,6 +22,11 @@ const config = defineConfig({
     tsconfigPaths: true,
     dedupe: ["react", "react-dom"],
   },
+  optimizeDeps: {
+    // Bun builtins are not npm packages; the client dep scan still crawls
+    // createServerFn modules and would otherwise fail to resolve `bun`.
+    exclude: ["bun"],
+  },
   build: {
     sourcemap: "hidden",
   },
@@ -30,7 +35,13 @@ const config = defineConfig({
     devtools(),
     nitro({ preset: "bun" }),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      importProtection: {
+        client: {
+          specifiers: ["bun", "@repo/redis", "@repo/jobs"],
+        },
+      },
+    }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
   ],

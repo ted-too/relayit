@@ -14,7 +14,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import Stripe from "stripe";
 import { env } from "@/env";
-import { AppLive } from "@/lib/layers";
+import { AppLive } from "@/lib/layers.server";
 
 const db = createPromiseDb({ databaseUrl: env.DATABASE_URL });
 const redis = new RedisClient(env.REDIS_URL);

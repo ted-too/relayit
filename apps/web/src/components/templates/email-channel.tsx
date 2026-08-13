@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
 import { putReactEmailChannelFn } from "@/lib/templating/template.functions";
-import type { WorkspaceEntryListItem } from "@/lib/templating/workspace";
+import type { WorkspaceEntryListItem } from "@/lib/templating/types";
 import type { Template } from "./types";
 
 function emailVariantOf(template: Template) {
