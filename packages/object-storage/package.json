@@ -1,0 +1,15 @@
+{
+  "name": "@repo/object-storage",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@effect-aws/client-s3": "2.0.0-beta.6",
+    "effect": "4.0.0-beta.102",
+    "zod": "^4.4.3"
+  }
+}

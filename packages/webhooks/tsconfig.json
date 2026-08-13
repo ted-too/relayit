@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/jobs": ["../jobs/src/index.ts"],
+      "@repo/jobs/*": ["../jobs/src/*"],
+      "@repo/persistence/*": ["../persistence/src/*"],
+      "@repo/redis": ["../redis/src/index.ts"],
+      "@repo/redis/*": ["../redis/src/*"],
+      "@repo/webhooks": ["./src/index.ts"],
+      "@repo/webhooks/*": ["./src/*"]
+    }
+  }
+}

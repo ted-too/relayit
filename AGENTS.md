@@ -15,3 +15,11 @@ Multi-context — `CONTEXT-MAP.md` at the root points at per-context docs. See `
 ### Drizzle migrations
 
 Never hand-edit `apps/api/drizzle/`. Schema TS → `bun run db:generate`; if generate needs a TTY, ask a human. See `docs/agents/drizzle-migrations.md`.
+
+### Implementation
+
+After `/implement`, do not commit until the human asks — ADR-0010.
+
+### Nitpicks
+
+Small do/don't preferences from review. See `docs/agents/nitpicks.md`.

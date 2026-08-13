@@ -175,12 +175,12 @@ function startDataGridColumnResizeOnEnd<TData>(
     const deltaOffset = (clientXPos - dragStartClientX) * directionMultiplier;
     const deltaPercentage = Math.max(deltaOffset / startSize, -0.999_999);
 
-    columnSizingStart.forEach(([columnId, headerSize]) => {
+    for (const [columnId, headerSize] of columnSizingStart) {
       nextColumnSizing[columnId] =
         Math.round(
           Math.max(headerSize + headerSize * deltaPercentage, 0) * 100
         ) / 100;
-    });
+    }
 
     table.setColumnSizingInfo((old) => ({
       ...old,
@@ -314,7 +314,7 @@ function getDataGridTableResolvedRows<TData>(
     pinnedBoundary?: DataGridTablePinnedBoundary;
   }> = [];
 
-  topRows.forEach((row, index) => {
+  for (const [index, row] of topRows.entries()) {
     resolvedRows.push({
       row,
       pinnedBoundary:
@@ -323,13 +323,13 @@ function getDataGridTableResolvedRows<TData>(
           ? "top"
           : undefined,
     });
-  });
+  }
 
-  centerRows.forEach((row) => {
+  for (const row of centerRows) {
     resolvedRows.push({ row });
-  });
+  }
 
-  bottomRows.forEach((row, index) => {
+  for (const [index, row] of bottomRows.entries()) {
     resolvedRows.push({
       row,
       pinnedBoundary:
@@ -337,7 +337,7 @@ function getDataGridTableResolvedRows<TData>(
           ? "bottom"
           : undefined,
     });
-  });
+  }
 
   return resolvedRows;
 }
@@ -493,8 +493,7 @@ function DataGridTableBase({ children }: { children: ReactNode }) {
     }
     const headers = table.getFlatHeaders();
     const colSizes: Record<string, number> = {};
-    for (let i = 0; i < headers.length; i++) {
-      const header = headers[i]!;
+    for (const header of headers) {
       colSizes[`--header-${header.id}-size`] = header.getSize();
       colSizes[`--col-${header.column.id}-size`] = header.column.getSize();
     }
@@ -689,7 +688,6 @@ function DataGridTableHead({ children }: { children: ReactNode }) {
 
 function DataGridTableHeadRow({
   children,
-  rowId,
 }: {
   children: ReactNode;
   rowId: string;
@@ -1322,6 +1320,7 @@ function DataGridTableRowPin<TData>({ row }: { row: Row<TData> }) {
     >
       {isPinned ? (
         <svg
+          aria-hidden="true"
           fill="currentColor"
           height="16"
           stroke="none"
@@ -1329,10 +1328,12 @@ function DataGridTableRowPin<TData>({ row }: { row: Row<TData> }) {
           width="16"
           xmlns="http://www.w3.org/2000/svg"
         >
+          <title>Unpin row</title>
           <path d="M16 2l4.585 4.586-2.122 2.121L17.05 7.293l-3.535 3.536 1.413 5.658-2.12 2.121-4.244-4.243L4.322 18.6l-1.414-1.41 4.242-4.244-4.243-4.243 2.122-2.121 5.656 1.414 3.536-3.536-1.414-1.414z" />
         </svg>
       ) : (
         <svg
+          aria-hidden="true"
           fill="none"
           height="16"
           stroke="currentColor"
@@ -1343,6 +1344,7 @@ function DataGridTableRowPin<TData>({ row }: { row: Row<TData> }) {
           width="16"
           xmlns="http://www.w3.org/2000/svg"
         >
+          <title>Pin row</title>
           <line x1="12" x2="12" y1="17" y2="22" />
           <path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24z" />
         </svg>
@@ -1430,11 +1432,13 @@ function DataGridTableBodyRows<TData>({ table }: { table: Table<TData> }) {
         <td className="p-8" colSpan={table.getVisibleFlatColumns().length}>
           <div className="flex items-center justify-center">
             <svg
+              aria-hidden="true"
               className="mr-3 -ml-1 h-5 w-5 animate-spin text-muted-foreground"
               fill="none"
               viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg"
             >
+              <title>Loading</title>
               <circle
                 className="opacity-25"
                 cx="12"

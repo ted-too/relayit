@@ -21,32 +21,26 @@ import {
 } from "@repo/ui/components/ui/shad/item";
 import { formatDateTime, getInitials } from "@repo/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { useParams, useRouteContext } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
-import type { ApiClient, InferData } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+import { authClient } from "@/lib/auth-client";
+import type { HydratedApiKey } from "@/lib/projects/api-keys";
+import { queries } from "@/lib/queries";
 import { UpsertApiKey } from "./upsert";
 
-type ApiKeysGet = ReturnType<ApiClient["projects"]>["apiKeys"]["get"];
-
-export function ApiKeyItem({
-  apiKey,
-}: {
-  apiKey: InferData<ApiKeysGet>[number];
-}) {
+export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { betterAuth } = useRouteContext({ from: "__root__" });
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { mutate: deleteApiKey, isPending: isDeletingApiKey } = useMutation({
     mutationFn: async () => {
-      const { error } = await betterAuth.apiKey.delete({
-        keyId: apiKey.id,
+      const { error } = await authClient.apiKey.delete({
         configId: "org-keys",
+        keyId: apiKey.id,
       });
 
       if (error) {
@@ -56,14 +50,14 @@ export function ApiKeyItem({
     onSuccess: (_, __, ___, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-        (old: InferData<ApiKeysGet>) =>
-          old.filter((key) => key.id !== apiKey.id)
+        (old: HydratedApiKey[] | undefined) =>
+          (old ?? []).filter((key) => key.id !== apiKey.id)
       );
       client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error("Failed to delete API key", {
         description: error.message,
       });

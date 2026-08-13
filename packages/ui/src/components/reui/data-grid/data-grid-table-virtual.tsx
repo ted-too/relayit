@@ -285,11 +285,11 @@ function DataGridTableVirtualBody<TData>({
       );
     }
 
-    virtualItems.forEach((virtualRow) => {
+    for (const virtualRow of virtualItems) {
       const row = centerRows[virtualRow.index];
 
       if (!row) {
-        return;
+        continue;
       }
 
       renderedRows.push(
@@ -299,7 +299,7 @@ function DataGridTableVirtualBody<TData>({
           rowRef={measureRowRef}
         />
       );
-    });
+    }
 
     if (trailingSpacerHeight > 0) {
       renderedRows.push(
@@ -311,9 +311,9 @@ function DataGridTableVirtualBody<TData>({
       );
     }
   } else {
-    centerRows.forEach((row) => {
+    for (const row of centerRows) {
       renderedRows.push(<DataGridTableRenderedRow key={row.id} row={row} />);
-    });
+    }
   }
 
   if (showFetchingRow) {

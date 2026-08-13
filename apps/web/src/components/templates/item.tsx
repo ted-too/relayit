@@ -16,17 +16,17 @@ import {
 } from "@repo/ui/components/ui/shad/item";
 import { formatDateTime } from "@repo/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useParams, useRouteContext } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
-import { formatToastError, type InferData } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
+import type { TemplateListItem } from "@/lib/templating/catalog";
+import { archiveTemplateFn } from "@/lib/templating/template.functions";
 import type { Template } from "./types";
 
 export function TemplateItem({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { api } = useRouteContext({ from: "__root__" });
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   const emailVariant = template.channelVariants.find(
@@ -34,28 +34,14 @@ export function TemplateItem({ template }: { template: Template }) {
   );
 
   const { mutate: archiveTemplate, isPending: isArchiving } = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.templates({ id: template.id })
-        .archive.post();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async () =>
+      await archiveTemplateFn({
+        data: { orgSlug, templateId: template.id },
+      }),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
-        (
-          old: InferData<
-            ReturnType<
-              ReturnType<typeof api.projects>["templating"]["templates"]["get"]
-            >
-          >
-        ) =>
+        (old: TemplateListItem[] | undefined) =>
           (old ?? []).map((row) =>
             row.id === data.id ? { ...row, ...data } : row
           )
@@ -66,8 +52,10 @@ export function TemplateItem({ template }: { template: Template }) {
       toast.success("Template archived");
       setArchiveOpen(false);
     },
-    onError: (error) => {
-      toast.error(...formatToastError(error as never));
+    onError: (error: Error) => {
+      toast.error("Failed to archive Template", {
+        description: error.message,
+      });
     },
   });
 

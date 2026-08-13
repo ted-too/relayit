@@ -1,10 +1,6 @@
-import {
-  type CreateProjectBody,
-  createProjectBodySchema,
-} from "@repo/api/validators/routes/projects/project";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { useMutation, useSuspenseQueries } from "@tanstack/react-query";
-import { useParams, useRouteContext } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   SettingsCard,
@@ -14,10 +10,14 @@ import {
   SettingsCardHeader,
   SettingsCardTitle,
 } from "@/components/settings/card";
-import { queries } from "@/integrations/queries";
+import { authClient } from "@/lib/auth-client";
+import {
+  type CreateProjectBody,
+  createProjectBodySchema,
+} from "@/lib/projects/schemas";
+import { queries } from "@/lib/queries";
 
 export function ProjectEditName() {
-  const { betterAuth } = useRouteContext({ from: "/_authd/$orgSlug" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [{ data: me }, { data: organization }] = useSuspenseQueries({
     queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
@@ -27,7 +27,7 @@ export function ProjectEditName() {
   );
   const { mutateAsync } = useMutation({
     mutationFn: async (body: CreateProjectBody) => {
-      const { data, error } = await betterAuth.organization.update({
+      const { data, error } = await authClient.organization.update({
         data: { name: body.name },
         organizationId: organization.id,
       });
@@ -68,7 +68,7 @@ export function ProjectEditName() {
     return null;
   }
 
-  const canUpdate = betterAuth.organization.checkRolePermission({
+  const canUpdate = authClient.organization.checkRolePermission({
     permissions: {
       organization: ["update"],
     },

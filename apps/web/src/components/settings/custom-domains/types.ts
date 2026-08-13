@@ -1,10 +1,8 @@
-import type { ApiClient, InferData } from "@/integrations/api";
+import type {
+  ProjectDomainDnsRecord,
+  ProjectDomainListItem,
+} from "@/lib/domains/list";
 
-export type Domain = InferData<
-  ReturnType<ApiClient["projects"]>["channels"]["email"]["domains"]["get"]
->[number];
+export type Domain = ProjectDomainListItem;
 
-export type DNSRecord =
-  | Domain["dnsRecords"]["dkimAndSpf"][number]
-  | Domain["dnsRecords"]["ownership"][number]
-  | Domain["dnsRecords"]["dmarc"][number];
+export type DNSRecord = ProjectDomainDnsRecord;

@@ -4,7 +4,7 @@ import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { OrganizationLogo } from "@/components/layout/nav-projects";
 import { NavUser } from "@/components/layout/nav-user";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/")({
   beforeLoad: async ({ context }) => {
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_authd/")({
       });
     }
 
-    if (organizations.length === 1) {
+    if (organizations[0]?.slug) {
       throw redirect({
         to: "/$orgSlug",
         params: { orgSlug: organizations[0].slug },

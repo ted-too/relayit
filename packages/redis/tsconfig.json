@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/redis": ["./src/index.ts"],
+      "@repo/redis/*": ["./src/*"]
+    }
+  }
+}

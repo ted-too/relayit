@@ -29,7 +29,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4"

@@ -5,7 +5,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { TemplateEditSlug } from "@/components/templates/edit-slug";
 import { TemplateEmailChannel } from "@/components/templates/email-channel";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute(
   "/_authd/$orgSlug/automations/templates/$templateId"

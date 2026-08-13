@@ -20,7 +20,7 @@ import {
 } from "@/components/settings/custom-domains/domain-actions";
 import { VERIFICATION_STATUS } from "@/components/settings/custom-domains/item";
 import { DOMAIN_PROVIDER_ICONS } from "@/components/settings/custom-domains/provider-icons";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/$orgSlug/domains/$fqdn")({
   loader: async ({ context, params }) => {
@@ -113,7 +113,6 @@ function RouteComponent() {
                   <div className="flex items-center gap-2">
                     {canSend ? (
                       <RiCheckboxCircleFill className="size-5 text-success-foreground" />
-                      // biome-ignore lint/style/noNestedTernary: this is the cleanest way to do this
                     ) : domain.isPaused ? (
                       <RiCloseCircleFill className="size-5 text-destructive-foreground" />
                     ) : (

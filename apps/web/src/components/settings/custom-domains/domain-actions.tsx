@@ -7,52 +7,34 @@ import {
   MenuTrigger,
 } from "@repo/ui/components/ui/coss/menu";
 import { useMutation } from "@tanstack/react-query";
-import {
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import {
-  type ApiClient,
-  formatToastError,
-  type InferData,
-  type InferError,
-} from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+  deleteCustomDomainFn,
+  refreshCustomDomainFn,
+} from "@/lib/domains/custom-domain.functions";
+import type { ProjectDomainListItem } from "@/lib/domains/list";
+import { queries } from "@/lib/queries";
 import type { Domain } from "./types";
 
-type DomainsGet = ReturnType<
-  ApiClient["projects"]
->["channels"]["email"]["domains"]["get"];
-type DomainById = ReturnType<
-  ReturnType<ApiClient["projects"]>["channels"]["email"]["domains"]
->;
-
 export function useRefreshDomain({ domain }: { domain: Domain }) {
-  const { api } = useRouteContext({ from: "__root__" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .channels.email.domains({ domainId: domain.id })
-        .verify.post();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async () =>
+      await refreshCustomDomainFn({
+        data: {
+          customDomainId: domain.id,
+          orgSlug,
+        },
+      }),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: InferData<DomainsGet>) =>
-          old.map((existingDomain) =>
+        (old: ProjectDomainListItem[] | undefined) =>
+          (old ?? []).map((existingDomain) =>
             existingDomain.id === data.id ? data : existingDomain
           )
       );
@@ -61,8 +43,10 @@ export function useRefreshDomain({ domain }: { domain: Domain }) {
       });
       toast.success("Domain verification refreshed");
     },
-    onError: (error: InferError<DomainById["verify"]["post"]>) => {
-      toast.error(...formatToastError(error));
+    onError: (error: Error) => {
+      toast.error("Failed to refresh domain", {
+        description: error.message,
+      });
     },
   });
 }
@@ -74,32 +58,30 @@ export function useDeleteDomain({
   domain: Domain;
   onDeleted?: () => void;
 }) {
-  const { api } = useRouteContext({ from: "__root__" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   return useMutation({
-    mutationFn: async () => {
-      const { error } = await api
-        .projects({ orgSlug })
-        .channels.email.domains({ domainId: domain.id })
-        .delete();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-    },
+    mutationFn: async () =>
+      await deleteCustomDomainFn({
+        data: {
+          customDomainId: domain.id,
+          orgSlug,
+        },
+      }),
     onSuccess: (_, __, ___, { client }) => {
       onDeleted?.();
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: InferData<DomainsGet>) =>
-          old.filter((existingDomain) => existingDomain.id !== domain.id)
+        (old: ProjectDomainListItem[] | undefined) =>
+          (old ?? []).filter(
+            (existingDomain) => existingDomain.id !== domain.id
+          )
       );
       client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listDomains.queryKey,
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error("Failed to delete custom domain", {
         description: error.message,
       });

@@ -11,7 +11,7 @@ import {
 import { Category2, Cloud, FolderOpen, Profile2User } from "iconsax-reactjs";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar, type NavItemGroup } from "@/components/layout/app-sidebar";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/admin")({
   beforeLoad: async ({ context }) => {

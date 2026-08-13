@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/object-storage": ["./src/index.ts"],
+      "@repo/object-storage/*": ["./src/*"]
+    }
+  }
+}

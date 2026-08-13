@@ -1,0 +1,1 @@
+ALTER TABLE "message" DROP COLUMN "idempotency_key";

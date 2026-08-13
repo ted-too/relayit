@@ -28,6 +28,8 @@ POSTGRES_PASSWORD=your-secure-password
 BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
 
 S3_ENDPOINT=...
+S3_REGION=...
+S3_BUCKET=...
 S3_ACCESS_KEY_ID=...
 S3_SECRET_ACCESS_KEY=...
 ```
@@ -112,7 +114,7 @@ Validated at process start (`apps/api` env packs). Compose maps `WEB_URL` → `A
 | `API_URL` | Public API URL |
 | `APP_URL` | Public web URL (trusted origin / cookies) |
 | `BETTER_AUTH_SECRETS` | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`) |
-| `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Object storage (`S3_BUCKET`, `S3_REGION` optional) |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
 
 Optional: `LOG_LEVEL`. Compose pins `RUN_MODE=combined` (builder in-process).
 

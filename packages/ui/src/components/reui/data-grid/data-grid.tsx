@@ -112,7 +112,7 @@ export interface DataGridProps<TData extends object> {
 }
 
 const DataGridContext = createContext<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: shared context must erase row generics
   DataGridContextProps<any> | undefined
 >(undefined);
 
@@ -129,7 +129,6 @@ function DataGridProvider<TData extends object>({
   table,
   ...props
 }: DataGridProps<TData> & { table: Table<TData> }) {
-  const _tableState = table.getState();
   const resolvedColumnsResizeMode =
     props.tableLayout?.columnsResizeMode ?? "onEnd";
 
@@ -142,14 +141,14 @@ function DataGridProvider<TData extends object>({
   // Memoize context value so consumers don't re-render during column resize.
   // Column sizing state is intentionally excluded from deps -- CSS variables
   // on the <table> element handle width updates without React re-renders.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: omit full `props` (new object each render); list stable fields instead
   const value = useMemo(
     () => ({
       props,
       table,
       recordCount: props.recordCount,
-      isLoading: props.isLoading,
+      isLoading: props.isLoading ?? false,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       table,
       props.recordCount,
@@ -161,7 +160,8 @@ function DataGridProvider<TData extends object>({
       props.emptyMessage,
       props.onRowClick,
       props.className,
-      props,
+      props.tableLayout,
+      props.tableClassNames,
     ]
   );
 
@@ -239,7 +239,6 @@ function DataGrid<TData extends object>({
 function DataGridContainer({
   children,
   className,
-  border = true,
 }: {
   children: ReactNode;
   className?: string;

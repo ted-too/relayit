@@ -9,7 +9,7 @@ import { Select } from "@/components/resources/primitives/select";
 import { Toolbar } from "@/components/resources/primitives/toolbar";
 import { CreateDomain } from "@/components/settings/custom-domains/create";
 import { DomainItem } from "@/components/settings/custom-domains/item";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/$orgSlug/domains/")({
   loader: ({ context, params }) => {
@@ -30,7 +30,7 @@ function RouteComponent() {
   const { orgSlug } = Route.useParams();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0]
+    SORT_OPTIONS[0] ?? null
   );
   const { data: rawDomains } = useSuspenseQuery(
     queries.organizations.bySlug(orgSlug).listDomains

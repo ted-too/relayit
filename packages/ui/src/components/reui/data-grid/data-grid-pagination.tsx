@@ -76,7 +76,7 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
 
   // Render page buttons based on the current group
   const renderPageButtons = () => {
-    const buttons = [];
+    const buttons: React.ReactElement[] = [];
     for (let i = currentGroupStart; i < currentGroupEnd; i++) {
       buttons.push(
         <Button

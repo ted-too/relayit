@@ -64,8 +64,12 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
 
     case "union": {
       const unionDef = def as z4.$ZodUnionDef;
+      const firstOption = unionDef.options[0];
+      if (!firstOption) {
+        return null as z4.infer<T>;
+      }
       // Use the first option's default
-      return getDefaultFromZodType(unionDef.options[0]) as z4.infer<T>;
+      return getDefaultFromZodType(firstOption) as z4.infer<T>;
     }
 
     case "intersection": {
@@ -90,7 +94,9 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
     }
 
     case "literal": {
-      const literalDef = def as z4.$ZodLiteralDef<any>;
+      const literalDef = def as z4.$ZodLiteralDef<
+        string | number | bigint | boolean | null | undefined
+      >;
       return literalDef.values[0] as z4.infer<T>;
     }
 
@@ -160,7 +166,14 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
 
     default: {
       // Fallback for any unhandled types
-      console.warn(`Unhandled Zod type: ${(def as any).type}`);
+      const unhandledType =
+        typeof def === "object" &&
+        def !== null &&
+        "type" in def &&
+        typeof (def as { type: unknown }).type === "string"
+          ? (def as { type: string }).type
+          : "unknown";
+      console.warn(`Unhandled Zod type: ${unhandledType}`);
       return null as z4.infer<T>;
     }
   }

@@ -1,12 +1,7 @@
-import { safeString } from "@repo/api/validators/shared";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { InputGroupText } from "@repo/ui/components/ui/shad/input-group";
 import { useMutation, useSuspenseQueries } from "@tanstack/react-query";
-import {
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 import * as z from "zod";
 import {
@@ -17,7 +12,9 @@ import {
   SettingsCardHeader,
   SettingsCardTitle,
 } from "@/components/settings/card";
-import { queries } from "@/integrations/queries";
+import { authClient } from "@/lib/auth-client";
+import { safeString } from "@/lib/projects/schemas";
+import { queries } from "@/lib/queries";
 
 const formSchema = z.object({
   slug: safeString,
@@ -27,7 +24,6 @@ type FormSchema = z.infer<typeof formSchema>;
 
 export function ProjectEditSlug() {
   const navigate = useNavigate();
-  const { betterAuth, env } = useRouteContext({ from: "/_authd/$orgSlug" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [{ data: me }, { data: organization }] = useSuspenseQueries({
     queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
@@ -37,7 +33,7 @@ export function ProjectEditSlug() {
   );
   const { mutateAsync } = useMutation({
     mutationFn: async (body: FormSchema) => {
-      const { data, error } = await betterAuth.organization.update({
+      const { data, error } = await authClient.organization.update({
         data: { slug: body.slug },
         organizationId: organization.id,
       });
@@ -80,14 +76,16 @@ export function ProjectEditSlug() {
     return null;
   }
 
-  const appURL = new URL(env.VITE_BASE_URL);
-  let baseUrl = new URL(env.VITE_BASE_URL).hostname;
+  // biome-ignore lint/correctness/noUndeclaredVariables: this is a vite constant
+  const rawBaseUrl = __BASE_URL__;
+  const appURL = new URL(rawBaseUrl);
+  let baseUrl = new URL(rawBaseUrl).hostname;
 
   if (!["80", "443"].includes(appURL.port)) {
     baseUrl = `${baseUrl}:${appURL.port}`;
   }
 
-  const canUpdate = betterAuth.organization.checkRolePermission({
+  const canUpdate = authClient.organization.checkRolePermission({
     permissions: {
       organization: ["update"],
     },

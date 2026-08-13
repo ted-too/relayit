@@ -56,10 +56,6 @@ function DataGridColumnHeaderInner<TData, TValue>({
   const resolvedTitle = title ?? getColumnHeaderLabel(column);
 
   const columnOrder = table.getState().columnOrder;
-  const _columnVisibilityKey =
-    props.tableLayout?.columnsVisibility && visibility
-      ? JSON.stringify(table.getState().columnVisibility)
-      : "";
   const isSorted = column.getIsSorted();
   const isPinned = column.getIsPinned();
   const canSort = column.getCanSort();
@@ -207,6 +203,9 @@ function DataGridColumnHeaderInner<TData, TValue>({
             if (columnIndex > 0) {
               const newOrder = [...columnOrder];
               const [movedColumn] = newOrder.splice(columnIndex, 1);
+              if (!movedColumn) {
+                return;
+              }
               newOrder.splice(columnIndex - 1, 0, movedColumn);
               table.setColumnOrder(newOrder);
             }
@@ -222,6 +221,9 @@ function DataGridColumnHeaderInner<TData, TValue>({
             if (columnIndex < columnOrder.length - 1) {
               const newOrder = [...columnOrder];
               const [movedColumn] = newOrder.splice(columnIndex, 1);
+              if (!movedColumn) {
+                return;
+              }
               newOrder.splice(columnIndex + 1, 0, movedColumn);
               table.setColumnOrder(newOrder);
             }
@@ -245,7 +247,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
             <RiEqualizer2Line className="size-3.5!" />
             <span>Columns</span>
           </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent side="right">
+          <DropdownMenuSubContent>
             {table
               .getAllColumns()
               .filter((col) => col.getCanHide())

@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "build"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/templating": ["../../packages/templating/src/index.ts"],
+      "@repo/templating/*": ["../../packages/templating/src/*"],
+      "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
+      "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
+      "@repo/persistence/*": ["../../packages/persistence/src/*"],
+      "@repo/redis": ["../../packages/redis/src/index.ts"],
+      "@repo/redis/*": ["../../packages/redis/src/*"],
+      "@repo/template-render": ["../../packages/template-render/src/index.ts"],
+      "@repo/template-render/*": ["../../packages/template-render/src/*"]
+    }
+  }
+}

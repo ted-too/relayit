@@ -1,4 +1,3 @@
-import { createDomainBodySchema } from "@repo/api/validators/routes/projects/channels/email/domains";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
   Dialog,
@@ -15,23 +14,16 @@ import {
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { FieldGroup } from "@repo/ui/components/ui/shad/field";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
-import {
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type * as z from "zod";
+import { createCustomDomainFn } from "@/lib/domains/custom-domain.functions";
+import type { ProjectDomainListItem } from "@/lib/domains/list";
 import {
-  type ApiClient,
-  formatToastError,
-  type InferError,
-} from "@/integrations/api";
-import { queries } from "@/integrations/queries";
-import type { Domain } from "./types";
-
-type CreateDomainBody = z.infer<typeof createDomainBodySchema>;
+  type CreateCustomDomainFormValues,
+  createCustomDomainFormSchema,
+} from "@/lib/domains/schemas";
+import { queries } from "@/lib/queries";
 
 export function CreateDomain({
   render,
@@ -46,7 +38,6 @@ export function CreateDomain({
 }) {
   const navigate = useNavigate();
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { api } = useRouteContext({ from: "__root__" });
   const [_open, _setOpen] = useState(false);
   const open = _openProp ?? _open;
   const setOpen = _setOpenProp ?? _setOpen;
@@ -84,21 +75,20 @@ export function CreateDomain({
     byo[0]?.id;
 
   const { mutateAsync: createDomain } = useMutation({
-    mutationFn: async (body: CreateDomainBody) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .channels.email.domains.post(body);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async (body: CreateCustomDomainFormValues) =>
+      await createCustomDomainFn({
+        data: {
+          ...body,
+          orgSlug,
+        },
+      }),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: Domain[]) => [...old, data]
+        (old: ProjectDomainListItem[] | undefined) => [
+          ...(old ?? []).filter((domain) => domain.id !== data.id),
+          data,
+        ]
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listDomains.queryKey,
@@ -111,14 +101,10 @@ export function CreateDomain({
         params: { orgSlug, fqdn: data.fqdn },
       });
     },
-    onError: (
-      error: InferError<
-        ReturnType<
-          ApiClient["projects"]
-        >["channels"]["email"]["domains"]["post"]
-      >
-    ) => {
-      toast.error(...formatToastError(error));
+    onError: (error: Error) => {
+      toast.error("Failed to add custom domain", {
+        description: error.message,
+      });
     },
   });
 
@@ -126,11 +112,11 @@ export function CreateDomain({
     defaultValues: {
       fqdn: "",
       providerId: defaultProviderId,
-    } satisfies CreateDomainBody,
+    } as CreateCustomDomainFormValues,
     validators: {
       // Transform on fqdn makes Zod input/output diverge from form values.
       // biome-ignore lint/suspicious/noExplicitAny: see above
-      onSubmit: createDomainBodySchema as any,
+      onSubmit: createCustomDomainFormSchema as any,
     },
     onSubmit: async ({ value }) => {
       if (showProviderPicker) {
@@ -145,18 +131,17 @@ export function CreateDomain({
         return;
       }
 
-      // Single (or zero) managed backend — let the API resolve the default.
       await createDomain({ fqdn: value.fqdn });
     },
   });
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
           form.reset();
         }
-        setOpen(open);
+        setOpen(nextOpen);
       }}
       open={open}
     >

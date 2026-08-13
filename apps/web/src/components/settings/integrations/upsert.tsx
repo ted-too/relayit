@@ -1,11 +1,3 @@
-import {
-  CLIENT_PROVIDER_REGISTRY,
-  type ProductKey,
-} from "@repo/api/providers/client";
-import {
-  createAdminProviderBodySchema,
-  updateAdminProviderBodySchema,
-} from "@repo/api/validators/routes/admin/providers";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
   Dialog,
@@ -37,33 +29,32 @@ import {
 } from "@repo/ui/components/ui/shad/select";
 import { generateDefaultFromSchema } from "@repo/ui/lib/zod-helpers";
 import { useMutation } from "@tanstack/react-query";
-import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import type * as z from "zod";
 import { DynamicForm } from "@/components/dynamic-form";
 import {
-  type ApiClient,
-  formatToastError,
-  type InferData,
-  type InferError,
-} from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+  createPlatformProviderFn,
+  updatePlatformProviderFn,
+} from "@/lib/admin/provider.functions";
+import {
+  DEFAULT_PLATFORM_PRODUCT,
+  PLATFORM_EMAIL_PRODUCTS,
+  type PlatformProductKey,
+  platformProductByKey,
+} from "@/lib/admin/provider-catalog";
+import {
+  createPlatformProviderBodySchema,
+  updatePlatformProviderBodySchema,
+} from "@/lib/admin/provider-schemas";
+import type { PlatformProviderListItem } from "@/lib/admin/providers";
+import { queries } from "@/lib/queries";
 import { PROVIDER_ICONS } from "./icons";
 
-const PRODUCTS = Object.values(CLIENT_PROVIDER_REGISTRY).flatMap((provider) =>
-  Object.values(provider.products).map((product) => {
-    const value = `${provider.id}.${product.id}` as ProductKey;
-    return {
-      label: `${provider.label} ${product.label}`,
-      value,
-      vendorId: provider.id,
-      productId: product.id,
-      config: product,
-      Icon: PROVIDER_ICONS[value],
-    };
-  })
-);
+const PRODUCTS = PLATFORM_EMAIL_PRODUCTS.map((product) => ({
+  ...product,
+  Icon: PROVIDER_ICONS[product.value],
+}));
 
 export function UpsertProvider({
   initialData,
@@ -72,67 +63,68 @@ export function UpsertProvider({
   open: _openProp,
   setOpen: _setOpenProp,
 }: {
-  initialData?: InferData<ApiClient["admin"]["providers"]["get"]>[number];
+  initialData?: PlatformProviderListItem;
   render?: DialogTriggerProps["render"];
   children?: React.ReactNode;
   open?: boolean;
   setOpen?: (open: boolean) => void;
 }) {
-  const { api } = useRouteContext({ from: "__root__" });
   const [_open, _setOpen] = useState(false);
   const open = _openProp ?? _open;
   const setOpen = _setOpenProp ?? _setOpen;
-  const [productKey, setProductKey] = useState<ProductKey>(
+  const [productKey, setProductKey] = useState<PlatformProductKey>(
     initialData
-      ? (`${initialData.vendorId}.${initialData.productId}` as ProductKey)
-      : PRODUCTS[0].value
+      ? (`${initialData.vendorId}.${initialData.productId}` as PlatformProductKey)
+      : DEFAULT_PLATFORM_PRODUCT.value
   );
-  const selectedProduct =
-    PRODUCTS.find((product) => product.value === productKey) ?? PRODUCTS[0];
-  const config = selectedProduct.config;
+  const selectedProduct = platformProductByKey(productKey);
+  const config = selectedProduct;
   const schema = (
-    initialData ? updateAdminProviderBodySchema : createAdminProviderBodySchema
+    initialData
+      ? updatePlatformProviderBodySchema.omit({ providerId: true })
+      : createPlatformProviderBodySchema.omit({
+          productId: true,
+          vendorId: true,
+        })
   ).extend({
     credentials: initialData
-      ? config.credentialsSchema.optional()
+      ? config.credentialsSchema.partial().optional()
       : config.credentialsSchema,
   });
 
-  type FormValues = z.infer<typeof createAdminProviderBodySchema> & {
+  interface FormValues {
     credentials: z.infer<typeof config.credentialsSchema> | undefined;
-  };
+    isDefault?: boolean;
+    name: string | null;
+  }
 
   const { mutateAsync: upsertProvider } = useMutation({
     mutationFn: async (body: FormValues) => {
       if (initialData) {
-        const { data, error } = await api.admin
-          .providers({ providerId: initialData.id })
-          .patch(body as z.infer<typeof updateAdminProviderBodySchema>);
-
-        if (error) {
-          return Promise.reject(error);
-        }
-
-        return data;
+        return await updatePlatformProviderFn({
+          data: {
+            ...body,
+            providerId: initialData.id,
+          },
+        });
       }
 
-      const { data, error } = await api.admin.providers
-        .byVendor({ vendorId: selectedProduct.vendorId })({
+      return await createPlatformProviderFn({
+        data: {
+          ...body,
           productId: selectedProduct.productId,
-        })
-        .post(body as z.infer<typeof createAdminProviderBodySchema>);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
+          vendorId: selectedProduct.vendorId,
+          credentials: body.credentials as z.infer<
+            typeof config.credentialsSchema
+          >,
+        },
+      });
     },
-    onSuccess: async (data, _, __, { client }) => {
+    onSuccess: async (data: PlatformProviderListItem, _, __, { client }) => {
       client.setQueryData(
         queries.admin.listProviders.queryKey,
-        (old: InferData<ApiClient["admin"]["providers"]["get"]>) => [
-          ...old.filter((provider) => provider.id !== data.id),
+        (old: PlatformProviderListItem[] | undefined) => [
+          ...(old ?? []).filter((provider) => provider.id !== data.id),
           data,
         ]
       );
@@ -147,14 +139,10 @@ export function UpsertProvider({
       form.reset();
       setOpen(false);
     },
-    onError: (
-      error: InferError<
-        ReturnType<
-          ReturnType<ApiClient["admin"]["providers"]["byVendor"]>
-        >["post"]
-      >
-    ) => {
-      toast.error(...formatToastError(error));
+    onError: (error: Error) => {
+      toast.error("Failed to save provider", {
+        description: error.message,
+      });
     },
   });
 
@@ -177,11 +165,11 @@ export function UpsertProvider({
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
           form.reset();
         }
-        setOpen(open);
+        setOpen(nextOpen);
       }}
       open={open}
     >
@@ -221,9 +209,13 @@ export function UpsertProvider({
               <Field>
                 <FieldLabel htmlFor="provider-config-id">Provider</FieldLabel>
                 <Select
+                  disabled={Boolean(initialData)}
                   items={PRODUCTS}
                   onValueChange={(value) =>
-                    setProductKey((value as ProductKey) ?? PRODUCTS[0].value)
+                    setProductKey(
+                      (value as PlatformProductKey) ??
+                        DEFAULT_PLATFORM_PRODUCT.value
+                    )
                   }
                   value={productKey}
                 >

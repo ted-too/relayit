@@ -3,7 +3,7 @@ import { createRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { DefaultCatchBoundary } from "@/components/default-catch";
 import { NotFound } from "@/components/not-found";
-import { getContext } from "@/integrations/context";
+import { getContext } from "@/lib/router-context";
 import { routeTree } from "./routeTree.gen";
 
 export const getRouter = () => {

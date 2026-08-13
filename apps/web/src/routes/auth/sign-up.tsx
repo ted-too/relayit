@@ -1,23 +1,60 @@
-import {
-  type SignUpBody,
-  signUpBodySchema,
-} from "@repo/api/validators/routes/auth";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { CombinedLogo } from "@repo/ui/components/ui/custom/logo";
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { z } from "zod";
+import { type SignUpBody, signUpBodySchema } from "@/lib/auth/schemas";
+import { authClient } from "@/lib/auth-client";
+
+const signUpSearchSchema = z.object({
+  redirect: z.string().optional(),
+});
 
 export const Route = createFileRoute("/auth/sign-up")({
+  validateSearch: signUpSearchSchema,
   component: RouteComponent,
 });
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { betterAuth, env, isCloudEdition } = Route.useRouteContext();
+  const { redirect } = Route.useSearch();
+  const { isGitHubAuthEnabled } = Route.useRouteContext();
+  const lastMethod = authClient.getLastUsedLoginMethod();
 
-  const lastMethod = betterAuth.getLastUsedLoginMethod();
+  // biome-ignore lint/correctness/noUndeclaredVariables: this is a vite constant
+  const baseURL = __BASE_URL__;
+  const callbackURL = redirect
+    ? `${baseURL}${redirect.startsWith("/") ? redirect : `/${redirect}`}`
+    : `${baseURL}/`;
+
+  const { mutate: signUpWithGitHub, isPending: isSigningUpWithGitHub } =
+    useMutation({
+      mutationFn: async () => {
+        const { data, error } = await authClient.signIn.social({
+          provider: "github",
+          callbackURL,
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        return data;
+      },
+      onSuccess: (data) => {
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      },
+      onError: (error) => {
+        toast.error("Failed to sign up with GitHub", {
+          description: error.message,
+        });
+      },
+    });
 
   const form = useAppForm({
     defaultValues: {
@@ -29,7 +66,7 @@ function RouteComponent() {
       onSubmit: signUpBodySchema,
     },
     onSubmit: async ({ value }) => {
-      const { error } = await betterAuth.signUp.email({
+      const { error } = await authClient.signUp.email({
         email: value.email,
         password: value.password,
         name: value.name,
@@ -43,7 +80,7 @@ function RouteComponent() {
 
       toast.success("Signed up successfully");
 
-      navigate({ to: "/" });
+      navigate({ to: redirect ?? "/" });
     },
   });
 
@@ -55,6 +92,7 @@ function RouteComponent() {
           Already have an account?{"  "}
           <Link
             className="font-medium text-caribbean hover:underline"
+            search={{ redirect }}
             to="/auth/sign-in"
           >
             Sign In
@@ -72,17 +110,13 @@ function RouteComponent() {
         <p className="mb-6 text-center text-muted-foreground">
           Sign up for a new account to continue
         </p>
-        {isCloudEdition && (
+        {isGitHubAuthEnabled && (
           <>
             <div className="mb-6 flex w-full flex-col items-center gap-4 sm:flex-row">
               <Button
                 className="relative grow"
-                onClick={() => {
-                  betterAuth.signIn.social({
-                    provider: "github",
-                    callbackURL: `${env.VITE_BASE_URL}/`,
-                  });
-                }}
+                isLoading={isSigningUpWithGitHub}
+                onClick={() => signUpWithGitHub()}
                 size="lg"
                 type="button"
                 variant="outline"

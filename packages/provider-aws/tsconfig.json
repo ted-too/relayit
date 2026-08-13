@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/channels/*": ["../channels/src/*"],
+      "@repo/persistence/*": ["../persistence/src/*"],
+      "@repo/provider-aws/*": ["./src/*"]
+    }
+  }
+}
