@@ -8,6 +8,7 @@ import {
   type SandboxDomain,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
+import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { makeProviderTypeId } from "../../provider-type";
 import type { DomainKeyMaterial } from "../dkim";
@@ -17,6 +18,7 @@ import {
   emailVerifyProviderIdentityJob,
   emailVerifySandboxDomainJob,
 } from "../verification/jobs";
+import { sweepIfSandboxAllocatable } from "./allocate";
 import {
   buildSandboxRootDnsRecords,
   createDomainKeyMaterial,
@@ -31,12 +33,14 @@ export class SandboxDomainError extends Data.TaggedError("SandboxDomainError")<{
   readonly message: string;
   readonly operation:
     | "add_identity"
+    | "allocate"
     | "create"
     | "encrypt_key"
     | "load_key"
     | "persist"
     | "provider"
     | "register_identity"
+    | "remove"
     | "schedule"
     | "unavailable";
   readonly providerId?: string;
@@ -442,4 +446,343 @@ export const addSandboxProviderIdentity = (
     });
 
     return { identityId: identity.id };
+  });
+
+export interface EnsureSandboxForProviderInput {
+  readonly cloudflareZoneId: string | null;
+  readonly provider: Provider;
+  readonly rootDomain: string | null;
+}
+
+export interface EnsureSandboxForProviderResult {
+  readonly allocated: number;
+  readonly identityId: string | null;
+  readonly sandboxDomainId: string | null;
+}
+
+const sweepAllocated = (sandboxDomainId: string) =>
+  sweepIfSandboxAllocatable(sandboxDomainId).pipe(
+    Effect.mapError(
+      (cause) =>
+        new SandboxDomainError({
+          cause,
+          message: "Failed to allocate Projects to the sandbox domain.",
+          operation: "allocate",
+          sandboxDomainId,
+        })
+    )
+  );
+
+/**
+ * Idempotent: the Cloudflare root is the singleton sandbox. First managed
+ * Provider creates it; later Providers attach an identity and reuse BYODKIM.
+ * Sweeps unassigned Projects when the root is already allocatable.
+ */
+export const ensureSandboxForProvider = (
+  input: EnsureSandboxForProviderInput
+) =>
+  Effect.gen(function* () {
+    if (!(input.cloudflareZoneId && input.rootDomain)) {
+      return {
+        allocated: 0,
+        identityId: null,
+        sandboxDomainId: null,
+      } satisfies EnsureSandboxForProviderResult;
+    }
+
+    const db = yield* DB;
+    const existing = yield* db.query.sandboxDomain
+      .findFirst({
+        where: { rootDomain: input.rootDomain },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to load sandbox domain.",
+              operation: "persist",
+              providerId: input.provider.id,
+            })
+        )
+      );
+
+    if (!existing) {
+      const created = yield* createSandboxDomain({
+        cloudflareZoneId: input.cloudflareZoneId,
+        provider: input.provider,
+        rootDomain: input.rootDomain,
+      });
+      const allocated = yield* sweepAllocated(created.sandboxDomainId);
+      return {
+        allocated,
+        identityId: created.identityId,
+        sandboxDomainId: created.sandboxDomainId,
+      };
+    }
+
+    const identity = yield* db.query.emailDomainProviderIdentity
+      .findFirst({
+        where: {
+          providerId: input.provider.id,
+          sandboxDomainId: existing.id,
+        },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to load sandbox provider identity.",
+              operation: "persist",
+              providerId: input.provider.id,
+              sandboxDomainId: existing.id,
+            })
+        )
+      );
+
+    if (!identity) {
+      const added = yield* addSandboxProviderIdentity({
+        provider: input.provider,
+        sandboxDomain: existing,
+      });
+      const allocated = yield* sweepAllocated(existing.id);
+      return {
+        allocated,
+        identityId: added.identityId,
+        sandboxDomainId: existing.id,
+      };
+    }
+
+    const allocated = yield* sweepAllocated(existing.id);
+    return {
+      allocated,
+      identityId: identity.id,
+      sandboxDomainId: existing.id,
+    };
+  });
+
+const openProviderAdapter = (provider: Provider) =>
+  Effect.gen(function* () {
+    const credentialsVault = yield* ProviderCredentialsVault;
+    const providers = yield* EmailProviderRegistry;
+    const factory = yield* providers
+      .get(makeProviderTypeId(provider.vendorId, provider.productId))
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Email provider type is not registered.",
+              operation: "provider",
+              providerId: provider.id,
+            })
+        )
+      );
+
+    const credentials = yield* credentialsVault.open(provider.credentials).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SandboxDomainError({
+            cause,
+            message: "Failed to open provider credentials.",
+            operation: "provider",
+            providerId: provider.id,
+          })
+      )
+    );
+
+    return yield* factory
+      .create({
+        credentials,
+        providerId: provider.id,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to create email provider adapter.",
+              operation: "provider",
+              providerId: provider.id,
+            })
+        )
+      );
+  });
+
+/**
+ * Tear down this Provider's sandbox identity (SES + MAIL FROM DNS). The
+ * singleton sandbox root (BYODKIM + DKIM/DMARC) stays.
+ */
+export const removeSandboxProviderIdentity = (provider: Provider) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+
+    const identity = yield* db.query.emailDomainProviderIdentity
+      .findFirst({
+        where: {
+          providerId: provider.id,
+          sandboxDomainId: { isNotNull: true },
+        },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to load sandbox provider identity.",
+              operation: "persist",
+              providerId: provider.id,
+            })
+        )
+      );
+
+    if (!identity?.sandboxDomainId) {
+      return;
+    }
+
+    const sandboxDomainId = identity.sandboxDomainId;
+    const sandbox = yield* db.query.sandboxDomain
+      .findFirst({
+        columns: { rootDomain: true },
+        where: { id: sandboxDomainId },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to load sandbox domain.",
+              operation: "persist",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+
+    if (sandbox) {
+      const adapter = yield* openProviderAdapter(provider);
+      yield* adapter.deleteIdentity({ fqdn: sandbox.rootDomain }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to delete provider sending identity.",
+              operation: "remove",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+    }
+
+    const managedDns = yield* EmailManagedDns;
+    const jobs = yield* Jobs;
+
+    yield* managedDns
+      .remove(sandboxIdentityDnsOwner(sandboxDomainId, provider.id))
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to remove sandbox MAIL FROM DNS.",
+              operation: "remove",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+
+    yield* db
+      .delete(emailDomainProviderIdentity)
+      .where(eq(emailDomainProviderIdentity.id, identity.id))
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to delete sandbox provider identity.",
+              operation: "persist",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+
+    yield* jobs
+      .cancel(emailVerifyProviderIdentityJob, { identityId: identity.id })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to cancel identity verification job.",
+              operation: "schedule",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+
+    const remaining = yield* db.query.emailDomainProviderIdentity
+      .findMany({
+        where: { sandboxDomainId },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to list remaining sandbox identities.",
+              operation: "persist",
+              providerId: provider.id,
+              sandboxDomainId,
+            })
+        )
+      );
+
+    if (remaining.length === 0) {
+      yield* db
+        .update(sandboxDomain)
+        .set({ isActive: false })
+        .where(eq(sandboxDomain.id, sandboxDomainId))
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new SandboxDomainError({
+                cause,
+                message: "Failed to deactivate sandbox domain.",
+                operation: "persist",
+                providerId: provider.id,
+                sandboxDomainId,
+              })
+          )
+        );
+      return;
+    }
+
+    if (identity.isActive && !remaining.some((row) => row.isActive)) {
+      const next = remaining
+        .filter((row) => row.failoverEligible)
+        .toSorted((a, b) => a.failoverPriority - b.failoverPriority)[0];
+      if (next) {
+        yield* db
+          .update(emailDomainProviderIdentity)
+          .set({ isActive: true })
+          .where(eq(emailDomainProviderIdentity.id, next.id))
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new SandboxDomainError({
+                  cause,
+                  message: "Failed to promote sandbox failover identity.",
+                  operation: "persist",
+                  providerId: provider.id,
+                  sandboxDomainId,
+                })
+            )
+          );
+      }
+    }
   });

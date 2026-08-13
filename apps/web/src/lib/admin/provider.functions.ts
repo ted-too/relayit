@@ -12,7 +12,7 @@ import {
   updatePlatformProvider,
 } from "@/lib/admin/providers.server";
 import { adminMiddleware } from "@/lib/auth.functions";
-import { runApp } from "@/lib/layers.server";
+import { runApp, sandboxCloudflare } from "@/lib/layers.server";
 
 export const listPlatformProvidersFn = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
@@ -21,7 +21,14 @@ export const listPlatformProvidersFn = createServerFn({ method: "GET" })
 export const createPlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(createPlatformProviderBodySchema)
-  .handler(async ({ data }) => runApp(createPlatformProvider(data)));
+  .handler(async ({ data }) =>
+    runApp(
+      createPlatformProvider({
+        ...data,
+        sandboxCloudflare,
+      })
+    )
+  );
 
 export const updatePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
