@@ -65,8 +65,13 @@ export const AppLive = Layer.mergeAll(
   templatingBuilderLive
 );
 
-/** Cloudflare zone id when sandbox capability is configured; else null. */
-export const sandboxCloudflareZoneId = cloudflareConfigured?.zoneId ?? null;
+/** Cloudflare zone when sandbox capability is configured; else null. */
+export const sandboxCloudflare = cloudflareConfigured
+  ? {
+      rootDomain: cloudflareConfigured.rootDomain,
+      zoneId: cloudflareConfigured.zoneId,
+    }
+  : null;
 
 export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.runPromise(
