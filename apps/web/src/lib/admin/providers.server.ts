@@ -1,3 +1,8 @@
+import {
+  ensureSandboxForProvider,
+  removeSandboxProviderIdentity,
+  type SandboxDomainError,
+} from "@repo/channels/email/sandbox";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import { provider } from "@repo/persistence/db/schema";
@@ -20,6 +25,28 @@ export class PlatformProviderError extends Data.TaggedError(
   /** Static human-readable summary — do not interpolate identifiers into this. */
   readonly message: string;
 }> {}
+
+export interface SandboxCloudflareConfig {
+  readonly rootDomain: string;
+  readonly zoneId: string;
+}
+
+const mapSandboxDomainError = (cause: SandboxDomainError) => {
+  switch (cause.operation) {
+    case "unavailable":
+      return new PlatformProviderError({
+        cause,
+        code: "failed",
+        message: "Sandbox Domains require Cloudflare to be configured.",
+      });
+    default:
+      return new PlatformProviderError({
+        cause,
+        code: "failed",
+        message: cause.message,
+      });
+  }
+};
 
 const toSerializableUnencrypted = (
   value: Record<string, unknown> | undefined
@@ -100,7 +127,11 @@ const clearEmailDefaults = (db: DatabaseExecutor) =>
       )
     );
 
-export const createPlatformProvider = (input: CreatePlatformProviderBody) =>
+export const createPlatformProvider = (
+  input: CreatePlatformProviderBody & {
+    readonly sandboxCloudflare: SandboxCloudflareConfig | null;
+  }
+) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const vault = yield* ProviderCredentialsVault;
@@ -172,6 +203,12 @@ export const createPlatformProvider = (input: CreatePlatformProviderBody) =>
         message: "Failed to create platform Provider.",
       });
     }
+
+    yield* ensureSandboxForProvider({
+      cloudflareZoneId: input.sandboxCloudflare?.zoneId ?? null,
+      provider: row,
+      rootDomain: input.sandboxCloudflare?.rootDomain ?? null,
+    }).pipe(Effect.mapError(mapSandboxDomainError));
 
     return toListItem(row);
   });
@@ -325,7 +362,6 @@ export const deletePlatformProvider = (providerId: string) =>
     const db = yield* DB;
     const existing = yield* db.query.provider
       .findFirst({
-        columns: { id: true },
         where: { id: providerId, scope: "platform" },
       })
       .pipe(
@@ -346,10 +382,10 @@ export const deletePlatformProvider = (providerId: string) =>
       });
     }
 
-    const identity = yield* db.query.emailDomainProviderIdentity
+    const customIdentity = yield* db.query.emailDomainProviderIdentity
       .findFirst({
         columns: { id: true },
-        where: { providerId },
+        where: { customDomainId: { isNotNull: true }, providerId },
       })
       .pipe(
         Effect.mapError(
@@ -362,13 +398,16 @@ export const deletePlatformProvider = (providerId: string) =>
         )
       );
 
-    if (identity) {
+    if (customIdentity) {
       return yield* new PlatformProviderError({
         code: "in_use",
-        message:
-          "Managed backend is still referenced by a Domain or Sandbox pairing.",
+        message: "Managed backend is still referenced by a Domain pairing.",
       });
     }
+
+    yield* removeSandboxProviderIdentity(existing).pipe(
+      Effect.mapError(mapSandboxDomainError)
+    );
 
     yield* db
       .delete(provider)

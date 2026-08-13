@@ -16,5 +16,9 @@ export {
   addSandboxProviderIdentity,
   type CreateSandboxDomainInput,
   createSandboxDomain,
+  type EnsureSandboxForProviderInput,
+  type EnsureSandboxForProviderResult,
+  ensureSandboxForProvider,
+  removeSandboxProviderIdentity,
   SandboxDomainError,
 } from "./provision";
