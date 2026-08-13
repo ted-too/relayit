@@ -16,9 +16,10 @@ import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
 import { apiConfig } from "./env";
-import { makeRuntime } from "./layers";
+import { LoggingLive, makeRuntime } from "./layers";
 import { createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
+import { logEffectFailure } from "./lib/log-failure";
 import { createEmailRoutes } from "./routes/messages/email";
 import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
 
@@ -91,12 +92,20 @@ const apiProgram = (startWorker: boolean) =>
           webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
         });
         yield* Effect.acquireRelease(
-          Effect.sync(() => runtime.runFork(jobWorkerProgram)),
+          Effect.sync(() =>
+            runtime.runFork(
+              jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))
+            )
+          ),
           Fiber.interrupt
         );
         yield* Effect.logInfo("Relayit Job worker started");
       }
-      const runEffect: RunApiEffect = runtime.runPromise;
+      const runEffect: RunApiEffect = (effect, options) =>
+        runtime.runPromise(
+          effect.pipe(Effect.tapCause(logEffectFailure("API request failed"))),
+          options
+        );
 
       const app = new Elysia()
         .get("/health", () => ({ status: "ok" as const }))
@@ -126,7 +135,7 @@ const reportFailure = Effect.catchCause((cause) => {
     return Effect.void;
   }
 
-  return Effect.logError(Cause.pretty(cause)).pipe(
+  return logEffectFailure("Process failed")(cause).pipe(
     Effect.andThen(
       Effect.sync(() => {
         process.exitCode = 1;
@@ -136,7 +145,9 @@ const reportFailure = Effect.catchCause((cause) => {
 });
 
 const runApi = (startWorker: boolean) => {
-  const fiber = Effect.runFork(apiProgram(startWorker).pipe(reportFailure));
+  const fiber = Effect.runFork(
+    apiProgram(startWorker).pipe(reportFailure, Effect.provide(LoggingLive))
+  );
   let shuttingDown = false;
 
   const shutdown = (signal: NodeJS.Signals) => {
@@ -263,7 +274,11 @@ const primaryProgram = Effect.scoped(
       webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
     });
     yield* Effect.acquireRelease(
-      Effect.sync(() => runtime.runFork(jobWorkerProgram)),
+      Effect.sync(() =>
+        runtime.runFork(
+          jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))
+        )
+      ),
       Fiber.interrupt
     );
     yield* Effect.logInfo("Relayit Job worker started in cluster primary");
@@ -277,7 +292,9 @@ if (
   Bun.env.NODE_ENV === "production" &&
   process.platform === "linux"
 ) {
-  Effect.runFork(primaryProgram.pipe(reportFailure));
+  Effect.runFork(
+    primaryProgram.pipe(reportFailure, Effect.provide(LoggingLive))
+  );
 } else {
   const isClusterChild = cluster.isWorker;
   runApi(!isClusterChild);

@@ -29,6 +29,9 @@ export const env = createEnv({
      */
     TEMPLATING_BUILDER_URL: z.string().url().optional(),
     TEMPLATING_BUILDER_SECRET: z.string().min(1).optional(),
+    LOG_LEVEL: z
+      .enum(["All", "Fatal", "Error", "Warn", "Info", "Debug", "Trace", "None"])
+      .optional(),
   },
   clientPrefix: "VITE_",
   client: {
@@ -59,6 +62,7 @@ export const env = createEnv({
     CF_ZONE_ID: process.env.CF_ZONE_ID,
     TEMPLATING_BUILDER_URL: process.env.TEMPLATING_BUILDER_URL,
     TEMPLATING_BUILDER_SECRET: process.env.TEMPLATING_BUILDER_SECRET,
+    LOG_LEVEL: process.env.LOG_LEVEL,
     VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
     VITE_DEBUG: import.meta.env.VITE_DEBUG,
   },

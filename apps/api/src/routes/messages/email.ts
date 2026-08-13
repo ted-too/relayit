@@ -1,9 +1,10 @@
 import { acceptTransactionalEmail } from "@repo/channels/email/accept";
-import { DateTime, Effect } from "effect";
+import { Cause, DateTime, Effect } from "effect";
 import { Elysia, status } from "elysia";
 import { createApiKeyMiddleware } from "../../lib/api-key";
 import type { ApiAuth } from "../../lib/auth";
 import type { RunApiEffect } from "../../lib/effect";
+import { logEffectFailure } from "../../lib/log-failure";
 import {
   sendEmailBodySchema,
   sendEmailHeadersSchema,
@@ -86,6 +87,7 @@ export const createEmailRoutes = (
             : undefined,
           tags: body.tags,
         }).pipe(
+          Effect.annotateLogs({ organizationId }),
           Effect.map((accepted) =>
             status(201, {
               id: accepted.messageId,
@@ -143,11 +145,8 @@ export const createEmailRoutes = (
                     ),
                   });
                 default:
-                  yield* Effect.logError("Email acceptance failed").pipe(
-                    Effect.annotateLogs({
-                      error: error._tag,
-                      organizationId,
-                    })
+                  yield* logEffectFailure("Email acceptance failed")(
+                    Cause.fail(error)
                   );
                   return status(500, {
                     code: "internal_server_error",

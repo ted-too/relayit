@@ -42,7 +42,7 @@ const parseJson = (
   value: string,
   source: "ses_notification" | "sns_envelope"
 ) =>
-  Schema.decodeEffect(Schema.UnknownFromJsonString)(value).pipe(
+  Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(value).pipe(
     Effect.mapError(
       (cause) =>
         new AwsWebhookPayloadError({

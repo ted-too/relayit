@@ -4,6 +4,8 @@ import {
 } from "@repo/templating";
 import { Effect, Redacted } from "effect";
 import { env } from "@/env";
+import { AppLive } from "@/lib/layers.server";
+import { logEffectFailure } from "@/lib/log-failure.server";
 
 /** Require builder URL + secret; open a scoped Rpc client for one call. */
 export const runTemplatingBuilder = <A, E>(
@@ -27,6 +29,7 @@ export const runTemplatingBuilder = <A, E>(
       },
       use
     ).pipe(
+      Effect.tapCause(logEffectFailure("Template builder request failed")),
       Effect.mapError((error) => {
         if (
           error &&
@@ -37,7 +40,8 @@ export const runTemplatingBuilder = <A, E>(
           return new Error((error as { message: string }).message);
         }
         return new Error("Template builder request failed.");
-      })
+      }),
+      Effect.provide(AppLive)
     )
   );
 };

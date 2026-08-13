@@ -14,7 +14,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import Stripe from "stripe";
 import { env } from "@/env";
-import { AppLive } from "@/lib/layers.server";
+import { runApp } from "@/lib/layers.server";
+import { failureAnnotations } from "@/lib/log-failure.server";
 
 const db = createPromiseDb({ databaseUrl: env.DATABASE_URL });
 const redis = new RedisClient(env.REDIS_URL);
@@ -69,9 +70,14 @@ export const auth = createAuth({
             .set({ billingUserId: createdBy.id })
             .where(eq(organization.id, org.id));
 
-          await Effect.runPromise(
+          await runApp(
             allocateSandboxDomain(org.id).pipe(
-              Effect.provide(AppLive),
+              Effect.annotateLogs({ organizationId: org.id }),
+              Effect.tapError((error) =>
+                Effect.logWarning("Sandbox Domain allocation skipped").pipe(
+                  Effect.annotateLogs(failureAnnotations(error))
+                )
+              ),
               Effect.catchTag("SandboxAllocateError", () =>
                 Effect.succeed(null)
               )
@@ -199,9 +205,14 @@ export const auth = createAuth({
       });
 
       for (const org of memberOrgs) {
-        await Effect.runPromise(
+        await runApp(
           allocateSandboxDomain(org.id).pipe(
-            Effect.provide(AppLive),
+            Effect.annotateLogs({ organizationId: org.id }),
+            Effect.tapError((error) =>
+              Effect.logWarning("Sandbox Domain allocation skipped").pipe(
+                Effect.annotateLogs(failureAnnotations(error))
+              )
+            ),
             Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null))
           )
         );

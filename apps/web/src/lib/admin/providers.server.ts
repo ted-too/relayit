@@ -43,7 +43,7 @@ const mapSandboxDomainError = (cause: SandboxDomainError) => {
       return new PlatformProviderError({
         cause,
         code: "failed",
-        message: "Sandbox Domain operation failed.",
+        message: cause.message,
       });
   }
 };

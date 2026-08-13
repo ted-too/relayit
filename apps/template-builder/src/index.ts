@@ -4,7 +4,8 @@ import { Cause, Effect, Exit, Layer, Redacted } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { templateBuilderConfig } from "./env";
-import { makeAppLayers } from "./layers";
+import { loggingLive, makeAppLayers } from "./layers";
+import { logEffectFailure } from "./log-failure";
 
 const program = Effect.scoped(
   Effect.gen(function* () {
@@ -45,6 +46,7 @@ const program = Effect.scoped(
                     HttpServerRequest.HttpServerRequest,
                     HttpServerRequest.fromWeb(request)
                   ),
+                  Effect.tapCause(logEffectFailure("Rpc request failed")),
                   Effect.scoped
                 )
               );
@@ -79,6 +81,23 @@ const program = Effect.scoped(
   })
 );
 
+const reportFailure = Effect.catchCause((cause) => {
+  if (cause.reasons.every(Cause.isInterruptReason)) {
+    return Effect.void;
+  }
+
+  return logEffectFailure("Process failed")(cause).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        process.exitCode = 1;
+      })
+    )
+  );
+});
+
 Effect.runFork(
-  program.pipe(Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))))
+  program.pipe(
+    reportFailure,
+    Effect.provide(Layer.unwrap(Effect.map(templateBuilderConfig, loggingLive)))
+  )
 );

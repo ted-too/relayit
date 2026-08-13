@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 /** Rpc / builder failure visible to web callers. */
-export class TemplatingBuilderError extends Schema.TaggedErrorClass<TemplatingBuilderError>()(
+export class TemplatingBuilderError extends Schema.TaggedError<TemplatingBuilderError>()(
   "TemplatingBuilderError",
   {
     code: Schema.Literals([
@@ -17,7 +17,7 @@ export class TemplatingBuilderError extends Schema.TaggedErrorClass<TemplatingBu
   }
 ) {}
 
-export class BuilderUnauthorized extends Schema.TaggedErrorClass<BuilderUnauthorized>()(
+export class BuilderUnauthorized extends Schema.TaggedError<BuilderUnauthorized>()(
   "BuilderUnauthorized",
   {
     message: Schema.String,

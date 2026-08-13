@@ -5,8 +5,19 @@ import {
   makeBuilderAuthServerLayer,
   TemplatingBuilderHandlersLive,
 } from "@repo/templating";
-import { Layer, Redacted } from "effect";
+import { Layer, Logger, Redacted, References } from "effect";
 import type { TemplateBuilderConfig } from "./env";
+
+export const loggingLive = (config: TemplateBuilderConfig) =>
+  Layer.mergeAll(
+    Logger.layer([
+      Bun.env.NODE_ENV === "production"
+        ? Logger.consoleJson
+        : Logger.consolePretty(),
+      Logger.tracerLogger,
+    ]),
+    Layer.succeed(References.MinimumLogLevel, config.logLevel)
+  );
 
 export const makeAppLayers = (config: TemplateBuilderConfig) => {
   const dbLive = makeDbLive({
@@ -27,7 +38,9 @@ export const makeAppLayers = (config: TemplateBuilderConfig) => {
 
   // Handlers pull DB / Redis / ObjectStorage at request time — provideMerge
   // satisfies those requirements and keeps the services in the runtime context.
-  return Layer.mergeAll(TemplatingBuilderHandlersLive, authLive).pipe(
-    Layer.provideMerge(infraLive)
-  );
+  return Layer.mergeAll(
+    TemplatingBuilderHandlersLive,
+    authLive,
+    loggingLive(config)
+  ).pipe(Layer.provideMerge(infraLive));
 };

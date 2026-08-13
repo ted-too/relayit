@@ -3,6 +3,7 @@ import { Config, type Effect } from "effect";
 export const templateBuilderConfig = Config.all({
   databaseUrl: Config.redacted("DATABASE_URL"),
   hostname: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+  logLevel: Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")),
   port: Config.port("PORT").pipe(Config.withDefault(3006)),
   redisUrl: Config.redacted("REDIS_URL"),
   s3AccessKeyId: Config.redacted("S3_ACCESS_KEY_ID"),

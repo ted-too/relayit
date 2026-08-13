@@ -135,7 +135,9 @@ const claimDelivery = (deliveryId: string) =>
           })
           .where(eq(webhookEventDelivery.id, deliveryId));
 
-        const body = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+        const body = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown)
+        )({
           created_at: joined.eventCreatedAt.toISOString(),
           data: joined.eventPayload,
           type: joined.eventType,
