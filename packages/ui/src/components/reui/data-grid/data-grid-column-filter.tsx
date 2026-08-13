@@ -116,22 +116,15 @@ function DataGridColumnFilter<TData, TValue>({
                   );
                 };
                 return (
-                  <div
+                  <button
                     aria-pressed={isSelected}
                     className={cn(
-                      "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden",
+                      "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden",
                       "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                     )}
                     key={option.value}
                     onClick={toggleOption}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleOption();
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
+                    type="button"
                   >
                     <div
                       className={cn(
@@ -152,7 +145,7 @@ function DataGridColumnFilter<TData, TValue>({
                         {facetCount}
                       </span>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -161,20 +154,13 @@ function DataGridColumnFilter<TData, TValue>({
             <>
               <div className="-mx-1 my-1 h-px bg-border" />
               <div className="p-1">
-                <div
-                  className="relative flex cursor-pointer select-none items-center justify-center rounded-md px-2 py-1.5 text-sm outline-hidden hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                <button
+                  className="relative flex w-full cursor-pointer select-none items-center justify-center rounded-md px-2 py-1.5 text-sm outline-hidden hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                   onClick={() => column?.setFilterValue(undefined)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      column?.setFilterValue(undefined);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
+                  type="button"
                 >
                   Clear filters
-                </div>
+                </button>
               </div>
             </>
           )}

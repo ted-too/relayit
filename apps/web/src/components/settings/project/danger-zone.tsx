@@ -1,12 +1,7 @@
 import { Alert, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import {
@@ -15,11 +10,11 @@ import {
   SettingsCardHeader,
   SettingsCardTitle,
 } from "@/components/settings/card";
-import { queries } from "@/integrations/queries";
+import { authClient } from "@/lib/auth-client";
+import { queries } from "@/lib/queries";
 
 export function ProjectDangerZone() {
   const navigate = useNavigate();
-  const { betterAuth } = useRouteContext({ from: "/_authd/$orgSlug" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const { data: organization } = useSuspenseQuery(
     queries.organizations.bySlug(orgSlug)
@@ -27,7 +22,7 @@ export function ProjectDangerZone() {
   const { mutateAsync: deleteProject, isPending: isDeletingProject } =
     useMutation({
       mutationFn: async () => {
-        const { error } = await betterAuth.organization.delete({
+        const { error } = await authClient.organization.delete({
           organizationId: organization.id,
         });
 

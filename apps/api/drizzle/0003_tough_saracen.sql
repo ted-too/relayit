@@ -1,1 +1,0 @@
-ALTER TABLE "provider_identity" ADD COLUMN "channel_data" jsonb DEFAULT '{}'::jsonb;

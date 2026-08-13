@@ -1,17 +1,10 @@
-import type { ApiClient, InferData } from "@/integrations/api";
+import type {
+  TemplateListItem,
+  WorkspaceEntryListItem,
+} from "@/lib/templating/types";
 
-type TemplatesGet = ReturnType<
-  ReturnType<ApiClient["projects"]>["templating"]["templates"]["get"]
->;
-
-export type Template = InferData<TemplatesGet>[number];
+export type Template = TemplateListItem;
 
 export type TemplateChannelVariant = Template["channelVariants"][number];
 
-type EntriesGet = ReturnType<
-  ReturnType<
-    ReturnType<ApiClient["projects"]>["templating"]["workspace"]
-  >["entries"]["get"]
->;
-
-export type WorkspaceEntry = InferData<EntriesGet>[number];
+export type WorkspaceEntry = WorkspaceEntryListItem;

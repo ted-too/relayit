@@ -1,3 +1,4 @@
+"use strict";
 /**
  * semantic-release config (GitHub Releases only — no changelog commits).
  *

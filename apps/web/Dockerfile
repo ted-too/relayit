@@ -19,6 +19,8 @@ ENV VITE_API_URL=BAKED_VITE_API_URL \
 COPY --from=prepare /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prepare /app/out/full/ .
+# prune --docker omits the root tsconfig that apps/web extends.
+COPY --from=prepare /app/tsconfig.json ./tsconfig.json
 RUN --mount=type=secret,id=turbo_token \
     --mount=type=secret,id=turbo_team \
     TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
@@ -39,12 +41,14 @@ ENV HOME=/home/vite \
     TMPDIR=/tmp \
     BUN_TMPDIR=/tmp \
     XDG_CACHE_HOME=/home/vite/.cache \
-    NODE_ENV=production
+    NODE_ENV=production \
+    DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle
 
 COPY scripts/entrypoint-vite.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 COPY --from=builder --chown=vite:vite /app/apps/web/.output ./
+COPY --from=builder --chown=vite:vite /app/packages/persistence/drizzle ./drizzle
 
 USER vite
 EXPOSE 3000

@@ -21,25 +21,23 @@ import {
 } from "@repo/ui/components/ui/shad/item";
 import { formatDateTime } from "@repo/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import {
-  type ApiClient,
-  formatToastError,
-  type InferData,
-} from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+  deletePlatformProviderFn,
+  setDefaultPlatformProviderFn,
+} from "@/lib/admin/provider.functions";
+import type { PlatformProviderListItem } from "@/lib/admin/provider-types";
+import { queries } from "@/lib/queries";
 import { PROVIDER_ICONS } from "./icons";
 import { UpsertProvider } from "./upsert";
 
 export function ProviderItem({
   provider,
 }: {
-  provider: InferData<ApiClient["admin"]["providers"]["get"]>[number];
+  provider: PlatformProviderListItem;
 }) {
-  const { api } = useRouteContext({ from: "__root__" });
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const productKey =
@@ -48,20 +46,15 @@ export function ProviderItem({
 
   const { mutate: deleteProvider, isPending: isDeletingProvider } = useMutation(
     {
-      mutationFn: async () => {
-        const { error } = await api.admin
-          .providers({ providerId: provider.id })
-          .delete();
-
-        if (error) {
-          return Promise.reject(error);
-        }
-      },
+      mutationFn: async () =>
+        await deletePlatformProviderFn({
+          data: { providerId: provider.id },
+        }),
       onSuccess: (_, __, ___, { client }) => {
         client.setQueryData(
           queries.admin.listProviders.queryKey,
-          (old: InferData<ApiClient["admin"]["providers"]["get"]>) =>
-            old.filter(
+          (old: PlatformProviderListItem[] | undefined) =>
+            (old ?? []).filter(
               (existingProvider) => existingProvider.id !== provider.id
             )
         );
@@ -69,7 +62,7 @@ export function ProviderItem({
           queryKey: queries.admin.listProviders.queryKey,
         });
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         toast.error("Failed to delete provider", {
           description: error.message,
         });
@@ -78,35 +71,18 @@ export function ProviderItem({
   );
 
   const { mutate: setDefault, isPending: isSettingDefault } = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api.admin
-        .providers({ providerId: provider.id })
-        .setDefault.post();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async () =>
+      await setDefaultPlatformProviderFn({
+        data: { providerId: provider.id },
+      }),
     onSuccess: async (_, __, ___, { client }) => {
       await client.invalidateQueries({
         queryKey: queries.admin.listProviders.queryKey,
       });
       toast.success("Default managed backend updated");
     },
-    onError: (error: {
-      message?: string;
-      status?: number;
-      value?: unknown;
-    }) => {
-      if (typeof error.status === "number") {
-        toast.error(
-          ...formatToastError({ status: error.status, value: error.value })
-        );
-        return;
-      }
-      toast.error(error.message ?? "Failed to set default");
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to set default");
     },
   });
 
@@ -116,7 +92,7 @@ export function ProviderItem({
       variant="outline"
     >
       <div className="mr-2 flex size-8 items-center justify-center">
-        <Icon />
+        {Icon ? <Icon /> : null}
       </div>
       <ItemContent>
         <ItemTitle className="font-medium text-sm">

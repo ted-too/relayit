@@ -1,8 +1,4 @@
 /** biome-ignore-all lint/style/noNestedTernary: we need to nest ternaries here */
-import {
-  type CreateApiKeyBody,
-  createApiKeyBodySchema,
-} from "@repo/api/validators/routes/projects/api-keys";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
@@ -26,20 +22,20 @@ import {
   FieldLabel,
 } from "@repo/ui/components/ui/shad/field";
 import { type QueryClient, useMutation } from "@tanstack/react-query";
-import { useParams, useRouteContext } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  type ApiClient,
-  formatToastError,
-  type InferData,
-  type InferError,
-} from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+  createApiKeyFn,
+  updateApiKeyFn,
+} from "@/lib/projects/api-key.functions";
+import {
+  type ApiKeyFormValues,
+  apiKeyFormSchema,
+} from "@/lib/projects/api-key-schemas";
+import type { HydratedApiKey } from "@/lib/projects/api-key-types";
+import { queries } from "@/lib/queries";
 import { FieldExpiresAt } from "./field-expires-at";
-
-type ApiKeysGet = ReturnType<ApiClient["projects"]>["apiKeys"]["get"];
-type ApiKeysPost = ReturnType<ApiClient["projects"]>["apiKeys"]["post"];
 
 async function optimisticUpdate({
   client,
@@ -47,12 +43,15 @@ async function optimisticUpdate({
   orgSlug,
 }: {
   client: QueryClient;
-  data: InferData<ApiKeysPost>["data"];
+  data: HydratedApiKey;
   orgSlug: string;
 }) {
   client.setQueryData(
     queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-    (old: InferData<ApiKeysGet>) => [...old, data]
+    (old: HydratedApiKey[] | undefined) => [
+      ...(old ?? []).filter((key) => key.id !== data.id),
+      data,
+    ]
   );
   await client.invalidateQueries({
     queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
@@ -66,7 +65,7 @@ export function UpsertApiKey({
   open: _openProp,
   setOpen: _setOpenProp,
 }: {
-  initialData?: InferData<ApiKeysGet>[number];
+  initialData?: HydratedApiKey;
   render?: DialogTriggerProps["render"];
   children?: React.ReactNode;
   open?: boolean;
@@ -78,72 +77,69 @@ export function UpsertApiKey({
   );
   const open = _openProp ?? _open;
   const setOpen = _setOpenProp ?? _setOpen;
-  const { api } = useRouteContext({ from: "__root__" });
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   const { mutateAsync: upsertApiKey } = useMutation({
-    mutationFn: async (body: CreateApiKeyBody) => {
+    mutationFn: async (body: ApiKeyFormValues) => {
       if (initialData) {
-        const { data, error } = await api
-          .projects({ orgSlug })
-          .apiKeys({ id: initialData.id })
-          .put(body);
-
-        if (error) {
-          return Promise.reject(error);
-        }
-
-        return data;
+        return await updateApiKeyFn({
+          data: {
+            ...body,
+            id: initialData.id,
+            orgSlug,
+          },
+        });
       }
 
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .apiKeys.post(body);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
+      return await createApiKeyFn({
+        data: {
+          ...body,
+          orgSlug,
+        },
+      });
     },
-    onSuccess: async (keyAndData, _, __, { client }) => {
-      await optimisticUpdate({ client, data: keyAndData.data, orgSlug });
+    onSuccess: async (result, _, __, { client }) => {
+      await optimisticUpdate({ client, data: result.data, orgSlug });
       toast.success(
         initialData
           ? "API key updated successfully"
           : "API key created successfully"
       );
       form.reset();
-      if ("key" in keyAndData && keyAndData.key) {
-        setCreatedApiKey(keyAndData.key);
+      const createdKey =
+        "key" in result && typeof result.key === "string" ? result.key : null;
+      if (createdKey) {
+        setCreatedApiKey(createdKey);
       } else {
         setOpen(false);
       }
     },
-    onError: (error: InferError<ApiKeysPost>) => {
-      toast.error(...formatToastError(error));
+    onError: (error: Error) => {
+      toast.error("Failed to save API key", {
+        description: error.message,
+      });
     },
   });
 
   const form = useAppForm({
     defaultValues: {
       name: initialData?.name ?? "",
-      expiresAt: initialData?.expiresAt ?? undefined,
-    } as CreateApiKeyBody,
+      expiresAt: initialData?.expiresAt?.toISOString() ?? undefined,
+    } as ApiKeyFormValues,
     validators: {
-      onSubmit: createApiKeyBodySchema,
+      onSubmit: apiKeyFormSchema,
     },
     onSubmit: async ({ value }) => await upsertApiKey(value),
   });
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
           setCreatedApiKey(undefined);
           form.reset();
         }
-        setOpen(open);
+        setOpen(nextOpen);
       }}
       open={open}
     >

@@ -1,0 +1,24 @@
+{
+  "name": "@repo/template-builder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "portless": {
+    "name": "builder.relayit",
+    "script": "dev:app"
+  },
+  "scripts": {
+    "dev": "portless",
+    "dev:app": "bun run --watch ./src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./build --target bun",
+    "check-types": "tsc --noEmit",
+    "start": "bun ./src/index.ts"
+  },
+  "dependencies": {
+    "@repo/object-storage": "workspace:*",
+    "@repo/persistence": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "@repo/templating": "workspace:*",
+    "effect": "4.0.0-beta.102"
+  }
+}

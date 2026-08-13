@@ -95,7 +95,11 @@ async function main() {
     const text = await render(element, { plainText: true });
 
     // React 19 may recover into an error <template> instead of throwing.
-    if (html.includes("Switched to client rendering because the server rendering errored")) {
+    if (
+      html.includes(
+        "Switched to client rendering because the server rendering errored"
+      )
+    ) {
       const match = html.match(SSR_ERROR_MSG_RE);
       const detail = match?.[1]
         ? match[1]

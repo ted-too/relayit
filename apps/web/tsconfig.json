@@ -1,32 +1,28 @@
 {
+  "extends": "../../tsconfig.json",
   "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", ".output"],
   "compilerOptions": {
-    "target": "ES2022",
-    "jsx": "react-jsx",
-    "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": false,
-    "noEmit": true,
-
-    /* Linting */
-    "skipLibCheck": true,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-
     "paths": {
       "@/*": ["./src/*"],
+      "@repo/channels/*": ["../../packages/channels/src/*"],
+      "@repo/jobs": ["../../packages/jobs/src/index.ts"],
+      "@repo/jobs/*": ["../../packages/jobs/src/*"],
+      "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
+      "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
+      "@repo/persistence/*": ["../../packages/persistence/src/*"],
+      "@repo/provider-aws/*": ["../../packages/provider-aws/src/*"],
+      "@repo/redis": ["../../packages/redis/src/index.ts"],
+      "@repo/redis/*": ["../../packages/redis/src/*"],
+      "@repo/template-render": ["../../packages/template-render/src/index.ts"],
+      "@repo/template-render/*": ["../../packages/template-render/src/*"],
+      "@repo/templating": ["../../packages/templating/src/index.ts"],
+      "@repo/templating/*": ["../../packages/templating/src/*"],
       "@repo/ui/*": ["../../packages/ui/src/*"],
-      "@repo/api/server": ["../api/src/server/index.ts"],
-      "@repo/api/server/*": ["../api/src/server/*"],
-      "@repo/api/*": ["../api/src/shared/*"]
+      "@repo/webhooks": ["../../packages/webhooks/src/index.ts"],
+      "@repo/webhooks/*": ["../../packages/webhooks/src/*"]
     }
   }
 }

@@ -1,4 +1,4 @@
-import { dynamicFormFieldsRegistry } from "@repo/api/validators/shared";
+import { credentialFieldRegistry } from "@repo/channels/credential-fields";
 import { withForm } from "@repo/ui/components/ui/custom/form";
 import * as z from "zod";
 
@@ -8,7 +8,7 @@ interface FieldResult {
 }
 
 export const DynamicForm = withForm({
-  defaultValues: {} as any,
+  defaultValues: {} as Record<string, unknown>,
   props: {
     baseKey: null as string | null,
     schema: z.object({}) as z.core.$ZodObject,
@@ -103,7 +103,7 @@ export const DynamicForm = withForm({
         }
 
         default: {
-          const metadata = dynamicFormFieldsRegistry.get(field);
+          const metadata = credentialFieldRegistry.get(field);
           let Component: React.ReactNode = null;
 
           switch (metadata?.type) {

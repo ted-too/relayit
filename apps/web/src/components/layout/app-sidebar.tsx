@@ -1,3 +1,4 @@
+import type { statement } from "@repo/persistence/auth/permissions";
 import { Badge } from "@repo/ui/components/reui/badge";
 import {
   Sidebar,
@@ -14,9 +15,10 @@ import {
 } from "@repo/ui/components/ui/shad/sidebar";
 import { Link } from "@tanstack/react-router";
 import type { Icon } from "iconsax-reactjs";
-import type { PermissionStatements } from "@/integrations/better-auth";
 import { NavProject } from "./nav-projects";
 import { SidebarNavUser } from "./nav-user";
+
+export type PermissionStatements = typeof statement;
 
 export type RequiredPermissions = {
   [K in keyof PermissionStatements]?: PermissionStatements[K][number][];

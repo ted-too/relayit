@@ -12,4 +12,5 @@ Run typechecking regularly, single test files regularly, and the full test suite
 
 Once done, use /code-review to review the work.
 
-Commit your work to the current branch.
+**Do not commit** when finished. Leave the working tree for human review; commit only when the user explicitly asks (see ADR-0010).
+

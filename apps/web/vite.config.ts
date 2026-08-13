@@ -6,28 +6,26 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import { env } from "./src/env.ts";
 import { resolveUseSyncExternalStoreFromReact } from "./vite/resolve-use-sync-external-store-from-react.ts";
 
 const config = defineConfig({
+  define: {
+    // Public URL only — Docker bakes BAKED_VITE_BASE_URL; entrypoint rewrites at start.
+    __BASE_URL__: JSON.stringify(process.env.VITE_BASE_URL ?? ""),
+  },
   server: {
     // Portless sets HOST=127.0.0.1 so the proxy can reach Vite over IPv4.
-    host: env.HOST,
-    port: env.PORT,
-    // Polling is used instead of fsevents because Cursor's atomic file
-    // saves (write-to-temp + rename) cause fsevents to drop events on
-    // macOS, which makes HMR detection take 30s+ per change. Polling
-    // sidesteps fsevents entirely. If running on Linux/CI, this is
-    // unnecessary and can be removed.
-    // watch: {
-    //   usePolling: true,
-    //   interval: 300,
-    //   binaryInterval: 1000,
-    // },
+    host: process.env.HOST,
+    port: process.env.PORT ? Number(process.env.PORT) : undefined,
   },
   resolve: {
     tsconfigPaths: true,
     dedupe: ["react", "react-dom"],
+  },
+  optimizeDeps: {
+    // Bun builtins are not npm packages; the client dep scan still crawls
+    // createServerFn modules and would otherwise fail to resolve `bun`.
+    exclude: ["bun"],
   },
   build: {
     sourcemap: "hidden",
@@ -37,7 +35,13 @@ const config = defineConfig({
     devtools(),
     nitro({ preset: "bun" }),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      importProtection: {
+        client: {
+          specifiers: ["bun", "@repo/redis", "@repo/jobs"],
+        },
+      },
+    }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
   ],

@@ -23,13 +23,13 @@
     "@repo/web#build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "env": [
-        "NODE_ENV",
-        "VITE_API_URL",
-        "VITE_BASE_URL",
-        "VITE_EDITION"
-      ],
+      "env": ["NODE_ENV", "VITE_API_URL", "VITE_BASE_URL", "VITE_EDITION"],
       "outputs": [".output/**"]
+    },
+    "@repo/template-builder#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["build/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]

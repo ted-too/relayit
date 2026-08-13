@@ -1,7 +1,3 @@
-import {
-  type CreateTemplateBody,
-  createTemplateBodySchema,
-} from "@repo/api/validators/routes/projects/templating/templates";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
   Dialog,
@@ -18,16 +14,16 @@ import {
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { FieldGroup } from "@repo/ui/components/ui/shad/field";
 import { useMutation } from "@tanstack/react-query";
-import {
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatToastError, type InferData } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
-import type { Template } from "./types";
+import { queries } from "@/lib/queries";
+import {
+  type CreateTemplateFormValues,
+  createTemplateFormSchema,
+} from "@/lib/templating/schemas";
+import { createTemplateFn } from "@/lib/templating/template.functions";
+import type { TemplateListItem } from "@/lib/templating/types";
 
 export function CreateTemplate({
   render,
@@ -42,33 +38,22 @@ export function CreateTemplate({
 }) {
   const navigate = useNavigate();
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { api } = useRouteContext({ from: "__root__" });
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openProp ?? internalOpen;
   const setOpen = setOpenProp ?? setInternalOpen;
 
   const { mutateAsync: createTemplate } = useMutation({
-    mutationFn: async (body: CreateTemplateBody) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.templates.post(body);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data as Template;
-    },
+    mutationFn: async (body: CreateTemplateFormValues) =>
+      await createTemplateFn({
+        data: {
+          ...body,
+          orgSlug,
+        },
+      }),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
-        (
-          old: InferData<
-            ReturnType<
-              ReturnType<typeof api.projects>["templating"]["templates"]["get"]
-            >
-          >
-        ) => [...(old ?? []), data]
+        (old: TemplateListItem[] | undefined) => [...(old ?? []), data]
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -81,17 +66,19 @@ export function CreateTemplate({
         params: { orgSlug, templateId: data.id },
       });
     },
-    onError: (error) => {
-      toast.error(...formatToastError(error as never));
+    onError: (error: Error) => {
+      toast.error("Failed to create Template", {
+        description: error.message,
+      });
     },
   });
 
   const form = useAppForm({
     defaultValues: {
       name: "",
-    } satisfies CreateTemplateBody,
+    } satisfies CreateTemplateFormValues,
     validators: {
-      onSubmit: createTemplateBodySchema,
+      onSubmit: createTemplateFormSchema,
     },
     onSubmit: async ({ value }) => {
       await createTemplate(value);

@@ -1,7 +1,3 @@
-import {
-  type SignInBody,
-  signInBodySchema,
-} from "@repo/api/validators/routes/auth";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
@@ -9,22 +5,37 @@ import { CombinedLogo } from "@repo/ui/components/ui/custom/logo";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { z } from "zod";
+import { type SignInBody, signInBodySchema } from "@/lib/auth/schemas";
+import { authClient } from "@/lib/auth-client";
+
+const signInSearchSchema = z.object({
+  redirect: z.string().optional(),
+});
 
 export const Route = createFileRoute("/auth/sign-in")({
+  validateSearch: signInSearchSchema,
   component: RouteComponent,
 });
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { betterAuth, env, isCloudEdition } = Route.useRouteContext();
-  const lastMethod = betterAuth.getLastUsedLoginMethod();
+  const { redirect } = Route.useSearch();
+  const { isGitHubAuthEnabled } = Route.useRouteContext();
+  const lastMethod = authClient.getLastUsedLoginMethod();
+
+  // biome-ignore lint/correctness/noUndeclaredVariables: this is a vite constant
+  const baseURL = __BASE_URL__;
+  const callbackURL = redirect
+    ? `${baseURL}${redirect.startsWith("/") ? redirect : `/${redirect}`}`
+    : `${baseURL}/`;
 
   const { mutate: signInWithGitHub, isPending: isSigningInWithGitHub } =
     useMutation({
       mutationFn: async () => {
-        const { data, error } = await betterAuth.signIn.social({
+        const { data, error } = await authClient.signIn.social({
           provider: "github",
-          callbackURL: `${env.VITE_BASE_URL}/`,
+          callbackURL,
         });
 
         if (error) {
@@ -55,7 +66,7 @@ function RouteComponent() {
       onSubmit: signInBodySchema,
     },
     onSubmit: async ({ value }) => {
-      const { error } = await betterAuth.signIn.email({
+      const { error } = await authClient.signIn.email({
         email: value.email,
         password: value.password,
         rememberMe: value.rememberMe,
@@ -69,7 +80,7 @@ function RouteComponent() {
 
       toast.success("Signed in successfully");
 
-      navigate({ to: "/" });
+      navigate({ to: redirect ?? "/" });
     },
   });
 
@@ -81,6 +92,7 @@ function RouteComponent() {
           Don't have an account?{"  "}
           <Link
             className="font-medium text-caribbean hover:underline"
+            search={{ redirect }}
             to="/auth/sign-up"
           >
             Sign Up
@@ -98,7 +110,7 @@ function RouteComponent() {
         <p className="mb-6 text-center text-muted-foreground">
           Sign in to your account to continue
         </p>
-        {isCloudEdition && (
+        {isGitHubAuthEnabled && (
           <>
             <div className="mb-6 flex w-full flex-col items-center gap-4 sm:flex-row">
               <Button

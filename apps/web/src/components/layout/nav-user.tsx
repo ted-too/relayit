@@ -30,7 +30,8 @@ import { getInitials } from "@repo/ui/lib/utils";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { queries } from "@/integrations/queries";
+import { authClient } from "@/lib/auth-client";
+import { queries } from "@/lib/queries";
 
 export function NavUser({
   render,
@@ -45,12 +46,12 @@ export function NavUser({
 }) {
   const { data } = useSuspenseQuery(queries.session.me);
   const navigate = useNavigate();
-  const { betterAuth, isCloudEdition } = useRouteContext({
+  const { isBillingEnabled } = useRouteContext({
     from: "/_authd",
   });
   const { mutateAsync } = useMutation({
     mutationFn: async () => {
-      const { error } = await betterAuth.signOut();
+      const { error } = await authClient.signOut();
       if (error) {
         return Promise.reject(error);
       }
@@ -122,7 +123,7 @@ export function NavUser({
           <RiUserLine aria-hidden="true" />
           <span>Account</span>
         </MenuItem>
-        {isCloudEdition && (
+        {isBillingEnabled && (
           <MenuItem render={<Link to="/user/billing" />}>
             <RiWalletLine aria-hidden="true" />
             <span>Usage & Billing</span>

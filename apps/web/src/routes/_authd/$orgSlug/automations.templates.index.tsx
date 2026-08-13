@@ -9,16 +9,18 @@ import { Select } from "@/components/resources/primitives/select";
 import { Toolbar } from "@/components/resources/primitives/toolbar";
 import { CreateTemplate } from "@/components/templates/create";
 import { TemplateItem } from "@/components/templates/item";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
-export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/")({
-  loader: ({ context, params }) => {
-    void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).listTemplates
-    );
-  },
-  component: RouteComponent,
-});
+export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/")(
+  {
+    loader: ({ context, params }) => {
+      void context.queryClient.ensureQueryData(
+        queries.organizations.bySlug(params.orgSlug).listTemplates
+      );
+    },
+    component: RouteComponent,
+  }
+);
 
 const SORT_OPTIONS = [
   { label: "Date created", value: "createdAt" },

@@ -5,11 +5,27 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { Image } from "@unpic/react";
+import { z } from "zod";
+import { getSession } from "@/lib/auth.functions";
+import { queries } from "@/lib/queries";
+
+const authSearchSchema = z.object({
+  redirect: z.string().optional(),
+});
 
 export const Route = createFileRoute("/auth")({
-  beforeLoad: ({ context }) => {
-    if (context.isPotentialAuthd) {
-      throw redirect({ to: "/" });
+  validateSearch: authSearchSchema,
+  beforeLoad: async ({ context, search }) => {
+    const session = await getSession();
+
+    if (session) {
+      await context.queryClient.setQueryData(
+        queries.session.me.queryKey,
+        session
+      );
+      throw redirect({
+        to: search.redirect ?? "/",
+      });
     }
   },
   component: RouteComponent,

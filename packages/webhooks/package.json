@@ -1,0 +1,17 @@
+{
+  "name": "@repo/webhooks",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@repo/jobs": "workspace:*",
+    "@repo/persistence": "workspace:*",
+    "drizzle-orm": "^1.0.0-rc.4",
+    "effect": "4.0.0-beta.102",
+    "typeid-js": "^1.2.0"
+  }
+}

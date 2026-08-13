@@ -14,6 +14,7 @@ FROM base AS builder
 COPY --from=prepare /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prepare /app/out/full/ .
+COPY --from=prepare /app/tsconfig.json ./tsconfig.json
 RUN --mount=type=secret,id=turbo_token \
     --mount=type=secret,id=turbo_team \
     TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
@@ -33,16 +34,19 @@ RUN groupadd --system --gid 953 relayit && \
 ENV HOME=/home/relayit \
     TMPDIR=/tmp \
     BUN_TMPDIR=/tmp \
-    XDG_CACHE_HOME=/home/relayit/.cache
+    XDG_CACHE_HOME=/home/relayit/.cache \
+    DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle
 
 # Runtime extras not fully inlined by bun build (pino transports / react-email).
-RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3"}}' > package.json && \
+RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3", "@react-email/render": "^1.4.0"}}' > package.json && \
     bun install --production && \
     chown -R relayit:relayit /app
 
 COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
+COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
+COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
 
-# Deploy sets RUN_MODE (combined | api | worker | builder). Railway sets PORT.
+# Combined HTTP ingress + job worker. Railway sets PORT.
 USER relayit
 EXPOSE 8080
 

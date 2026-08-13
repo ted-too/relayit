@@ -1,16 +1,16 @@
 import { RiArrowLeftSLine, RiMore2Line } from "@remixicon/react";
-import {
-  type CreateProjectBody,
-  createProjectBodySchema,
-} from "@repo/api/validators/routes/projects/project";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NavUser } from "@/components/layout/nav-user";
-import { formatToastError, type InferError } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+import { createProjectFn } from "@/lib/projects/project.functions";
+import {
+  type CreateProjectBody,
+  createProjectBodySchema,
+} from "@/lib/projects/schemas";
+import { queries } from "@/lib/queries";
 
 // FIXME: We need to ensure slugs on the api don't collide with this page
 
@@ -24,19 +24,11 @@ export const Route = createFileRoute("/_authd/create-project")({
 
 function RouteComponent() {
   const navigate = Route.useNavigate();
-  const { api } = Route.useRouteContext();
   const { data: organizations } = useSuspenseQuery(queries.organizations.list);
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: CreateProjectBody) => {
-      const { data, error } = await api.projects.post(body);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async (body: CreateProjectBody) =>
+      await createProjectFn({ data: body }),
     onSuccess: (data, _, __, { client }) => {
       toast.success("Project created successfully");
       client.setQueryData(
@@ -46,11 +38,12 @@ function RouteComponent() {
       client.invalidateQueries({
         queryKey: queries.organizations.queryKey,
       });
-      // TODO: Redirect to onboarding page of org
       navigate({ to: "/$orgSlug", params: { orgSlug: data.slug } });
     },
-    onError: (error: InferError<typeof api.projects.post>) => {
-      toast.error(...formatToastError(error));
+    onError: (error: Error) => {
+      toast.error("Failed to create project", {
+        description: error.message,
+      });
     },
   });
 

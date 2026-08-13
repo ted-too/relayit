@@ -13,12 +13,13 @@ import {
 } from "@repo/ui/components/ui/coss/dialog";
 import { Input } from "@repo/ui/components/ui/shad/input";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
-import { Link, useParams, useRouteContext } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { formatToastError } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
-import type { Template, WorkspaceEntry } from "./types";
+import { queries } from "@/lib/queries";
+import { putReactEmailChannelFn } from "@/lib/templating/template.functions";
+import type { WorkspaceEntryListItem } from "@/lib/templating/types";
+import type { Template } from "./types";
 
 function emailVariantOf(template: Template) {
   return template.channelVariants.find(
@@ -42,7 +43,6 @@ function subjectFromVariant(template: Template) {
 
 export function TemplateEmailChannel({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { api } = useRouteContext({ from: "__root__" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [subject, setSubject] = useState(
     () => subjectFromVariant(template) || template.name
@@ -66,25 +66,15 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
   const pickableEntries = entries.filter((entry) => entry.pickable);
 
   const { mutate: linkEntry, isPending: isLinking } = useMutation({
-    mutationFn: async (input: {
-      workspaceEntryId: string;
-      subject: string;
-    }) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.templates({ id: template.id })
-        .channels.email.put({
-          engine: "reactEmail",
-          workspaceEntryId: input.workspaceEntryId,
+    mutationFn: async (input: { workspaceEntryId: string; subject: string }) =>
+      await putReactEmailChannelFn({
+        data: {
+          orgSlug,
           subject: input.subject,
-        });
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+          templateId: template.id,
+          workspaceEntryId: input.workspaceEntryId,
+        },
+      }),
     onSuccess: async (_, __, ___, { client }) => {
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -96,8 +86,10 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
       toast.success("Email channel saved");
       setPickerOpen(false);
     },
-    onError: (error) => {
-      toast.error(...formatToastError(error as never));
+    onError: (error: Error) => {
+      toast.error("Failed to save email channel", {
+        description: error.message,
+      });
     },
   });
 
@@ -250,8 +242,8 @@ function EntryPickerDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entries: WorkspaceEntry[];
-  onLink: (entry: WorkspaceEntry) => void;
+  entries: WorkspaceEntryListItem[];
+  onLink: (entry: WorkspaceEntryListItem) => void;
   isLinking: boolean;
   subject: string;
 }) {

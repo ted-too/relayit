@@ -9,7 +9,7 @@ import { Select } from "@/components/resources/primitives/select";
 import { Toolbar } from "@/components/resources/primitives/toolbar";
 import { ProviderItem } from "@/components/settings/integrations/item";
 import { UpsertProvider } from "@/components/settings/integrations/upsert";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/admin/settings/integrations")({
   loader: ({ context }) => {
@@ -26,7 +26,7 @@ const SORT_OPTIONS = [
 function RouteComponent() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0]
+    SORT_OPTIONS[0] ?? null
   );
   const { data: providers } = useSuspenseQuery(queries.admin.listProviders);
 

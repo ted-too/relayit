@@ -1,52 +1,30 @@
 {
   "name": "@repo/api",
-  "module": "src/index.js",
+  "version": "0.0.0",
   "portless": {
     "name": "api.relayit",
     "script": "dev:app"
   },
-  "version": "1.0.50",
+  "private": true,
   "scripts": {
     "dev": "portless",
     "dev:app": "bun run --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target bun && cp -r ./drizzle ./build/drizzle",
+    "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "check-types": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "db:studio": "bunx --bun drizzle-kit studio",
-    "db:generate": "bunx --bun drizzle-kit generate",
-    "db:migrate": "bunx --bun drizzle-kit migrate"
+    "test": "bun test"
   },
+  "type": "module",
   "dependencies": {
-    "@repo/template-render": "workspace:*",
-    "@aws-sdk/client-s3": "^3.1076.0",
-    "@aws-sdk/client-ses": "^3.1079.0",
-    "@aws-sdk/client-sesv2": "^3.1057.0",
-    "@aws-sdk/client-sns": "^3.1079.0",
-    "@aws-sdk/s3-request-presigner": "^3.1079.0",
-    "@better-auth/api-key": "^1.6.25",
-    "@better-auth/stripe": "^1.6.25",
-    "@elysiajs/cors": "^1.4.2",
-    "better-auth": "^1.6.25",
-    "better-auth-harmony": "^1.3.2",
-    "cloudflare": "^6.3.0",
-    "drizzle-orm": "^0.45.2",
-    "elysia": "latest",
-    "fast-xml-parser": "^5.9.3",
-    "pg": "^8.21.0",
-    "pino": "^10.3.1",
-    "slugify": "^1.6.9",
-    "sns-validator": "^0.3.5",
-    "stripe": "^22.2.0",
-    "typeid-js": "^1.2.0",
+    "@repo/channels": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/object-storage": "workspace:*",
+    "@repo/persistence": "workspace:*",
+    "@repo/provider-aws": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "@repo/webhooks": "workspace:*",
+    "better-auth": "^1.6.26",
+    "effect": "4.0.0-beta.102",
+    "elysia": "^1.4.29",
     "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@elysiajs/eden": "^1.4.9",
-    "@types/bun": "latest",
-    "@types/sns-validator": "^0.3.3",
-    "drizzle-kit": "^0.31.10",
-    "pino-pretty": "^13.1.3",
-    "vitest": "^4.1.10"
   }
 }

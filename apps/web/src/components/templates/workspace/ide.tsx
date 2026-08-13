@@ -21,22 +21,38 @@ import {
 } from "@repo/ui/components/ui/coss/dialog";
 import { Input } from "@repo/ui/components/ui/shad/input";
 import { cn } from "@repo/ui/lib/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { formatToastError } from "@/integrations/api";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
+import {
+  commitWorkspaceFilesFn,
+  depsSyncWorkspaceFn,
+  getWorkspaceFn,
+  previewWorkspaceEntryFn,
+  publishWorkspaceFn,
+  putReactEmailChannelFn,
+  readWorkspaceFileFn,
+} from "@/lib/templating/template.functions";
 import {
   componentNameFromSlug,
   starterReactEmailEntrySource,
 } from "./starter-entry";
+
+const toastError = (error: unknown, fallback = "Something went wrong") => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error &&
+          "message" in error &&
+          typeof (error as { message: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : fallback;
+  toast.error(fallback, { description: message });
+};
 
 const KIND = "reactEmail" as const;
 const LEADING_SLASHES_RE = /^\/+/;
@@ -64,7 +80,7 @@ function languageForPath(path: string) {
   return "plaintext";
 }
 
-function buildTree(paths: string[]) {
+function buildTree(paths: readonly string[]) {
   const root: Record<string, unknown> = {};
   for (const filePath of paths) {
     const parts = filePath.split("/");
@@ -83,7 +99,6 @@ function buildTree(paths: string[]) {
 
 export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { api } = useRouteContext({ from: "__root__" });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -127,66 +142,39 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   );
 
   const { mutateAsync: readFile } = useMutation({
-    mutationFn: async (path: string) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.workspace({ kind: KIND })
-        .file.get({ query: { path } });
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async (path: string) =>
+      await readWorkspaceFileFn({
+        data: { kind: KIND, orgSlug, path },
+      }),
   });
 
   const { mutateAsync: commitFiles, isPending: isSaving } = useMutation({
     mutationFn: async (input: {
       changes: Record<string, string | null>;
       message?: string;
-    }) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.workspace({ kind: KIND })
-        .files.put(input);
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    }) =>
+      await commitWorkspaceFilesFn({
+        data: {
+          changes: input.changes,
+          kind: KIND,
+          orgSlug,
+          ...(input.message ? { message: input.message } : {}),
+        },
+      }),
   });
 
   const { mutateAsync: depsSync } = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.workspace({ kind: KIND })
-        .depsSync.post();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async () =>
+      await depsSyncWorkspaceFn({
+        data: { kind: KIND, orgSlug },
+      }),
   });
 
   const { mutateAsync: publish, isPending: isPublishing } = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.workspace({ kind: KIND })
-        .publish.post();
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+    mutationFn: async () =>
+      await publishWorkspaceFn({
+        data: { kind: KIND, orgSlug },
+      }),
   });
 
   const { mutateAsync: preview, isPending: isPreviewing } = useMutation({
@@ -194,22 +182,16 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       entryId: string;
       props: Record<string, unknown>;
       subject?: string;
-    }) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.workspace({ kind: KIND })
-        .entries({ entryId: input.entryId })
-        .preview.post({
+    }) =>
+      await previewWorkspaceEntryFn({
+        data: {
+          entryId: input.entryId,
+          kind: KIND,
+          orgSlug,
           props: input.props,
           ...(input.subject ? { subject: input.subject } : {}),
-        });
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+        },
+      }),
   });
 
   const { mutateAsync: linkEntry } = useMutation({
@@ -217,22 +199,15 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       templateId: string;
       workspaceEntryId: string;
       subject: string;
-    }) => {
-      const { data, error } = await api
-        .projects({ orgSlug })
-        .templating.templates({ id: input.templateId })
-        .channels.email.put({
-          engine: "reactEmail",
-          workspaceEntryId: input.workspaceEntryId,
+    }) =>
+      await putReactEmailChannelFn({
+        data: {
+          orgSlug,
           subject: input.subject,
-        });
-
-      if (error) {
-        return Promise.reject(error);
-      }
-
-      return data;
-    },
+          templateId: input.templateId,
+          workspaceEntryId: input.workspaceEntryId,
+        },
+      }),
   });
 
   // Soft-create workspace + optional create-new Entry from Template.slug
@@ -245,10 +220,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
     async function bootstrap() {
       try {
-        await api
-          .projects({ orgSlug })
-          .templating.workspace({ kind: KIND })
-          .get();
+        await getWorkspaceFn({
+          data: { kind: KIND, orgSlug },
+        });
 
         if (search.intent === "create-new" && search.templateId) {
           const template = templateQuery.data;
@@ -295,7 +269,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           }
         }
       } catch (error) {
-        toast.error(...formatToastError(error as never));
+        toastError(error as never);
       } finally {
         if (!cancelled) {
           setBootstrapped(true);
@@ -308,7 +282,6 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       cancelled = true;
     };
   }, [
-    api,
     bootstrapped,
     commitFiles,
     entriesQuery.data,
@@ -364,7 +337,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
         }
       })
       .catch((error) => {
-        toast.error(...formatToastError(error));
+        toastError(error);
       });
     return () => {
       cancelled = true;
@@ -383,9 +356,10 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       });
     } catch (error) {
       setDepsStatus("error");
-      const [title, options] = formatToastError(error as never);
-      setDepsError(options?.description ?? title);
-      toast.error(title, options);
+      const message =
+        error instanceof Error ? error.message : "Deps sync failed";
+      setDepsError(message);
+      toastError(error, "Deps sync failed");
     }
   }
 
@@ -412,7 +386,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
         await runDepsSync();
       }
     } catch (error) {
-      toast.error(...formatToastError(error as never));
+      toastError(error as never);
     }
   }
 
@@ -459,14 +433,19 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       });
       setPreviewHtml(result.html);
       setPreviewSubject(result.subject);
-      if (result.props && activePath) {
-        const nextJson = `${JSON.stringify(result.props, null, 2)}\n`;
+      if (result.propsJson && activePath) {
+        let nextJson = result.propsJson;
+        try {
+          nextJson = `${JSON.stringify(JSON.parse(result.propsJson), null, 2)}\n`;
+        } catch {
+          nextJson = result.propsJson;
+        }
         setPropsJson(nextJson);
         setPropsByPath((prev) => ({ ...prev, [activePath]: nextJson }));
         setPropsOpen(false);
       }
     } catch (error) {
-      toast.error(...formatToastError(error as never));
+      toastError(error as never);
     }
   }
 
@@ -521,7 +500,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
       toast.success("Published successfully");
     } catch (error) {
-      toast.error(...formatToastError(error as never));
+      toastError(error as never);
     }
   }
 
@@ -685,7 +664,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                       toast.success("File created");
                     })
                     .catch((error) => {
-                      toast.error(...formatToastError(error as never));
+                      toastError(error as never);
                     });
                 }}
               >
@@ -826,8 +805,8 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-muted-foreground text-xs">
                         Overrides{" "}
-                        <code className="font-mono">PreviewProps</code> for
-                        this file.
+                        <code className="font-mono">PreviewProps</code> for this
+                        file.
                       </p>
                       <Button
                         disabled={!activePath || isPreviewing}

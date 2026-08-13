@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { WorkspaceIde } from "@/components/templates/workspace/ide";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 const workspaceSearchSchema = z.object({
   templateId: z.string().optional(),

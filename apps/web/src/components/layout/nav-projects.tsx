@@ -20,7 +20,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Image } from "@unpic/react";
-import { queries } from "@/integrations/queries";
+import { queries } from "@/lib/queries";
 
 export function OrganizationLogo({
   name,

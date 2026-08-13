@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/jobs": ["./src/index.ts"],
+      "@repo/jobs/*": ["./src/*"],
+      "@repo/persistence/*": ["../persistence/src/*"],
+      "@repo/redis": ["../redis/src/index.ts"],
+      "@repo/redis/*": ["../redis/src/*"]
+    }
+  }
+}

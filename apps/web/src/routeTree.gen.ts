@@ -27,6 +27,8 @@ import { Route as AuthdAdminProjectsRouteImport } from './routes/_authd/admin/pr
 import { Route as AuthdAdminUsersRouteImport } from './routes/_authd/admin/users'
 import { Route as AuthdUserAccountRouteImport } from './routes/_authd/user.account'
 import { Route as AuthdUserBillingRouteImport } from './routes/_authd/user.billing'
+import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
+import { Route as UnsubscribeOrgSlugContactIdRouteImport } from './routes/unsubscribe.$orgSlug.$contactId'
 import { Route as AuthdOrgSlugAutomationsWorkflowsRouteImport } from './routes/_authd/$orgSlug/automations.workflows'
 import { Route as AuthdOrgSlugDomainsIndexRouteImport } from './routes/_authd/$orgSlug/domains/index'
 import { Route as AuthdOrgSlugDomainsFqdnRouteImport } from './routes/_authd/$orgSlug/domains/$fqdn'
@@ -124,6 +126,17 @@ const AuthdUserBillingRoute = AuthdUserBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => AuthdUserRoute,
 } as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnsubscribeOrgSlugContactIdRoute =
+  UnsubscribeOrgSlugContactIdRouteImport.update({
+    id: '/unsubscribe/$orgSlug/$contactId',
+    path: '/unsubscribe/$orgSlug/$contactId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthdOrgSlugAutomationsWorkflowsRoute =
   AuthdOrgSlugAutomationsWorkflowsRouteImport.update({
     id: '/automations/workflows',
@@ -182,6 +195,8 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AuthdAdminUsersRoute
   '/user/account': typeof AuthdUserAccountRoute
   '/user/billing': typeof AuthdUserBillingRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/admin/': typeof AuthdAdminIndexRoute
   '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
@@ -206,6 +221,8 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AuthdAdminUsersRoute
   '/user/account': typeof AuthdUserAccountRoute
   '/user/billing': typeof AuthdUserBillingRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/$orgSlug': typeof AuthdOrgSlugIndexRoute
   '/admin': typeof AuthdAdminIndexRoute
   '/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
@@ -234,6 +251,8 @@ export interface FileRoutesById {
   '/_authd/admin/users': typeof AuthdAdminUsersRoute
   '/_authd/user/account': typeof AuthdUserAccountRoute
   '/_authd/user/billing': typeof AuthdUserBillingRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/_authd/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/_authd/admin/': typeof AuthdAdminIndexRoute
   '/_authd/$orgSlug/automations/workflows': typeof AuthdOrgSlugAutomationsWorkflowsRoute
@@ -262,6 +281,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/user/account'
     | '/user/billing'
+    | '/api/auth/$'
+    | '/unsubscribe/$orgSlug/$contactId'
     | '/$orgSlug/'
     | '/admin/'
     | '/$orgSlug/automations/workflows'
@@ -286,6 +307,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/user/account'
     | '/user/billing'
+    | '/api/auth/$'
+    | '/unsubscribe/$orgSlug/$contactId'
     | '/$orgSlug'
     | '/admin'
     | '/$orgSlug/automations/workflows'
@@ -313,6 +336,8 @@ export interface FileRouteTypes {
     | '/_authd/admin/users'
     | '/_authd/user/account'
     | '/_authd/user/billing'
+    | '/api/auth/$'
+    | '/unsubscribe/$orgSlug/$contactId'
     | '/_authd/$orgSlug/'
     | '/_authd/admin/'
     | '/_authd/$orgSlug/automations/workflows'
@@ -327,6 +352,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthdRoute: typeof AuthdRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  UnsubscribeOrgSlugContactIdRoute: typeof UnsubscribeOrgSlugContactIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -456,6 +483,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/user/billing'
       preLoaderRoute: typeof AuthdUserBillingRouteImport
       parentRoute: typeof AuthdUserRoute
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unsubscribe/$orgSlug/$contactId': {
+      id: '/unsubscribe/$orgSlug/$contactId'
+      path: '/unsubscribe/$orgSlug/$contactId'
+      fullPath: '/unsubscribe/$orgSlug/$contactId'
+      preLoaderRoute: typeof UnsubscribeOrgSlugContactIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authd/$orgSlug/automations/workflows': {
       id: '/_authd/$orgSlug/automations/workflows'
@@ -607,6 +648,8 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AuthdRoute: AuthdRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  UnsubscribeOrgSlugContactIdRoute: UnsubscribeOrgSlugContactIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
