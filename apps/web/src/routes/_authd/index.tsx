@@ -4,12 +4,16 @@ import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { OrganizationLogo } from "@/components/layout/nav-projects";
 import { NavUser } from "@/components/layout/nav-user";
+import { listOrganizations } from "@/lib/auth.functions";
 import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/")({
   beforeLoad: async ({ context }) => {
-    const organizations = await context.queryClient.ensureQueryData(
-      queries.organizations.list
+    const organizations = await listOrganizations();
+
+    await context.queryClient.setQueryData(
+      queries.organizations.list.queryKey,
+      organizations
     );
 
     if (organizations.length === 0) {

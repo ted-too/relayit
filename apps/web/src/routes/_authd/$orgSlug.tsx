@@ -24,13 +24,17 @@ import {
   type NavItemGroup,
   type RequiredPermissions,
 } from "@/components/layout/app-sidebar";
+import { listOrganizations } from "@/lib/auth.functions";
 import { authClient } from "@/lib/auth-client";
 import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/$orgSlug")({
   beforeLoad: async ({ context, params }) => {
-    const userOrganizations = await context.queryClient.ensureQueryData(
-      queries.organizations.list
+    const userOrganizations = await listOrganizations();
+
+    await context.queryClient.setQueryData(
+      queries.organizations.list.queryKey,
+      userOrganizations
     );
 
     const currentOrganization = userOrganizations.find(
