@@ -14,6 +14,7 @@ import {
   getRef,
   HOSTED_DEV_REF,
   HOSTED_MAIN_REF,
+  scaffoldHostedWorkspace,
   updateRef,
   withWorkspaceGitLock,
 } from "../git";
@@ -79,6 +80,8 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           (dir) =>
             Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
         );
+
+        yield* scaffoldHostedWorkspace(input.workspaceId);
 
         const checkedOut = yield* checkoutRefToDirectory({
           destDir: tempDir,

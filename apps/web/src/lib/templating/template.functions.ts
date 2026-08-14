@@ -166,6 +166,11 @@ export const getWorkspaceFn = createServerFn({ method: "GET" })
         organizationId: org.id,
       })
     );
+    // Old API GET scaffolded Git here. Catalog meta is Postgres-only; seed `dev`
+    // through the builder so create-new never commits onto an empty tree.
+    await runTemplatingBuilder((client) =>
+      client.listFiles({ workspaceId: workspace.id })
+    );
     return {
       createdAt: workspace.createdAt,
       id: workspace.id,

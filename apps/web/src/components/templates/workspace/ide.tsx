@@ -210,9 +210,14 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       }),
   });
 
-  // Soft-create workspace + optional create-new Entry from Template.slug
+  // Soft-create workspace + optional create-new Entry from Template.slug.
+  // Old API GET scaffolded Git before any commit; wait for that seed, then add
+  // `reactEmail/<slug>.tsx` on top of package.json / welcome.tsx.
   useEffect(() => {
-    if (bootstrapped || filesQuery.isLoading || templateQuery.isLoading) {
+    if (bootstrapped || templateQuery.isLoading) {
+      return;
+    }
+    if (search.intent === "create-new" && !templateQuery.data) {
       return;
     }
 
@@ -223,6 +228,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
         await getWorkspaceFn({
           data: { kind: KIND, orgSlug },
         });
+        const files = await queryClient.fetchQuery(
+          queries.organizations.bySlug(orgSlug).workspace(KIND).files
+        );
 
         if (search.intent === "create-new" && search.templateId) {
           const template = templateQuery.data;
@@ -230,7 +238,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             return;
           }
           const entryPath = `reactEmail/${template.slug}.tsx`;
-          const exists = (filesQuery.data?.paths ?? []).includes(entryPath);
+          const exists = files.paths.includes(entryPath);
           if (!exists) {
             await commitFiles({
               message: `feat: add ${entryPath}`,
@@ -259,11 +267,10 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           if (entry && !cancelled) {
             setActivePath(entry.path);
           }
-        } else if (!cancelled && (filesQuery.data?.paths.length ?? 0) > 0) {
+        } else if (!cancelled && files.paths.length > 0) {
           const firstEntry =
-            filesQuery.data?.paths.find((path) =>
-              path.startsWith("reactEmail/")
-            ) ?? filesQuery.data?.paths[0];
+            files.paths.find((path) => path.startsWith("reactEmail/")) ??
+            files.paths[0];
           if (firstEntry) {
             setActivePath(firstEntry);
           }
@@ -285,8 +292,6 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
     bootstrapped,
     commitFiles,
     entriesQuery.data,
-    filesQuery.data?.paths,
-    filesQuery.isLoading,
     orgSlug,
     queryClient,
     search.entryId,

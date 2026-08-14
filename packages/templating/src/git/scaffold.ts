@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
-import { commitFiles } from "./commit";
+import { commitFiles, listFilesAtRef, readFileAtRef } from "./commit";
 import { getRef, updateRef } from "./refs";
 import { HOSTED_DEV_REF, HOSTED_MAIN_REF } from "./types";
 
@@ -37,7 +37,7 @@ export default function WelcomeEmail({ name }: Props) {
 }
 `;
 
-const generateLockfile = () =>
+const generateLockfile = (packageJson: string) =>
   Effect.acquireRelease(
     Effect.tryPromise({
       catch: () =>
@@ -58,10 +58,7 @@ const generateLockfile = () =>
             message: "Failed to generate starter lockfile.",
           }),
         try: async () => {
-          await fs.writeFile(
-            path.join(tempDir, "package.json"),
-            STARTER_PACKAGE_JSON
-          );
+          await fs.writeFile(path.join(tempDir, "package.json"), packageJson);
           const proc = Bun.spawn(
             ["bun", "install", "--lockfile-only", "--ignore-scripts"],
             {
@@ -92,15 +89,53 @@ const generateLockfile = () =>
     Effect.scoped
   );
 
-/** Seed hosted `dev` + `main` with a starter React Email workspace. */
+/**
+ * Seed hosted `dev` + `main` like the old API `getOrCreateHostedWorkspace`.
+ * If `dev` already exists but is missing `package.json` / `bun.lock` (a
+ * create-new commit that raced ahead of scaffold), restore those files.
+ * Caller must hold the workspace Git lock.
+ */
 export const scaffoldHostedWorkspace = (workspaceId: string) =>
   Effect.gen(function* () {
     const existing = yield* getRef(workspaceId, HOSTED_DEV_REF);
     if (existing) {
-      return { commitSha: existing };
+      const listed = yield* listFilesAtRef({
+        ref: HOSTED_DEV_REF,
+        workspaceId,
+      });
+      const hasPackage = listed.paths.includes("package.json");
+      const hasLock = listed.paths.includes("bun.lock");
+      if (hasPackage && hasLock) {
+        return { commitSha: existing };
+      }
+
+      let packageJson = STARTER_PACKAGE_JSON;
+      if (hasPackage) {
+        const current = yield* readFileAtRef({
+          path: "package.json",
+          ref: HOSTED_DEV_REF,
+          workspaceId,
+        });
+        packageJson = current.content;
+      }
+      const changes: Record<string, string> = {};
+      if (!hasPackage) {
+        changes["package.json"] = STARTER_PACKAGE_JSON;
+      }
+      if (!hasLock) {
+        changes["bun.lock"] = yield* generateLockfile(packageJson);
+      }
+
+      const restored = yield* commitFiles({
+        changes,
+        message: "chore: restore workspace package manifest",
+        ref: HOSTED_DEV_REF,
+        workspaceId,
+      });
+      return { commitSha: restored.commitSha };
     }
 
-    const lockfile = yield* generateLockfile();
+    const lockfile = yield* generateLockfile(STARTER_PACKAGE_JSON);
 
     const committed = yield* commitFiles({
       changes: {

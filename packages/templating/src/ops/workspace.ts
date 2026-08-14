@@ -18,30 +18,40 @@ import {
 import { assertHardenedPackageJson } from "../publish/package-json";
 import { TemplatingBuilderError } from "../rpc/errors";
 
-/** Scaffold `dev` if missing; sync entry rows after first scaffold. */
+const hasPackageManifest = (paths: readonly string[]) =>
+  paths.includes("package.json") && paths.includes("bun.lock");
+
+const seedAndSyncEntries = (workspaceId: string) =>
+  Effect.gen(function* () {
+    const scaffolded = yield* scaffoldHostedWorkspace(workspaceId);
+    const listed = yield* listFilesAtRef({
+      ref: HOSTED_DEV_REF,
+      workspaceId,
+    });
+    yield* syncWorkspaceEntriesFromPaths(workspaceId, listed.paths);
+    return scaffolded;
+  });
+
+/**
+ * Scaffold `dev` if missing, and restore `package.json` / `bun.lock` when a
+ * first commit raced ahead of the starter tree.
+ */
 export const ensureScaffolded = (input: { readonly workspaceId: string }) =>
   Effect.gen(function* () {
     const tip = yield* getRef(input.workspaceId, HOSTED_DEV_REF);
     if (tip) {
-      return { commitSha: tip };
+      const listed = yield* listFilesAtRef({
+        ref: HOSTED_DEV_REF,
+        workspaceId: input.workspaceId,
+      });
+      if (hasPackageManifest(listed.paths)) {
+        return { commitSha: tip };
+      }
     }
 
     return yield* withWorkspaceGitLock(
       input.workspaceId,
-      Effect.gen(function* () {
-        const again = yield* getRef(input.workspaceId, HOSTED_DEV_REF);
-        if (again) {
-          return { commitSha: again };
-        }
-
-        const scaffolded = yield* scaffoldHostedWorkspace(input.workspaceId);
-        const listed = yield* listFilesAtRef({
-          ref: HOSTED_DEV_REF,
-          workspaceId: input.workspaceId,
-        });
-        yield* syncWorkspaceEntriesFromPaths(input.workspaceId, listed.paths);
-        return scaffolded;
-      })
+      seedAndSyncEntries(input.workspaceId)
     );
   });
 
@@ -124,6 +134,7 @@ export const commitFiles = (input: {
     return yield* withWorkspaceGitLock(
       input.workspaceId,
       Effect.gen(function* () {
+        yield* scaffoldHostedWorkspace(input.workspaceId);
         const committed = yield* gitCommitFiles({
           changes: normalized,
           message: input.message ?? "chore: update workspace files",
