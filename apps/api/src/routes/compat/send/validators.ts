@@ -61,15 +61,7 @@ export const legacyApiKeyHeadersSchema = z
     "X-API-Key": z.string().optional(),
     "x-api-key": z.string().optional(),
   })
-  .transform((headers, ctx) => {
-    const key = headers["x-api-key"] ?? headers["X-API-Key"];
-    if (!key) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Unauthorized",
-        path: ["x-api-key"],
-      });
-      return z.NEVER;
-    }
-    return { "x-api-key": key };
+  .refine((headers) => Boolean(headers["x-api-key"] ?? headers["X-API-Key"]), {
+    message: "Unauthorized",
+    path: ["x-api-key"],
   });

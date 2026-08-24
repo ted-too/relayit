@@ -32,36 +32,27 @@ export const emailContactSchema = z.object({
 
 export type EmailContact = z.infer<typeof emailContactSchema>;
 
-/** Wire address list: string or string[] → string[] (Resend `reply_to`, etc.). */
-export const emailAddressListWireSchema = z
-  .union([z.email(), z.array(z.email()).max(MAX_RECIPIENTS)])
-  .transform((val) => (Array.isArray(val) ? val : [val]));
+/** Wire address list: email or email[] (Resend `reply_to`, etc.). */
+export const emailAddressListWireSchema = z.union([
+  z.email(),
+  z.array(z.email()).max(MAX_RECIPIENTS),
+]);
 
 export type EmailAddressListWire = z.infer<typeof emailAddressListWireSchema>;
 
 /**
  * Recipients: Resend string | string[], plus Relayit contact objects.
- * Always normalized to `{ email, first_name?, last_name?, properties? }[]`.
  */
-export const emailContactRecipientSchema = z
-  .union([
-    z.email(),
-    z.array(z.email()).max(MAX_RECIPIENTS),
-    emailContactSchema,
-    z.array(emailContactSchema).max(MAX_RECIPIENTS),
-  ])
-  .transform((val) => {
-    if (Array.isArray(val)) {
-      return val.map((item) =>
-        typeof item === "object" ? item : { email: item }
-      );
-    }
-    return typeof val === "object" ? [val] : [{ email: val }];
-  });
+export const emailContactRecipientSchema = z.union([
+  z.email(),
+  z.array(z.email()).max(MAX_RECIPIENTS),
+  emailContactSchema,
+  z.array(emailContactSchema).max(MAX_RECIPIENTS),
+]);
 
 export type EmailContactRecipient = z.infer<typeof emailContactRecipientSchema>;
 
-function parseEmailFrom(value: string): EmailFrom {
+export function parseEmailFrom(value: string): EmailFrom {
   const trimmed = value.trim();
   const angled = trimmed.match(FROM_ANGLE_ADDR);
   if (angled?.[2]) {
@@ -79,24 +70,17 @@ function parseEmailFrom(value: string): EmailFrom {
   return { address, normalized: address };
 }
 
-/** Wire From string → stored {@link EmailFrom}. */
+/** Wire From string. */
 export const emailFromSchema = z
   .string()
   .min(1)
-  .transform((value, ctx) => {
-    const parsed = parseEmailFrom(value);
-    if (!z.email().safeParse(parsed.address).success) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Invalid from address",
-      });
-      return z.NEVER;
-    }
-    return parsed;
-  })
+  .refine(
+    (value) => z.email().safeParse(parseEmailFrom(value).address).success,
+    { message: "Invalid from address" }
+  )
   .describe('Sender. Resend format: email or "Name <email@example.com>".');
 
-/** Resend tags → Message Tags map (key/value on the Message). */
+/** Resend [{ name, value }] tags. */
 const emailTagItemSchema = z.object({
   name: z.string().min(1).max(256).regex(TAG_TOKEN, {
     message:
@@ -108,12 +92,7 @@ const emailTagItemSchema = z.object({
   }),
 });
 
-export const emailTagsSchema = z
-  .array(emailTagItemSchema)
-  .transform((tags) =>
-    Object.fromEntries(tags.map((tag) => [tag.name, tag.value]))
-  )
-  .optional();
+export const emailTagsSchema = z.array(emailTagItemSchema).optional();
 
 export type EmailTags = z.infer<typeof emailTagsSchema>;
 

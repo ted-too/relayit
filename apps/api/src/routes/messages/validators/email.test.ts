@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { sendEmailBodySchema } from "./email";
+import { parseEmailFrom, sendEmailBodySchema } from "./email";
 
 describe("sendEmailBodySchema (Resend-compatible)", () => {
   it("accepts a minimal Resend-shaped body and parses From", () => {
@@ -10,12 +10,13 @@ describe("sendEmailBodySchema (Resend-compatible)", () => {
       html: "<p>Hi</p>",
     });
 
-    expect(parsed.from).toEqual({
+    expect(parsed.from).toBe("Acme <noreply@example.com>");
+    expect(parseEmailFrom(parsed.from)).toEqual({
       name: "Acme",
       address: "noreply@example.com",
       normalized: "Acme <noreply@example.com>",
     });
-    expect(parsed.to).toEqual([{ email: "user@example.com" }]);
+    expect(parsed.to).toEqual(["user@example.com"]);
   });
 
   it("accepts Relayit contact-object recipients and Resend tags", () => {
@@ -37,8 +38,12 @@ describe("sendEmailBodySchema (Resend-compatible)", () => {
       ],
     });
 
-    expect(parsed.to[0]?.first_name).toBe("Ada");
-    expect(parsed.tags).toEqual({ category: "welcome" });
+    expect(parsed.to).toEqual({
+      email: "user@example.com",
+      first_name: "Ada",
+      properties: { plan: "pro" },
+    });
+    expect(parsed.tags).toEqual([{ name: "category", value: "welcome" }]);
     expect(parsed.attachments?.[0]).toMatchObject({
       filename: "invoice.pdf",
       path: "https://example.com/invoice.pdf",

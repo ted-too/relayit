@@ -18,18 +18,30 @@ import {
 } from "./validators";
 
 const authenticateLegacySend = async ({
-  apiKey,
   db,
+  headers,
   projectSlug,
   requestHeaders,
   verifyApiKey,
 }: {
-  readonly apiKey: string;
   readonly db: ApiAuth["db"];
+  readonly headers: {
+    readonly "X-API-Key"?: string;
+    readonly "x-api-key"?: string;
+  };
   readonly projectSlug: string;
   readonly requestHeaders: Headers;
   readonly verifyApiKey: ApiAuth["auth"]["api"]["verifyApiKey"];
 }) => {
+  const apiKey = headers["x-api-key"] ?? headers["X-API-Key"];
+  if (!apiKey) {
+    return {
+      body: { details: [] as string[], message: "Unauthorized" },
+      ok: false as const,
+      status: 401 as const,
+    };
+  }
+
   const result = await verifyApiKey({
     body: {
       configId: "org-keys",
@@ -94,8 +106,8 @@ export const createLegacySendRoutes = (
       "/raw/email",
       async ({ body, headers, params, request }) => {
         const authResult = await authenticateLegacySend({
-          apiKey: headers["x-api-key"],
           db: auth.db,
+          headers,
           projectSlug: params.project,
           requestHeaders: request.headers,
           verifyApiKey: auth.auth.api.verifyApiKey,
@@ -158,8 +170,8 @@ export const createLegacySendRoutes = (
       "/template/email",
       async ({ body, headers, params, request }) => {
         const authResult = await authenticateLegacySend({
-          apiKey: headers["x-api-key"],
           db: auth.db,
+          headers,
           projectSlug: params.project,
           requestHeaders: request.headers,
           verifyApiKey: auth.auth.api.verifyApiKey,

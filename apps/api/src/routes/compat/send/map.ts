@@ -6,7 +6,10 @@ import type {
 import { SANDBOX_FROM_LOCAL_PART } from "@repo/channels/email/sender";
 import type { UsageLimitExceeded } from "@repo/channels/usage";
 import type { PromiseDb } from "@repo/persistence/db/promise";
-import { emailFromSchema } from "../../messages/validators/email";
+import {
+  emailFromSchema,
+  parseEmailFrom,
+} from "../../messages/validators/email";
 
 export interface LegacySendContact {
   readonly externalIdentifiers?: Readonly<Record<string, string>>;
@@ -136,7 +139,7 @@ const resolveMappedFrom = (input: {
     };
   }
 
-  return { from: parsedFrom.data, ok: true };
+  return { from: parseEmailFrom(parsedFrom.data), ok: true };
 };
 
 export const mapLegacyRawToAccept = (input: {

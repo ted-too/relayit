@@ -6,6 +6,8 @@ import type { ApiAuth } from "../../lib/auth";
 import type { RunApiEffect } from "../../lib/effect";
 import { logEffectFailure } from "../../lib/log-failure";
 import {
+  type EmailContact,
+  parseEmailFrom,
   sendEmailBodySchema,
   sendEmailHeadersSchema,
 } from "./validators/email";
@@ -21,6 +23,15 @@ const contactInput = (contact: {
   lastName: contact.last_name,
   properties: contact.properties,
 });
+
+const asContactList = (
+  value: EmailContact | string | readonly (EmailContact | string)[]
+) => {
+  const items = Array.isArray(value) ? value : [value];
+  return items.map((item) =>
+    typeof item === "string" ? { email: item } : item
+  );
+};
 
 export const createEmailRoutes = (
   auth: ApiAuth,
@@ -62,8 +73,12 @@ export const createEmailRoutes = (
                     ? { kind: "url" as const, url: attachment.path ?? "" }
                     : { content: attachment.content, kind: "base64" as const },
               })),
-              bcc: (body.bcc ?? []).map(contactInput),
-              cc: (body.cc ?? []).map(contactInput),
+              bcc: (body.bcc === undefined ? [] : asContactList(body.bcc)).map(
+                contactInput
+              ),
+              cc: (body.cc === undefined ? [] : asContactList(body.cc)).map(
+                contactInput
+              ),
               content: body.template
                 ? {
                     idOrSlug: body.template.id,
@@ -77,17 +92,27 @@ export const createEmailRoutes = (
                     subject: body.subject ?? "",
                     text: body.text,
                   },
-              from: body.from,
+              from: parseEmailFrom(body.from),
               headers: body.headers ?? {},
-              replyTo: body.reply_to ?? [],
-              to: body.to.map(contactInput),
+              replyTo:
+                body.reply_to === undefined
+                  ? []
+                  : Array.isArray(body.reply_to)
+                    ? [...body.reply_to]
+                    : [body.reply_to],
+              to: asContactList(body.to).map(contactInput),
             },
             idempotencyKey: headers["idempotency-key"],
             organizationId,
             scheduledAt: body.scheduled_at
               ? DateTime.makeUnsafe(body.scheduled_at)
               : undefined,
-            tags: body.tags,
+            tags:
+              body.tags === undefined
+                ? undefined
+                : Object.fromEntries(
+                    body.tags.map((tag) => [tag.name, tag.value])
+                  ),
           }).pipe(
             Effect.annotateLogs({ organizationId }),
             Effect.map((accepted) =>
