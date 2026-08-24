@@ -15,6 +15,8 @@
   },
   "type": "module",
   "dependencies": {
+    "@elysia/openapi": "^1.4.15",
+    "@opentelemetry/api": "^1.9.1",
     "@repo/channels": "workspace:*",
     "@repo/jobs": "workspace:*",
     "@repo/object-storage": "workspace:*",

@@ -2,6 +2,7 @@ import type { Worker } from "node:cluster";
 import cluster from "node:cluster";
 import os from "node:os";
 import { setTimeout as scheduleTimeout } from "node:timers";
+import openapi from "@elysia/openapi";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
 import {
@@ -16,6 +17,7 @@ import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
+import * as z from "zod";
 import { apiConfig } from "./env";
 import { LoggingLive, makeRuntime } from "./layers";
 import { createAuth } from "./lib/auth";
@@ -125,6 +127,13 @@ const apiProgram = (startWorker: boolean) =>
         );
 
       const app = new Elysia()
+        .use(
+          openapi({
+            mapJsonSchema: {
+              zod: z.toJSONSchema,
+            },
+          })
+        )
         .get("/health", () => ({ status: "ok" as const }))
         .use(createLegacySendRoutes(auth, runEffect))
         .group("/messages", (group) =>
