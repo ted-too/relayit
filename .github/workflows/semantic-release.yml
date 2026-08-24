@@ -37,8 +37,12 @@ jobs:
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
+          # Pin 9.3.1: v10 needs conventional-changelog-writer@9, but
+          # @semantic-release/release-notes-generator still ships writer@8.
+          # Unpinned extra_plugins floated to 10.4.0 and failed generateNotes
+          # (conventional-changelog/conventional-changelog#1495).
           extra_plugins: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@9.3.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
