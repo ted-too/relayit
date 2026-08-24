@@ -1,60 +1,23 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import openapi from "@elysia/openapi";
 import { Elysia } from "elysia";
-import * as z from "zod";
-import { legacyApiKeyHeadersSchema } from "../routes/compat/send/validators";
-import { sendEmailBodySchema } from "../routes/messages/validators/email";
+import {
+  sendEmailBodySchema,
+  sendEmailHeadersSchema,
+  sendEmailOpenApiModels,
+} from "../routes/messages/validators/email";
 
-const isTransformWarning = (arg: unknown) => {
-  const message = arg instanceof Error ? arg.message : String(arg);
-  return message.includes("Transforms cannot be represented in JSON Schema");
-};
+const RESEND_COPY = /resend/i;
 
-const transformWarningCalls = (warn: ReturnType<typeof spyOn>) =>
-  warn.mock.calls.filter((args: readonly unknown[]) =>
-    args.some(isTransformWarning)
-  );
-
-describe("OpenAPI Zod schemas", () => {
-  test("send-email body documents wire From as a string", () => {
-    const warn = spyOn(console, "warn");
-    try {
-      const schema = z.toJSONSchema(sendEmailBodySchema);
-      expect(transformWarningCalls(warn)).toEqual([]);
-      expect(schema).toMatchObject({
-        properties: {
-          from: { type: "string" },
-          tags: {
-            items: {
-              properties: {
-                name: { type: "string" },
-                value: { type: "string" },
-              },
-            },
-            type: "array",
-          },
-        },
-        type: "object",
-      });
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  test("spec generation does not warn on send schemas", async () => {
+describe("OpenAPI send-email schemas", () => {
+  test("documents Recipient as a named component union", async () => {
     const warn = spyOn(console, "warn");
     const app = new Elysia()
-      .use(
-        openapi({
-          mapJsonSchema: {
-            zod: z.toJSONSchema,
-          },
-          path: "/docs",
-        })
-      )
+      .use(openapi({ path: "/docs" }))
+      .model(sendEmailOpenApiModels)
       .post("/messages/email", () => ({ id: "msg_test" }), {
         body: sendEmailBodySchema,
-        headers: legacyApiKeyHeadersSchema,
+        headers: sendEmailHeadersSchema,
       });
 
     try {
@@ -62,7 +25,43 @@ describe("OpenAPI Zod schemas", () => {
         new Request("http://localhost/docs/json")
       );
       expect(response.status).toBe(200);
-      expect(transformWarningCalls(warn)).toEqual([]);
+      expect(warn.mock.calls).toEqual([]);
+
+      const spec = (await response.json()) as {
+        components?: {
+          schemas?: {
+            Recipient?: { anyOf?: { title?: string }[] };
+          };
+        };
+        paths?: Record<
+          string,
+          {
+            post?: {
+              requestBody?: {
+                content?: {
+                  "application/json"?: {
+                    schema?: { properties?: { to?: { $ref?: string } } };
+                  };
+                };
+              };
+            };
+          }
+        >;
+      };
+
+      const path =
+        spec.paths?.["/messages/email"] ?? spec.paths?.["/messages/email/"];
+      expect(
+        path?.post?.requestBody?.content?.["application/json"]?.schema
+          ?.properties?.to
+      ).toEqual({ $ref: "#/components/schemas/Recipient" });
+      expect(spec.components?.schemas?.Recipient?.anyOf).toEqual([
+        expect.objectContaining({ title: "Email address", type: "string" }),
+        expect.objectContaining({ title: "Email addresses", type: "array" }),
+        expect.objectContaining({ $ref: "#/components/schemas/Contact" }),
+        expect.objectContaining({ title: "Contacts", type: "array" }),
+      ]);
+      expect(JSON.stringify(spec)).not.toMatch(RESEND_COPY);
     } finally {
       warn.mockRestore();
     }

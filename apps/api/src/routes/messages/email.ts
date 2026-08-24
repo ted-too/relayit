@@ -8,8 +8,11 @@ import { logEffectFailure } from "../../lib/log-failure";
 import {
   type EmailContact,
   parseEmailFrom,
+  refineSendEmailBody,
+  type SendEmailBody,
   sendEmailBodySchema,
   sendEmailHeadersSchema,
+  sendEmailOpenApiModels,
 } from "./validators/email";
 
 const contactInput = (contact: {
@@ -39,10 +42,12 @@ export const createEmailRoutes = (
   accept = acceptTransactionalEmail
 ) =>
   new Elysia({ prefix: "/email", tags: ["Send"] })
+    .model(sendEmailOpenApiModels)
     .use(createApiKeyMiddleware(auth))
     .post(
       "/",
-      ({ body, headers, organizationId, request }) => {
+      ({ body: rawBody, headers, organizationId, request }) => {
+        const body = rawBody as SendEmailBody;
         const hasApp = Boolean(headers.app);
         const hasEnvironment = Boolean(headers.environment);
         if (hasApp !== hasEnvironment) {
@@ -69,8 +74,8 @@ export const createEmailRoutes = (
                 contentType: attachment.content_type,
                 filename: attachment.filename,
                 source:
-                  attachment.content === undefined
-                    ? { kind: "url" as const, url: attachment.path ?? "" }
+                  "path" in attachment
+                    ? { kind: "url" as const, url: attachment.path }
                     : { content: attachment.content, kind: "base64" as const },
               })),
               bcc: (body.bcc === undefined ? [] : asContactList(body.bcc)).map(
@@ -188,7 +193,22 @@ export const createEmailRoutes = (
       },
       {
         apiKey: true,
+        beforeHandle: ({ body, status }) => {
+          const message = refineSendEmailBody(body as SendEmailBody);
+          if (message !== undefined) {
+            return status(422, {
+              message,
+              on: "body",
+              type: "validation",
+            });
+          }
+        },
         body: sendEmailBodySchema,
+        detail: {
+          description:
+            "Create a transactional email. Provide inline html/text or a template, not both.",
+          summary: "Send email",
+        },
         headers: sendEmailHeadersSchema,
       }
     );

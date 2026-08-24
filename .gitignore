@@ -27,6 +27,9 @@ out/
 build
 dist
 
+# tsc declaration emit must not land next to sources
+**/src/**/*.d.ts
+
 
 # Debug
 npm-debug.log*

@@ -1,12 +1,11 @@
-import { Elysia, status } from "elysia";
-import { z } from "zod";
+import { Elysia, status, t } from "elysia";
 import type { ApiAuth } from "./auth";
 
-export const apiKeyHeadersSchema = z.object({
-  "x-api-key": z.string().describe("The API key to use for the request."),
+export const apiKeyHeadersSchema = t.Object({
+  "x-api-key": t.String({
+    description: "The API key to use for the request.",
+  }),
 });
-
-export type ApiKeyHeaders = z.infer<typeof apiKeyHeadersSchema>;
 
 export const createApiKeyMiddleware = ({ auth, db }: ApiAuth) =>
   new Elysia({ name: "api-key" })

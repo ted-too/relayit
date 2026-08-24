@@ -1,67 +1,96 @@
-import { z } from "zod";
+import { type Static, t } from "elysia";
 
-const legacyAttachmentSchema = z
-  .object({
-    content: z.string().optional(),
-    contentId: z.string().optional(),
-    contentType: z.string().optional(),
-    filename: z.string().min(1),
-    path: z.url().optional(),
-  })
-  .refine(
-    (data) =>
-      Number(data.content !== undefined) + Number(data.path !== undefined) ===
-      1,
+const stringMap = t.Object({}, { additionalProperties: t.String() });
+
+const legacyAttachmentSchema = t.Union([
+  t.Object(
     {
-      message: "Exactly one of 'content' or 'path' must be provided",
-      path: ["content"],
-    }
-  );
+      content: t.String(),
+      contentId: t.Optional(t.String()),
+      contentType: t.Optional(t.String()),
+      filename: t.String({ minLength: 1 }),
+    },
+    { additionalProperties: false, title: "Base64 attachment" }
+  ),
+  t.Object(
+    {
+      contentId: t.Optional(t.String()),
+      contentType: t.Optional(t.String()),
+      filename: t.String({ minLength: 1 }),
+      path: t.String({ format: "uri" }),
+    },
+    { additionalProperties: false, title: "Hosted attachment" }
+  ),
+]);
 
-const legacyContactSchema = z.object({
-  externalIdentifiers: z.record(z.string(), z.string()).optional(),
-  name: z.string().optional(),
+const legacyContactSchema = t.Object(
+  {
+    externalIdentifiers: t.Optional(stringMap),
+    name: t.Optional(t.String()),
+  },
+  { additionalProperties: false }
+);
+
+const legacyBase = {
+  app: t.Optional(t.String()),
+  appEnvironment: t.Optional(t.String()),
+  attachments: t.Optional(t.Array(legacyAttachmentSchema, { maxItems: 20 })),
+  contact: t.Optional(legacyContactSchema),
+  from: t.Optional(t.String({ format: "email" })),
+  to: t.String({ format: "email" }),
+};
+
+const legacyInlinePayloadSchema = t.Union([
+  t.Object(
+    {
+      html: t.String(),
+      subject: t.String({ minLength: 1 }),
+      text: t.Optional(t.String()),
+    },
+    { additionalProperties: false }
+  ),
+  t.Object(
+    {
+      html: t.Optional(t.String()),
+      subject: t.String({ minLength: 1 }),
+      text: t.String(),
+    },
+    { additionalProperties: false }
+  ),
+]);
+
+export const legacySendRawBodySchema = t.Object(
+  {
+    ...legacyBase,
+    payload: legacyInlinePayloadSchema,
+  },
+  { additionalProperties: false }
+);
+
+export const legacySendTemplateBodySchema = t.Object(
+  {
+    ...legacyBase,
+    template: t.Object(
+      {
+        props: t.Optional(t.Object({}, { additionalProperties: t.Any() })),
+        slug: t.String({ minLength: 1 }),
+      },
+      { additionalProperties: false }
+    ),
+  },
+  { additionalProperties: false }
+);
+
+export const legacySendProjectParamsSchema = t.Object({
+  project: t.String({ minLength: 1 }),
 });
 
-const legacyBaseSchema = z.object({
-  app: z.string().optional(),
-  appEnvironment: z.string().optional(),
-  attachments: z.array(legacyAttachmentSchema).max(20).optional(),
-  contact: legacyContactSchema.optional(),
-  from: z.email().optional(),
-  to: z.email(),
+export const legacyApiKeyHeadersSchema = t.Object({
+  "X-API-Key": t.Optional(t.String()),
+  "x-api-key": t.Optional(t.String()),
 });
 
-export const legacySendRawBodySchema = legacyBaseSchema.extend({
-  payload: z
-    .object({
-      html: z.string().optional(),
-      subject: z.string().min(1),
-      text: z.string().optional(),
-    })
-    .refine((data) => data.html !== undefined || data.text !== undefined, {
-      message: "At least one of 'html' or 'text' must be provided",
-      path: ["html"],
-    }),
-});
-
-export const legacySendTemplateBodySchema = legacyBaseSchema.extend({
-  template: z.object({
-    props: z.record(z.string(), z.unknown()).optional(),
-    slug: z.string().min(1),
-  }),
-});
-
-export const legacySendProjectParamsSchema = z.object({
-  project: z.string().min(1),
-});
-
-export const legacyApiKeyHeadersSchema = z
-  .object({
-    "X-API-Key": z.string().optional(),
-    "x-api-key": z.string().optional(),
-  })
-  .refine((headers) => Boolean(headers["x-api-key"] ?? headers["X-API-Key"]), {
-    message: "Unauthorized",
-    path: ["x-api-key"],
-  });
+export type LegacySendRawBody = Static<typeof legacySendRawBodySchema>;
+export type LegacySendTemplateBody = Static<
+  typeof legacySendTemplateBodySchema
+>;

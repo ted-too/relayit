@@ -164,7 +164,14 @@ export const createLegacySendRoutes = (
           { signal: request.signal }
         );
       },
-      { body: legacySendRawBodySchema }
+      {
+        body: legacySendRawBodySchema,
+        detail: {
+          description:
+            "Compatibility send with inline html/text. Prefer POST /messages/email.",
+          summary: "Send raw email",
+        },
+      }
     )
     .post(
       "/template/email",
@@ -228,5 +235,12 @@ export const createLegacySendRoutes = (
           { signal: request.signal }
         );
       },
-      { body: legacySendTemplateBodySchema }
+      {
+        body: legacySendTemplateBodySchema,
+        detail: {
+          description:
+            "Compatibility send using a Template. Prefer POST /messages/email.",
+          summary: "Send template email",
+        },
+      }
     );

@@ -6,50 +6,13 @@ import type {
 import { SANDBOX_FROM_LOCAL_PART } from "@repo/channels/email/sender";
 import type { UsageLimitExceeded } from "@repo/channels/usage";
 import type { PromiseDb } from "@repo/persistence/db/promise";
-import {
-  emailFromSchema,
-  parseEmailFrom,
-} from "../../messages/validators/email";
+import { tryParseEmailFrom } from "../../messages/validators/email";
+import type { LegacySendRawBody, LegacySendTemplateBody } from "./validators";
 
-export interface LegacySendContact {
-  readonly externalIdentifiers?: Readonly<Record<string, string>>;
-  readonly name?: string;
-}
-
-export interface LegacySendAttachment {
-  readonly content?: string;
-  readonly contentId?: string;
-  readonly contentType?: string;
-  readonly filename: string;
-  readonly path?: string;
-}
-
-export interface LegacySendRawBody {
-  readonly app?: string;
-  readonly appEnvironment?: string;
-  readonly attachments?: readonly LegacySendAttachment[];
-  readonly contact?: LegacySendContact;
-  readonly from?: string;
-  readonly payload: {
-    readonly html?: string;
-    readonly subject: string;
-    readonly text?: string;
-  };
-  readonly to: string;
-}
-
-export interface LegacySendTemplateBody {
-  readonly app?: string;
-  readonly appEnvironment?: string;
-  readonly attachments?: readonly LegacySendAttachment[];
-  readonly contact?: LegacySendContact;
-  readonly from?: string;
-  readonly template: {
-    readonly props?: Readonly<Record<string, unknown>>;
-    readonly slug: string;
-  };
-  readonly to: string;
-}
+type LegacySendContact = NonNullable<LegacySendRawBody["contact"]>;
+type LegacySendAttachment = NonNullable<
+  LegacySendRawBody["attachments"]
+>[number];
 
 export type LegacyMapResult =
   | { readonly input: AcceptTransactionalEmailInput; readonly ok: true }
@@ -101,8 +64,8 @@ const mapLegacyAttachments = (
   return attachments.map((attachment) => ({
     filename: attachment.filename,
     source:
-      attachment.content === undefined
-        ? { kind: "url" as const, url: attachment.path ?? "" }
+      "path" in attachment
+        ? { kind: "url" as const, url: attachment.path }
         : { content: attachment.content, kind: "base64" as const },
     ...(attachment.contentId ? { contentId: attachment.contentId } : {}),
     ...(attachment.contentType ? { contentType: attachment.contentType } : {}),
@@ -129,17 +92,17 @@ const resolveMappedFrom = (input: {
     };
   }
 
-  const parsedFrom = emailFromSchema.safeParse(from);
-  if (!parsedFrom.success) {
+  const parsedFrom = tryParseEmailFrom(from);
+  if (parsedFrom === undefined) {
     return {
-      details: parsedFrom.error.issues.map((issue) => issue.message),
+      details: ["Invalid from address"],
       message: "Validation error",
       ok: false,
       status: 400,
     };
   }
 
-  return { from: parseEmailFrom(parsedFrom.data), ok: true };
+  return { from: parsedFrom, ok: true };
 };
 
 export const mapLegacyRawToAccept = (input: {

@@ -33,7 +33,6 @@
         "better-auth": "^1.6.26",
         "effect": "4.0.0-rc.108",
         "elysia": "^1.4.29",
-        "zod": "^4.4.3",
       },
     },
     "apps/template-builder": {

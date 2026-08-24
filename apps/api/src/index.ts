@@ -2,7 +2,7 @@ import type { Worker } from "node:cluster";
 import cluster from "node:cluster";
 import os from "node:os";
 import { setTimeout as scheduleTimeout } from "node:timers";
-import openapi, { fromTypes } from "@elysia/openapi";
+import openapi from "@elysia/openapi";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
 import {
@@ -17,7 +17,6 @@ import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
-import * as z from "zod";
 import { apiConfig } from "./env";
 import { LoggingLive, makeRuntime } from "./layers";
 import { type ApiAuth, createAuth } from "./lib/auth";
@@ -28,8 +27,6 @@ import { createEmailRoutes } from "./routes/messages/email";
 import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
 
 const TRAILING_SLASH = /\/$/;
-
-const isDevelopment = Bun.env.NODE_ENV === "development";
 
 export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
   return new Elysia()
@@ -57,17 +54,9 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
         exclude: {
           paths: ["/health", "/webhooks/providers/:vendorId/:productId"],
         },
-        mapJsonSchema: {
-          zod: z.toJSONSchema,
-        },
         path: "/docs",
+        specPath: "/openapi.json",
         provider: "scalar",
-        references: fromTypes(
-          isDevelopment ? "src/index.ts" : `${import.meta.dir}/index.d.ts`,
-          {
-            debug: isDevelopment,
-          }
-        ),
       })
     )
     .get("/health", () => ({ status: "ok" as const }), {

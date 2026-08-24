@@ -1,13 +1,12 @@
 import { handleProviderWebhook } from "@repo/channels/email/deliverability";
 import { Cause, Effect } from "effect";
-import { Elysia, status } from "elysia";
-import { z } from "zod";
+import { Elysia, status, t } from "elysia";
 import type { RunApiEffect } from "../../lib/effect";
 import { logEffectFailure } from "../../lib/log-failure";
 
-const providerWebhookParamsSchema = z.object({
-  productId: z.string().min(1),
-  vendorId: z.string().min(1),
+const providerWebhookParamsSchema = t.Object({
+  productId: t.String({ minLength: 1 }),
+  vendorId: t.String({ minLength: 1 }),
 });
 
 export const createProviderWebhookRoutes = (
