@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "portless",
     "dev:app": "bun run --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target bun",
+    "build": "bun build ./src/index.ts --outdir ./build --target bun && bun run build:dts",
+    "build:dts": "bun ./scripts/emit-openapi-dts.ts",
     "check-types": "tsc --noEmit",
     "test": "bun test"
   },

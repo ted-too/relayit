@@ -2,7 +2,7 @@ import type { Worker } from "node:cluster";
 import cluster from "node:cluster";
 import os from "node:os";
 import { setTimeout as scheduleTimeout } from "node:timers";
-import openapi from "@elysia/openapi";
+import openapi, { fromTypes } from "@elysia/openapi";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
 import {
@@ -20,7 +20,7 @@ import { Elysia } from "elysia";
 import * as z from "zod";
 import { apiConfig } from "./env";
 import { LoggingLive, makeRuntime } from "./layers";
-import { createAuth } from "./lib/auth";
+import { type ApiAuth, createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
 import { logEffectFailure } from "./lib/log-failure";
 import { createLegacySendRoutes } from "./routes/compat/send";
@@ -28,6 +28,61 @@ import { createEmailRoutes } from "./routes/messages/email";
 import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
 
 const TRAILING_SLASH = /\/$/;
+
+const isDevelopment = Bun.env.NODE_ENV === "development";
+
+export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
+  return new Elysia()
+    .use(
+      openapi({
+        documentation: {
+          info: {
+            description:
+              "HTTP API for sending messages through Relayit. Prefer POST /messages/email for new integrations.",
+            title: "Relayit API",
+            version: "0.0.0",
+          },
+          tags: [
+            {
+              description: "Current send endpoints",
+              name: "Send",
+            },
+            {
+              description:
+                "Compatibility send endpoints for existing integrations",
+              name: "Legacy Send",
+            },
+          ],
+        },
+        exclude: {
+          paths: ["/health", "/webhooks/providers/:vendorId/:productId"],
+        },
+        mapJsonSchema: {
+          zod: z.toJSONSchema,
+        },
+        path: "/docs",
+        provider: "scalar",
+        references: fromTypes(
+          isDevelopment ? "src/index.ts" : `${import.meta.dir}/index.d.ts`,
+          {
+            debug: isDevelopment,
+          }
+        ),
+      })
+    )
+    .get("/health", () => ({ status: "ok" as const }), {
+      detail: {
+        hide: true,
+      },
+    })
+    .use(createLegacySendRoutes(auth, runEffect))
+    .group("/messages", (group) =>
+      group.use(createEmailRoutes(auth, runEffect))
+    )
+    .group("/webhooks", (group) =>
+      group.use(createProviderWebhookRoutes(runEffect))
+    );
+}
 
 const jobWorkerOptions = {
   blockMs: 5000,
@@ -126,22 +181,7 @@ const apiProgram = (startWorker: boolean) =>
           options
         );
 
-      const app = new Elysia()
-        .use(
-          openapi({
-            mapJsonSchema: {
-              zod: z.toJSONSchema,
-            },
-          })
-        )
-        .get("/health", () => ({ status: "ok" as const }))
-        .use(createLegacySendRoutes(auth, runEffect))
-        .group("/messages", (group) =>
-          group.use(createEmailRoutes(auth, runEffect))
-        )
-        .group("/webhooks", (group) =>
-          group.use(createProviderWebhookRoutes(runEffect))
-        );
+      const app = createHttpApp(auth, runEffect);
 
       yield* Effect.acquireRelease(
         Effect.sync(() =>

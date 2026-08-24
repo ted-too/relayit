@@ -85,7 +85,7 @@ export const createLegacySendRoutes = (
   runEffect: RunApiEffect,
   accept = acceptTransactionalEmail
 ) =>
-  new Elysia({ prefix: "/send/:project" })
+  new Elysia({ prefix: "/send/:project", tags: ["Legacy Send"] })
     .guard({
       headers: legacyApiKeyHeadersSchema,
       params: legacySendProjectParamsSchema,

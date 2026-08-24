@@ -68,6 +68,9 @@ export const createProviderWebhookRoutes = (
       );
     },
     {
+      detail: {
+        hide: true,
+      },
       params: providerWebhookParamsSchema,
     }
   );
