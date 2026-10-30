@@ -13,7 +13,6 @@ import {
   organization,
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
-import type { RedisClient } from "bun";
 import type { PromiseDb } from "../db/promise";
 import * as schema from "../db/schema";
 import { COOKIE_PREFIX } from "./constants";
@@ -35,6 +34,14 @@ interface AuthStripePlanPriceIds {
   monthlyPriceId: string;
 }
 
+/**
+ * Raw-command Redis surface for session storage. Satisfied by
+ * `@repo/redis`'s self-healing client (preferred) and by Bun's `RedisClient`.
+ */
+export interface AuthRedis {
+  readonly send: (command: string, args: string[]) => Promise<unknown>;
+}
+
 export interface AuthConfig {
   baseUrl?: string;
   db: PromiseDb;
@@ -52,7 +59,7 @@ export interface AuthConfig {
       };
     };
   };
-  redis: RedisClient;
+  redis: AuthRedis;
   socialProviders?: SocialProviders;
 }
 
@@ -78,19 +85,19 @@ export const createAuth = ({
     },
     secondaryStorage: {
       get: async (key) => {
-        const value = await redis.get(`${COOKIE_PREFIX}:auth:${key}`);
-        return value ?? null;
+        const value = await redis.send("GET", [`${COOKIE_PREFIX}:auth:${key}`]);
+        return typeof value === "string" ? value : null;
       },
       set: async (key, value, ttl) => {
         const redisKey = `${COOKIE_PREFIX}:auth:${key}`;
         if (ttl) {
-          await redis.setex(redisKey, ttl, value);
+          await redis.send("SETEX", [redisKey, String(ttl), value]);
         } else {
-          await redis.set(redisKey, value);
+          await redis.send("SET", [redisKey, value]);
         }
       },
       delete: async (key) => {
-        await redis.del(`${COOKIE_PREFIX}:auth:${key}`);
+        await redis.send("DEL", [`${COOKIE_PREFIX}:auth:${key}`]);
       },
     },
     emailAndPassword: {

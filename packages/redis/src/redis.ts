@@ -69,7 +69,26 @@ export const makeRedisLive = (config: RedisLayerConfig) =>
   Layer.effect(
     Redis,
     Effect.gen(function* () {
-      const connections = yield* acquireConnections(config);
+      // Reconnects surface from promise land; run the log with the layer's
+      // services so it reaches the configured logger.
+      const services = yield* Effect.context<never>();
+      const connections = yield* acquireConnections(
+        config,
+        (connection, event) => {
+          Effect.runForkWith(services)(
+            Effect.logWarning(
+              "Redis connection lost; replaced client and retried",
+              event.cause
+            ).pipe(
+              Effect.annotateLogs({
+                code: event.code,
+                command: event.command,
+                connection,
+              })
+            )
+          );
+        }
+      );
       const healthcheck = ping(connections.commands);
 
       yield* healthcheck;

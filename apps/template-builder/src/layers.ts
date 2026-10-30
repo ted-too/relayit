@@ -20,12 +20,14 @@ export const loggingLive = (config: TemplateBuilderConfig) =>
   );
 
 export const makeAppLayers = (config: TemplateBuilderConfig) => {
+  const logging = loggingLive(config);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
   });
+  // Redis logs reconnects from the layer itself; give it the app logger.
   const redisLive = makeRedisLive({
     url: Redacted.value(config.redisUrl),
-  });
+  }).pipe(Layer.provide(logging));
   const objectStorageLive = makeObjectStorageLive({
     accessKeyId: Redacted.value(config.s3AccessKeyId),
     bucket: config.s3Bucket,
@@ -38,9 +40,7 @@ export const makeAppLayers = (config: TemplateBuilderConfig) => {
 
   // Handlers pull DB / Redis / ObjectStorage at request time — provideMerge
   // satisfies those requirements and keeps the services in the runtime context.
-  return Layer.mergeAll(
-    TemplatingBuilderHandlersLive,
-    authLive,
-    loggingLive(config)
-  ).pipe(Layer.provideMerge(infraLive));
+  return Layer.mergeAll(TemplatingBuilderHandlersLive, authLive, logging).pipe(
+    Layer.provideMerge(infraLive)
+  );
 };

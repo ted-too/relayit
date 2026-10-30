@@ -75,10 +75,14 @@ export const makeRuntime = (config: ApiConfig) => {
   const secrets = parseBetterAuthSecrets(
     Redacted.value(config.betterAuthSecrets)
   );
+  const logging = loggingLive(config);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
   });
-  const redisLive = makeRedisLive({ url: Redacted.value(config.redisUrl) });
+  // Redis logs reconnects from the layer itself; give it the app logger.
+  const redisLive = makeRedisLive({
+    url: Redacted.value(config.redisUrl),
+  }).pipe(Layer.provide(logging));
   const objectStorageLive = makeObjectStorageLive({
     accessKeyId: Redacted.value(config.s3AccessKeyId),
     bucket: config.s3Bucket,
@@ -122,7 +126,7 @@ export const makeRuntime = (config: ApiConfig) => {
       symmetricCryptoLive,
       emailProviderRegistryLive,
       managedDnsLive,
-      loggingLive(config)
+      logging
     )
   );
 };

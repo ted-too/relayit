@@ -9,16 +9,40 @@ import {
 } from "@repo/persistence/auth/server";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import { organization, user } from "@repo/persistence/db/schema";
-import { RedisClient } from "bun";
+import { makeRedisClient } from "@repo/redis";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import Stripe from "stripe";
 import { env } from "@/env";
-import { runApp } from "@/lib/layers.server";
+import { runApp, runLog } from "@/lib/layers.server";
 import { failureAnnotations } from "@/lib/log-failure.server";
 
-const db = createPromiseDb({ databaseUrl: env.DATABASE_URL });
-const redis = new RedisClient(env.REDIS_URL);
+const db = createPromiseDb({
+  databaseUrl: env.DATABASE_URL,
+  onPoolError: (error) =>
+    runLog(
+      Effect.logWarning(
+        "Database connection dropped; pool will reconnect",
+        error
+      ).pipe(Effect.annotateLogs({ connection: "auth" }))
+    ),
+});
+const redis = makeRedisClient({
+  onReconnect: (event) =>
+    runLog(
+      Effect.logWarning(
+        "Redis connection lost; replaced client and retried",
+        event.cause
+      ).pipe(
+        Effect.annotateLogs({
+          code: event.code,
+          command: event.command,
+          connection: "auth",
+        })
+      )
+    ),
+  url: env.REDIS_URL,
+});
 
 const stripeConfig =
   env.STRIPE_SECRET_KEY &&

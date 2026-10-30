@@ -1,4 +1,11 @@
 export {
+  isRedisConnectionError,
+  makeRedisClient,
+  type RedisClientConfig,
+  type RedisCommandClient,
+  type RedisReconnectEvent,
+} from "./client";
+export {
   makeSchemaJsonCodec,
   type RedisCodec,
   RedisCodecError,
