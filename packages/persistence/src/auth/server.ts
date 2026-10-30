@@ -44,6 +44,12 @@ export interface AuthRedis {
 
 export interface AuthConfig {
   baseUrl?: string;
+  /**
+   * Parent domain for the session cookie (e.g. `relayit.io`), so sibling
+   * subdomains like the marketing site can see that a user is signed in.
+   * Omit to keep cookies host-only.
+   */
+  cookieDomain?: string;
   db: PromiseDb;
   hooks?: BetterAuthOptions["hooks"];
   plugins?: {
@@ -65,6 +71,7 @@ export interface AuthConfig {
 
 export const createAuth = ({
   baseUrl,
+  cookieDomain,
   db,
   redis,
   socialProviders,
@@ -110,6 +117,9 @@ export const createAuth = ({
         generateId: false,
       },
       cookiePrefix: COOKIE_PREFIX,
+      ...(cookieDomain
+        ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
+        : {}),
     },
     user: {
       additionalFields: {

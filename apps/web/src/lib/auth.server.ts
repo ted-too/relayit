@@ -71,6 +71,7 @@ const stripeConfig =
 
 export const auth = createAuth({
   baseUrl: env.VITE_BASE_URL,
+  cookieDomain: env.AUTH_COOKIE_DOMAIN,
   db,
   redis,
   socialProviders:
