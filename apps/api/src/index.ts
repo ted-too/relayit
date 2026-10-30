@@ -131,12 +131,14 @@ const apiProgram = (startWorker: boolean) =>
         migrateOnStartup(Redacted.value(config.databaseUrl))
       );
       yield* Effect.logInfo("Database migrations up to date");
+      const services = yield* Effect.context<never>();
       const auth = yield* Effect.acquireRelease(
         Effect.sync(() =>
           createAuth({
             apiUrl: config.apiUrl.toString(),
             databaseUrl: Redacted.value(config.databaseUrl),
             redisUrl: Redacted.value(config.redisUrl),
+            runLog: Effect.runForkWith(services),
           })
         ),
         (apiAuth) => Effect.promise(apiAuth.close)

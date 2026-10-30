@@ -28,7 +28,10 @@ const dbLive = makeDbLive({
   databaseUrl: env.DATABASE_URL,
 });
 
-const redisLive = makeRedisLive({ url: env.REDIS_URL });
+// Redis logs reconnects from the layer itself; give it the app logger.
+const redisLive = makeRedisLive({ url: env.REDIS_URL }).pipe(
+  Layer.provide(loggingLive)
+);
 
 const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
 
@@ -87,6 +90,10 @@ export const sandboxCloudflare = cloudflareConfigured
 
 /** Public API origin for Provider delivery-webhook scaffolding. */
 export const apiOrigin = env.API_URL ?? null;
+
+/** Runs a log effect with only the logging layer, so it works while infra is down. */
+export const runLog = (effect: Effect.Effect<void>) =>
+  Effect.runFork(effect.pipe(Effect.provide(loggingLive)));
 
 export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.runPromise(

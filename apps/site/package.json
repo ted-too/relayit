@@ -1,0 +1,40 @@
+{
+  "name": "@repo/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "portless": {
+    "name": "relayit",
+    "script": "dev:app"
+  },
+  "scripts": {
+    "dev": "portless",
+    "dev:app": "bun --bun vite dev",
+    "build": "bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remixicon/react": "^4.9.0",
+    "@repo/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-router": "^1.170.18",
+    "@tanstack/react-start": "^1.168.34",
+    "marked": "^18.1.2",
+    "motion": "^14.8.0",
+    "nitro": "^3.0.260610-beta",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "shiki": "^4.5.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.5",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "dotenv": "^17.4.2",
+    "vite": "^8.2.0"
+  }
+}

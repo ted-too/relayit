@@ -1,5 +1,11 @@
-import { RedisClient, type RedisOptions } from "bun";
+import type { RedisOptions } from "bun";
 import { Data, Effect } from "effect";
+import {
+  makeRedisClient,
+  type RedisClientConfig,
+  type RedisCommandClient,
+  type RedisReconnectEvent,
+} from "./client";
 
 type RedisOperation =
   | "acknowledge"
@@ -31,8 +37,8 @@ export interface RedisLayerConfig {
 }
 
 export interface RedisConnections {
-  readonly blocking: RedisClient;
-  readonly commands: RedisClient;
+  readonly blocking: RedisCommandClient;
+  readonly commands: RedisCommandClient;
 }
 
 const redisFailure =
@@ -53,7 +59,7 @@ export const unexpectedResponse = (
   });
 
 export const execute = (
-  client: RedisClient,
+  client: RedisCommandClient,
   operation: RedisOperation,
   command: string,
   args: string[]
@@ -73,20 +79,32 @@ export const expectString = (operation: RedisOperation, value: unknown) =>
     ? Effect.succeed(value)
     : Effect.fail(unexpectedResponse(operation, "string", value));
 
-const acquireConnection = ({ options, url }: RedisLayerConfig) =>
+const acquireConnection = (config: RedisClientConfig) =>
   Effect.acquireRelease(
-    Effect.sync(() => new RedisClient(url, options)),
+    Effect.sync(() => makeRedisClient(config)),
     (client) => Effect.sync(() => client.close())
   );
 
-export const acquireConnections = (config: RedisLayerConfig) =>
+export const acquireConnections = (
+  config: RedisLayerConfig,
+  onReconnect: (
+    connection: keyof RedisConnections,
+    event: RedisReconnectEvent
+  ) => void
+) =>
   Effect.gen(function* () {
-    const commands = yield* acquireConnection(config);
-    const blocking = yield* acquireConnection(config);
+    const commands = yield* acquireConnection({
+      ...config,
+      onReconnect: (event) => onReconnect("commands", event),
+    });
+    const blocking = yield* acquireConnection({
+      ...config,
+      onReconnect: (event) => onReconnect("blocking", event),
+    });
     return { blocking, commands } satisfies RedisConnections;
   });
 
-export const ping = (client: RedisClient, label = "Redis") =>
+export const ping = (client: RedisCommandClient, label = "Redis") =>
   execute(client, "ping", "PING", []).pipe(
     Effect.flatMap((response) =>
       response === "PONG"
