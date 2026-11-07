@@ -66,13 +66,13 @@ curl -X POST https://api.relayit.io/send/my-project/template/email \
 | Field | Type | Description |
 | --- | --- | --- |
 | `to` | string | One recipient email address. |
-| `from` | string | Optional plain email address (no display name). When omitted, the Project's sandbox address is used if the Sandbox Domain is active. |
+| `from` | string | Optional plain email address (no display name). When omitted, Relayit uses `noreply@` your Project's oldest verified Domain, or the sandbox address if the Project has no verified Domain and the Sandbox Domain is active. |
 | `contact` | object | Optional. `name` and `externalIdentifiers` (string map) for the recipient. |
 | `app` | string | Optional App attribution. Ignored unless `appEnvironment` is also set. |
 | `appEnvironment` | string | Optional App Environment attribution. Ignored unless `app` is also set. |
 | `attachments` | array | Up to 20. Each has `filename` and either `content` (base64) or `path` (URL), plus optional `contentType` and `contentId`. |
 
-If you omit `from` and the Project has no usable Sandbox Domain, the request fails with `400` and the message `No sender identity available; pass from or provision Sandbox Domain`.
+If you omit `from` and the Project has no verified Domain and no usable Sandbox Domain, the request fails with `400` and the message `No sender identity available; pass from or provision Sandbox Domain`.
 
 ## Responses
 
@@ -115,7 +115,7 @@ The move is mostly renaming fields.
 | `app` and `appEnvironment` body fields | `app` and `environment` headers |
 | `attachments[].contentType` | `attachments[].content_type` |
 | `attachments[].contentId` | `attachments[].content_id` |
-| `from` optional, defaults to sandbox | `from` required |
+| `from` optional, defaults to `noreply@` a verified Domain or sandbox | `from` required |
 | Response `{ id, status }` | Response `{ id, stripped? }` |
 | Errors `400` with `details: [code]` | Errors `422` with `code` and `details` object |
 | `401` for bad keys | `403` with `code: "invalid_api_key"` |
@@ -150,7 +150,7 @@ curl -X POST https://api.relayit.io/messages/email \
 
 Things to check when you switch:
 
-- Always set `from`. There is no sandbox default.
+- Always set `from`. There is no default sender.
 - Handle `422` with `code` instead of `400` with `details`.
 - If you only sent one of `app` or `appEnvironment` before, it was ignored. On `/messages/email` sending only one header is a `400` error.
 - Add an `Idempotency-Key` header to make retries safe.
