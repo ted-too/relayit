@@ -37,10 +37,12 @@ ENV HOME=/home/relayit \
     XDG_CACHE_HOME=/home/relayit/.cache \
     DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle
 
+# This install runs as root with XDG_CACHE_HOME set, so bun creates its cache
+# under /home/relayit as root; chown it back or runtime installs fail (EACCES).
 # Runtime extras not fully inlined by bun build (pino transports / react-email).
 RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3", "@react-email/render": "^1.4.0"}}' > package.json && \
     bun install --production && \
-    chown -R relayit:relayit /app
+    chown -R relayit:relayit /app /home/relayit
 
 COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
 COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
