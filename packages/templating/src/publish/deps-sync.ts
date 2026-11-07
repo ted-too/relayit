@@ -9,6 +9,7 @@ import {
   withWorkspaceGitLock,
 } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
+import { runBunInstall } from "./bun-install";
 import { assertHardenedPackageJson } from "./package-json";
 
 /**
@@ -49,28 +50,17 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
         });
         yield* assertHardenedPackageJson(packageJson);
 
-        yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Deps sync install failed.",
-            }),
-          try: async () => {
-            const proc = Bun.spawn(["bun", "install", "--ignore-scripts"], {
-              cwd: tempDir,
-              env: {
-                ...process.env,
-                BUN_INSTALL_IGNORE_SCRIPTS: "1",
-              },
-              stderr: "pipe",
-              stdout: "pipe",
-            });
-            const exit = await proc.exited;
-            if (exit !== 0) {
-              throw new Error("install failed");
-            }
-          },
+        const install = yield* runBunInstall({
+          args: ["--ignore-scripts"],
+          cwd: tempDir,
+          operation: "deps-sync",
         });
+        if (!install.ok) {
+          return yield* new TemplatingBuilderError({
+            code: "failed",
+            message: "Deps sync install failed.",
+          });
+        }
 
         const lockPath = path.join(tempDir, "bun.lock");
         const lockfile = yield* Effect.tryPromise({
