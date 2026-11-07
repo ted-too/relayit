@@ -22,6 +22,7 @@ import { isReactEmailEntryPath } from "../kinds/react-email/paths";
 import { inferReactEmailPropsFromSource } from "../kinds/react-email/props";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { newArtifactRevision, templatingArtifacts } from "../storage";
+import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
 import { assertHardenedPackageJson } from "./package-json";
 
@@ -104,41 +105,16 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           )
         );
 
-        const installResult = yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Publish install failed.",
-            }),
-          try: async () => {
-            try {
-              const install = Bun.spawn(
-                ["bun", "install", "--frozen-lockfile", "--ignore-scripts"],
-                {
-                  cwd: tempDir,
-                  env: { ...process.env, BUN_INSTALL_IGNORE_SCRIPTS: "1" },
-                  stderr: "pipe",
-                  stdout: "pipe",
-                }
-              );
-              if ((await install.exited) !== 0) {
-                const stderr = await new Response(install.stderr).text();
-                return {
-                  detail: stderr || "Publish install failed.",
-                  ok: false as const,
-                };
-              }
-              return { ok: true as const };
-            } catch {
-              return {
-                detail: "Publish install failed.",
-                ok: false as const,
-              };
-            }
-          },
+        const installResult = yield* runBunInstall({
+          args: ["--frozen-lockfile", "--ignore-scripts"],
+          cwd: tempDir,
+          operation: "publish",
         });
         if (!installResult.ok) {
-          yield* recordBuildError(input.workspaceId, installResult.detail);
+          yield* recordBuildError(
+            input.workspaceId,
+            installResult.stderr || "Publish install failed."
+          );
           return yield* new TemplatingBuilderError({
             code: "failed",
             message: "Publish install failed.",

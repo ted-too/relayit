@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Effect } from "effect";
+import { runBunInstall } from "../publish/bun-install";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { commitFiles, listFilesAtRef, readFileAtRef } from "./commit";
 import { getRef, updateRef } from "./refs";
@@ -51,39 +52,37 @@ const generateLockfile = (packageJson: string) =>
       Effect.promise(() => fs.rm(tempDir, { force: true, recursive: true }))
   ).pipe(
     Effect.flatMap((tempDir) =>
-      Effect.tryPromise({
-        catch: () =>
-          new TemplatingBuilderError({
+      Effect.gen(function* () {
+        yield* Effect.tryPromise({
+          catch: () =>
+            new TemplatingBuilderError({
+              code: "failed",
+              message: "Failed to generate starter lockfile.",
+            }),
+          try: () =>
+            fs.writeFile(path.join(tempDir, "package.json"), packageJson),
+        });
+
+        const install = yield* runBunInstall({
+          args: ["--lockfile-only", "--ignore-scripts"],
+          cwd: tempDir,
+          operation: "scaffold",
+        });
+        if (!install.ok) {
+          return yield* new TemplatingBuilderError({
             code: "failed",
             message: "Failed to generate starter lockfile.",
-          }),
-        try: async () => {
-          await fs.writeFile(path.join(tempDir, "package.json"), packageJson);
-          const proc = Bun.spawn(
-            ["bun", "install", "--lockfile-only", "--ignore-scripts"],
-            {
-              cwd: tempDir,
-              env: {
-                ...process.env,
-                BUN_INSTALL_IGNORE_SCRIPTS: "1",
-              },
-              stderr: "pipe",
-              stdout: "pipe",
-            }
-          );
-          const exit = await proc.exited;
-          if (exit !== 0) {
-            throw new Error("bun install failed");
-          }
+          });
+        }
 
-          const lockPath = path.join(tempDir, "bun.lock");
-          try {
-            await fs.access(lockPath);
-            return await fs.readFile(lockPath, "utf8");
-          } catch {
-            throw new Error("No bun.lock produced");
-          }
-        },
+        return yield* Effect.tryPromise({
+          catch: () =>
+            new TemplatingBuilderError({
+              code: "failed",
+              message: "Failed to generate starter lockfile.",
+            }),
+          try: () => fs.readFile(path.join(tempDir, "bun.lock"), "utf8"),
+        });
       })
     ),
     Effect.scoped

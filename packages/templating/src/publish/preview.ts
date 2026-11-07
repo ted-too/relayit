@@ -12,6 +12,7 @@ import {
   withWorkspaceGitLock,
 } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
+import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
 import { assertHardenedPackageJson } from "./package-json";
 
@@ -96,27 +97,17 @@ export const previewHostedWorkspaceEntry = (input: {
         });
         yield* assertHardenedPackageJson(packageJson);
 
-        yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Preview install failed.",
-            }),
-          try: async () => {
-            const install = Bun.spawn(
-              ["bun", "install", "--frozen-lockfile", "--ignore-scripts"],
-              {
-                cwd: tempDir,
-                env: { ...process.env, BUN_INSTALL_IGNORE_SCRIPTS: "1" },
-                stderr: "pipe",
-                stdout: "pipe",
-              }
-            );
-            if ((await install.exited) !== 0) {
-              throw new Error("install failed");
-            }
-          },
+        const install = yield* runBunInstall({
+          args: ["--frozen-lockfile", "--ignore-scripts"],
+          cwd: tempDir,
+          operation: "preview",
         });
+        if (!install.ok) {
+          return yield* new TemplatingBuilderError({
+            code: "failed",
+            message: "Preview install failed.",
+          });
+        }
 
         const artifact = yield* bundleReactEmailEntry({
           entryPath: entry.path,
