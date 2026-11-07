@@ -193,9 +193,36 @@ describe("mapLegacyTemplateToAccept", () => {
 });
 
 describe("resolveLegacyDefaultFromAddress", () => {
+  const noLinkedDomain = { findFirst: async () => undefined };
+
+  test("returns noreply@domain when the Project has a sendable custom Domain", async () => {
+    const db = {
+      query: {
+        organization: {
+          findFirst: () =>
+            Promise.reject(new Error("sandbox should not be consulted")),
+        },
+        organizationDomain: {
+          findFirst: async () => ({
+            customDomain: { fqdn: "acme.test" },
+            customDomainId: "domn_1",
+          }),
+        },
+      },
+    };
+
+    expect(
+      await resolveLegacyDefaultFromAddress({
+        db: db as never,
+        organizationId: "org_1",
+      })
+    ).toBe("noreply@acme.test");
+  });
+
   test("returns sandbox@root when the Project sandbox is verified and active", async () => {
     const db = {
       query: {
+        organizationDomain: noLinkedDomain,
         organization: {
           findFirst: async () => ({
             sandboxDomain: {
@@ -220,6 +247,7 @@ describe("resolveLegacyDefaultFromAddress", () => {
   test("returns null when sandbox is missing or not sendable", async () => {
     const db = {
       query: {
+        organizationDomain: noLinkedDomain,
         organization: {
           findFirst: async () => ({
             sandboxDomain: {

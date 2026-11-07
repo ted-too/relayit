@@ -184,10 +184,32 @@ export const mapLegacyTemplateToAccept = (input: {
   };
 };
 
+/** Local part used when a legacy send omits `from` and a custom Domain is used. */
+export const LEGACY_DEFAULT_FROM_LOCAL_PART = "noreply";
+
+/**
+ * Sender for legacy sends that omit `from`. Prod Relayit fell back to the
+ * Project's default identity (e.g. `noreply@acme.com`), so prefer the
+ * Project's oldest sendable custom Domain, then the Sandbox Domain.
+ */
 export const resolveLegacyDefaultFromAddress = async (input: {
   readonly db: PromiseDb;
   readonly organizationId: string;
 }): Promise<string | null> => {
+  const linkedDomain = await input.db.query.organizationDomain.findFirst({
+    columns: { customDomainId: true },
+    orderBy: { createdAt: "asc" },
+    where: {
+      customDomain: { isPaused: false, verificationStatus: "verified" },
+      organizationId: input.organizationId,
+    },
+    with: { customDomain: { columns: { fqdn: true } } },
+  });
+
+  if (linkedDomain?.customDomain) {
+    return `${LEGACY_DEFAULT_FROM_LOCAL_PART}@${linkedDomain.customDomain.fqdn}`;
+  }
+
   const organization = await input.db.query.organization.findFirst({
     columns: { id: true },
     where: { id: input.organizationId },

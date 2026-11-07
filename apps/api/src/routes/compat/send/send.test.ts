@@ -61,6 +61,7 @@ const makeTestLayer = () => {
 };
 
 const makeTestAuth = (input?: {
+  readonly customDomainFqdn?: string;
   readonly slug?: string;
   readonly valid?: boolean;
 }): ApiAuth => ({
@@ -87,6 +88,17 @@ const makeTestAuth = (input?: {
             input?.valid === false
               ? null
               : { id: "org_test", slug: input?.slug ?? "acme" }
+          ),
+      },
+      organizationDomain: {
+        findFirst: () =>
+          Promise.resolve(
+            input?.customDomainFqdn
+              ? {
+                  customDomain: { fqdn: input.customDomainFqdn },
+                  customDomainId: "domn_test",
+                }
+              : undefined
           ),
       },
     },
@@ -210,6 +222,39 @@ describe("POST /send/:project/raw/email", () => {
 
         expect(response.status).toBe(401);
         expect(body).toMatchObject({ message: "Unauthorized" });
+      }).pipe(Effect.ensuring(runtime.disposeEffect))
+    );
+  });
+
+  test("defaults from to noreply@ the Project's custom Domain when omitted", () => {
+    let captured: AcceptTransactionalEmailInput | undefined;
+    const { app, runtime } = makeApp(
+      (input) => {
+        captured = input;
+        return Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
+        });
+      },
+      makeTestAuth({ customDomainFqdn: "acme.test" })
+    );
+
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const response = yield* Effect.promise(() =>
+          postLegacy(app, "/send/acme/raw/email", {
+            payload: { html: "<p>Hello</p>", subject: "Hello" },
+            to: "recipient@example.com",
+          })
+        );
+
+        expect(response.status).toBe(201);
+        expect(captured?.email.from).toEqual({
+          address: "noreply@acme.test",
+          normalized: "noreply@acme.test",
+        });
       }).pipe(Effect.ensuring(runtime.disposeEffect))
     );
   });
