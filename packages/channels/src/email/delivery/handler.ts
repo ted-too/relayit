@@ -5,7 +5,7 @@ import {
   type DatabaseExecutor,
   DB,
 } from "@repo/persistence/db/effect";
-import { emailDelivery } from "@repo/persistence/db/schema";
+import { customDomain, emailDelivery } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import {
   deliverySkipped,
@@ -26,7 +26,10 @@ import { filterSuppressedContacts } from "../../messages/suppressions";
 import { makeProviderTypeId } from "../../provider-type";
 import { Usage, UsageLimitExceeded } from "../../usage";
 import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
-import type { ProviderEmailAttachment } from "../provider-message";
+import type {
+  ProviderEmailAttachment,
+  ProviderEmailSender,
+} from "../provider-message";
 import { EmailProviderRegistry } from "../provider-registry";
 import { loadEmailAttachmentsForSend } from "./attachments";
 import {
@@ -130,6 +133,7 @@ const trySendWithIdentity = (
     readonly bcc: readonly string[];
     readonly cc: readonly string[];
     readonly delivery: SendableDelivery;
+    readonly sender: ProviderEmailSender;
     readonly to: readonly string[];
   }
 ) =>
@@ -184,6 +188,8 @@ const trySendWithIdentity = (
         headers: input.delivery.headers,
         html: input.delivery.html,
         replyTo: input.delivery.replyTo,
+        // Reputation isolation only matters on shared (managed) Providers.
+        sender: targetKind === "managed" ? input.sender : undefined,
         subject: input.delivery.subject,
         text: input.delivery.text,
         to: [...input.to],
@@ -199,6 +205,26 @@ const trySendWithIdentity = (
     );
 
     if (!sendError.ok) {
+      // Project-level vendor pause (SES tenant): not a Provider fault, so the
+      // circuit stays closed for other Projects and failover must not bypass it.
+      const cause = sendError.cause;
+      if (
+        cause._tag === "ProviderRejected" &&
+        cause.reason === "project_sending_paused"
+      ) {
+        return {
+          error: new EmailDeliveryProviderError({
+            cause,
+            deliveryId: input.delivery.id,
+            leaveActive: true,
+            message: "Provider paused sending for this Project",
+            providerId: identity.provider.id,
+          }),
+          leaveActive: true,
+          ok: false as const,
+          projectSendingPaused: true,
+        };
+      }
       yield* providerCircuitRecordFailure(identity.provider.id);
       const allowed = yield* providerCircuitAllow(identity.provider.id);
       return {
@@ -235,9 +261,12 @@ export const makeEmailDeliverHandler = (
             where: { id: payload.deliveryId },
             with: {
               customDomain: {
-                columns: { id: true, isPaused: true },
+                columns: { fqdn: true, id: true, isPaused: true },
               },
               message: true,
+              sandboxDomain: {
+                columns: { rootDomain: true },
+              },
             },
           })
           .pipe(
@@ -398,7 +427,9 @@ export const makeEmailDeliverHandler = (
           });
         }
 
-        if (!(loaded.customDomainId || loaded.sandboxDomainId)) {
+        const identityFqdn =
+          loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
+        if (!identityFqdn) {
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
             message: "Email Delivery has no sender domain",
@@ -509,8 +540,70 @@ export const makeEmailDeliverHandler = (
             ...loaded,
             headers: headers ?? loaded.headers,
           },
+          sender: {
+            identityFqdn,
+            projectId: appEnvironment.organizationId,
+          },
           to: toEmails,
         };
+
+        const failProjectSendingPaused = (error: EmailDeliveryProviderError) =>
+          Effect.gen(function* () {
+            const failureMessage = "Provider paused sending for this Project";
+            yield* db.transaction((tx) =>
+              Effect.gen(function* () {
+                if (loaded.customDomainId) {
+                  yield* tx
+                    .update(customDomain)
+                    .set({ isPaused: true, pausedReason: "bad_reputation" })
+                    .where(eq(customDomain.id, loaded.customDomainId))
+                    .pipe(
+                      Effect.mapError(
+                        (cause) =>
+                          new EmailDeliveryPersistenceError({
+                            cause,
+                            deliveryId: loaded.id,
+                            operation: "update_status",
+                          })
+                      )
+                    );
+                }
+                yield* updateDelivery(tx, loaded.id, {
+                  completedAt: new Date(),
+                  error: { message: failureMessage, retryable: false },
+                  status: "failed",
+                });
+                yield* emitWebhookEvent(tx, {
+                  event: {
+                    data: {
+                      delivery_id: loaded.id,
+                      error: failureMessage,
+                      message_id: loaded.messageId,
+                    },
+                    type: messageFailed.type,
+                  },
+                  messageTags: message.tags,
+                  organizationId: appEnvironment.organizationId,
+                }).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new MessageDeliveryRetryableError({
+                        cause,
+                        deliveryId: loaded.id,
+                        message: "Failed to emit message.failed",
+                        stage: "webhooks",
+                      })
+                  )
+                );
+              })
+            );
+            return yield* new MessageDeliveryTerminalError({
+              cause: error,
+              deliveryId: loaded.id,
+              message: failureMessage,
+              stage: "send",
+            });
+          });
 
         if (primary && (yield* providerCircuitAllow(primary.provider.id))) {
           const primaryResult = yield* trySendWithIdentity(primary, sendInput);
@@ -524,6 +617,9 @@ export const makeEmailDeliverHandler = (
               providerMessageId: primaryResult.providerMessageId,
             });
             return;
+          }
+          if (primaryResult.projectSendingPaused) {
+            return yield* failProjectSendingPaused(primaryResult.error);
           }
           if (!primaryResult.leaveActive) {
             return yield* new MessageDeliveryRetryableError({
@@ -551,6 +647,9 @@ export const makeEmailDeliverHandler = (
               providerMessageId: result.providerMessageId,
             });
             return;
+          }
+          if (result.projectSendingPaused) {
+            return yield* failProjectSendingPaused(result.error);
           }
           lastError = result.error;
         }

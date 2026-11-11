@@ -35,6 +35,7 @@ See also:
 - [ADR-0006](./docs/adr/0006-project-owned-byo-providers.md) — BYO Providers are Project-owned (like Domains); managed backends stay ops-wired.
 - [ADR-0007](./docs/adr/0007-sticky-managed-provider-baseline.md) — omit Provider on Domain create uses the current ops default managed backend (no per-Project sticky store).
 - [ADR-0008](./docs/adr/0008-ssr-use-sync-external-store-react-resolve.md) — web SSR: resolve Base UI’s `use-sync-external-store/shim` to app React until Nitro rewrites leaked `createRequire("react")`.
+- [ADR-0011](./docs/adr/0011-ses-tenant-per-project.md) — managed SES sends use one SES tenant per Project (Standard reputation policy) so one Project's bounces pause only that Project; BYO excluded.
 
 ## Deferred (not in glossary yet)
 

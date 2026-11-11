@@ -18,8 +18,8 @@ import { Data, type Effect } from "effect";
 export class AwsUnexpectedResponseError extends Data.TaggedError(
   "AwsUnexpectedResponseError"
 )<{
-  readonly missingField: "MessageId" | "TopicArn";
-  readonly operation: "CreateTopic" | "SendEmail";
+  readonly missingField: "MessageId" | "TenantArn" | "TopicArn";
+  readonly operation: "CreateTenant" | "CreateTopic" | "SendEmail";
 }> {}
 
 export class AwsWebhookPayloadError extends Data.TaggedError(
@@ -57,10 +57,16 @@ type SesOperation =
   | "createConfigurationSet"
   | "createConfigurationSetEventDestination"
   | "createEmailIdentity"
+  | "createTenant"
+  | "createTenantResourceAssociation"
   | "deleteConfigurationSetEventDestination"
   | "deleteEmailIdentity"
+  | "deleteTenantResourceAssociation"
   | "getAccount"
   | "getEmailIdentity"
+  | "getTenant"
+  | "listResourceTenants"
+  | "listTenants"
   | "putEmailIdentityDkimSigningAttributes"
   | "putEmailIdentityMailFromAttributes"
   | "sendEmail"

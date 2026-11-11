@@ -9,6 +9,7 @@ import { DB } from "@repo/persistence/db/effect";
 import { Redis, type RedisService } from "@repo/redis";
 import { Effect, Layer } from "effect";
 import { MessageDeliveryTerminalError } from "../../messages/delivery";
+import { ProviderRejected } from "../../provider-errors";
 import { Usage, UsageLimitExceeded, type UsageService } from "../../usage";
 import type {
   EmailProviderAdapter,
@@ -56,7 +57,11 @@ const baseDelivery = {
   bcc: null as string[] | null,
   cc: null as string[] | null,
   completedAt: null,
-  customDomain: null as { id: string; isPaused: boolean } | null,
+  customDomain: {
+    fqdn: "example.com",
+    id: "dom_test",
+    isPaused: false,
+  } as { fqdn: string; id: string; isPaused: boolean } | null,
   customDomainId: "dom_test",
   error: null,
   from: {
@@ -75,6 +80,7 @@ const baseDelivery = {
   providerId: null,
   providerMessageId: null,
   replyTo: null as string[] | null,
+  sandboxDomain: null as { rootDomain: string } | null,
   sandboxDomainId: null as string | null,
   startedAt: null,
   status: "queued" as
@@ -190,6 +196,8 @@ const testLayer = (
   db: Effect.Success<typeof DB>,
   options: {
     readonly allowByProvider?: ReadonlyMap<string, boolean>;
+    /** Provider ids whose circuit recorded a failure, in order. */
+    readonly circuitFailures?: string[];
     /** After recordFailure, these providers report open (allow=0) so failover proceeds. */
     readonly openCircuitAfterFailure?: ReadonlySet<string>;
     readonly registry?: {
@@ -218,6 +226,7 @@ const testLayer = (
       const providerId = key.replace("relayit:breaker:provider:", "");
       if (args.length === 3) {
         // RECORD_FAILURE
+        options.circuitFailures?.push(providerId);
         if (openAfterFailure.has(providerId)) {
           opened.add(providerId);
         }
@@ -334,7 +343,7 @@ describe("emailDeliverHandler", () => {
     const { db, updates } = makeDb({
       delivery: {
         ...baseDelivery,
-        customDomain: { id: "dom_test", isPaused: true },
+        customDomain: { fqdn: "example.com", id: "dom_test", isPaused: true },
       },
     });
     return Effect.runPromise(
@@ -489,6 +498,94 @@ describe("emailDeliverHandler", () => {
               (update) => (update as { status?: string }).status === "sent"
             )
           ).toBe(true);
+          return true;
+        })
+      )
+    );
+  });
+
+  test.each([
+    {
+      expected: { identityFqdn: "example.com", projectId: "org_test" },
+      scope: "platform" as const,
+    },
+    { expected: undefined, scope: "project" as const },
+  ])(
+    "passes the sending Project to $scope Providers only for reputation isolation",
+    ({ expected, scope }) => {
+      const provider = makeProvider({ id: "prov_primary", scope });
+      const { db } = makeDb({
+        identities: [
+          makeIdentity({ id: "ident_primary", isActive: true, provider }),
+        ],
+      });
+      let sender: unknown = "unset";
+      const factory = makeSendFactory((message) => {
+        sender = message?.sender;
+        return Effect.succeed({ providerMessageId: "ses_msg_1" });
+      });
+
+      return Effect.runPromise(
+        emailDeliverHandler.handle(payload, execution).pipe(
+          Effect.provide(
+            testLayer(db, { registry: { get: () => Effect.succeed(factory) } })
+          ),
+          Effect.map(() => {
+            expect(sender).toEqual(expected);
+            return true;
+          })
+        )
+      );
+    }
+  );
+
+  test("Project-level provider pause pauses the Domain and fails terminally without failover or tripping the circuit", () => {
+    const { db, updates } = makeDb({
+      identities: [primaryIdentity, standbyIdentity],
+    });
+    const circuitFailures: string[] = [];
+    const attempted: string[] = [];
+    const factory = makeSendFactory(
+      () =>
+        Effect.fail(
+          new ProviderRejected({
+            providerId: "prov_primary",
+            reason: "project_sending_paused",
+            typeId: "aws.ses",
+          })
+        ),
+      (input) => {
+        attempted.push(input.providerId);
+      }
+    );
+
+    return Effect.runPromise(
+      emailDeliverHandler.handle(payload, execution).pipe(
+        Effect.provide(
+          testLayer(db, {
+            circuitFailures,
+            registry: { get: () => Effect.succeed(factory) },
+          })
+        ),
+        Effect.flip,
+        Effect.map((error) => {
+          expect(error).toMatchObject({
+            _tag: "MessageDeliveryTerminalError",
+            stage: "send",
+          });
+          expect(emailDeliverHandler.classifyFailure(error)).toBe("terminal");
+          expect(attempted).toEqual(["prov_primary"]);
+          expect(circuitFailures).toEqual([]);
+          expect(updates).toContainEqual({
+            isPaused: true,
+            pausedReason: "bad_reputation",
+          });
+          expect(updates).toContainEqual(
+            expect.objectContaining({
+              error: expect.objectContaining({ retryable: false }),
+              status: "failed",
+            })
+          );
           return true;
         })
       )
