@@ -29,9 +29,7 @@ export function ProjectEditSlug() {
   const [{ data: me }, { data: organization }] = useSuspenseQueries({
     queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
   });
-  const member = organization?.members.find(
-    (member) => member.userId === me.user.id
-  );
+  const member = organization?.members.find((member) => member.userId === me.user.id);
   const { mutateAsync } = useMutation({
     mutationFn: async (body: FormSchema) => {
       const { data, error } = await authClient.organization.update({
@@ -119,9 +117,7 @@ export function ProjectEditSlug() {
                 hideError
                 label="URL"
                 leftAddon={
-                  <InputGroupText className="text-muted-foreground">
-                    {baseUrl}/
-                  </InputGroupText>
+                  <InputGroupText className="text-muted-foreground">{baseUrl}/</InputGroupText>
                 }
                 type="text"
               />

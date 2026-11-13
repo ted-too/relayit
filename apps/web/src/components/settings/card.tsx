@@ -12,13 +12,7 @@ export function SettingsCard({
   className,
   ...props
 }: Omit<React.ComponentProps<typeof Card>, "size">) {
-  return (
-    <Card
-      className={cn("w-full data-[size=lg]:gap-3", className)}
-      size="lg"
-      {...props}
-    />
-  );
+  return <Card className={cn("w-full data-[size=lg]:gap-3", className)} size="lg" {...props} />;
 }
 
 export function SettingsCardHeader({
@@ -33,10 +27,7 @@ export function SettingsCardTitle({
   ...props
 }: Omit<React.ComponentProps<typeof CardTitle>, "size">) {
   return (
-    <CardTitle
-      className={cn("font-semibold text-xl leading-relaxed", className)}
-      {...props}
-    />
+    <CardTitle className={cn("font-semibold text-xl leading-relaxed", className)} {...props} />
   );
 }
 
@@ -62,7 +53,7 @@ export function SettingsCardFooter({
     <CardFooter
       className={cn(
         "mt-3 justify-between group-data-[size=lg]/card:px-6 group-data-[size=lg]/card:py-3",
-        className
+        className,
       )}
       {...props}
     />

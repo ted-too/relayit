@@ -1,19 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { makeRedisLive } from "@repo/redis";
 import { Effect, Layer } from "effect";
-import {
-  Usage,
-  UsageLive,
-  UsagePolicy,
-  type UsagePolicyService,
-} from "./usage";
+import { Usage, UsageLive, UsagePolicy, type UsagePolicyService } from "./usage";
 
 const testRedisUrl = Bun.env.TEST_REDIS_URL;
 const integrationTestName = "Usage reservation lifecycle";
 
-const makePolicy = (
-  limits: Partial<Record<"managed" | "byo", number>>
-): UsagePolicyService => {
+const makePolicy = (limits: Partial<Record<"managed" | "byo", number>>): UsagePolicyService => {
   const periodStart = new Date();
   periodStart.setUTCHours(0, 0, 0, 0);
   const periodEnd = new Date(periodStart);
@@ -31,10 +24,7 @@ const makePolicy = (
   };
 };
 
-const runWithUsage = <A, E>(
-  policy: UsagePolicyService,
-  effect: Effect.Effect<A, E, Usage>
-) =>
+const runWithUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A, E, Usage>) =>
   Effect.runPromise(
     effect.pipe(
       Effect.provide(
@@ -42,18 +32,18 @@ const runWithUsage = <A, E>(
           Layer.provide(
             Layer.merge(
               makeRedisLive({ url: testRedisUrl ?? "" }),
-              Layer.succeed(UsagePolicy, policy)
-            )
-          )
-        )
-      )
-    )
+              Layer.succeed(UsagePolicy, policy),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 
 const makeReservation = (
   organizationId: string,
   deliveryId: string,
-  providerKind: "managed" | "byo" = "managed"
+  providerKind: "managed" | "byo" = "managed",
 ) => ({
   channel: "email" as const,
   deliveryId,
@@ -65,9 +55,7 @@ const makeReservation = (
 
 describe("Usage reservation lifecycle", () => {
   if (!testRedisUrl) {
-    process.emitWarning(
-      "Skipping Usage integration tests: TEST_REDIS_URL is not set"
-    );
+    process.emitWarning("Skipping Usage integration tests: TEST_REDIS_URL is not set");
     // biome-ignore lint/suspicious/noSkippedTests: The Redis test is opt-in.
     test.skip(integrationTestName, () => undefined);
     return;
@@ -75,14 +63,8 @@ describe("Usage reservation lifecycle", () => {
 
   test("reserving the same Delivery twice consumes one place", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
-    const first = makeReservation(
-      organizationId,
-      `delivery_${Bun.randomUUIDv7()}`
-    );
-    const second = makeReservation(
-      organizationId,
-      `delivery_${Bun.randomUUIDv7()}`
-    );
+    const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
+    const second = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
       makePolicy({ managed: 1 }),
@@ -101,16 +83,13 @@ describe("Usage reservation lifecycle", () => {
           _tag: "UsageLimitExceeded",
           window: "daily",
         });
-      })
+      }),
     );
   });
 
   test("remetering moves the reservation to the actual Provider kind", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
-    const original = makeReservation(
-      organizationId,
-      `delivery_${Bun.randomUUIDv7()}`
-    );
+    const original = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
       makePolicy({ byo: 1, managed: 1 }),
@@ -127,37 +106,24 @@ describe("Usage reservation lifecycle", () => {
         });
 
         yield* usage.reserve(
-          makeReservation(
-            organizationId,
-            `delivery_${Bun.randomUUIDv7()}`,
-            "managed"
-          )
+          makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`, "managed"),
         );
 
         const error = yield* usage
-          .reserve(
-            makeReservation(
-              organizationId,
-              `delivery_${Bun.randomUUIDv7()}`,
-              "byo"
-            )
-          )
+          .reserve(makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`, "byo"))
           .pipe(Effect.flip);
 
         expect(error).toMatchObject({
           _tag: "UsageLimitExceeded",
           window: "daily",
         });
-      })
+      }),
     );
   });
 
   test("releasing twice cannot release another Delivery's Usage", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
-    const first = makeReservation(
-      organizationId,
-      `delivery_${Bun.randomUUIDv7()}`
-    );
+    const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
       makePolicy({ managed: 1 }),
@@ -166,31 +132,24 @@ describe("Usage reservation lifecycle", () => {
         yield* usage.reserve(first);
         yield* usage.release({ deliveryId: first.deliveryId });
 
-        yield* usage.reserve(
-          makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`)
-        );
+        yield* usage.reserve(makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`));
         yield* usage.release({ deliveryId: first.deliveryId });
 
         const error = yield* usage
-          .reserve(
-            makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`)
-          )
+          .reserve(makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`))
           .pipe(Effect.flip);
 
         expect(error).toMatchObject({
           _tag: "UsageLimitExceeded",
           window: "daily",
         });
-      })
+      }),
     );
   });
 
   test("confirmed Usage remains consumed when cleanup is replayed", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
-    const first = makeReservation(
-      organizationId,
-      `delivery_${Bun.randomUUIDv7()}`
-    );
+    const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
       makePolicy({ managed: 1 }),
@@ -201,16 +160,14 @@ describe("Usage reservation lifecycle", () => {
         yield* usage.release({ deliveryId: first.deliveryId });
 
         const error = yield* usage
-          .reserve(
-            makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`)
-          )
+          .reserve(makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`))
           .pipe(Effect.flip);
 
         expect(error).toMatchObject({
           _tag: "UsageLimitExceeded",
           window: "daily",
         });
-      })
+      }),
     );
   });
 });

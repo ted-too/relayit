@@ -86,8 +86,8 @@ const loadCustomDomainKeyMaterial = (domain: CustomDomain) =>
             customDomainId: domain.id,
             message: "Failed to decrypt custom domain DKIM private key.",
             operation: "load_key",
-          })
-      )
+          }),
+      ),
     );
 
     return {
@@ -119,8 +119,8 @@ const assertOrgDomainLink = (input: {
               message: "Failed to load organization domain link.",
               operation: "persist",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!link) {
@@ -148,9 +148,7 @@ const registerCustomDomainProviderIdentity = (input: {
     const managedDns = yield* EmailManagedDns;
 
     const factory = yield* providers
-      .get(
-        makeProviderTypeId(input.provider.vendorId, input.provider.productId)
-      )
+      .get(makeProviderTypeId(input.provider.vendorId, input.provider.productId))
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -160,24 +158,22 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Email provider type is not registered.",
               operation: "provider",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
-    const credentials = yield* credentialsVault
-      .open(input.provider.credentials)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              message: "Failed to open provider credentials.",
-              operation: "provider",
-              providerId: input.provider.id,
-            })
-        )
-      );
+    const credentials = yield* credentialsVault.open(input.provider.credentials).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CustomDomainError({
+            cause,
+            customDomainId: input.customDomainId,
+            message: "Failed to open provider credentials.",
+            operation: "provider",
+            providerId: input.provider.id,
+          }),
+      ),
+    );
 
     const adapter = yield* factory
       .create({
@@ -193,8 +189,8 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Failed to create email provider adapter.",
               operation: "provider",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     const identityResult = yield* adapter
@@ -212,17 +208,14 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Failed to create provider sending identity.",
               operation: "register_identity",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     yield* managedDns
       .reconcile({
         customDomainId: input.customDomainId,
-        owner: customDomainIdentityDnsOwner(
-          input.customDomainId,
-          input.provider.id
-        ),
+        owner: customDomainIdentityDnsOwner(input.customDomainId, input.provider.id),
         records: resolveCustomDomainMailFromRecords({
           records: identityResult.mailFrom.records,
         }),
@@ -236,8 +229,8 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Failed to materialize custom domain MAIL FROM DNS.",
               operation: "register_identity",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     const existing = yield* input.db.query.emailDomainProviderIdentity
@@ -257,15 +250,12 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Failed to list custom domain provider identities.",
               operation: "persist",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     const hasActive = existing.some((row) => row.isActive);
-    const maxPriority = existing.reduce(
-      (max, row) => Math.max(max, row.failoverPriority),
-      0
-    );
+    const maxPriority = existing.reduce((max, row) => Math.max(max, row.failoverPriority), 0);
 
     const [identity] = yield* input.db
       .insert(emailDomainProviderIdentity)
@@ -290,8 +280,8 @@ const registerCustomDomainProviderIdentity = (input: {
               message: "Failed to insert custom domain provider identity.",
               operation: "persist",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!identity) {
@@ -318,11 +308,7 @@ const scheduleCustomDomainVerification = (input: {
     const runAt = Date.now();
 
     yield* jobs
-      .schedule(
-        emailVerifyCustomDomainJob,
-        { customDomainId: input.customDomainId },
-        runAt
-      )
+      .schedule(emailVerifyCustomDomainJob, { customDomainId: input.customDomainId }, runAt)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -331,16 +317,12 @@ const scheduleCustomDomainVerification = (input: {
               customDomainId: input.customDomainId,
               message: "Failed to schedule custom domain verification job.",
               operation: "schedule",
-            })
-        )
+            }),
+        ),
       );
 
     yield* jobs
-      .schedule(
-        emailVerifyProviderIdentityJob,
-        { identityId: input.identityId },
-        runAt
-      )
+      .schedule(emailVerifyProviderIdentityJob, { identityId: input.identityId }, runAt)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -349,8 +331,8 @@ const scheduleCustomDomainVerification = (input: {
               customDomainId: input.customDomainId,
               message: "Failed to schedule identity verification job.",
               operation: "schedule",
-            })
-        )
+            }),
+        ),
       );
 
     if (input.ownership) {
@@ -361,7 +343,7 @@ const scheduleCustomDomainVerification = (input: {
             customDomainId: input.customDomainId,
             organizationId: input.ownership.organizationId,
           },
-          runAt
+          runAt,
         )
         .pipe(
           Effect.mapError(
@@ -372,8 +354,8 @@ const scheduleCustomDomainVerification = (input: {
                 message: "Failed to schedule ownership verification job.",
                 operation: "schedule",
                 organizationId: input.ownership?.organizationId,
-              })
-          )
+              }),
+          ),
         );
     }
   });
@@ -394,12 +376,8 @@ const createOrgDomainLink = (input: {
         customDomainId: input.customDomainId,
         organizationId: input.organizationId,
         ownershipToken: token,
-        ownershipVerificationStatus: input.ownershipVerified
-          ? "verified"
-          : "not_verified",
-        pendingProviderId: input.ownershipVerified
-          ? null
-          : (input.pendingProviderId ?? null),
+        ownershipVerificationStatus: input.ownershipVerified ? "verified" : "not_verified",
+        pendingProviderId: input.ownershipVerified ? null : (input.pendingProviderId ?? null),
       })
       .pipe(
         Effect.mapError(
@@ -410,8 +388,8 @@ const createOrgDomainLink = (input: {
               message: "Failed to link Project to custom domain.",
               operation: "persist",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     return { token };
@@ -442,13 +420,13 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
               operation: "persist",
               organizationId: input.organizationId,
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (existing) {
       const alreadyLinked = existing.organizations.some(
-        (organization) => organization.organizationId === input.organizationId
+        (organization) => organization.organizationId === input.organizationId,
       );
       if (alreadyLinked) {
         return { customDomainId: existing.id, kind: "existing" as const };
@@ -481,27 +459,24 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
                     message: "Failed to persist detected DNS host.",
                     operation: "persist",
                     organizationId: input.organizationId,
-                  })
-              )
+                  }),
+              ),
             );
         }
       }
 
       const verifiedOwner = existing.organizations.find(
-        (organization) =>
-          organization.ownershipVerificationStatus === "verified"
+        (organization) => organization.ownershipVerificationStatus === "verified",
       );
       const pendingClaim = existing.organizations.find(
-        (organization) =>
-          organization.ownershipVerificationStatus !== "verified"
+        (organization) => organization.ownershipVerificationStatus !== "verified",
       );
 
       if (verifiedOwner) {
         if (pendingClaim) {
           return yield* new CustomDomainError({
             customDomainId: existing.id,
-            message:
-              "Another Project already has a pending claim on this domain.",
+            message: "Another Project already has a pending claim on this domain.",
             operation: "claim",
             organizationId: input.organizationId,
           });
@@ -516,13 +491,13 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         });
 
         const hasProvider = existing.providerIdentities.some(
-          (identity) => identity.providerId === input.provider.id
+          (identity) => identity.providerId === input.provider.id,
         );
 
         let identityId: string | undefined;
         if (hasProvider) {
           identityId = existing.providerIdentities.find(
-            (identity) => identity.providerId === input.provider.id
+            (identity) => identity.providerId === input.provider.id,
           )?.id;
         } else {
           const keyMaterial = yield* loadCustomDomainKeyMaterial(existing);
@@ -560,20 +535,18 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     const managedDns = yield* EmailManagedDns;
     const crypto = yield* SymmetricCrypto;
     const keyMaterial = createDomainKeyMaterial();
-    const encryptedPrivateKey = yield* crypto
-      .encrypt(keyMaterial.dkimPrivateKey)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              message: "Failed to encrypt custom domain DKIM private key.",
-              operation: "encrypt_key",
-              organizationId: input.organizationId,
-              providerId: input.provider.id,
-            })
-        )
-      );
+    const encryptedPrivateKey = yield* crypto.encrypt(keyMaterial.dkimPrivateKey).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CustomDomainError({
+            cause,
+            message: "Failed to encrypt custom domain DKIM private key.",
+            operation: "encrypt_key",
+            organizationId: input.organizationId,
+            providerId: input.provider.id,
+          }),
+      ),
+    );
 
     const detectedProvider = yield* Effect.tryPromise({
       catch: (cause) =>
@@ -608,8 +581,8 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
               operation: "persist",
               organizationId: input.organizationId,
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!row) {
@@ -640,8 +613,8 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
               message: "Failed to materialize custom domain root DNS.",
               operation: "create",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     const identity = yield* registerCustomDomainProviderIdentity({
@@ -688,8 +661,8 @@ export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
               message: "Failed to pause custom domain.",
               operation: "pause",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     return { customDomainId: input.customDomainId, isPaused: true as const };
@@ -716,8 +689,8 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
               message: "Failed to unpause custom domain.",
               operation: "unpause",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     return { customDomainId: input.customDomainId, isPaused: false as const };
@@ -739,8 +712,8 @@ export const completeDomainClaimTransfer = (input: {
       .where(
         and(
           eq(organizationDomain.customDomainId, input.customDomain.id),
-          ne(organizationDomain.organizationId, input.organizationId)
-        )
+          ne(organizationDomain.organizationId, input.organizationId),
+        ),
       )
       .pipe(
         Effect.mapError(
@@ -751,8 +724,8 @@ export const completeDomainClaimTransfer = (input: {
               message: "Failed to remove source Project domain link.",
               operation: "claim",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     const identities = yield* input.db.query.emailDomainProviderIdentity
@@ -769,8 +742,8 @@ export const completeDomainClaimTransfer = (input: {
               message: "Failed to list identities for claim transfer.",
               operation: "claim",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     const credentialsVault = yield* ProviderCredentialsVault;
@@ -800,19 +773,14 @@ export const completeDomainClaimTransfer = (input: {
                   message: "Failed to activate kept Provider identity.",
                   operation: "claim",
                   providerId: identity.providerId,
-                })
-            )
+                }),
+            ),
           );
         continue;
       }
 
       const factory = yield* providers
-        .get(
-          makeProviderTypeId(
-            identity.provider.vendorId,
-            identity.provider.productId
-          )
-        )
+        .get(makeProviderTypeId(identity.provider.vendorId, identity.provider.productId))
         .pipe(
           Effect.mapError(
             (cause) =>
@@ -822,24 +790,22 @@ export const completeDomainClaimTransfer = (input: {
                 message: "Email provider type is not registered.",
                 operation: "provider",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
 
-      const credentials = yield* credentialsVault
-        .open(identity.provider.credentials)
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new CustomDomainError({
-                cause,
-                customDomainId: input.customDomain.id,
-                message: "Failed to open provider credentials.",
-                operation: "provider",
-                providerId: identity.providerId,
-              })
-          )
-        );
+      const credentials = yield* credentialsVault.open(identity.provider.credentials).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CustomDomainError({
+              cause,
+              customDomainId: input.customDomain.id,
+              message: "Failed to open provider credentials.",
+              operation: "provider",
+              providerId: identity.providerId,
+            }),
+        ),
+      );
 
       const adapter = yield* factory
         .create({
@@ -855,8 +821,8 @@ export const completeDomainClaimTransfer = (input: {
                 message: "Failed to create email provider adapter.",
                 operation: "provider",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
 
       yield* adapter.deleteIdentity({ fqdn: input.customDomain.fqdn }).pipe(
@@ -868,17 +834,12 @@ export const completeDomainClaimTransfer = (input: {
               message: "Failed to delete provider identity during claim.",
               operation: "claim",
               providerId: identity.providerId,
-            })
-        )
+            }),
+        ),
       );
 
       yield* managedDns
-        .remove(
-          customDomainIdentityDnsOwner(
-            input.customDomain.id,
-            identity.providerId
-          )
-        )
+        .remove(customDomainIdentityDnsOwner(input.customDomain.id, identity.providerId))
         .pipe(
           Effect.mapError(
             (cause) =>
@@ -888,8 +849,8 @@ export const completeDomainClaimTransfer = (input: {
                 message: "Failed to remove identity DNS during claim.",
                 operation: "claim",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
 
       yield* input.db
@@ -904,8 +865,8 @@ export const completeDomainClaimTransfer = (input: {
                 message: "Failed to delete identity row during claim.",
                 operation: "claim",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
     }
   });
@@ -947,8 +908,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
               message: "Failed to load Custom Domain for delete.",
               operation: "delete",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!link?.customDomain) {
@@ -967,8 +928,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
       .where(
         and(
           eq(organizationDomain.organizationId, input.organizationId),
-          eq(organizationDomain.customDomainId, input.customDomainId)
-        )
+          eq(organizationDomain.customDomainId, input.customDomainId),
+        ),
       )
       .pipe(
         Effect.mapError(
@@ -979,12 +940,12 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
               message: "Failed to unlink Custom Domain from Project.",
               operation: "delete",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     const remainingRefs = domain.organizations.filter(
-      (organization) => organization.organizationId !== input.organizationId
+      (organization) => organization.organizationId !== input.organizationId,
     ).length;
 
     if (remainingRefs > 0) {
@@ -997,12 +958,7 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
       }
 
       const factory = yield* providers
-        .get(
-          makeProviderTypeId(
-            identity.provider.vendorId,
-            identity.provider.productId
-          )
-        )
+        .get(makeProviderTypeId(identity.provider.vendorId, identity.provider.productId))
         .pipe(
           Effect.mapError(
             (cause) =>
@@ -1012,24 +968,22 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
                 message: "Email provider type is not registered.",
                 operation: "provider",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
 
-      const credentials = yield* credentialsVault
-        .open(identity.provider.credentials)
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new CustomDomainError({
-                cause,
-                customDomainId: domain.id,
-                message: "Failed to open provider credentials.",
-                operation: "provider",
-                providerId: identity.providerId,
-              })
-          )
-        );
+      const credentials = yield* credentialsVault.open(identity.provider.credentials).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CustomDomainError({
+              cause,
+              customDomainId: domain.id,
+              message: "Failed to open provider credentials.",
+              operation: "provider",
+              providerId: identity.providerId,
+            }),
+        ),
+      );
 
       const adapter = yield* factory
         .create({
@@ -1045,8 +999,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
                 message: "Failed to create email provider adapter.",
                 operation: "provider",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
 
       yield* adapter.deleteIdentity({ fqdn: domain.fqdn }).pipe(
@@ -1058,24 +1012,22 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
               message: "Failed to delete provider identity.",
               operation: "delete",
               providerId: identity.providerId,
-            })
-        )
+            }),
+        ),
       );
 
-      yield* managedDns
-        .remove(customDomainIdentityDnsOwner(domain.id, identity.providerId))
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new CustomDomainError({
-                cause,
-                customDomainId: domain.id,
-                message: "Failed to remove identity DNS.",
-                operation: "delete",
-                providerId: identity.providerId,
-              })
-          )
-        );
+      yield* managedDns.remove(customDomainIdentityDnsOwner(domain.id, identity.providerId)).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CustomDomainError({
+              cause,
+              customDomainId: domain.id,
+              message: "Failed to remove identity DNS.",
+              operation: "delete",
+              providerId: identity.providerId,
+            }),
+        ),
+      );
 
       yield* db
         .delete(emailDomainProviderIdentity)
@@ -1089,8 +1041,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
                 message: "Failed to delete identity row.",
                 operation: "delete",
                 providerId: identity.providerId,
-              })
-          )
+              }),
+          ),
         );
     }
 
@@ -1102,8 +1054,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
             customDomainId: domain.id,
             message: "Failed to remove root DNS.",
             operation: "delete",
-          })
-      )
+          }),
+      ),
     );
 
     yield* db
@@ -1117,8 +1069,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
               customDomainId: domain.id,
               message: "Failed to delete DNS rows.",
               operation: "delete",
-            })
-        )
+            }),
+        ),
       );
 
     yield* db
@@ -1132,8 +1084,8 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
               customDomainId: domain.id,
               message: "Failed to delete Custom Domain row.",
               operation: "delete",
-            })
-        )
+            }),
+        ),
       );
 
     return { deleted: true as const };

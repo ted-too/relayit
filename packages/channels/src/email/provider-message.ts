@@ -9,15 +9,7 @@ export interface ProviderEmailAttachment {
 
 type ProviderEmailDeliveryFields = Pick<
   EmailDelivery,
-  | "bcc"
-  | "cc"
-  | "from"
-  | "headers"
-  | "html"
-  | "replyTo"
-  | "subject"
-  | "text"
-  | "to"
+  "bcc" | "cc" | "from" | "headers" | "html" | "replyTo" | "subject" | "text" | "to"
 >;
 
 /**

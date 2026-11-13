@@ -43,7 +43,7 @@ export const sandboxDomain = pgTable(
     uniqueIndex("sandbox_domain_root_domain_unique_idx").on(t.rootDomain),
     index("sandbox_domain_status_idx").on(t.verificationStatus),
     index("sandbox_domain_next_verify_at_idx").on(t.nextVerifyAt),
-  ]
+  ],
 );
 
 export type SandboxDomain = typeof sandboxDomain.$inferSelect;

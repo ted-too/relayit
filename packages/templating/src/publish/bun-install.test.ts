@@ -7,9 +7,7 @@ import { runBunInstall } from "./bun-install";
 
 describe("runBunInstall", () => {
   test("returns ok: false with stderr when the install fails", async () => {
-    const dir = await fs.mkdtemp(
-      path.join(os.tmpdir(), "relayit-bun-install-")
-    );
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "relayit-bun-install-"));
     try {
       await fs.writeFile(path.join(dir, "package.json"), "{ not json");
 
@@ -18,7 +16,7 @@ describe("runBunInstall", () => {
           args: ["--frozen-lockfile", "--ignore-scripts"],
           cwd: dir,
           operation: "test",
-        })
+        }),
       );
 
       expect(result.ok).toBe(false);
@@ -34,7 +32,7 @@ describe("runBunInstall", () => {
         args: ["--ignore-scripts"],
         cwd: path.join(os.tmpdir(), `relayit-missing-${Bun.randomUUIDv7()}`),
         operation: "test",
-      })
+      }),
     );
 
     expect(result.ok).toBe(false);

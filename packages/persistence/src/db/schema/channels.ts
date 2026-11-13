@@ -7,10 +7,7 @@ export const zChannels = z.enum(AVAILABLE_CHANNELS);
 export const ChannelTypeEnum = zChannels.enum;
 export type ChannelType = (typeof AVAILABLE_CHANNELS)[number];
 
-export const AVAILABLE_MESSAGE_PURPOSES = [
-  "transactional",
-  "marketing",
-] as const;
+export const AVAILABLE_MESSAGE_PURPOSES = ["transactional", "marketing"] as const;
 export type MessagePurpose = (typeof AVAILABLE_MESSAGE_PURPOSES)[number];
 
 export const AVAILABLE_PROVIDER_KINDS = ["managed", "byo"] as const;
@@ -37,10 +34,7 @@ export interface ChannelLimits {
   email: EmailLimits;
 }
 
-export type ChannelLimit<T extends ChannelType = ChannelType> = Pick<
-  ChannelLimits,
-  T
->[T];
+export type ChannelLimit<T extends ChannelType = ChannelType> = Pick<ChannelLimits, T>[T];
 
 export interface UserLimits extends ChannelLimits {
   projects: number | null;
@@ -62,10 +56,7 @@ export const AVAILABLE_DELIVERY_STATUSES = [
 ] as const;
 export type DeliveryStatus = (typeof AVAILABLE_DELIVERY_STATUSES)[number];
 
-export const deliveryStatusEnum = pgEnum(
-  "delivery_status",
-  AVAILABLE_DELIVERY_STATUSES
-);
+export const deliveryStatusEnum = pgEnum("delivery_status", AVAILABLE_DELIVERY_STATUSES);
 
 export interface DeliveryError {
   details?: unknown;
@@ -73,7 +64,4 @@ export interface DeliveryError {
   retryable?: boolean;
 }
 
-export const messagePurposeEnum = pgEnum(
-  "message_purpose",
-  AVAILABLE_MESSAGE_PURPOSES
-);
+export const messagePurposeEnum = pgEnum("message_purpose", AVAILABLE_MESSAGE_PURPOSES);

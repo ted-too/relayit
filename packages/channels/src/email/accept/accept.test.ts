@@ -29,10 +29,7 @@ const testServices = Layer.mergeAll(
     remeter: unsupported,
     reserve: unsupported,
   } satisfies UsageService),
-  Layer.succeed(
-    HttpClient.HttpClient,
-    {} as Effect.Success<typeof HttpClient.HttpClient>
-  )
+  Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),
 );
 
 const baseInput = {
@@ -72,8 +69,8 @@ describe("acceptTransactionalEmail", () => {
             code: "no_recipients",
           });
           return error;
-        })
-      )
+        }),
+      ),
     ));
 
   test("rejects blocked attachment filenames before using infrastructure", () =>
@@ -116,7 +113,7 @@ describe("acceptTransactionalEmail", () => {
             message: "This file type isn't allowed for security reasons.",
           });
           return error;
-        })
-      )
+        }),
+      ),
     ));
 });

@@ -11,14 +11,8 @@ import { Effect, Layer } from "effect";
 import { MessageDeliveryTerminalError } from "../../messages/delivery";
 import { ProviderRejected } from "../../provider-errors";
 import { Usage, UsageLimitExceeded, type UsageService } from "../../usage";
-import type {
-  EmailProviderAdapter,
-  EmailProviderFactory,
-} from "../provider-adapter";
-import {
-  EmailProviderRegistry,
-  type EmailProviderRegistryService,
-} from "../provider-registry";
+import type { EmailProviderAdapter, EmailProviderFactory } from "../provider-adapter";
+import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
 import { makeEmailDeliverHandler } from "./handler";
 
 const unsupported = () => Effect.die("unused");
@@ -27,10 +21,7 @@ const openedCredentials = {
   unencrypted: {},
 } as OpenedProviderCredentials;
 
-const makeProvider = (input: {
-  readonly id: string;
-  readonly scope?: "platform" | "project";
-}) => ({
+const makeProvider = (input: { readonly id: string; readonly scope?: "platform" | "project" }) => ({
   credentials: { ciphertext: "sealed", keyVersion: 1, nonce: "n" },
   id: input.id,
   productId: "ses",
@@ -83,13 +74,7 @@ const baseDelivery = {
   sandboxDomain: null as { rootDomain: string } | null,
   sandboxDomainId: null as string | null,
   startedAt: null,
-  status: "queued" as
-    | "canceled"
-    | "failed"
-    | "queued"
-    | "sending"
-    | "sent"
-    | "skipped",
+  status: "queued" as "canceled" | "failed" | "queued" | "sending" | "sent" | "skipped",
   subject: "Hello",
   text: null as string | null,
   to: ["recipient@example.com"],
@@ -105,18 +90,14 @@ const makeDb = (overrides: {
   readonly updates?: unknown[];
 }) => {
   const updates = overrides.updates ?? [];
-  const delivery =
-    overrides.delivery === undefined ? baseDelivery : overrides.delivery;
+  const delivery = overrides.delivery === undefined ? baseDelivery : overrides.delivery;
   const suppressed = new Set(overrides.suppressedEmails ?? []);
   const identities = overrides.identities ?? [];
 
   const db: any = {
     query: {
       contact: {
-        findFirst: () =>
-          Effect.succeed(
-            overrides.contactId ? { id: overrides.contactId } : null
-          ),
+        findFirst: () => Effect.succeed(overrides.contactId ? { id: overrides.contactId } : null),
       },
       emailAttachment: {
         findMany: () => Effect.succeed([]),
@@ -142,12 +123,10 @@ const makeDb = (overrides: {
         innerJoin: () => ({
           where: () => Effect.succeed(identities),
         }),
-        where: () =>
-          Effect.succeed([...suppressed].map((email) => ({ email }))),
+        where: () => Effect.succeed([...suppressed].map((email) => ({ email }))),
       }),
     }),
-    transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) =>
-      body(db),
+    transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),
     update: () => ({
       set: (values: unknown) => ({
         where: () => {
@@ -172,9 +151,9 @@ const adapterDefinition = {
 
 const makeSendFactory = (
   send: (
-    message?: Parameters<EmailProviderAdapter["send"]>[0]
+    message?: Parameters<EmailProviderAdapter["send"]>[0],
   ) => Effect.Effect<{ readonly providerMessageId: string }, unknown>,
-  createInput?: (input: { providerId: string }) => void
+  createInput?: (input: { providerId: string }) => void,
 ) =>
   ({
     create: (input) => {
@@ -185,8 +164,7 @@ const makeSendFactory = (
         definition: adapterDefinition,
         deleteIdentity: unsupported,
         getIdentityStatus: unsupported,
-        send: (message) =>
-          send(message) as ReturnType<EmailProviderAdapter["send"]>,
+        send: (message) => send(message) as ReturnType<EmailProviderAdapter["send"]>,
       } as EmailProviderAdapter);
     },
     definition: adapterDefinition,
@@ -205,7 +183,7 @@ const testLayer = (
     };
     readonly usage?: Partial<UsageService>;
     readonly vaultOpen?: () => Effect.Effect<OpenedProviderCredentials>;
-  } = {}
+  } = {},
 ) => {
   const allowByProvider = options.allowByProvider;
   const openAfterFailure = new Set(options.openCircuitAfterFailure ?? []);
@@ -215,13 +193,7 @@ const testLayer = (
     append: unsupported,
     autoClaim: unsupported,
     createConsumerGroup: unsupported,
-    evaluateNumber: ({
-      args,
-      keys,
-    }: {
-      args: readonly string[];
-      keys: readonly string[];
-    }) => {
+    evaluateNumber: ({ args, keys }: { args: readonly string[]; keys: readonly string[] }) => {
       const key = keys[0] ?? "";
       const providerId = key.replace("relayit:breaker:provider:", "");
       if (args.length === 3) {
@@ -238,9 +210,7 @@ const testLayer = (
           return Effect.succeed(0);
         }
         if (allowByProvider) {
-          return Effect.succeed(
-            (allowByProvider.get(providerId) ?? true) ? 1 : 0
-          );
+          return Effect.succeed((allowByProvider.get(providerId) ?? true) ? 1 : 0);
         }
         return Effect.succeed(1);
       }
@@ -285,9 +255,9 @@ const testLayer = (
       EmailProviderRegistry,
       options.registry ?? {
         get: unsupported,
-      }
+      },
     ),
-    Layer.succeed(Redis, redisStub)
+    Layer.succeed(Redis, redisStub),
   );
 };
 
@@ -334,8 +304,8 @@ describe("emailDeliverHandler", () => {
         Effect.map(() => {
           expect(updates).toEqual([]);
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -357,8 +327,8 @@ describe("emailDeliverHandler", () => {
           });
           expect(updates[0]).toMatchObject({ status: "failed" });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -376,13 +346,11 @@ describe("emailDeliverHandler", () => {
             stage: "suppressions",
           });
           expect(
-            updates.some(
-              (update) => (update as { status?: string }).status === "skipped"
-            )
+            updates.some((update) => (update as { status?: string }).status === "skipped"),
           ).toBe(true);
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -391,9 +359,7 @@ describe("emailDeliverHandler", () => {
       identities: [primaryIdentity],
     });
     let confirmed = false;
-    const factory = makeSendFactory(() =>
-      Effect.succeed({ providerMessageId: "ses_msg_1" })
-    );
+    const factory = makeSendFactory(() => Effect.succeed({ providerMessageId: "ses_msg_1" }));
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
@@ -408,22 +374,20 @@ describe("emailDeliverHandler", () => {
                 return Effect.void;
               },
             },
-          })
+          }),
         ),
         Effect.map(() => {
           expect(confirmed).toBe(true);
           expect(
             updates.some(
               (update) =>
-                (update as { status?: string; providerMessageId?: string })
-                  .status === "sent" &&
-                (update as { providerMessageId?: string }).providerMessageId ===
-                  "ses_msg_1"
-            )
+                (update as { status?: string; providerMessageId?: string }).status === "sent" &&
+                (update as { providerMessageId?: string }).providerMessageId === "ses_msg_1",
+            ),
           ).toBe(true);
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -455,14 +419,14 @@ describe("emailDeliverHandler", () => {
                 return Effect.void;
               },
             },
-          })
+          }),
         ),
         Effect.map(() => {
           expect(remeterKinds).toContain("byo");
           expect(sendCount).toBe(2);
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -475,7 +439,7 @@ describe("emailDeliverHandler", () => {
       () => Effect.succeed({ providerMessageId: "ses_standby" }),
       (input) => {
         sentVia = input.providerId;
-      }
+      },
     );
 
     return Effect.runPromise(
@@ -489,18 +453,16 @@ describe("emailDeliverHandler", () => {
             registry: {
               get: () => Effect.succeed(factory),
             },
-          })
+          }),
         ),
         Effect.map(() => {
           expect(sentVia).toBe("prov_standby");
-          expect(
-            updates.some(
-              (update) => (update as { status?: string }).status === "sent"
-            )
-          ).toBe(true);
+          expect(updates.some((update) => (update as { status?: string }).status === "sent")).toBe(
+            true,
+          );
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -515,9 +477,7 @@ describe("emailDeliverHandler", () => {
     ({ expected, scope }) => {
       const provider = makeProvider({ id: "prov_primary", scope });
       const { db } = makeDb({
-        identities: [
-          makeIdentity({ id: "ident_primary", isActive: true, provider }),
-        ],
+        identities: [makeIdentity({ id: "ident_primary", isActive: true, provider })],
       });
       let sender: unknown = "unset";
       const factory = makeSendFactory((message) => {
@@ -527,16 +487,14 @@ describe("emailDeliverHandler", () => {
 
       return Effect.runPromise(
         emailDeliverHandler.handle(payload, execution).pipe(
-          Effect.provide(
-            testLayer(db, { registry: { get: () => Effect.succeed(factory) } })
-          ),
+          Effect.provide(testLayer(db, { registry: { get: () => Effect.succeed(factory) } })),
           Effect.map(() => {
             expect(sender).toEqual(expected);
             return true;
-          })
-        )
+          }),
+        ),
       );
-    }
+    },
   );
 
   test("Project-level provider pause pauses the Domain and fails terminally without failover or tripping the circuit", () => {
@@ -552,11 +510,11 @@ describe("emailDeliverHandler", () => {
             providerId: "prov_primary",
             reason: "project_sending_paused",
             typeId: "aws.ses",
-          })
+          }),
         ),
       (input) => {
         attempted.push(input.providerId);
-      }
+      },
     );
 
     return Effect.runPromise(
@@ -565,7 +523,7 @@ describe("emailDeliverHandler", () => {
           testLayer(db, {
             circuitFailures,
             registry: { get: () => Effect.succeed(factory) },
-          })
+          }),
         ),
         Effect.flip,
         Effect.map((error) => {
@@ -584,11 +542,11 @@ describe("emailDeliverHandler", () => {
             expect.objectContaining({
               error: expect.objectContaining({ retryable: false }),
               status: "failed",
-            })
+            }),
           );
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -596,9 +554,7 @@ describe("emailDeliverHandler", () => {
     const { db, updates } = makeDb({
       identities: [primaryIdentity],
     });
-    const factory = makeSendFactory(() =>
-      Effect.fail(new Error("ses unavailable"))
-    );
+    const factory = makeSendFactory(() => Effect.fail(new Error("ses unavailable")));
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
@@ -609,7 +565,7 @@ describe("emailDeliverHandler", () => {
             registry: {
               get: () => Effect.succeed(factory),
             },
-          })
+          }),
         ),
         Effect.flip,
         Effect.map((error) => {
@@ -622,12 +578,12 @@ describe("emailDeliverHandler", () => {
             updates.some(
               (update) =>
                 (update as { status?: string }).status === "failed" ||
-                (update as { status?: string }).status === "sending"
-            )
+                (update as { status?: string }).status === "sending",
+            ),
           ).toBe(true);
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -647,10 +603,10 @@ describe("emailDeliverHandler", () => {
                     providerKind: "managed",
                     retryAt: new Date("2026-08-11T00:00:00.000Z"),
                     window: "daily",
-                  })
+                  }),
                 ),
             },
-          })
+          }),
         ),
         Effect.flip,
         Effect.map((error) => {
@@ -658,8 +614,8 @@ describe("emailDeliverHandler", () => {
             _tag: "MessageDeliveryRetryableError",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -678,7 +634,7 @@ describe("emailDeliverHandler", () => {
           deliveryId: "edlv_test",
           message: "done",
           stage: "test",
-        })
+        }),
       ).pipe(
         Effect.provide(
           testLayer(db, {
@@ -688,13 +644,13 @@ describe("emailDeliverHandler", () => {
                 return Effect.void;
               },
             },
-          })
+          }),
         ),
         Effect.map(() => {
           expect(released).toBe(true);
           return true;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -722,29 +678,27 @@ describe("emailDeliverHandler", () => {
             purpose: "marketing",
             topicId: "topc_test",
           },
-          execution
+          execution,
         )
         .pipe(
           Effect.provide(
             testLayer(db, {
               registry: { get: () => Effect.succeed(factory) },
-            })
+            }),
           ),
           Effect.map(() => {
             expect(sentHeaders).toEqual(
               expect.objectContaining({
                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-              })
+              }),
             );
             expect(sentHeaders?.["List-Unsubscribe"]).toContain(
-              "https://app.example.com/unsubscribe/acme/cont_test?"
+              "https://app.example.com/unsubscribe/acme/cont_test?",
             );
-            expect(sentHeaders?.["List-Unsubscribe"]).toContain(
-              "topic=topc_test"
-            );
+            expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
             return true;
-          })
-        )
+          }),
+        ),
     );
   });
 });

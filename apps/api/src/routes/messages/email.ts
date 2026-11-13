@@ -27,19 +27,15 @@ const contactInput = (contact: {
   properties: contact.properties,
 });
 
-const asContactList = (
-  value: EmailContact | string | readonly (EmailContact | string)[]
-) => {
+const asContactList = (value: EmailContact | string | readonly (EmailContact | string)[]) => {
   const items = Array.isArray(value) ? value : [value];
-  return items.map((item) =>
-    typeof item === "string" ? { email: item } : item
-  );
+  return items.map((item) => (typeof item === "string" ? { email: item } : item));
 };
 
 export const createEmailRoutes = (
   auth: ApiAuth,
   runEffect: RunApiEffect,
-  accept = acceptTransactionalEmail
+  accept = acceptTransactionalEmail,
 ) =>
   new Elysia({ prefix: "/email", tags: ["Send"] })
     .model(sendEmailOpenApiModels)
@@ -53,8 +49,7 @@ export const createEmailRoutes = (
         if (hasApp !== hasEnvironment) {
           return status(400, {
             code: "invalid_app_environment",
-            message:
-              "App and Environment headers must both be present, or both omitted.",
+            message: "App and Environment headers must both be present, or both omitted.",
           });
         }
 
@@ -78,12 +73,8 @@ export const createEmailRoutes = (
                     ? { kind: "url" as const, url: attachment.path }
                     : { content: attachment.content, kind: "base64" as const },
               })),
-              bcc: (body.bcc === undefined ? [] : asContactList(body.bcc)).map(
-                contactInput
-              ),
-              cc: (body.cc === undefined ? [] : asContactList(body.cc)).map(
-                contactInput
-              ),
+              bcc: (body.bcc === undefined ? [] : asContactList(body.bcc)).map(contactInput),
+              cc: (body.cc === undefined ? [] : asContactList(body.cc)).map(contactInput),
               content: body.template
                 ? {
                     idOrSlug: body.template.id,
@@ -109,24 +100,18 @@ export const createEmailRoutes = (
             },
             idempotencyKey: headers["idempotency-key"],
             organizationId,
-            scheduledAt: body.scheduled_at
-              ? DateTime.makeUnsafe(body.scheduled_at)
-              : undefined,
+            scheduledAt: body.scheduled_at ? DateTime.makeUnsafe(body.scheduled_at) : undefined,
             tags:
               body.tags === undefined
                 ? undefined
-                : Object.fromEntries(
-                    body.tags.map((tag) => [tag.name, tag.value])
-                  ),
+                : Object.fromEntries(body.tags.map((tag) => [tag.name, tag.value])),
           }).pipe(
             Effect.annotateLogs({ organizationId }),
             Effect.map((accepted) =>
               status(201, {
                 id: accepted.messageId,
-                ...(accepted.stripped.length > 0
-                  ? { stripped: accepted.stripped }
-                  : {}),
-              })
+                ...(accepted.stripped.length > 0 ? { stripped: accepted.stripped } : {}),
+              }),
             ),
             Effect.catch((error) =>
               Effect.gen(function* () {
@@ -170,25 +155,22 @@ export const createEmailRoutes = (
                       retry_after_seconds: Math.max(
                         1,
                         Math.ceil(
-                          (error.retryAt.getTime() -
-                            DateTime.toEpochMillis(DateTime.nowUnsafe())) /
-                            1000
-                        )
+                          (error.retryAt.getTime() - DateTime.toEpochMillis(DateTime.nowUnsafe())) /
+                            1000,
+                        ),
                       ),
                     });
                   default:
-                    yield* logEffectFailure("Email acceptance failed")(
-                      Cause.fail(error)
-                    );
+                    yield* logEffectFailure("Email acceptance failed")(Cause.fail(error));
                     return status(500, {
                       code: "internal_server_error",
                       message: "Failed to accept email message.",
                     });
                 }
-              })
-            )
+              }),
+            ),
           ),
-          { signal: request.signal }
+          { signal: request.signal },
         );
       },
       {
@@ -210,5 +192,5 @@ export const createEmailRoutes = (
           summary: "Send email",
         },
         headers: sendEmailHeadersSchema,
-      }
+      },
     );

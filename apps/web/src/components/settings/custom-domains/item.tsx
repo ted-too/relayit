@@ -22,20 +22,14 @@ export const VERIFICATION_STATUS = {
 export function DomainItem({ domain }: { domain: Domain }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const verification =
-    VERIFICATION_STATUS[domain.verificationStatus] ??
-    VERIFICATION_STATUS.not_verified;
+    VERIFICATION_STATUS[domain.verificationStatus] ?? VERIFICATION_STATUS.not_verified;
 
   const ProviderIcon = DOMAIN_PROVIDER_ICONS[domain.provider];
 
   return (
     <Item
       className="rounded-none border-t-0 border-r-0 border-l-0 bg-background px-4 py-3 last:border-b-0"
-      render={
-        <Link
-          params={{ orgSlug, fqdn: domain.fqdn }}
-          to="/$orgSlug/domains/$fqdn"
-        />
-      }
+      render={<Link params={{ orgSlug, fqdn: domain.fqdn }} to="/$orgSlug/domains/$fqdn" />}
       variant="outline"
     >
       <ItemMedia variant="icon">

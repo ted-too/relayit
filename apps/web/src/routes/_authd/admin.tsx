@@ -1,13 +1,5 @@
-import {
-  SidebarInset,
-  SidebarProvider,
-} from "@repo/ui/components/ui/shad/sidebar";
-import {
-  createFileRoute,
-  notFound,
-  Outlet,
-  useLocation,
-} from "@tanstack/react-router";
+import { SidebarInset, SidebarProvider } from "@repo/ui/components/ui/shad/sidebar";
+import { createFileRoute, notFound, Outlet, useLocation } from "@tanstack/react-router";
 import { Category2, Cloud, FolderOpen, Profile2User } from "iconsax-reactjs";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar, type NavItemGroup } from "@/components/layout/app-sidebar";
@@ -15,9 +7,7 @@ import { queries } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authd/admin")({
   beforeLoad: async ({ context }) => {
-    const session = await context.queryClient.ensureQueryData(
-      queries.session.me
-    );
+    const session = await context.queryClient.ensureQueryData(queries.session.me);
 
     if (session.user.role !== "admin") {
       throw notFound();

@@ -25,8 +25,8 @@ const requestSubscription = (url: URL) =>
           new AwsSubscriptionConfirmationError({
             cause,
             reason: "request_failed",
-          })
-      )
+          }),
+      ),
     );
     if (response.status < 200 || response.status >= 300) {
       return yield* new AwsSubscriptionConfirmationError({
@@ -36,31 +36,24 @@ const requestSubscription = (url: URL) =>
     }
   }).pipe(
     Effect.provide(FetchHttpClient.layer),
-    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
   );
-const parseJson = (
-  value: string,
-  source: "ses_notification" | "sns_envelope"
-) =>
+const parseJson = (value: string, source: "ses_notification" | "sns_envelope") =>
   Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(value).pipe(
     Effect.mapError(
       (cause) =>
         new AwsWebhookPayloadError({
           cause,
           source,
-        })
-    )
+        }),
+    ),
   );
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
 
 const stringArray = (value: unknown) =>
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
 const recipientsFor = (payload: Record<string, unknown>) => {
   const bounce = asRecord(payload.bounce);
@@ -89,9 +82,7 @@ const recipientsFor = (payload: Record<string, unknown>) => {
   return stringArray(asRecord(payload.mail)?.destination);
 };
 
-const eventKind = (
-  notificationType: string
-): NormalizedDeliveryEvent["kind"] | undefined => {
+const eventKind = (notificationType: string): NormalizedDeliveryEvent["kind"] | undefined => {
   switch (notificationType.toLowerCase()) {
     case "send":
       return "accepted";
@@ -115,11 +106,9 @@ const eventKind = (
 };
 
 export const normalizeSesNotification = (
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): ProviderWebhookResult => {
-  const notificationType = String(
-    payload.eventType ?? payload.notificationType ?? ""
-  );
+  const notificationType = String(payload.eventType ?? payload.notificationType ?? "");
   const kind = eventKind(notificationType);
   const providerMessageId = asRecord(payload.mail)?.messageId;
 
@@ -128,8 +117,7 @@ export const normalizeSesNotification = (
   }
 
   const bounceType = asRecord(payload.bounce)?.bounceType;
-  const suppress =
-    kind === "complained" || (kind === "bounced" && bounceType === "Permanent");
+  const suppress = kind === "complained" || (kind === "bounced" && bounceType === "Permanent");
 
   return {
     events: [
@@ -154,8 +142,8 @@ const validateSnsMessage = (message: unknown) =>
           Effect.fail(
             new AwsWebhookPayloadError({
               source: "sns_envelope",
-            })
-          )
+            }),
+          ),
         );
         return;
       }
@@ -165,8 +153,8 @@ const validateSnsMessage = (message: unknown) =>
             Effect.fail(
               new AwsSnsValidationError({
                 cause: error,
-              })
-            )
+              }),
+            ),
           );
           return;
         }
@@ -177,8 +165,8 @@ const validateSnsMessage = (message: unknown) =>
             : Effect.fail(
                 new AwsWebhookPayloadError({
                   source: "sns_envelope",
-                })
-              )
+                }),
+              ),
         );
       });
     } catch (cause) {
@@ -186,8 +174,8 @@ const validateSnsMessage = (message: unknown) =>
         Effect.fail(
           new AwsSnsValidationError({
             cause,
-          })
-        )
+          }),
+        ),
       );
     }
   });
@@ -231,17 +219,12 @@ export const createAwsSesWebhooks = (mapWebhookError: AwsWebhookErrorMapper) =>
           return { type: "noop" } as const;
         }
 
-        if (
-          message.Type !== "Notification" ||
-          typeof message.Message !== "string"
-        ) {
+        if (message.Type !== "Notification" || typeof message.Message !== "string") {
           return { type: "noop" } as const;
         }
 
         const payload = yield* parseJson(message.Message, "ses_notification");
         const record = asRecord(payload);
-        return record
-          ? normalizeSesNotification(record)
-          : ({ type: "noop" } as const);
+        return record ? normalizeSesNotification(record) : ({ type: "noop" } as const);
       }).pipe(Effect.mapError(mapWebhookError)),
   }) satisfies EmailProviderWebhookAdapter;

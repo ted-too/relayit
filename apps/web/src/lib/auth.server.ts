@@ -21,25 +21,21 @@ const db = createPromiseDb({
   databaseUrl: env.DATABASE_URL,
   onPoolError: (error) =>
     runLog(
-      Effect.logWarning(
-        "Database connection dropped; pool will reconnect",
-        error
-      ).pipe(Effect.annotateLogs({ connection: "auth" }))
+      Effect.logWarning("Database connection dropped; pool will reconnect", error).pipe(
+        Effect.annotateLogs({ connection: "auth" }),
+      ),
     ),
 });
 const redis = makeRedisClient({
   onReconnect: (event) =>
     runLog(
-      Effect.logWarning(
-        "Redis connection lost; replaced client and retried",
-        event.cause
-      ).pipe(
+      Effect.logWarning("Redis connection lost; replaced client and retried", event.cause).pipe(
         Effect.annotateLogs({
           code: event.code,
           command: event.command,
           connection: "auth",
-        })
-      )
+        }),
+      ),
     ),
   url: env.REDIS_URL,
 });
@@ -86,10 +82,7 @@ export const auth = createAuth({
   plugins: {
     organization: {
       hooks: {
-        afterCreateOrganization: async ({
-          organization: org,
-          user: createdBy,
-        }) => {
+        afterCreateOrganization: async ({ organization: org, user: createdBy }) => {
           await db
             .update(organization)
             .set({ billingUserId: createdBy.id })
@@ -100,13 +93,11 @@ export const auth = createAuth({
               Effect.annotateLogs({ organizationId: org.id }),
               Effect.tapError((error) =>
                 Effect.logWarning("Sandbox Domain allocation skipped").pipe(
-                  Effect.annotateLogs(failureAnnotations(error))
-                )
+                  Effect.annotateLogs(failureAnnotations(error)),
+                ),
               ),
-              Effect.catchTag("SandboxAllocateError", () =>
-                Effect.succeed(null)
-              )
-            )
+              Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
+            ),
           );
         },
         beforeRemoveMember: async ({ member: removed, organization: org }) => {
@@ -122,8 +113,7 @@ export const auth = createAuth({
             },
           });
 
-          const billingUserId =
-            row?.billingUserId ?? row?.members[0]?.userId ?? null;
+          const billingUserId = row?.billingUserId ?? row?.members[0]?.userId ?? null;
 
           if (billingUserId === removed.userId) {
             throw new APIError("BAD_REQUEST", {
@@ -168,8 +158,7 @@ export const auth = createAuth({
         },
       });
 
-      const billingUserId =
-        org?.billingUserId ?? org?.members[0]?.userId ?? null;
+      const billingUserId = org?.billingUserId ?? org?.members[0]?.userId ?? null;
 
       if (billingUserId === userId) {
         throw new APIError("BAD_REQUEST", {
@@ -236,11 +225,11 @@ export const auth = createAuth({
             Effect.annotateLogs({ organizationId: org.id }),
             Effect.tapError((error) =>
               Effect.logWarning("Sandbox Domain allocation skipped").pipe(
-                Effect.annotateLogs(failureAnnotations(error))
-              )
+                Effect.annotateLogs(failureAnnotations(error)),
+              ),
             ),
-            Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null))
-          )
+            Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
+          ),
         );
       }
     }),

@@ -29,9 +29,7 @@ const SKIP_ANNOTATION_KEYS = new Set([
   "token",
 ]);
 
-const isAnnotationScalar = (
-  value: unknown
-): value is string | number | boolean =>
+const isAnnotationScalar = (value: unknown): value is string | number | boolean =>
   (typeof value === "string" && value.length > 0) ||
   typeof value === "number" ||
   typeof value === "boolean";
@@ -60,10 +58,7 @@ export const failureAnnotations = (error: unknown): Record<string, unknown> => {
     if (typeof value.code === "string" && value.code.length > 0) {
       if (annotations.code === undefined) {
         annotations.code = value.code;
-      } else if (
-        annotations.causeCode === undefined &&
-        value.code !== annotations.code
-      ) {
+      } else if (annotations.causeCode === undefined && value.code !== annotations.code) {
         annotations.causeCode = value.code;
       }
     }
@@ -103,23 +98,16 @@ export const failureAnnotations = (error: unknown): Record<string, unknown> => {
   return annotations;
 };
 
-export const logEffectFailure =
-  (message: string) => (cause: Cause.Cause<unknown>) => {
-    if (Cause.hasInterruptsOnly(cause)) {
-      return Effect.void;
-    }
+export const logEffectFailure = (message: string) => (cause: Cause.Cause<unknown>) => {
+  if (Cause.hasInterruptsOnly(cause)) {
+    return Effect.void;
+  }
 
-    const error = Cause.squash(cause);
-    const annotations = failureAnnotations(error);
-    const code =
-      typeof annotations.code === "string" ? annotations.code : undefined;
-    const expected =
-      !Cause.hasDies(cause) &&
-      code !== undefined &&
-      EXPECTED_CLIENT_CODES.has(code);
-    const log = expected
-      ? Effect.logDebug(message, cause)
-      : Effect.logError(message, cause);
+  const error = Cause.squash(cause);
+  const annotations = failureAnnotations(error);
+  const code = typeof annotations.code === "string" ? annotations.code : undefined;
+  const expected = !Cause.hasDies(cause) && code !== undefined && EXPECTED_CLIENT_CODES.has(code);
+  const log = expected ? Effect.logDebug(message, cause) : Effect.logError(message, cause);
 
-    return log.pipe(Effect.annotateLogs(annotations));
-  };
+  return log.pipe(Effect.annotateLogs(annotations));
+};

@@ -9,13 +9,13 @@ Relayit is source-available under the Business Source License 1.1. You can run i
 
 A self-hosted install has two Relayit services plus Postgres, Redis, and S3-compatible storage:
 
-| Service | Image | Role |
-| --- | --- | --- |
-| api | `ghcr.io/ted-too/relayit-api:<tag>` | Public API (`/health`, `POST /messages/email`, `/send/*`, provider webhooks) and the background job worker, in one process. |
-| web | `ghcr.io/ted-too/relayit-web:<tag>` | The dashboard and authentication. |
-| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file. |
-| postgres | `postgres:18-alpine` | Database. Postgres 18 or later. |
-| redis | `redis:7-alpine` | Cache, sessions, and job queues. Redis 7 or later. |
+| Service          | Image                                            | Role                                                                                                                        |
+| ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, provider webhooks) and the background job worker, in one process. |
+| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard and authentication.                                                                                           |
+| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                       |
+| postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                             |
+| redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                          |
 
 You also need an S3-compatible bucket (for example Cloudflare R2, AWS S3, or a Bunny Storage zone) for attachments and template artifacts.
 
@@ -74,36 +74,36 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 
 ### api (required)
 
-| Variable | Description |
-| --- | --- |
-| `DATABASE_URL` | Postgres connection string. |
-| `REDIS_URL` | Redis connection string. |
-| `API_URL` | Public URL of the API. |
-| `APP_URL` | Public URL of the dashboard. Used for trusted origins and cookies. |
-| `BETTER_AUTH_SECRETS` | Versioned secrets for auth and for sealing provider credentials and DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage. |
+| Variable                                                                            | Description                                                                                                                                               |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                                               |
+| `REDIS_URL`                                                                         | Redis connection string.                                                                                                                                  |
+| `API_URL`                                                                           | Public URL of the API.                                                                                                                                    |
+| `APP_URL`                                                                           | Public URL of the dashboard. Used for trusted origins and cookies.                                                                                        |
+| `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing provider credentials and DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                                             |
 
 Optional: `LOG_LEVEL`, and `WEB_CONCURRENCY` (on Linux, the number of HTTP child processes; the job worker stays on the primary process).
 
 ### web (required)
 
-| Variable | Description |
-| --- | --- |
-| `VITE_BASE_URL` | Public URL of the dashboard. Can be changed at deploy time without a rebuild. |
-| `DATABASE_URL` | Postgres connection string. |
-| `REDIS_URL` | Redis connection string. |
-| `BETTER_AUTH_SECRETS` | The same value as the api. |
-| `API_URL` | Public URL of the API. Used to set up Provider delivery webhooks. |
+| Variable              | Description                                                                   |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `VITE_BASE_URL`       | Public URL of the dashboard. Can be changed at deploy time without a rebuild. |
+| `DATABASE_URL`        | Postgres connection string.                                                   |
+| `REDIS_URL`           | Redis connection string.                                                      |
+| `BETTER_AUTH_SECRETS` | The same value as the api.                                                    |
+| `API_URL`             | Public URL of the API. Used to set up Provider delivery webhooks.             |
 
 Optional: `VITE_DEBUG`. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
 
 ## Image tags
 
-| Tag | Description |
-| --- | --- |
-| `alpha` | Always the newest alpha release. The Compose default. |
-| `1.0.0-alpha.N` | A specific alpha release. Pin this in production. |
-| `main` | Latest stable release (not used while Relayit ships alphas). |
+| Tag             | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| `alpha`         | Always the newest alpha release. The Compose default.        |
+| `1.0.0-alpha.N` | A specific alpha release. Pin this in production.            |
+| `main`          | Latest stable release (not used while Relayit ships alphas). |
 
 Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releases).
 

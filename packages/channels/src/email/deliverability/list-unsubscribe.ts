@@ -23,7 +23,7 @@ export const signListUnsubscribe = (input: {
         contactId: input.contactId,
         messageId: input.messageId,
         topicId: input.topicId,
-      })
+      }),
     )
     .digest("base64url");
 
@@ -125,14 +125,12 @@ export const mergeListUnsubscribeHeadersForSend = (input: {
   });
 
   return {
-    ...(existing ?? {}),
+    ...existing,
     ...buildListUnsubscribeHeaders({ httpsUrl }),
   };
 };
 
-export class ListUnsubscribeError extends Data.TaggedError(
-  "ListUnsubscribeError"
-)<{
+export class ListUnsubscribeError extends Data.TaggedError("ListUnsubscribeError")<{
   readonly cause?: unknown;
   readonly code: "bad_request" | "invalid_signature" | "not_found";
   readonly message: string;
@@ -176,8 +174,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (!organization) {
@@ -204,8 +202,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (contact?.appEnvironment?.organizationId !== organization.id) {
@@ -230,8 +228,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (!topic) {
@@ -258,8 +256,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (message?.appEnvironment?.organizationId !== organization.id) {
@@ -283,10 +281,7 @@ export const handleListUnsubscribeOneClick = (input: {
         topicId: topic.id,
       })
       .onConflictDoNothing({
-        target: [
-          contactTopicUnsubscribe.contactId,
-          contactTopicUnsubscribe.topicId,
-        ],
+        target: [contactTopicUnsubscribe.contactId, contactTopicUnsubscribe.topicId],
       })
       .pipe(
         Effect.mapError(
@@ -295,8 +290,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe write failed",
-            })
-        )
+            }),
+        ),
       );
 
     return {

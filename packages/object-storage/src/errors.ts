@@ -26,9 +26,7 @@ export class ObjectBodyEmpty extends Data.TaggedError("ObjectBodyEmpty")<{
   }
 }
 
-export class ObjectKeyParamsError extends Data.TaggedError(
-  "ObjectKeyParamsError"
-)<{
+export class ObjectKeyParamsError extends Data.TaggedError("ObjectKeyParamsError")<{
   readonly cause: unknown;
   readonly subBucket: string;
 }> {
@@ -37,9 +35,7 @@ export class ObjectKeyParamsError extends Data.TaggedError(
   }
 }
 
-export class ObjectSignedUrlExpiryError extends Data.TaggedError(
-  "ObjectSignedUrlExpiryError"
-)<{
+export class ObjectSignedUrlExpiryError extends Data.TaggedError("ObjectSignedUrlExpiryError")<{
   readonly expiresInSeconds: number;
   readonly maximumSeconds: number;
   readonly minimumSeconds: number;

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  getCurrentBetterAuthSecret,
-  parseBetterAuthSecrets,
-} from "./auth-secrets";
+import { getCurrentBetterAuthSecret, parseBetterAuthSecrets } from "./auth-secrets";
 
 describe("parseBetterAuthSecrets", () => {
   test("parses current and previous secrets", () => {
@@ -15,21 +12,19 @@ describe("parseBetterAuthSecrets", () => {
 
   test("rejects empty input", () => {
     expect(() => parseBetterAuthSecrets("")).toThrow(
-      "BETTER_AUTH_SECRETS must include at least one secret"
+      "BETTER_AUTH_SECRETS must include at least one secret",
     );
   });
 
   test("rejects malformed entries", () => {
     expect(() => parseBetterAuthSecrets("not-versioned")).toThrow(
-      'BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"'
+      'BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"',
     );
   });
 });
 
 describe("getCurrentBetterAuthSecret", () => {
   test("returns the first entry secret", () => {
-    expect(getCurrentBetterAuthSecret("2:new-secret,1:old-secret")).toBe(
-      "new-secret"
-    );
+    expect(getCurrentBetterAuthSecret("2:new-secret,1:old-secret")).toBe("new-secret");
   });
 });

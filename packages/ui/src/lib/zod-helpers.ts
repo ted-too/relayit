@@ -56,9 +56,7 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
 
     case "tuple": {
       const tupleDef = def as z4.$ZodTupleDef;
-      const tupleDefaults = tupleDef.items.map((item) =>
-        getDefaultFromZodType(item)
-      );
+      const tupleDefaults = tupleDef.items.map((item) => getDefaultFromZodType(item));
       return tupleDefaults as z4.infer<T>;
     }
 
@@ -179,9 +177,7 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
   }
 }
 
-export function generateDefaultFromSchema<T extends z4.$ZodObject>(
-  schema: T
-): z4.infer<T> {
+export function generateDefaultFromSchema<T extends z4.$ZodObject>(schema: T): z4.infer<T> {
   const defaultValues: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(schema._zod.def.shape)) {

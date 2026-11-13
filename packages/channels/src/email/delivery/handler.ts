@@ -1,17 +1,9 @@
 import { defineJobHandler } from "@repo/jobs";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
-import {
-  type Database,
-  type DatabaseExecutor,
-  DB,
-} from "@repo/persistence/db/effect";
+import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import { customDomain, emailDelivery } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
-import {
-  deliverySkipped,
-  messageFailed,
-  messageSent,
-} from "@repo/webhooks/events";
+import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
@@ -26,16 +18,10 @@ import { filterSuppressedContacts } from "../../messages/suppressions";
 import { makeProviderTypeId } from "../../provider-type";
 import { Usage, UsageLimitExceeded } from "../../usage";
 import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
-import type {
-  ProviderEmailAttachment,
-  ProviderEmailSender,
-} from "../provider-message";
+import type { ProviderEmailAttachment, ProviderEmailSender } from "../provider-message";
 import { EmailProviderRegistry } from "../provider-registry";
 import { loadEmailAttachmentsForSend } from "./attachments";
-import {
-  EmailDeliveryPersistenceError,
-  EmailDeliveryProviderError,
-} from "./errors";
+import { EmailDeliveryPersistenceError, EmailDeliveryProviderError } from "./errors";
 import {
   listFailoverProviderIdentities,
   providerKindFor,
@@ -61,7 +47,7 @@ interface SendableDelivery {
 const updateDelivery = (
   db: DatabaseExecutor,
   deliveryId: string,
-  values: Partial<typeof emailDelivery.$inferInsert>
+  values: Partial<typeof emailDelivery.$inferInsert>,
 ) =>
   db
     .update(emailDelivery)
@@ -74,8 +60,8 @@ const updateDelivery = (
             cause,
             deliveryId,
             operation: "update_status",
-          })
-      )
+          }),
+      ),
     );
 
 const markSent = (
@@ -87,7 +73,7 @@ const markSent = (
     readonly organizationId: string;
     readonly providerId: string;
     readonly providerMessageId: string;
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const usage = yield* Usage;
@@ -119,10 +105,10 @@ const markSent = (
                 deliveryId: input.deliveryId,
                 message: "Failed to emit message.sent",
                 stage: "webhooks",
-              })
-          )
+              }),
+          ),
         );
-      })
+      }),
     );
   });
 
@@ -135,7 +121,7 @@ const trySendWithIdentity = (
     readonly delivery: SendableDelivery;
     readonly sender: ProviderEmailSender;
     readonly to: readonly string[];
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const usage = yield* Usage;
@@ -145,10 +131,9 @@ const trySendWithIdentity = (
       .pipe(
         Effect.as(null as UsageLimitExceeded | null),
         Effect.catchIf(
-          (error): error is UsageLimitExceeded =>
-            error instanceof UsageLimitExceeded,
-          (error) => Effect.succeed(error)
-        )
+          (error): error is UsageLimitExceeded => error instanceof UsageLimitExceeded,
+          (error) => Effect.succeed(error),
+        ),
       );
     if (remeterError) {
       return {
@@ -169,10 +154,7 @@ const trySendWithIdentity = (
       const vault = yield* ProviderCredentialsVault;
       const registry = yield* EmailProviderRegistry;
       const factory = yield* registry.get(
-        makeProviderTypeId(
-          identity.provider.vendorId,
-          identity.provider.productId
-        )
+        makeProviderTypeId(identity.provider.vendorId, identity.provider.productId),
       );
       const credentials = yield* vault.open(identity.provider.credentials);
       const adapter = yield* factory.create({
@@ -180,8 +162,7 @@ const trySendWithIdentity = (
         providerId: identity.provider.id,
       });
       return yield* adapter.send({
-        attachments:
-          input.attachments.length > 0 ? [...input.attachments] : undefined,
+        attachments: input.attachments.length > 0 ? [...input.attachments] : undefined,
         bcc: input.bcc.length > 0 ? [...input.bcc] : null,
         cc: input.cc.length > 0 ? [...input.cc] : null,
         from: input.delivery.from,
@@ -200,18 +181,15 @@ const trySendWithIdentity = (
         Effect.succeed({
           cause,
           ok: false as const,
-        })
-      )
+        }),
+      ),
     );
 
     if (!sendError.ok) {
       // Project-level vendor pause (SES tenant): not a Provider fault, so the
       // circuit stays closed for other Projects and failover must not bypass it.
       const cause = sendError.cause;
-      if (
-        cause._tag === "ProviderRejected" &&
-        cause.reason === "project_sending_paused"
-      ) {
+      if (cause._tag === "ProviderRejected" && cause.reason === "project_sending_paused") {
         return {
           error: new EmailDeliveryProviderError({
             cause,
@@ -248,9 +226,7 @@ const trySendWithIdentity = (
     };
   });
 
-export const makeEmailDeliverHandler = (
-  listUnsubscribe: EmailDeliverHandlerOptions
-) =>
+export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOptions) =>
   defineJobHandler({
     contract: emailDeliverJob,
     handle: (payload) =>
@@ -276,8 +252,8 @@ export const makeEmailDeliverHandler = (
                   cause,
                   deliveryId: payload.deliveryId,
                   operation: "load_delivery",
-                })
-            )
+                }),
+            ),
           );
 
         if (!loaded?.message) {
@@ -322,8 +298,8 @@ export const makeEmailDeliverHandler = (
                   cause,
                   deliveryId: loaded.id,
                   operation: "load_delivery",
-                })
-            )
+                }),
+            ),
           );
         if (!appEnvironment) {
           return yield* new MessageDeliveryTerminalError({
@@ -348,8 +324,8 @@ export const makeEmailDeliverHandler = (
                 deliveryId: loaded.id,
                 message: "Suppression lookup failed",
                 stage: "suppressions",
-              })
-          )
+              }),
+          ),
         );
         const cc = yield* filterSuppressedContacts(db, {
           ...suppressionInput,
@@ -362,8 +338,8 @@ export const makeEmailDeliverHandler = (
                 deliveryId: loaded.id,
                 message: "Suppression lookup failed",
                 stage: "suppressions",
-              })
-          )
+              }),
+          ),
         );
         const bcc = yield* filterSuppressedContacts(db, {
           ...suppressionInput,
@@ -376,15 +352,11 @@ export const makeEmailDeliverHandler = (
                 deliveryId: loaded.id,
                 message: "Suppression lookup failed",
                 stage: "suppressions",
-              })
-          )
+              }),
+          ),
         );
 
-        if (
-          to.kept.length === 0 &&
-          cc.kept.length === 0 &&
-          bcc.kept.length === 0
-        ) {
+        if (to.kept.length === 0 && cc.kept.length === 0 && bcc.kept.length === 0) {
           yield* db.transaction((tx) =>
             Effect.gen(function* () {
               yield* updateDelivery(tx, loaded.id, {
@@ -415,10 +387,10 @@ export const makeEmailDeliverHandler = (
                       deliveryId: loaded.id,
                       message: "Failed to emit delivery.skipped",
                       stage: "webhooks",
-                    })
-                )
+                    }),
+                ),
               );
-            })
+            }),
           );
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
@@ -427,8 +399,7 @@ export const makeEmailDeliverHandler = (
           });
         }
 
-        const identityFqdn =
-          loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
+        const identityFqdn = loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
         if (!identityFqdn) {
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
@@ -445,7 +416,7 @@ export const makeEmailDeliverHandler = (
                 kind: "sandbox-domain",
                 sandboxDomainId: loaded.sandboxDomainId as string,
               },
-          loaded.id
+          loaded.id,
         );
         if (identities.length === 0) {
           return yield* new MessageDeliveryTerminalError({
@@ -487,8 +458,8 @@ export const makeEmailDeliverHandler = (
                     cause,
                     deliveryId: loaded.id,
                     operation: "load_delivery",
-                  })
-              )
+                  }),
+              ),
             );
           orgSlug = organization?.slug ?? null;
 
@@ -499,8 +470,7 @@ export const makeEmailDeliverHandler = (
                 columns: { id: true },
                 where: {
                   email: normalizeContactEmail(recipientEmail),
-                  organizationAppEnvironmentId:
-                    message.organizationAppEnvironmentId,
+                  organizationAppEnvironmentId: message.organizationAppEnvironmentId,
                 },
               })
               .pipe(
@@ -510,8 +480,8 @@ export const makeEmailDeliverHandler = (
                       cause,
                       deliveryId: loaded.id,
                       operation: "load_delivery",
-                    })
-                )
+                    }),
+                ),
               );
             contactId = contactRow?.id ?? null;
           }
@@ -564,8 +534,8 @@ export const makeEmailDeliverHandler = (
                             cause,
                             deliveryId: loaded.id,
                             operation: "update_status",
-                          })
-                      )
+                          }),
+                      ),
                     );
                 }
                 yield* updateDelivery(tx, loaded.id, {
@@ -592,10 +562,10 @@ export const makeEmailDeliverHandler = (
                         deliveryId: loaded.id,
                         message: "Failed to emit message.failed",
                         stage: "webhooks",
-                      })
-                  )
+                      }),
+                  ),
                 );
-              })
+              }),
             );
             return yield* new MessageDeliveryTerminalError({
               cause: error,
@@ -681,10 +651,10 @@ export const makeEmailDeliverHandler = (
                     deliveryId: loaded.id,
                     message: "Failed to emit message.failed",
                     stage: "webhooks",
-                  })
-              )
+                  }),
+              ),
             );
-          })
+          }),
         );
 
         return yield* new MessageDeliveryRetryableError({
@@ -709,7 +679,7 @@ export const makeEmailDeliverHandler = (
                 stage: "runtime",
               });
           }
-        })
+        }),
       ),
     classifyFailure: (failure) => {
       switch (failure._tag) {

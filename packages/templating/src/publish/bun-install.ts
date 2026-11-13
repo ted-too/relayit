@@ -24,10 +24,7 @@ export const runBunInstall = (input: {
         stderr: "pipe",
         stdout: "pipe",
       });
-      const [exitCode, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stderr).text(),
-      ]);
+      const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
       return { ok: exitCode === 0, stderr: stderr.trim() };
     } catch (error) {
       return {
@@ -44,7 +41,7 @@ export const runBunInstall = (input: {
               args: input.args.join(" "),
               operation: input.operation,
               stderr: result.stderr,
-            })
-          )
-    )
+            }),
+          ),
+    ),
   );

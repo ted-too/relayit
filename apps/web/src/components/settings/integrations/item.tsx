@@ -1,17 +1,7 @@
-import {
-  RiDeleteBin6Line,
-  RiEditLine,
-  RiMoreFill,
-  RiStarLine,
-} from "@remixicon/react";
+import { RiDeleteBin6Line, RiEditLine, RiMoreFill, RiStarLine } from "@remixicon/react";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@repo/ui/components/ui/coss/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@repo/ui/components/ui/coss/menu";
 import {
   Item,
   ItemActions,
@@ -33,42 +23,33 @@ import { queries } from "@/lib/queries";
 import { PROVIDER_ICONS } from "./icons";
 import { UpsertProvider } from "./upsert";
 
-export function ProviderItem({
-  provider,
-}: {
-  provider: PlatformProviderListItem;
-}) {
+export function ProviderItem({ provider }: { provider: PlatformProviderListItem }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const productKey =
-    `${provider.vendorId}.${provider.productId}` as keyof typeof PROVIDER_ICONS;
+  const productKey = `${provider.vendorId}.${provider.productId}` as keyof typeof PROVIDER_ICONS;
   const Icon = PROVIDER_ICONS[productKey];
 
-  const { mutate: deleteProvider, isPending: isDeletingProvider } = useMutation(
-    {
-      mutationFn: async () =>
-        await deletePlatformProviderFn({
-          data: { providerId: provider.id },
-        }),
-      onSuccess: (_, __, ___, { client }) => {
-        client.setQueryData(
-          queries.admin.listProviders.queryKey,
-          (old: PlatformProviderListItem[] | undefined) =>
-            (old ?? []).filter(
-              (existingProvider) => existingProvider.id !== provider.id
-            )
-        );
-        client.invalidateQueries({
-          queryKey: queries.admin.listProviders.queryKey,
-        });
-      },
-      onError: (error: Error) => {
-        toast.error("Failed to delete provider", {
-          description: error.message,
-        });
-      },
-    }
-  );
+  const { mutate: deleteProvider, isPending: isDeletingProvider } = useMutation({
+    mutationFn: async () =>
+      await deletePlatformProviderFn({
+        data: { providerId: provider.id },
+      }),
+    onSuccess: (_, __, ___, { client }) => {
+      client.setQueryData(
+        queries.admin.listProviders.queryKey,
+        (old: PlatformProviderListItem[] | undefined) =>
+          (old ?? []).filter((existingProvider) => existingProvider.id !== provider.id),
+      );
+      client.invalidateQueries({
+        queryKey: queries.admin.listProviders.queryKey,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to delete provider", {
+        description: error.message,
+      });
+    },
+  });
 
   const { mutate: setDefault, isPending: isSettingDefault } = useMutation({
     mutationFn: async () =>
@@ -91,9 +72,7 @@ export function ProviderItem({
       className="rounded-none border-t-0 border-r-0 border-l-0 bg-background px-4 py-3 last:border-b-0"
       variant="outline"
     >
-      <div className="mr-2 flex size-8 items-center justify-center">
-        {Icon ? <Icon /> : null}
-      </div>
+      <div className="mr-2 flex size-8 items-center justify-center">{Icon ? <Icon /> : null}</div>
       <ItemContent>
         <ItemTitle className="font-medium text-sm">
           {provider.name ?? "<no name>"}
@@ -119,10 +98,7 @@ export function ProviderItem({
               <RiEditLine /> Edit Provider
             </MenuItem>
             {!provider.isDefault && (
-              <MenuItem
-                disabled={isSettingDefault}
-                onClick={() => setDefault()}
-              >
+              <MenuItem disabled={isSettingDefault} onClick={() => setDefault()}>
                 <RiStarLine /> Set as default
               </MenuItem>
             )}
@@ -135,19 +111,13 @@ export function ProviderItem({
             </MenuItem>
           </MenuPopup>
         </Menu>
-        <UpsertProvider
-          initialData={provider}
-          open={editOpen}
-          setOpen={setEditOpen}
-        />
+        <UpsertProvider initialData={provider} open={editOpen} setOpen={setEditOpen} />
         <ConfirmAction
           execute={() => deleteProvider()}
           isLoading={isDeletingProvider}
           open={deleteOpen}
           setOpen={setDeleteOpen}
-          verificationText={
-            provider.name && provider.name !== "" ? provider.name : productKey
-          }
+          verificationText={provider.name && provider.name !== "" ? provider.name : productKey}
         />
       </ItemActions>
     </Item>

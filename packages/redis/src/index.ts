@@ -5,19 +5,11 @@ export {
   type RedisCommandClient,
   type RedisReconnectEvent,
 } from "./client";
-export {
-  makeSchemaJsonCodec,
-  type RedisCodec,
-  RedisCodecError,
-} from "./codec";
+export { makeSchemaJsonCodec, type RedisCodec, RedisCodecError } from "./codec";
 export {
   RedisCommandError,
   type RedisError,
   type RedisLayerConfig,
   RedisResponseError,
 } from "./connection";
-export {
-  makeRedisLive,
-  Redis,
-  type RedisService,
-} from "./redis";
+export { makeRedisLive, Redis, type RedisService } from "./redis";

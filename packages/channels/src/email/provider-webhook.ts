@@ -24,6 +24,6 @@ export type ProviderWebhookResult =
 
 export interface EmailProviderWebhookAdapter {
   readonly handle: (
-    input: ProviderWebhookInput
+    input: ProviderWebhookInput,
   ) => Effect.Effect<ProviderWebhookResult, ProviderWebhookError>;
 }

@@ -10,7 +10,7 @@ const legacyAttachmentSchema = t.Union([
       contentType: t.Optional(t.String()),
       filename: t.String({ minLength: 1 }),
     },
-    { additionalProperties: false, title: "Base64 attachment" }
+    { additionalProperties: false, title: "Base64 attachment" },
   ),
   t.Object(
     {
@@ -19,7 +19,7 @@ const legacyAttachmentSchema = t.Union([
       filename: t.String({ minLength: 1 }),
       path: t.String({ format: "uri" }),
     },
-    { additionalProperties: false, title: "Hosted attachment" }
+    { additionalProperties: false, title: "Hosted attachment" },
   ),
 ]);
 
@@ -28,7 +28,7 @@ const legacyContactSchema = t.Object(
     externalIdentifiers: t.Optional(stringMap),
     name: t.Optional(t.String()),
   },
-  { additionalProperties: false }
+  { additionalProperties: false },
 );
 
 const legacyBase = {
@@ -47,7 +47,7 @@ const legacyInlinePayloadSchema = t.Union([
       subject: t.String({ minLength: 1 }),
       text: t.Optional(t.String()),
     },
-    { additionalProperties: false }
+    { additionalProperties: false },
   ),
   t.Object(
     {
@@ -55,7 +55,7 @@ const legacyInlinePayloadSchema = t.Union([
       subject: t.String({ minLength: 1 }),
       text: t.String(),
     },
-    { additionalProperties: false }
+    { additionalProperties: false },
   ),
 ]);
 
@@ -64,7 +64,7 @@ export const legacySendRawBodySchema = t.Object(
     ...legacyBase,
     payload: legacyInlinePayloadSchema,
   },
-  { additionalProperties: false }
+  { additionalProperties: false },
 );
 
 export const legacySendTemplateBodySchema = t.Object(
@@ -75,10 +75,10 @@ export const legacySendTemplateBodySchema = t.Object(
         props: t.Optional(t.Object({}, { additionalProperties: t.Any() })),
         slug: t.String({ minLength: 1 }),
       },
-      { additionalProperties: false }
+      { additionalProperties: false },
     ),
   },
-  { additionalProperties: false }
+  { additionalProperties: false },
 );
 
 export const legacySendProjectParamsSchema = t.Object({
@@ -91,6 +91,4 @@ export const legacyApiKeyHeadersSchema = t.Object({
 });
 
 export type LegacySendRawBody = Static<typeof legacySendRawBodySchema>;
-export type LegacySendTemplateBody = Static<
-  typeof legacySendTemplateBodySchema
->;
+export type LegacySendTemplateBody = Static<typeof legacySendTemplateBodySchema>;

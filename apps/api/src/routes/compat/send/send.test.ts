@@ -50,13 +50,10 @@ const makeTestLayer = () => {
     Layer.succeed(Usage, usage),
     Layer.succeed(Jobs, jobs),
     Layer.succeed(ObjectStorage, storage),
-    Layer.succeed(
-      HttpClient.HttpClient,
-      {} as Effect.Success<typeof HttpClient.HttpClient>
-    ),
+    Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),
     Layer.succeed(EmailProviderRegistry, {
       get: () => Effect.die("unused"),
-    })
+    }),
   );
 };
 
@@ -75,7 +72,7 @@ const makeTestAuth = (input?: {
                 error: null,
                 key: { id: "key_test", referenceId: "org_test" },
                 valid: true,
-              }
+              },
         ),
     },
   } as ApiAuth["auth"],
@@ -85,9 +82,7 @@ const makeTestAuth = (input?: {
       organization: {
         findFirst: () =>
           Promise.resolve(
-            input?.valid === false
-              ? null
-              : { id: "org_test", slug: input?.slug ?? "acme" }
+            input?.valid === false ? null : { id: "org_test", slug: input?.slug ?? "acme" },
           ),
       },
       organizationDomain: {
@@ -98,17 +93,14 @@ const makeTestAuth = (input?: {
                   customDomain: { fqdn: input.customDomainFqdn },
                   customDomainId: "domn_test",
                 }
-              : undefined
+              : undefined,
           ),
       },
     },
   } as ApiAuth["db"],
 });
 
-const makeApp = (
-  accept: typeof acceptTransactionalEmail,
-  auth: ApiAuth = makeTestAuth()
-) => {
+const makeApp = (accept: typeof acceptTransactionalEmail, auth: ApiAuth = makeTestAuth()) => {
   const runtime = ManagedRuntime.make(makeTestLayer());
   const runEffect: RunApiEffect = runtime.runPromise;
   const app = new Elysia().use(createLegacySendRoutes(auth, runEffect, accept));
@@ -118,7 +110,7 @@ const makeApp = (
 const postLegacy = async (
   app: { handle: (request: Request) => Response | Promise<Response> },
   path: string,
-  body: unknown
+  body: unknown,
 ): Promise<Response> =>
   await app.handle(
     new Request(`http://localhost${path}`, {
@@ -128,7 +120,7 @@ const postLegacy = async (
         "x-api-key": "test-key",
       },
       method: "POST",
-    })
+    }),
   );
 
 describe("POST /send/:project/raw/email", () => {
@@ -151,7 +143,7 @@ describe("POST /send/:project/raw/email", () => {
             from: "sender@acme.test",
             payload: { html: "<p>Hello</p>", subject: "Hello" },
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -161,7 +153,7 @@ describe("POST /send/:project/raw/email", () => {
           attribution: { kind: "project" },
           organizationId: "org_test",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -174,7 +166,7 @@ describe("POST /send/:project/raw/email", () => {
           replayed: false,
           stripped: [],
         }),
-      makeTestAuth({ slug: "other" })
+      makeTestAuth({ slug: "other" }),
     );
 
     return Effect.runPromise(
@@ -184,7 +176,7 @@ describe("POST /send/:project/raw/email", () => {
             from: "sender@acme.test",
             payload: { html: "<p>Hello</p>", subject: "Hello" },
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -193,7 +185,7 @@ describe("POST /send/:project/raw/email", () => {
           details: [],
           message: "Project not found",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -206,7 +198,7 @@ describe("POST /send/:project/raw/email", () => {
           replayed: false,
           stripped: [],
         }),
-      makeTestAuth({ valid: false })
+      makeTestAuth({ valid: false }),
     );
 
     return Effect.runPromise(
@@ -216,13 +208,13 @@ describe("POST /send/:project/raw/email", () => {
             from: "sender@acme.test",
             payload: { html: "<p>Hello</p>", subject: "Hello" },
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
         expect(response.status).toBe(401);
         expect(body).toMatchObject({ message: "Unauthorized" });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -238,7 +230,7 @@ describe("POST /send/:project/raw/email", () => {
           stripped: [],
         });
       },
-      makeTestAuth({ customDomainFqdn: "acme.test" })
+      makeTestAuth({ customDomainFqdn: "acme.test" }),
     );
 
     return Effect.runPromise(
@@ -247,7 +239,7 @@ describe("POST /send/:project/raw/email", () => {
           postLegacy(app, "/send/acme/raw/email", {
             payload: { html: "<p>Hello</p>", subject: "Hello" },
             to: "recipient@example.com",
-          })
+          }),
         );
 
         expect(response.status).toBe(201);
@@ -255,7 +247,7 @@ describe("POST /send/:project/raw/email", () => {
           address: "noreply@acme.test",
           normalized: "noreply@acme.test",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -266,7 +258,7 @@ describe("POST /send/:project/raw/email", () => {
         messageId: "msg_test",
         replayed: false,
         stripped: [],
-      })
+      }),
     );
 
     return Effect.runPromise(
@@ -275,16 +267,15 @@ describe("POST /send/:project/raw/email", () => {
           postLegacy(app, "/send/acme/raw/email", {
             payload: { html: "<p>Hello</p>", subject: "Hello" },
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
         expect(response.status).toBe(400);
         expect(body).toMatchObject({
-          message:
-            "No sender identity available; pass from or provision Sandbox Domain",
+          message: "No sender identity available; pass from or provision Sandbox Domain",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 });
@@ -309,7 +300,7 @@ describe("POST /send/:project/template/email", () => {
             from: "sender@acme.test",
             template: { props: { name: "Ada" }, slug: "welcome" },
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -320,7 +311,7 @@ describe("POST /send/:project/template/email", () => {
           kind: "template",
           values: { name: "Ada" },
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 });

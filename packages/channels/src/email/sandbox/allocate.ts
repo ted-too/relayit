@@ -8,9 +8,7 @@ import {
 import { and, count, eq, isNull } from "drizzle-orm";
 import { Data, Effect } from "effect";
 
-export class SandboxAllocateError extends Data.TaggedError(
-  "SandboxAllocateError"
-)<{
+export class SandboxAllocateError extends Data.TaggedError("SandboxAllocateError")<{
   readonly cause?: unknown;
   /** Static human-readable summary — do not interpolate identifiers into this. */
   readonly message: string;
@@ -35,26 +33,23 @@ export const allocateSandboxDomain = (organizationId: string) =>
         emailDomainProviderIdentity,
         and(
           eq(emailDomainProviderIdentity.sandboxDomainId, sandboxDomain.id),
-          eq(emailDomainProviderIdentity.verificationStatus, "verified")
-        )
+          eq(emailDomainProviderIdentity.verificationStatus, "verified"),
+        ),
       )
       .innerJoin(
         provider,
         and(
           eq(emailDomainProviderIdentity.providerId, provider.id),
-          eq(provider.scope, "platform")
-        )
+          eq(provider.scope, "platform"),
+        ),
       )
-      .leftJoin(
-        organization,
-        eq(organization.sandboxDomainId, sandboxDomain.id)
-      )
+      .leftJoin(organization, eq(organization.sandboxDomainId, sandboxDomain.id))
       .where(
         and(
           eq(sandboxDomain.isActive, true),
           eq(sandboxDomain.isPaused, false),
-          eq(sandboxDomain.verificationStatus, "verified")
-        )
+          eq(sandboxDomain.verificationStatus, "verified"),
+        ),
       )
       .groupBy(sandboxDomain.id)
       .orderBy(count(organization.id))
@@ -67,8 +62,8 @@ export const allocateSandboxDomain = (organizationId: string) =>
               message: "Failed to pick an allocatable sandbox domain.",
               operation: "allocate",
               organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!picked) {
@@ -88,8 +83,8 @@ export const allocateSandboxDomain = (organizationId: string) =>
               operation: "allocate",
               organizationId,
               sandboxDomainId: picked.id,
-            })
-        )
+            }),
+        ),
       );
 
     return picked.id;
@@ -118,13 +113,11 @@ export const sweepIfSandboxAllocatable = (sandboxDomainId: string) =>
               message: "Failed to load sandbox domain for allocation sweep.",
               operation: "sweep",
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
-    if (
-      !(row?.isActive && !row.isPaused && row.verificationStatus === "verified")
-    ) {
+    if (!(row?.isActive && !row.isPaused && row.verificationStatus === "verified")) {
       return 0;
     }
 
@@ -140,14 +133,14 @@ export const sweepIfSandboxAllocatable = (sandboxDomainId: string) =>
               message: "Failed to list organizations without a sandbox.",
               operation: "sweep",
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     let assigned = 0;
     for (const org of unassigned) {
       const picked = yield* allocateSandboxDomain(org.id).pipe(
-        Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null))
+        Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
       );
       if (!picked) {
         break;

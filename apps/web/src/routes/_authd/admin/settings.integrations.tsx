@@ -25,9 +25,7 @@ const SORT_OPTIONS = [
 
 function RouteComponent() {
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0] ?? null
-  );
+  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(SORT_OPTIONS[0] ?? null);
   const { data: providers } = useSuspenseQuery(queries.admin.listProviders);
 
   return (

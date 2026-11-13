@@ -10,19 +10,11 @@ export interface ResolveAppEnvironmentInput {
   readonly organizationId: string;
 }
 
-export const resolveAppEnvironment = (
-  db: DatabaseExecutor,
-  input: ResolveAppEnvironmentInput
-) =>
+export const resolveAppEnvironment = (db: DatabaseExecutor, input: ResolveAppEnvironmentInput) =>
   Effect.gen(function* () {
-    const app =
-      input.attribution.kind === "appEnvironment"
-        ? input.attribution.app
-        : null;
+    const app = input.attribution.kind === "appEnvironment" ? input.attribution.app : null;
     const environment =
-      input.attribution.kind === "appEnvironment"
-        ? input.attribution.environment
-        : null;
+      input.attribution.kind === "appEnvironment" ? input.attribution.environment : null;
     const find = () =>
       db
         .select()
@@ -35,8 +27,8 @@ export const resolveAppEnvironment = (
               : eq(organizationAppEnvironment.app, app),
             environment === null
               ? isNull(organizationAppEnvironment.environment)
-              : eq(organizationAppEnvironment.environment, environment)
-          )
+              : eq(organizationAppEnvironment.environment, environment),
+          ),
         )
         .limit(1)
         .pipe(
@@ -47,8 +39,8 @@ export const resolveAppEnvironment = (
                 cause,
                 operation: "find_app_environment",
                 organizationId: input.organizationId,
-              })
-          )
+              }),
+          ),
         );
     const existing = yield* find();
     if (existing) {
@@ -71,8 +63,8 @@ export const resolveAppEnvironment = (
               cause,
               operation: "create_app_environment",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
     if (created) {
       return created;
@@ -85,7 +77,7 @@ export const resolveAppEnvironment = (
 
     return yield* Effect.die(
       new Error(
-        `App Environment insert returned no record for Organization ${input.organizationId}`
-      )
+        `App Environment insert returned no record for Organization ${input.organizationId}`,
+      ),
     );
   });

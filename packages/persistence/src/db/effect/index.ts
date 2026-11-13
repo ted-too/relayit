@@ -4,27 +4,19 @@ import { Context, Effect, Layer, Redacted } from "effect";
 import { types } from "pg";
 import { relations } from "../relations";
 
-const DATE_TIME_TYPE_OIDS = [
-  1184, 1114, 1082, 1186, 1231, 1115, 1185, 1187, 1182,
-] as const;
+const DATE_TIME_TYPE_OIDS = [1184, 1114, 1082, 1186, 1231, 1115, 1185, 1187, 1182] as const;
 
 export interface DatabaseConfig {
   databaseUrl: string;
 }
 
-const dbEffect = PgDrizzle.make({ relations }).pipe(
-  Effect.provide(PgDrizzle.DefaultServices)
-);
+const dbEffect = PgDrizzle.make({ relations }).pipe(Effect.provide(PgDrizzle.DefaultServices));
 
 export type Database = Effect.Success<typeof dbEffect>;
-export type DatabaseTransaction = Parameters<
-  Parameters<Database["transaction"]>[0]
->[0];
+export type DatabaseTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type DatabaseExecutor = Database | DatabaseTransaction;
 
-export class DB extends Context.Service<DB, Effect.Success<typeof dbEffect>>()(
-  "PersistenceDB"
-) {}
+export class DB extends Context.Service<DB, Effect.Success<typeof dbEffect>>()("PersistenceDB") {}
 
 const makePgClientLive = ({ databaseUrl }: DatabaseConfig) =>
   PgClient.layer({

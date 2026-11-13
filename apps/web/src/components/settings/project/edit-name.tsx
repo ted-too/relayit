@@ -11,10 +11,7 @@ import {
   SettingsCardTitle,
 } from "@/components/settings/card";
 import { authClient } from "@/lib/auth-client";
-import {
-  type CreateProjectBody,
-  createProjectBodySchema,
-} from "@/lib/projects/schemas";
+import { type CreateProjectBody, createProjectBodySchema } from "@/lib/projects/schemas";
 import { queries } from "@/lib/queries";
 
 export function ProjectEditName() {
@@ -22,9 +19,7 @@ export function ProjectEditName() {
   const [{ data: me }, { data: organization }] = useSuspenseQueries({
     queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
   });
-  const member = organization?.members.find(
-    (member) => member.userId === me.user.id
-  );
+  const member = organization?.members.find((member) => member.userId === me.user.id);
   const { mutateAsync } = useMutation({
     mutationFn: async (body: CreateProjectBody) => {
       const { data, error } = await authClient.organization.update({

@@ -2,18 +2,12 @@ import { dkimRecordName, formatDkimTxtRecord } from "../dkim";
 import { formatTxtRecordContent, type ManagedDnsRecord } from "../managed-dns";
 import type { MailFromDnsRecord } from "../provider-adapter";
 
-export {
-  createDomainKeyMaterial,
-  type DomainKeyMaterial,
-} from "../dkim";
+export { createDomainKeyMaterial, type DomainKeyMaterial } from "../dkim";
 
-export const sandboxRootDnsOwner = (sandboxDomainId: string) =>
-  `sandbox:${sandboxDomainId}:root`;
+export const sandboxRootDnsOwner = (sandboxDomainId: string) => `sandbox:${sandboxDomainId}:root`;
 
-export const sandboxIdentityDnsOwner = (
-  sandboxDomainId: string,
-  providerId: string
-) => `sandbox:${sandboxDomainId}:identity:${providerId}`;
+export const sandboxIdentityDnsOwner = (sandboxDomainId: string, providerId: string) =>
+  `sandbox:${sandboxDomainId}:identity:${providerId}`;
 
 export const buildSandboxRootDnsRecords = (input: {
   readonly dkimPublicKey: string;

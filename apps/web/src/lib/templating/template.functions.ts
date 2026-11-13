@@ -76,7 +76,7 @@ export const getTemplateFn = createServerFn({ method: "GET" })
       getTemplateForProject({
         organizationId: org.id,
         templateId: data.templateId,
-      })
+      }),
     );
   });
 
@@ -93,7 +93,7 @@ export const createTemplateFn = createServerFn({ method: "POST" })
       createTemplateForProject({
         name: data.name,
         organizationId: org.id,
-      })
+      }),
     );
   });
 
@@ -110,7 +110,7 @@ export const archiveTemplateFn = createServerFn({ method: "POST" })
       archiveTemplateForProject({
         organizationId: org.id,
         templateId: data.templateId,
-      })
+      }),
     );
   });
 
@@ -128,7 +128,7 @@ export const updateTemplateSlugFn = createServerFn({ method: "POST" })
         organizationId: org.id,
         slug: data.slug,
         templateId: data.templateId,
-      })
+      }),
     );
   });
 
@@ -147,7 +147,7 @@ export const putReactEmailChannelFn = createServerFn({ method: "POST" })
         subject: data.subject,
         templateId: data.templateId,
         workspaceEntryId: data.workspaceEntryId,
-      })
+      }),
     );
   });
 
@@ -164,13 +164,11 @@ export const getWorkspaceFn = createServerFn({ method: "GET" })
       getOrCreateHostedWorkspaceMeta({
         kind: data.kind,
         organizationId: org.id,
-      })
+      }),
     );
     // Old API GET scaffolded Git here. Catalog meta is Postgres-only; seed `dev`
     // through the builder so create-new never commits onto an empty tree.
-    await runTemplatingBuilder((client) =>
-      client.listFiles({ workspaceId: workspace.id })
-    );
+    await runTemplatingBuilder((client) => client.listFiles({ workspaceId: workspace.id }));
     return {
       createdAt: workspace.createdAt,
       id: workspace.id,
@@ -195,7 +193,7 @@ export const listWorkspaceEntriesFn = createServerFn({ method: "GET" })
       listWorkspaceEntriesForProject({
         kind: data.kind,
         organizationId: org.id,
-      })
+      }),
     );
   });
 
@@ -213,7 +211,7 @@ const requireWorkspaceForOrg = async (input: {
     getOrCreateHostedWorkspaceMeta({
       kind: input.kind,
       organizationId: org.id,
-    })
+    }),
   );
   return { org, workspace };
 };
@@ -227,9 +225,7 @@ export const listWorkspaceFilesFn = createServerFn({ method: "GET" })
       orgSlug: data.orgSlug,
       permission: "read",
     });
-    return runTemplatingBuilder((client) =>
-      client.listFiles({ workspaceId: workspace.id })
-    );
+    return runTemplatingBuilder((client) => client.listFiles({ workspaceId: workspace.id }));
   });
 
 export const readWorkspaceFileFn = createServerFn({ method: "GET" })
@@ -245,7 +241,7 @@ export const readWorkspaceFileFn = createServerFn({ method: "GET" })
       client.readFile({
         path: data.path,
         workspaceId: workspace.id,
-      })
+      }),
     );
   });
 
@@ -263,7 +259,7 @@ export const commitWorkspaceFilesFn = createServerFn({ method: "POST" })
         changes: data.changes,
         ...(data.message ? { message: data.message } : {}),
         workspaceId: workspace.id,
-      })
+      }),
     );
   });
 
@@ -276,9 +272,7 @@ export const depsSyncWorkspaceFn = createServerFn({ method: "POST" })
       orgSlug: data.orgSlug,
       permission: "update",
     });
-    return runTemplatingBuilder((client) =>
-      client.depsSync({ workspaceId: workspace.id })
-    );
+    return runTemplatingBuilder((client) => client.depsSync({ workspaceId: workspace.id }));
   });
 
 export const publishWorkspaceFn = createServerFn({ method: "POST" })
@@ -290,9 +284,7 @@ export const publishWorkspaceFn = createServerFn({ method: "POST" })
       orgSlug: data.orgSlug,
       permission: "update",
     });
-    return runTemplatingBuilder((client) =>
-      client.publish({ workspaceId: workspace.id })
-    );
+    return runTemplatingBuilder((client) => client.publish({ workspaceId: workspace.id }));
   });
 
 export const previewWorkspaceEntryFn = createServerFn({ method: "POST" })
@@ -310,7 +302,7 @@ export const previewWorkspaceEntryFn = createServerFn({ method: "POST" })
         ...(data.props ? { props: data.props } : {}),
         ...(data.subject ? { subjectOverride: data.subject } : {}),
         workspaceId: workspace.id,
-      })
+      }),
     ).then((result) => ({
       commitSha: result.commitSha,
       html: result.html,

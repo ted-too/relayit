@@ -1,43 +1,24 @@
 import { RiArrowRightLine, RiCheckLine } from "@remixicon/react";
 import { cn } from "@repo/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import {
-  motion,
-  useMotionValueEvent,
-  useScroll,
-  useTransform,
-} from "motion/react";
+import { motion, useMotionValueEvent, useScroll, useTransform } from "motion/react";
 import { useRef, useState } from "react";
 import { RenderedEmail } from "./rendered-email";
 
 const MESSAGE_ID = "msg_01jbxk7d4qf3t9s2vw8cyh6m5n";
 
-function Mono({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span className={cn("font-mono text-[12.5px]", className)}>{children}</span>
-  );
+function Mono({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={cn("font-mono text-[12.5px]", className)}>{children}</span>;
 }
 
-function Status({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone: "ok" | "bad" | "muted";
-}) {
+function Status({ children, tone }: { children: React.ReactNode; tone: "ok" | "bad" | "muted" }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[11.5px]",
         tone === "ok" && "border-success/40 text-success-foreground",
         tone === "bad" && "border-destructive/40 text-destructive-foreground",
-        tone === "muted" && "text-muted-foreground"
+        tone === "muted" && "text-muted-foreground",
       )}
     >
       {tone === "ok" && <RiCheckLine className="size-3" />}
@@ -54,9 +35,7 @@ function AcceptArtifact() {
       <div className={panel}>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-4 py-2.5">
           <Mono>POST /messages/email</Mono>
-          <Mono className="text-muted-foreground">
-            idempotency-key: order-4821-shipped
-          </Mono>
+          <Mono className="text-muted-foreground">idempotency-key: order-4821-shipped</Mono>
         </div>
         <div className="flex items-center gap-3 px-4 py-4">
           <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[12px] text-primary-foreground">
@@ -144,17 +123,12 @@ function DeliverArtifact() {
           key={step.note}
         >
           {index < steps.length - 1 && (
-            <span
-              aria-hidden
-              className="absolute top-6 bottom-0 left-[1.4rem] w-px bg-border"
-            />
+            <span aria-hidden className="absolute top-6 bottom-0 left-[1.4rem] w-px bg-border" />
           )}
           <span className="relative w-fit bg-card">
             <Status tone={step.tone}>{step.status}</Status>
           </span>
-          <span className="pt-0.5 text-muted-foreground text-sm">
-            {step.note}
-          </span>
+          <span className="pt-0.5 text-muted-foreground text-sm">{step.note}</span>
         </li>
       ))}
     </ol>
@@ -164,9 +138,7 @@ function DeliverArtifact() {
 function ProtectArtifact() {
   return (
     <div className="grid w-full gap-3">
-      <div
-        className={cn(panel, "flex flex-wrap items-center gap-3 px-4 py-3.5")}
-      >
+      <div className={cn(panel, "flex flex-wrap items-center gap-3 px-4 py-3.5")}>
         <Status tone="bad">failed</Status>
         <Mono className="text-muted-foreground">hard bounce</Mono>
         <Mono className="ml-auto">jo@closed-mailbox.net</Mono>
@@ -174,20 +146,16 @@ function ProtectArtifact() {
       <div
         className={cn(
           panel,
-          "flex flex-wrap items-center gap-3 border-primary/30 bg-primary/5 px-4 py-3.5 dark:border-brand-mint/30 dark:bg-brand-mint/5"
+          "flex flex-wrap items-center gap-3 border-primary/30 bg-primary/5 px-4 py-3.5 dark:border-brand-mint/30 dark:bg-brand-mint/5",
         )}
       >
         <span className="font-medium text-sm">Suppressed</span>
         <Mono className="text-muted-foreground">severity: all</Mono>
         <Mono className="ml-auto">jo@closed-mailbox.net</Mono>
       </div>
-      <div
-        className={cn(panel, "flex flex-wrap items-center gap-3 px-4 py-3.5")}
-      >
+      <div className={cn(panel, "flex flex-wrap items-center gap-3 px-4 py-3.5")}>
         <Status tone="muted">skipped</Status>
-        <Mono className="text-muted-foreground">
-          next send, never attempted
-        </Mono>
+        <Mono className="text-muted-foreground">next send, never attempted</Mono>
         <Mono className="ml-auto">jo@closed-mailbox.net</Mono>
       </div>
     </div>
@@ -248,17 +216,17 @@ export function Route() {
   const trackX = useTransform(
     scrollYProgress,
     input,
-    stops.map((stop) => `-${(stop / STOPS.length) * 100}%`)
+    stops.map((stop) => `-${(stop / STOPS.length) * 100}%`),
   );
   const fill = useTransform(
     scrollYProgress,
     input,
-    stops.map((stop) => stop / lastStop)
+    stops.map((stop) => stop / lastStop),
   );
   const batonX = useTransform(
     scrollYProgress,
     input,
-    stops.map((stop) => `${(stop / lastStop) * 100 - 100}%`)
+    stops.map((stop) => `${(stop / lastStop) * 100 - 100}%`),
   );
   const [active, setActive] = useState(0);
   useMotionValueEvent(scrollYProgress, "change", (value) => {
@@ -298,9 +266,7 @@ export function Route() {
                     "absolute top-0 text-sm transition-colors duration-300",
                     index > 0 && index < lastStop && "-translate-x-1/2",
                     index === lastStop && "-translate-x-full",
-                    active === index
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground"
+                    active === index ? "font-medium text-foreground" : "text-muted-foreground",
                   )}
                   key={stop.verb}
                   style={{ left: `${(index / lastStop) * 100}%` }}

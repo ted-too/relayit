@@ -25,7 +25,7 @@ import { queries } from "@/lib/queries";
 export const Route = createFileRoute("/_authd/$orgSlug/domains/$fqdn")({
   loader: async ({ context, params }) => {
     const domains = await context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).listDomains
+      queries.organizations.bySlug(params.orgSlug).listDomains,
     );
 
     const domain = domains.find((domain) => domain.fqdn === params.fqdn);
@@ -46,18 +46,17 @@ function RouteComponent() {
     select: (domains) => domains.find((domain) => domain.fqdn === fqdn)!,
   });
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain(
-    {
-      domain,
-      onDeleted: () =>
-        navigate({
-          to: "/$orgSlug/domains",
-          params: { orgSlug },
-        }),
-    }
-  );
-  const { mutate: refreshDNSRecords, isPending: isRefreshingDNSRecords } =
-    useRefreshDomain({ domain });
+  const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain({
+    domain,
+    onDeleted: () =>
+      navigate({
+        to: "/$orgSlug/domains",
+        params: { orgSlug },
+      }),
+  });
+  const { mutate: refreshDNSRecords, isPending: isRefreshingDNSRecords } = useRefreshDomain({
+    domain,
+  });
 
   const canSend = domain.verificationStatus === "verified" && !domain.isPaused;
 
@@ -68,11 +67,7 @@ function RouteComponent() {
       <div className="flex w-full flex-col gap-6 border-y bg-card p-6">
         <div className="flex w-full items-center justify-between">
           <span className="font-medium text-3xl">{domain.fqdn}</span>
-          <Button
-            onClick={() => setDeleteOpen(true)}
-            size="icon-lg"
-            variant="destructive-light"
-          >
+          <Button onClick={() => setDeleteOpen(true)} size="icon-lg" variant="destructive-light">
             <RiDeleteBin6Line />
           </Button>
           <ConfirmAction
@@ -98,11 +93,7 @@ function RouteComponent() {
               {
                 label: "Status",
                 children: (
-                  <Badge
-                    variant={
-                      VERIFICATION_STATUS[domain.verificationStatus].variant
-                    }
-                  >
+                  <Badge variant={VERIFICATION_STATUS[domain.verificationStatus].variant}>
                     {VERIFICATION_STATUS[domain.verificationStatus].label}
                   </Badge>
                 ),
@@ -140,10 +131,7 @@ function RouteComponent() {
               },
             ] satisfies { label: string; children: React.ReactNode }[]
           ).map(({ label, children }, index) => (
-            <div
-              className="flex flex-col gap-2 text-sm"
-              key={`metadata-${index}`}
-            >
+            <div className="flex flex-col gap-2 text-sm" key={`metadata-${index}`}>
               <span>{label}</span>
               {children}
             </div>
@@ -155,8 +143,8 @@ function RouteComponent() {
           <div className="flex flex-col gap-2">
             <span className="font-semibold text-xl">DNS Records</span>
             <p className="text-muted-foreground text-sm">
-              DNS records are used to verify ownership of the domain and to
-              ensure that the domain is correctly configured.
+              DNS records are used to verify ownership of the domain and to ensure that the domain
+              is correctly configured.
             </p>
           </div>
           <div className="flex items-center gap-4">

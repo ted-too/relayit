@@ -36,10 +36,7 @@ import {
   putReactEmailChannelFn,
   readWorkspaceFileFn,
 } from "@/lib/templating/template.functions";
-import {
-  componentNameFromSlug,
-  starterReactEmailEntrySource,
-} from "./starter-entry";
+import { componentNameFromSlug, starterReactEmailEntrySource } from "./starter-entry";
 
 const toastError = (error: unknown, fallback = "Something went wrong") => {
   const message =
@@ -105,9 +102,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [depsStatus, setDepsStatus] = useState<
-    "idle" | "syncing" | "error" | "ok"
-  >("idle");
+  const [depsStatus, setDepsStatus] = useState<"idle" | "syncing" | "error" | "ok">("idle");
   const [depsError, setDepsError] = useState<string | null>(null);
   const [propsJson, setPropsJson] = useState("{}");
   const [propsByPath, setPropsByPath] = useState<Record<string, string>>({});
@@ -121,12 +116,8 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const [newFileOpen, setNewFileOpen] = useState(false);
   const [newFilePath, setNewFilePath] = useState("reactEmail/");
 
-  const filesQuery = useQuery(
-    queries.organizations.bySlug(orgSlug).workspace(KIND).files
-  );
-  const entriesQuery = useQuery(
-    queries.organizations.bySlug(orgSlug).workspace(KIND).entries
-  );
+  const filesQuery = useQuery(queries.organizations.bySlug(orgSlug).workspace(KIND).files);
+  const entriesQuery = useQuery(queries.organizations.bySlug(orgSlug).workspace(KIND).entries);
   const templateQuery = useQuery({
     ...queries.organizations.bySlug(orgSlug).template(search.templateId ?? ""),
     enabled: Boolean(search.templateId),
@@ -136,9 +127,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const tree = useMemo(() => buildTree(paths), [paths]);
 
   const activeEntry = entriesQuery.data?.find(
-    (entry) =>
-      entry.id === search.entryId ||
-      (activePath != null && entry.path === activePath)
+    (entry) => entry.id === search.entryId || (activePath != null && entry.path === activePath),
   );
 
   const { mutateAsync: readFile } = useMutation({
@@ -149,10 +138,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   });
 
   const { mutateAsync: commitFiles, isPending: isSaving } = useMutation({
-    mutationFn: async (input: {
-      changes: Record<string, string | null>;
-      message?: string;
-    }) =>
+    mutationFn: async (input: { changes: Record<string, string | null>; message?: string }) =>
       await commitWorkspaceFilesFn({
         data: {
           changes: input.changes,
@@ -195,11 +181,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   });
 
   const { mutateAsync: linkEntry } = useMutation({
-    mutationFn: async (input: {
-      templateId: string;
-      workspaceEntryId: string;
-      subject: string;
-    }) =>
+    mutationFn: async (input: { templateId: string; workspaceEntryId: string; subject: string }) =>
       await putReactEmailChannelFn({
         data: {
           orgSlug,
@@ -229,7 +211,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           data: { kind: KIND, orgSlug },
         });
         const files = await queryClient.fetchQuery(
-          queries.organizations.bySlug(orgSlug).workspace(KIND).files
+          queries.organizations.bySlug(orgSlug).workspace(KIND).files,
         );
 
         if (search.intent === "create-new" && search.templateId) {
@@ -244,33 +226,28 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
               message: `feat: add ${entryPath}`,
               changes: {
                 [entryPath]: starterReactEmailEntrySource(
-                  componentNameFromSlug(template.slug) || "Email"
+                  componentNameFromSlug(template.slug) || "Email",
                 ),
               },
             });
             await queryClient.invalidateQueries({
-              queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND)
-                .files.queryKey,
+              queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files.queryKey,
             });
             await queryClient.invalidateQueries({
-              queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND)
-                .entries.queryKey,
+              queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries.queryKey,
             });
           }
           if (!cancelled) {
             setActivePath(entryPath);
           }
         } else if (search.entryId && entriesQuery.data) {
-          const entry = entriesQuery.data.find(
-            (row) => row.id === search.entryId
-          );
+          const entry = entriesQuery.data.find((row) => row.id === search.entryId);
           if (entry && !cancelled) {
             setActivePath(entry.path);
           }
         } else if (!cancelled && files.paths.length > 0) {
           const firstEntry =
-            files.paths.find((path) => path.startsWith("reactEmail/")) ??
-            files.paths[0];
+            files.paths.find((path) => path.startsWith("reactEmail/")) ?? files.paths[0];
           if (firstEntry) {
             setActivePath(firstEntry);
           }
@@ -315,7 +292,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
   const templateEmailSubject = useMemo(() => {
     const emailContent = templateQuery.data?.channelVariants.find(
-      (variant) => variant.channel === "email"
+      (variant) => variant.channel === "email",
     )?.content;
     if (
       emailContent &&
@@ -356,13 +333,11 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       await depsSync();
       setDepsStatus("ok");
       await queryClient.invalidateQueries({
-        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files
-          .queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files.queryKey,
       });
     } catch (error) {
       setDepsStatus("error");
-      const message =
-        error instanceof Error ? error.message : "Deps sync failed";
+      const message = error instanceof Error ? error.message : "Deps sync failed";
       setDepsError(message);
       toastError(error, "Deps sync failed");
     }
@@ -380,12 +355,10 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       setDirty(false);
       toast.success("Saved to draft (dev)");
       await queryClient.invalidateQueries({
-        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files
-          .queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files.queryKey,
       });
       await queryClient.invalidateQueries({
-        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries
-          .queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries.queryKey,
       });
       if (activePath === "package.json") {
         await runDepsSync();
@@ -406,12 +379,11 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
     {
       preventDefault: true,
       enabled: Boolean(activePath),
-    }
+    },
   );
 
   async function handlePreview() {
-    const entry =
-      activeEntry ?? entriesQuery.data?.find((row) => row.path === activePath);
+    const entry = activeEntry ?? entriesQuery.data?.find((row) => row.path === activePath);
     if (!entry) {
       toast.error("Save an Entry file first, then Preview");
       return;
@@ -471,14 +443,12 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
     try {
       const result = await publish();
       await queryClient.invalidateQueries({
-        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries
-          .queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries.queryKey,
       });
 
       if (search.intent === "create-new" && search.templateId) {
         const publishedEntry =
-          result.entries.find((entry) => entry.path === activePath) ??
-          result.entries[0];
+          result.entries.find((entry) => entry.path === activePath) ?? result.entries[0];
         if (publishedEntry) {
           await linkEntry({
             templateId: search.templateId,
@@ -486,13 +456,10 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             subject: templateEmailSubject?.trim() || "Untitled",
           });
           await queryClient.invalidateQueries({
-            queryKey:
-              queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
+            queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
           });
           await queryClient.invalidateQueries({
-            queryKey: queries.organizations
-              .bySlug(orgSlug)
-              .template(search.templateId).queryKey,
+            queryKey: queries.organizations.bySlug(orgSlug).template(search.templateId).queryKey,
           });
           toast.success("Published and linked");
           void navigate({
@@ -551,12 +518,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             </Button>
           ) : (
             <Button
-              render={
-                <Link
-                  params={{ orgSlug }}
-                  to="/$orgSlug/automations/templates"
-                />
-              }
+              render={<Link params={{ orgSlug }} to="/$orgSlug/automations/templates" />}
               variant="outline"
             >
               Back to Templates
@@ -577,10 +539,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           >
             Preview
           </Button>
-          <Button
-            disabled={publishBlocked || isPublishing}
-            onClick={() => void handlePublish()}
-          >
+          <Button disabled={publishBlocked || isPublishing} onClick={() => void handlePublish()}>
             Publish
           </Button>
         </div>
@@ -600,11 +559,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             New file
           </Button>
           <div className="min-h-0 flex-1 overflow-auto">
-            <FileTree
-              activePath={activePath}
-              node={tree}
-              onSelect={setActivePath}
-            />
+            <FileTree activePath={activePath} node={tree} onSelect={setActivePath} />
           </div>
         </aside>
 
@@ -624,14 +579,10 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
               />
             </DialogPanel>
             <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>
-                Cancel
-              </DialogClose>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
               <Button
                 onClick={() => {
-                  const next = newFilePath
-                    .trim()
-                    .replace(LEADING_SLASHES_RE, "");
+                  const next = newFilePath.trim().replace(LEADING_SLASHES_RE, "");
                   if (!next) {
                     return;
                   }
@@ -643,9 +594,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                     .replace(REACT_EMAIL_PREFIX_RE, "")
                     .replace(TSX_SUFFIX_RE, "");
                   const content = next.endsWith(".tsx")
-                    ? starterReactEmailEntrySource(
-                        componentNameFromSlug(slugStem) || "Email"
-                      )
+                    ? starterReactEmailEntrySource(componentNameFromSlug(slugStem) || "Email")
                     : next.endsWith(".json")
                       ? "{}\n"
                       : "";
@@ -655,14 +604,12 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                   })
                     .then(async () => {
                       await queryClient.invalidateQueries({
-                        queryKey: queries.organizations
-                          .bySlug(orgSlug)
-                          .workspace(KIND).files.queryKey,
+                        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).files
+                          .queryKey,
                       });
                       await queryClient.invalidateQueries({
-                        queryKey: queries.organizations
-                          .bySlug(orgSlug)
-                          .workspace(KIND).entries.queryKey,
+                        queryKey: queries.organizations.bySlug(orgSlug).workspace(KIND).entries
+                          .queryKey,
                       });
                       setActivePath(next);
                       setNewFileOpen(false);
@@ -685,16 +632,13 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
               {activePath ?? "No file selected"}
               {activePath === "bun.lock" ? " · read-only" : null}
             </div>
-            <div
-              className="flex shrink-0 rounded-md border bg-muted/40 p-0.5"
-              role="tablist"
-            >
+            <div className="flex shrink-0 rounded-md border bg-muted/40 p-0.5" role="tablist">
               <button
                 className={cn(
                   "rounded px-2.5 py-1 font-medium text-xs transition-colors",
                   editorTab === "code"
                     ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setEditorTab("code")}
                 role="tab"
@@ -707,7 +651,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                   "rounded px-2.5 py-1 font-medium text-xs transition-colors",
                   editorTab === "preview"
                     ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 disabled={!activePath}
                 onClick={() => {
@@ -745,7 +689,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
                       () => {
                         void handleSaveRef.current();
-                      }
+                      },
                     );
                   }}
                   options={{
@@ -767,13 +711,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           ) : (
             <div className="flex min-h-0 flex-1 flex-col bg-[hsl(0,0%,96%)]">
               <div className="border-b bg-background px-4 py-3">
-                <div className="text-muted-foreground text-xs uppercase tracking-wide">
-                  Subject
-                </div>
+                <div className="text-muted-foreground text-xs uppercase tracking-wide">Subject</div>
                 <div className="mt-0.5 truncate font-medium text-sm">
-                  {previewSubject ??
-                    templateEmailSubject ??
-                    "Run Preview to resolve subject"}
+                  {previewSubject ?? templateEmailSubject ?? "Run Preview to resolve subject"}
                 </div>
               </div>
 
@@ -809,9 +749,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                     />
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-muted-foreground text-xs">
-                        Overrides{" "}
-                        <code className="font-mono">PreviewProps</code> for this
-                        file.
+                        Overrides <code className="font-mono">PreviewProps</code> for this file.
                       </p>
                       <Button
                         disabled={!activePath || isPreviewing}

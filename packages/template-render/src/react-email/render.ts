@@ -22,9 +22,7 @@ export async function renderSealedReactEmailArtifact(input: {
   mergePreviewProps?: boolean;
   timeoutMs?: number;
 }): Promise<ReactEmailRenderResult> {
-  const tempDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "relayit-react-email-")
-  );
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "relayit-react-email-"));
   const artifactPath = path.join(tempDir, "artifact.mjs");
 
   try {
@@ -34,18 +32,10 @@ export async function renderSealedReactEmailArtifact(input: {
         : input.artifact;
     await fs.writeFile(artifactPath, bytes);
 
-    const runner = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "isolate-runner.ts"
-    );
+    const runner = path.join(path.dirname(fileURLToPath(import.meta.url)), "isolate-runner.ts");
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const subject = input.subject ?? input.subjectOverride ?? "";
-    const args = [
-      runner,
-      artifactPath,
-      JSON.stringify(input.props ?? {}),
-      subject,
-    ];
+    const args = [runner, artifactPath, JSON.stringify(input.props ?? {}), subject];
 
     const proc = Bun.spawn(["bun", ...args], {
       cwd: path.dirname(runner),
@@ -82,8 +72,7 @@ export async function renderSealedReactEmailArtifact(input: {
         ok: false,
         error: {
           code: "render_failed",
-          message:
-            stderr.trim() || "Sealed artifact isolate produced no output",
+          message: stderr.trim() || "Sealed artifact isolate produced no output",
         },
       };
     }

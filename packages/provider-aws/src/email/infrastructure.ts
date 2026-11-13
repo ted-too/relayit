@@ -37,10 +37,7 @@ const namesFor = (deliveryWebhookUrl: string) => {
   };
 };
 
-const validateWebhookUrl = (
-  value: string,
-  context: ProviderInstanceErrorContext
-) =>
+const validateWebhookUrl = (value: string, context: ProviderInstanceErrorContext) =>
   Effect.try({
     catch: (cause) =>
       new ProviderConfigurationError({
@@ -57,16 +54,12 @@ const validateWebhookUrl = (
             new ProviderConfigurationError({
               ...context,
               code: "invalid_webhook_url",
-            })
-          )
-    )
+            }),
+          ),
+    ),
   );
 
-const ensureTopicAndSubscription = (
-  sns: SNS.Type,
-  topicName: string,
-  webhookUrl: string
-) =>
+const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl: string) =>
   Effect.gen(function* () {
     const topic = yield* sns.createTopic({ Name: topicName });
     const topicArn = topic.TopicArn;
@@ -81,9 +74,7 @@ const ensureTopicAndSubscription = (
       TopicArn: topicArn,
     });
     const exists = subscriptions.Subscriptions?.some(
-      (subscription) =>
-        subscription.Protocol === "https" &&
-        subscription.Endpoint === webhookUrl
+      (subscription) => subscription.Protocol === "https" && subscription.Endpoint === webhookUrl,
     );
 
     if (!exists) {
@@ -105,7 +96,7 @@ const findTopicArn = (sns: SNS.Type, topicName: string) =>
     do {
       const page = yield* sns.listTopics({ NextToken: nextToken });
       const topicArn = page.Topics?.find((topic) =>
-        topic.TopicArn?.endsWith(`:${topicName}`)
+        topic.TopicArn?.endsWith(`:${topicName}`),
       )?.TopicArn;
 
       if (topicArn) {
@@ -118,11 +109,7 @@ const findTopicArn = (sns: SNS.Type, topicName: string) =>
     return;
   });
 
-const ensureEventDestination = (
-  ses: SESv2.Type,
-  destinationName: string,
-  topicArn: string
-) =>
+const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicArn: string) =>
   Effect.gen(function* () {
     yield* ses
       .createConfigurationSet({
@@ -148,8 +135,8 @@ const ensureEventDestination = (
             ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
             EventDestination: eventDestination,
             EventDestinationName: destinationName,
-          })
-        )
+          }),
+        ),
       );
   });
 
@@ -167,25 +154,15 @@ export const createAwsSesInfrastructure = ({
   ({
     ensure: ({ deliveryWebhookUrl }) =>
       Effect.gen(function* () {
-        const webhookUrl = yield* validateWebhookUrl(
-          deliveryWebhookUrl,
-          context
-        );
+        const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, context);
         const { destinationName, topicName } = namesFor(webhookUrl);
-        const topicArn = yield* ensureTopicAndSubscription(
-          sns,
-          topicName,
-          webhookUrl
-        );
+        const topicArn = yield* ensureTopicAndSubscription(sns, topicName, webhookUrl);
         yield* ensureEventDestination(ses, destinationName, topicArn);
         return { managedDnsRecords: [] };
       }).pipe(Effect.mapError(mapAwsError)),
     teardown: ({ deliveryWebhookUrl }) =>
       Effect.gen(function* () {
-        const webhookUrl = yield* validateWebhookUrl(
-          deliveryWebhookUrl,
-          context
-        );
+        const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, context);
         const { destinationName, topicName } = namesFor(webhookUrl);
 
         yield* ses

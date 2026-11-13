@@ -20,9 +20,7 @@ export interface PublicWebhookEndpoint {
   readonly url: string;
 }
 
-const publicEndpoint = (
-  endpoint: typeof webhookEndpoint.$inferSelect
-): PublicWebhookEndpoint => ({
+const publicEndpoint = (endpoint: typeof webhookEndpoint.$inferSelect): PublicWebhookEndpoint => ({
   createdAt: endpoint.createdAt,
   enabled: endpoint.enabled,
   eventTypes: endpoint.eventTypes,
@@ -43,12 +41,8 @@ const operationFailed = (message: string, cause: unknown) =>
   });
 
 export const listWebhookEndpoints = (
-  organizationId: string
-): Effect.Effect<
-  readonly PublicWebhookEndpoint[],
-  WebhookManagementError,
-  DB
-> =>
+  organizationId: string,
+): Effect.Effect<readonly PublicWebhookEndpoint[], WebhookManagementError, DB> =>
   Effect.gen(function* () {
     const db = yield* DB;
     const endpoints = yield* db
@@ -57,16 +51,14 @@ export const listWebhookEndpoints = (
       .where(eq(webhookEndpoint.organizationId, organizationId))
       .orderBy(asc(webhookEndpoint.createdAt))
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Endpoints could not be listed", cause)
-        )
+        Effect.mapError((cause) => operationFailed("Webhook Endpoints could not be listed", cause)),
       );
     return endpoints.map(publicEndpoint);
   });
 
 export const getWebhookEndpoint = (
   organizationId: string,
-  endpointId: string
+  endpointId: string,
 ): Effect.Effect<PublicWebhookEndpoint, WebhookManagementError, DB> =>
   Effect.gen(function* () {
     const db = yield* DB;
@@ -74,15 +66,10 @@ export const getWebhookEndpoint = (
       .select()
       .from(webhookEndpoint)
       .where(
-        and(
-          eq(webhookEndpoint.id, endpointId),
-          eq(webhookEndpoint.organizationId, organizationId)
-        )
+        and(eq(webhookEndpoint.id, endpointId), eq(webhookEndpoint.organizationId, organizationId)),
       )
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Endpoint could not be loaded", cause)
-        )
+        Effect.mapError((cause) => operationFailed("Webhook Endpoint could not be loaded", cause)),
       );
     if (!endpoint) {
       return yield* new WebhookManagementError({
@@ -107,7 +94,7 @@ export interface CreatedWebhookEndpoint extends PublicWebhookEndpoint {
 
 export const createWebhookEndpoint = (
   transaction: DatabaseTransaction,
-  input: CreateWebhookEndpointInput
+  input: CreateWebhookEndpointInput,
 ): Effect.Effect<CreatedWebhookEndpoint, WebhookManagementError> =>
   Effect.gen(function* () {
     const signingSecret = generateWebhookSigningSecret();
@@ -123,14 +110,12 @@ export const createWebhookEndpoint = (
       })
       .returning()
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Endpoint could not be created", cause)
-        )
+        Effect.mapError((cause) => operationFailed("Webhook Endpoint could not be created", cause)),
       );
     if (!endpoint) {
       return yield* operationFailed(
         "Webhook Endpoint could not be created",
-        new Error("Webhook Endpoint insert returned no record")
+        new Error("Webhook Endpoint insert returned no record"),
       );
     }
 
@@ -151,7 +136,7 @@ export interface UpdateWebhookEndpointInput {
 
 export const updateWebhookEndpoint = (
   transaction: DatabaseTransaction,
-  input: UpdateWebhookEndpointInput
+  input: UpdateWebhookEndpointInput,
 ): Effect.Effect<PublicWebhookEndpoint, WebhookManagementError> =>
   Effect.gen(function* () {
     const [existing] = yield* transaction
@@ -160,8 +145,8 @@ export const updateWebhookEndpoint = (
       .where(
         and(
           eq(webhookEndpoint.id, input.endpointId),
-          eq(webhookEndpoint.organizationId, input.organizationId)
-        )
+          eq(webhookEndpoint.organizationId, input.organizationId),
+        ),
       );
     if (!existing) {
       return yield* new WebhookManagementError({
@@ -173,12 +158,8 @@ export const updateWebhookEndpoint = (
     const [updated] = yield* transaction
       .update(webhookEndpoint)
       .set({
-        ...(input.eventTypes === undefined
-          ? {}
-          : { eventTypes: [...input.eventTypes] }),
-        ...(input.tagFilter === undefined
-          ? {}
-          : { tagFilter: input.tagFilter }),
+        ...(input.eventTypes === undefined ? {} : { eventTypes: [...input.eventTypes] }),
+        ...(input.tagFilter === undefined ? {} : { tagFilter: input.tagFilter }),
         ...(input.url === undefined ? {} : { url: input.url }),
       })
       .where(eq(webhookEndpoint.id, existing.id))
@@ -200,23 +181,20 @@ export const updateWebhookEndpoint = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook Endpoint could not be updated", error)
-    )
+        : operationFailed("Webhook Endpoint could not be updated", error),
+    ),
   );
 
 export const deleteWebhookEndpoint = (
   transaction: DatabaseTransaction,
   organizationId: string,
-  endpointId: string
+  endpointId: string,
 ): Effect.Effect<string, WebhookManagementError> =>
   Effect.gen(function* () {
     const [deleted] = yield* transaction
       .delete(webhookEndpoint)
       .where(
-        and(
-          eq(webhookEndpoint.id, endpointId),
-          eq(webhookEndpoint.organizationId, organizationId)
-        )
+        and(eq(webhookEndpoint.id, endpointId), eq(webhookEndpoint.organizationId, organizationId)),
       )
       .returning({ id: webhookEndpoint.id });
     if (!deleted) {
@@ -230,6 +208,6 @@ export const deleteWebhookEndpoint = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook Endpoint could not be deleted", error)
-    )
+        : operationFailed("Webhook Endpoint could not be deleted", error),
+    ),
   );

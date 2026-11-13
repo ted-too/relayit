@@ -34,7 +34,7 @@ function isForbiddenSpec(spec: string): boolean {
 
 /** Reject non-registry dependency specs before Bun install. */
 export const assertHardenedPackageJson = (
-  raw: string
+  raw: string,
 ): Effect.Effect<PackageJson, TemplatingBuilderError> => {
   let pkg: PackageJson;
   try {
@@ -44,21 +44,18 @@ export const assertHardenedPackageJson = (
       new TemplatingBuilderError({
         code: "invalid",
         message: "package.json is not valid JSON.",
-      })
+      }),
     );
   }
 
-  const forbidden = collectDeps(pkg).filter(([, spec]) =>
-    isForbiddenSpec(spec)
-  );
+  const forbidden = collectDeps(pkg).filter(([, spec]) => isForbiddenSpec(spec));
 
   if (forbidden.length > 0) {
     return Effect.fail(
       new TemplatingBuilderError({
         code: "invalid",
-        message:
-          "package.json has disallowed dependency specs (registry versions only).",
-      })
+        message: "package.json has disallowed dependency specs (registry versions only).",
+      }),
     );
   }
 

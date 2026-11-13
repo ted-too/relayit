@@ -19,10 +19,7 @@ export interface DeadLetterFailure {
 
 const DEAD_LETTER_STATUSES = ["pending", "replayed", "discarded"] as const;
 
-export const deadLetterStatusEnum = pgEnum(
-  "job_dead_letter_status",
-  DEAD_LETTER_STATUSES
-);
+export const deadLetterStatusEnum = pgEnum("job_dead_letter_status", DEAD_LETTER_STATUSES);
 
 export const jobDeadLetter = pgTable(
   "job_dead_letter",
@@ -45,10 +42,7 @@ export const jobDeadLetter = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("job_dead_letter_job_stream_uidx").on(
-      table.jobName,
-      table.originalStreamId
-    ),
+    uniqueIndex("job_dead_letter_job_stream_uidx").on(table.jobName, table.originalStreamId),
     index("job_dead_letter_status_failed_idx").on(table.status, table.failedAt),
-  ]
+  ],
 );

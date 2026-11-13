@@ -17,8 +17,8 @@ export function Closing({ appUrl, signedIn }: ClosingProps) {
         </p>
         <div className="mt-12 flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
           <p className="max-w-[40ch] text-lg text-muted-foreground leading-relaxed">
-            Create a project, grab an API key and send a test email from the
-            sandbox domain in a few minutes.
+            Create a project, grab an API key and send a test email from the sandbox domain in a few
+            minutes.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button

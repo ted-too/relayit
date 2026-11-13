@@ -12,9 +12,9 @@ export interface ProviderInfrastructurePlan {
 
 export interface EmailProviderInfrastructureAdapter {
   readonly ensure: (
-    input: EnsureProviderInfrastructureInput
+    input: EnsureProviderInfrastructureInput,
   ) => Effect.Effect<ProviderInfrastructurePlan, ProviderOperationError>;
   readonly teardown: (
-    input: EnsureProviderInfrastructureInput
+    input: EnsureProviderInfrastructureInput,
   ) => Effect.Effect<void, ProviderOperationError>;
 }

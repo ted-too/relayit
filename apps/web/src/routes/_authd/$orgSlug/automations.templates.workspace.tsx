@@ -9,20 +9,17 @@ const workspaceSearchSchema = z.object({
   intent: z.enum(["create-new", "manage"]).optional(),
 });
 
-export const Route = createFileRoute(
-  "/_authd/$orgSlug/automations/templates/workspace"
-)({
+export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/workspace")({
   validateSearch: (search) => workspaceSearchSchema.parse(search),
   loader: ({ context, params }) => {
     void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail")
+      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail"),
     );
     void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").files
+      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").files,
     );
     void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail")
-        .entries
+      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").entries,
     );
   },
   component: RouteComponent,

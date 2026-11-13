@@ -29,8 +29,8 @@ export const requireOrganizationBySlug = (orgSlug: string) =>
               cause,
               code: "failed",
               message: "Failed to load Project.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!org) {

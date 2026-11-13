@@ -3,10 +3,7 @@ const LEADING_SLASHES_RE = /^\/+/;
 
 /** Normalize and validate a workspace-relative path (kind-agnostic). */
 export function normalizeWorkspacePath(raw: string): string | null {
-  const trimmed = raw
-    .trim()
-    .replaceAll("\\", "/")
-    .replace(LEADING_SLASHES_RE, "");
+  const trimmed = raw.trim().replaceAll("\\", "/").replace(LEADING_SLASHES_RE, "");
   if (!trimmed || trimmed.length > 512) {
     return null;
   }

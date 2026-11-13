@@ -14,10 +14,7 @@ import { makeProviderTypeId } from "../../provider-type";
 import type { DomainKeyMaterial } from "../dkim";
 import { EmailManagedDns } from "../managed-dns";
 import { EmailProviderRegistry } from "../provider-registry";
-import {
-  emailVerifyProviderIdentityJob,
-  emailVerifySandboxDomainJob,
-} from "../verification/jobs";
+import { emailVerifyProviderIdentityJob, emailVerifySandboxDomainJob } from "../verification/jobs";
 import { sweepIfSandboxAllocatable } from "./allocate";
 import {
   buildSandboxRootDnsRecords,
@@ -69,8 +66,8 @@ const loadSandboxKeyMaterial = (sandbox: SandboxDomain) =>
             message: "Failed to decrypt sandbox DKIM private key.",
             operation: "load_key",
             sandboxDomainId: sandbox.id,
-          })
-      )
+          }),
+      ),
     );
 
     return {
@@ -84,10 +81,7 @@ const registerSandboxProviderIdentity = (input: {
   readonly db: DatabaseExecutor;
   readonly keyMaterial: DomainKeyMaterial;
   readonly provider: Provider;
-  readonly sandboxDomain: Pick<
-    SandboxDomain,
-    "cloudflareZoneId" | "id" | "rootDomain"
-  >;
+  readonly sandboxDomain: Pick<SandboxDomain, "cloudflareZoneId" | "id" | "rootDomain">;
 }) =>
   Effect.gen(function* () {
     const credentialsVault = yield* ProviderCredentialsVault;
@@ -95,9 +89,7 @@ const registerSandboxProviderIdentity = (input: {
     const managedDns = yield* EmailManagedDns;
 
     const factory = yield* providers
-      .get(
-        makeProviderTypeId(input.provider.vendorId, input.provider.productId)
-      )
+      .get(makeProviderTypeId(input.provider.vendorId, input.provider.productId))
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -107,24 +99,22 @@ const registerSandboxProviderIdentity = (input: {
               operation: "provider",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
-    const credentials = yield* credentialsVault
-      .open(input.provider.credentials)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to open provider credentials.",
-              operation: "provider",
-              providerId: input.provider.id,
-              sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
-      );
+    const credentials = yield* credentialsVault.open(input.provider.credentials).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SandboxDomainError({
+            cause,
+            message: "Failed to open provider credentials.",
+            operation: "provider",
+            providerId: input.provider.id,
+            sandboxDomainId: input.sandboxDomain.id,
+          }),
+      ),
+    );
 
     const adapter = yield* factory
       .create({
@@ -140,8 +130,8 @@ const registerSandboxProviderIdentity = (input: {
               operation: "provider",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
     const identityResult = yield* adapter
@@ -159,17 +149,14 @@ const registerSandboxProviderIdentity = (input: {
               operation: "register_identity",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
     yield* managedDns
       .reconcile({
         cloudflareZoneId: input.sandboxDomain.cloudflareZoneId,
-        owner: sandboxIdentityDnsOwner(
-          input.sandboxDomain.id,
-          input.provider.id
-        ),
+        owner: sandboxIdentityDnsOwner(input.sandboxDomain.id, input.provider.id),
         records: resolveSandboxMailFromRecords({
           records: identityResult.mailFrom.records,
         }),
@@ -184,8 +171,8 @@ const registerSandboxProviderIdentity = (input: {
               operation: "register_identity",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
     const existing = yield* input.db.query.emailDomainProviderIdentity
@@ -205,15 +192,12 @@ const registerSandboxProviderIdentity = (input: {
               operation: "persist",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
     const hasActive = existing.some((row) => row.isActive);
-    const maxPriority = existing.reduce(
-      (max, row) => Math.max(max, row.failoverPriority),
-      0
-    );
+    const maxPriority = existing.reduce((max, row) => Math.max(max, row.failoverPriority), 0);
 
     const [identity] = yield* input.db
       .insert(emailDomainProviderIdentity)
@@ -238,8 +222,8 @@ const registerSandboxProviderIdentity = (input: {
               operation: "persist",
               providerId: input.provider.id,
               sandboxDomainId: input.sandboxDomain.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!identity) {
@@ -264,11 +248,7 @@ const scheduleInitialVerification = (input: {
     const runAt = Date.now();
 
     yield* jobs
-      .schedule(
-        emailVerifySandboxDomainJob,
-        { sandboxDomainId: input.sandboxDomainId },
-        runAt
-      )
+      .schedule(emailVerifySandboxDomainJob, { sandboxDomainId: input.sandboxDomainId }, runAt)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -278,16 +258,12 @@ const scheduleInitialVerification = (input: {
               operation: "schedule",
               providerId: input.providerId,
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     yield* jobs
-      .schedule(
-        emailVerifyProviderIdentityJob,
-        { identityId: input.identityId },
-        runAt
-      )
+      .schedule(emailVerifyProviderIdentityJob, { identityId: input.identityId }, runAt)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -297,8 +273,8 @@ const scheduleInitialVerification = (input: {
               operation: "schedule",
               providerId: input.providerId,
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
   });
 
@@ -322,19 +298,17 @@ export const createSandboxDomain = (input: CreateSandboxDomainInput) =>
     const crypto = yield* SymmetricCrypto;
     const keyMaterial = createDomainKeyMaterial();
 
-    const encryptedPrivateKey = yield* crypto
-      .encrypt(keyMaterial.dkimPrivateKey)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to encrypt sandbox DKIM private key.",
-              operation: "encrypt_key",
-              providerId: input.provider.id,
-            })
-        )
-      );
+    const encryptedPrivateKey = yield* crypto.encrypt(keyMaterial.dkimPrivateKey).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SandboxDomainError({
+            cause,
+            message: "Failed to encrypt sandbox DKIM private key.",
+            operation: "encrypt_key",
+            providerId: input.provider.id,
+          }),
+      ),
+    );
 
     const [row] = yield* db
       .insert(sandboxDomain)
@@ -357,8 +331,8 @@ export const createSandboxDomain = (input: CreateSandboxDomainInput) =>
               message: "Failed to insert sandbox domain.",
               operation: "persist",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!row) {
@@ -389,8 +363,8 @@ export const createSandboxDomain = (input: CreateSandboxDomainInput) =>
               operation: "create",
               providerId: input.provider.id,
               sandboxDomainId: row.id,
-            })
-        )
+            }),
+        ),
       );
 
     const identity = yield* registerSandboxProviderIdentity({
@@ -416,9 +390,7 @@ export const createSandboxDomain = (input: CreateSandboxDomainInput) =>
  * Attach an additional platform provider to an existing sandbox root, reusing
  * the shared BYODKIM key material. Requires Cloudflare (sandbox capability).
  */
-export const addSandboxProviderIdentity = (
-  input: AddSandboxProviderIdentityInput
-) =>
+export const addSandboxProviderIdentity = (input: AddSandboxProviderIdentityInput) =>
   Effect.gen(function* () {
     const managedDns = yield* EmailManagedDns;
     if (!managedDns.cloudflareEnabled) {
@@ -469,8 +441,8 @@ const sweepAllocated = (sandboxDomainId: string) =>
           message: "Failed to allocate Projects to the sandbox domain.",
           operation: "allocate",
           sandboxDomainId,
-        })
-    )
+        }),
+    ),
   );
 
 /**
@@ -478,9 +450,7 @@ const sweepAllocated = (sandboxDomainId: string) =>
  * Provider creates it; later Providers attach an identity and reuse BYODKIM.
  * Sweeps unassigned Projects when the root is already allocatable.
  */
-export const ensureSandboxForProvider = (
-  input: EnsureSandboxForProviderInput
-) =>
+export const ensureSandboxForProvider = (input: EnsureSandboxForProviderInput) =>
   Effect.gen(function* () {
     if (!(input.cloudflareZoneId && input.rootDomain)) {
       return {
@@ -503,8 +473,8 @@ export const ensureSandboxForProvider = (
               message: "Failed to load sandbox domain.",
               operation: "persist",
               providerId: input.provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!existing) {
@@ -537,8 +507,8 @@ export const ensureSandboxForProvider = (
               operation: "persist",
               providerId: input.provider.id,
               sandboxDomainId: existing.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!identity) {
@@ -576,8 +546,8 @@ const openProviderAdapter = (provider: Provider) =>
               message: "Email provider type is not registered.",
               operation: "provider",
               providerId: provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     const credentials = yield* credentialsVault.open(provider.credentials).pipe(
@@ -588,8 +558,8 @@ const openProviderAdapter = (provider: Provider) =>
             message: "Failed to open provider credentials.",
             operation: "provider",
             providerId: provider.id,
-          })
-      )
+          }),
+      ),
     );
 
     return yield* factory
@@ -605,8 +575,8 @@ const openProviderAdapter = (provider: Provider) =>
               message: "Failed to create email provider adapter.",
               operation: "provider",
               providerId: provider.id,
-            })
-        )
+            }),
+        ),
       );
   });
 
@@ -633,8 +603,8 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
               message: "Failed to load sandbox provider identity.",
               operation: "persist",
               providerId: provider.id,
-            })
-        )
+            }),
+        ),
       );
 
     if (!identity?.sandboxDomainId) {
@@ -656,8 +626,8 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
               operation: "persist",
               providerId: provider.id,
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     if (sandbox) {
@@ -671,28 +641,26 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
               operation: "remove",
               providerId: provider.id,
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
     }
 
     const managedDns = yield* EmailManagedDns;
     const jobs = yield* Jobs;
 
-    yield* managedDns
-      .remove(sandboxIdentityDnsOwner(sandboxDomainId, provider.id))
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to remove sandbox MAIL FROM DNS.",
-              operation: "remove",
-              providerId: provider.id,
-              sandboxDomainId,
-            })
-        )
-      );
+    yield* managedDns.remove(sandboxIdentityDnsOwner(sandboxDomainId, provider.id)).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SandboxDomainError({
+            cause,
+            message: "Failed to remove sandbox MAIL FROM DNS.",
+            operation: "remove",
+            providerId: provider.id,
+            sandboxDomainId,
+          }),
+      ),
+    );
 
     yield* db
       .delete(emailDomainProviderIdentity)
@@ -706,24 +674,22 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
               operation: "persist",
               providerId: provider.id,
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
-    yield* jobs
-      .cancel(emailVerifyProviderIdentityJob, { identityId: identity.id })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to cancel identity verification job.",
-              operation: "schedule",
-              providerId: provider.id,
-              sandboxDomainId,
-            })
-        )
-      );
+    yield* jobs.cancel(emailVerifyProviderIdentityJob, { identityId: identity.id }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SandboxDomainError({
+            cause,
+            message: "Failed to cancel identity verification job.",
+            operation: "schedule",
+            providerId: provider.id,
+            sandboxDomainId,
+          }),
+      ),
+    );
 
     const remaining = yield* db.query.emailDomainProviderIdentity
       .findMany({
@@ -738,8 +704,8 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
               operation: "persist",
               providerId: provider.id,
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     if (remaining.length === 0) {
@@ -756,8 +722,8 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
                 operation: "persist",
                 providerId: provider.id,
                 sandboxDomainId,
-              })
-          )
+              }),
+          ),
         );
       return;
     }
@@ -780,8 +746,8 @@ export const removeSandboxProviderIdentity = (provider: Provider) =>
                   operation: "persist",
                   providerId: provider.id,
                   sandboxDomainId,
-                })
-            )
+                }),
+            ),
           );
       }
     }

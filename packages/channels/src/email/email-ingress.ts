@@ -43,13 +43,11 @@ export interface InboundEmail {
 
 export interface EmailIngressAdapter {
   readonly ensureDomain: (
-    input: EnsureInboundDomainInput
+    input: EnsureInboundDomainInput,
   ) => Effect.Effect<InboundDomainPlan, EmailIngressError>;
-  readonly handle: (
-    input: RawInboundEmail
-  ) => Effect.Effect<InboundEmail, EmailIngressError>;
+  readonly handle: (input: RawInboundEmail) => Effect.Effect<InboundEmail, EmailIngressError>;
   readonly id: string;
   readonly removeDomain: (
-    input: EnsureInboundDomainInput
+    input: EnsureInboundDomainInput,
   ) => Effect.Effect<void, EmailIngressError>;
 }

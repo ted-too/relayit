@@ -1,12 +1,7 @@
 import { RiArrowRightSLine, RiMoreFill } from "@remixicon/react";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@repo/ui/components/ui/coss/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@repo/ui/components/ui/coss/menu";
 import {
   Item,
   ItemActions,
@@ -29,9 +24,7 @@ export function TemplateItem({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [archiveOpen, setArchiveOpen] = useState(false);
 
-  const emailVariant = template.channelVariants.find(
-    (variant) => variant.channel === "email"
-  );
+  const emailVariant = template.channelVariants.find((variant) => variant.channel === "email");
 
   const { mutate: archiveTemplate, isPending: isArchiving } = useMutation({
     mutationFn: async () =>
@@ -42,9 +35,7 @@ export function TemplateItem({ template }: { template: Template }) {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
         (old: TemplateListItem[] | undefined) =>
-          (old ?? []).map((row) =>
-            row.id === data.id ? { ...row, ...data } : row
-          )
+          (old ?? []).map((row) => (row.id === data.id ? { ...row, ...data } : row)),
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -87,19 +78,13 @@ export function TemplateItem({ template }: { template: Template }) {
             </Badge>
           ) : null}
         </ItemTitle>
-        <ItemDescription>
-          {formatDateTime(new Date(template.createdAt))}
-        </ItemDescription>
+        <ItemDescription>{formatDateTime(new Date(template.createdAt))}</ItemDescription>
       </ItemContent>
       <ItemActions className="gap-2">
         {emailVariant ? (
-          <span className="font-light text-muted-foreground text-sm">
-            React Email
-          </span>
+          <span className="font-light text-muted-foreground text-sm">React Email</span>
         ) : (
-          <span className="font-light text-muted-foreground text-sm">
-            No email channel
-          </span>
+          <span className="font-light text-muted-foreground text-sm">No email channel</span>
         )}
         <Button
           render={
@@ -120,10 +105,7 @@ export function TemplateItem({ template }: { template: Template }) {
                 <RiMoreFill />
               </MenuTrigger>
               <MenuPopup>
-                <MenuItem
-                  onClick={() => setArchiveOpen(true)}
-                  variant="destructive"
-                >
+                <MenuItem onClick={() => setArchiveOpen(true)} variant="destructive">
                   Archive
                 </MenuItem>
               </MenuPopup>

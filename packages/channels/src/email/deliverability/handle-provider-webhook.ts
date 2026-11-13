@@ -4,9 +4,7 @@ import { makeProviderTypeId } from "../../provider-type";
 import { EmailProviderRegistry } from "../provider-registry";
 import { ingestDeliveryEvents } from "./notifications";
 
-export class ProviderWebhookHandlerError extends Data.TaggedError(
-  "ProviderWebhookHandlerError"
-)<{
+export class ProviderWebhookHandlerError extends Data.TaggedError("ProviderWebhookHandlerError")<{
   readonly cause?: unknown;
   readonly code: "bad_request" | "not_found";
   readonly message: string;
@@ -29,8 +27,8 @@ export const handleProviderWebhook = (input: {
           new ProviderWebhookHandlerError({
             code: "not_found",
             message: "Webhook handler not found",
-          })
-      )
+          }),
+      ),
     );
 
     const webhooks = factory.webhooks;
@@ -53,8 +51,8 @@ export const handleProviderWebhook = (input: {
               cause,
               code: "bad_request",
               message: "Provider webhook handling failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (result.type === "events") {
@@ -65,8 +63,8 @@ export const handleProviderWebhook = (input: {
               cause,
               code: "bad_request",
               message: "Provider webhook handling failed",
-            })
-        )
+            }),
+        ),
       );
     }
 

@@ -9,6 +9,4 @@ export const campaignSendCompleted = defineWebhookEvent({
   type: "campaign_send.completed",
 });
 
-export type CampaignSendWebhookEvent = WebhookEventInput<
-  typeof campaignSendCompleted
->;
+export type CampaignSendWebhookEvent = WebhookEventInput<typeof campaignSendCompleted>;

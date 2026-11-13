@@ -22,9 +22,7 @@ declare module "@tanstack/react-table" {
 }
 
 /** Label for headers / column visibility: `meta.headerTitle`, string `columnDef.header`, or `column.id`. */
-export function getColumnHeaderLabel<TData, TValue>(
-  column: Column<TData, TValue>
-): string {
+export function getColumnHeaderLabel<TData, TValue>(column: Column<TData, TValue>): string {
   const meta = column.columnDef.meta as { headerTitle?: string } | undefined;
   if (typeof meta?.headerTitle === "string") {
     return meta.headerTitle;
@@ -135,8 +133,7 @@ function DataGridProvider<TData extends object>({
   table,
   ...props
 }: DataGridProps<TData> & { table: Table<TData> }) {
-  const resolvedColumnsResizeMode =
-    props.tableLayout?.columnsResizeMode ?? "onEnd";
+  const resolvedColumnsResizeMode = props.tableLayout?.columnsResizeMode ?? "onEnd";
 
   // Keep resize mode aligned with the DataGrid contract every render so
   // consumer-level useReactTable options cannot flip it back between drags.
@@ -171,21 +168,13 @@ function DataGridProvider<TData extends object>({
       props.className,
       props.tableLayout,
       props.tableClassNames,
-    ]
+    ],
   );
 
-  return (
-    <DataGridContext.Provider value={value}>
-      {children}
-    </DataGridContext.Provider>
-  );
+  return <DataGridContext.Provider value={value}>{children}</DataGridContext.Provider>;
 }
 
-function DataGrid<TData extends object>({
-  children,
-  table,
-  ...props
-}: DataGridProps<TData>) {
+function DataGrid<TData extends object>({ children, table, ...props }: DataGridProps<TData>) {
   const defaultProps: Partial<DataGridProps<TData>> = {
     loadingMode: "skeleton",
     tableLayout: {
@@ -225,11 +214,11 @@ function DataGrid<TData extends object>({
     ...props,
     tableLayout: {
       ...defaultProps.tableLayout,
-      ...(props.tableLayout || {}),
+      ...props.tableLayout,
     },
     tableClassNames: {
       ...defaultProps.tableClassNames,
-      ...(props.tableClassNames || {}),
+      ...props.tableClassNames,
     },
   };
 
@@ -254,10 +243,7 @@ function DataGridContainer({
   border?: boolean;
 }) {
   return (
-    <div
-      className={cn("w-full overflow-hidden", className)}
-      data-slot="data-grid"
-    >
+    <div className={cn("w-full overflow-hidden", className)} data-slot="data-grid">
       {children}
     </div>
   );

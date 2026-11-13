@@ -19,10 +19,10 @@ Use them only if you already have code that calls them. New integrations should 
 - `{project}` is your Project slug. Find it under **Settings > Project details**.
 - Send the API key in `x-api-key` (or `X-API-Key`). The key must belong to the Project in the path.
 
-| Status | Body `message` | When |
-| --- | --- | --- |
-| `401` | `Unauthorized` or the key error | The key is missing or invalid. |
-| `404` | `Project not found` | The key is valid but belongs to a different Project than `{project}`. |
+| Status | Body `message`                  | When                                                                  |
+| ------ | ------------------------------- | --------------------------------------------------------------------- |
+| `401`  | `Unauthorized` or the key error | The key is missing or invalid.                                        |
+| `404`  | `Project not found`             | The key is valid but belongs to a different Project than `{project}`. |
 
 ## Raw email
 
@@ -63,14 +63,14 @@ curl -X POST https://api.relayit.io/send/my-project/template/email \
 
 ## Shared fields
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `to` | string | One recipient email address. |
-| `from` | string | Optional plain email address (no display name). When omitted, Relayit uses `noreply@` your Project's oldest verified Domain, or the sandbox address if the Project has no verified Domain and the Sandbox Domain is active. |
-| `contact` | object | Optional. `name` and `externalIdentifiers` (string map) for the recipient. |
-| `app` | string | Optional App attribution. Ignored unless `appEnvironment` is also set. |
-| `appEnvironment` | string | Optional App Environment attribution. Ignored unless `app` is also set. |
-| `attachments` | array | Up to 20. Each has `filename` and either `content` (base64) or `path` (URL), plus optional `contentType` and `contentId`. |
+| Field            | Type   | Description                                                                                                                                                                                                                 |
+| ---------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `to`             | string | One recipient email address.                                                                                                                                                                                                |
+| `from`           | string | Optional plain email address (no display name). When omitted, Relayit uses `noreply@` your Project's oldest verified Domain, or the sandbox address if the Project has no verified Domain and the Sandbox Domain is active. |
+| `contact`        | object | Optional. `name` and `externalIdentifiers` (string map) for the recipient.                                                                                                                                                  |
+| `app`            | string | Optional App attribution. Ignored unless `appEnvironment` is also set.                                                                                                                                                      |
+| `appEnvironment` | string | Optional App Environment attribution. Ignored unless `app` is also set.                                                                                                                                                     |
+| `attachments`    | array  | Up to 20. Each has `filename` and either `content` (base64) or `path` (URL), plus optional `contentType` and `contentId`.                                                                                                   |
 
 If you omit `from` and the Project has no verified Domain and no usable Sandbox Domain, the request fails with `400` and the message `No sender identity available; pass from or provision Sandbox Domain`.
 
@@ -87,12 +87,12 @@ Success returns `201`:
 
 Errors use `{ "message": "...", "details": [...] }`:
 
-| Status | Example body | Meaning |
-| --- | --- | --- |
-| `400` | `{ "message": "Validation error", "details": ["Invalid from address"] }` | Bad `from` address. |
-| `400` | `{ "message": "The 'from' address is not a verified sending domain for this Project.", "details": ["invalid_from_address"] }` | Accept error. `details[0]` is the same `code` that `/messages/email` returns. |
-| `429` | `{ "message": "Monthly email send limit exceeded", "details": ["monthly_limit_exceeded"] }` | Limit reached. No `retry_after_seconds`. |
-| `500` | `{ "message": "Something went wrong", "details": [] }` | Server error. |
+| Status | Example body                                                                                                                  | Meaning                                                                       |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `400`  | `{ "message": "Validation error", "details": ["Invalid from address"] }`                                                      | Bad `from` address.                                                           |
+| `400`  | `{ "message": "The 'from' address is not a verified sending domain for this Project.", "details": ["invalid_from_address"] }` | Accept error. `details[0]` is the same `code` that `/messages/email` returns. |
+| `429`  | `{ "message": "Monthly email send limit exceeded", "details": ["monthly_limit_exceeded"] }`                                   | Limit reached. No `retry_after_seconds`.                                      |
+| `500`  | `{ "message": "Something went wrong", "details": [] }`                                                                        | Server error.                                                                 |
 
 The accept error codes are listed in [Errors and limits](/docs/errors-and-limits#accept-errors-422).
 
@@ -100,25 +100,25 @@ The accept error codes are listed in [Errors and limits](/docs/errors-and-limits
 
 The move is mostly renaming fields.
 
-| Legacy | `/messages/email` |
-| --- | --- |
-| `POST /send/{project}/raw/email` | `POST /messages/email` (the Project comes from the API key) |
-| `POST /send/{project}/template/email` | `POST /messages/email` with `template` |
-| `payload.subject` | `subject` |
-| `payload.html` | `html` |
-| `payload.text` | `text` |
-| `template.slug` | `template.id` (slug or `tmpl_` id) |
-| `template.props` | `template.variables` |
-| `to` (one address) | `to` (address, list, or Contact objects, up to 50) |
-| `contact.name` | `to: { "email": "...", "first_name": "..." }` |
-| `contact.externalIdentifiers` | `to: { "email": "...", "properties": { ... } }` |
-| `app` and `appEnvironment` body fields | `app` and `environment` headers |
-| `attachments[].contentType` | `attachments[].content_type` |
-| `attachments[].contentId` | `attachments[].content_id` |
-| `from` optional, defaults to `noreply@` a verified Domain or sandbox | `from` required |
-| Response `{ id, status }` | Response `{ id, stripped? }` |
-| Errors `400` with `details: [code]` | Errors `422` with `code` and `details` object |
-| `401` for bad keys | `403` with `code: "invalid_api_key"` |
+| Legacy                                                               | `/messages/email`                                           |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `POST /send/{project}/raw/email`                                     | `POST /messages/email` (the Project comes from the API key) |
+| `POST /send/{project}/template/email`                                | `POST /messages/email` with `template`                      |
+| `payload.subject`                                                    | `subject`                                                   |
+| `payload.html`                                                       | `html`                                                      |
+| `payload.text`                                                       | `text`                                                      |
+| `template.slug`                                                      | `template.id` (slug or `tmpl_` id)                          |
+| `template.props`                                                     | `template.variables`                                        |
+| `to` (one address)                                                   | `to` (address, list, or Contact objects, up to 50)          |
+| `contact.name`                                                       | `to: { "email": "...", "first_name": "..." }`               |
+| `contact.externalIdentifiers`                                        | `to: { "email": "...", "properties": { ... } }`             |
+| `app` and `appEnvironment` body fields                               | `app` and `environment` headers                             |
+| `attachments[].contentType`                                          | `attachments[].content_type`                                |
+| `attachments[].contentId`                                            | `attachments[].content_id`                                  |
+| `from` optional, defaults to `noreply@` a verified Domain or sandbox | `from` required                                             |
+| Response `{ id, status }`                                            | Response `{ id, stripped? }`                                |
+| Errors `400` with `details: [code]`                                  | Errors `422` with `code` and `details` object               |
+| `401` for bad keys                                                   | `403` with `code: "invalid_api_key"`                        |
 
 Before:
 

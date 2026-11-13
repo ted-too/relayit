@@ -1,9 +1,5 @@
 export { webhookDeliverHandler } from "./deliver";
-export {
-  type EmittedWebhookEvent,
-  type EmitWebhookEventInput,
-  emitWebhookEvent,
-} from "./emit";
+export { type EmittedWebhookEvent, type EmitWebhookEventInput, emitWebhookEvent } from "./emit";
 export {
   clearPreviousWebhookSigningSecret,
   type ReplayWebhookDeliveryInput,
@@ -24,7 +20,4 @@ export {
   type UpdateWebhookEndpointInput,
   updateWebhookEndpoint,
 } from "./endpoints";
-export {
-  WebhookEmissionError,
-  WebhookManagementError,
-} from "./errors";
+export { WebhookEmissionError, WebhookManagementError } from "./errors";

@@ -51,7 +51,7 @@ export const columns: ColumnDef<DNSRecord>[] = [
       <CopyableText
         text={toRelativeHost(
           cellApi.getValue() as string,
-          (cellApi.table.options.meta as { fqdn: string })?.fqdn
+          (cellApi.table.options.meta as { fqdn: string })?.fqdn,
         )}
       />
     ),

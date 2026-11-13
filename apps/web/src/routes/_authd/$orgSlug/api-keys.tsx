@@ -14,7 +14,7 @@ import { queries } from "@/lib/queries";
 export const Route = createFileRoute("/_authd/$orgSlug/api-keys")({
   loader: ({ context, params }) => {
     void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).listApiKeys
+      queries.organizations.bySlug(params.orgSlug).listApiKeys,
     );
   },
   component: RouteComponent,
@@ -29,25 +29,17 @@ const SORT_OPTIONS = [
 function RouteComponent() {
   const { orgSlug } = Route.useParams();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0] ?? null
-  );
-  const { data: rawApiKeys } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug).listApiKeys
-  );
+  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(SORT_OPTIONS[0] ?? null);
+  const { data: rawApiKeys } = useSuspenseQuery(queries.organizations.bySlug(orgSlug).listApiKeys);
 
   const apiKeys = rawApiKeys
-    .filter((apiKey) =>
-      apiKey.createdBy?.name.toLowerCase().includes(search.toLowerCase())
-    )
+    .filter((apiKey) => apiKey.createdBy?.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       switch (sort?.value) {
         case "createdAt":
           return a.createdAt.getTime() - b.createdAt.getTime();
         case "lastUsed":
-          return (
-            (a.lastRequest?.getTime() ?? 0) - (b.lastRequest?.getTime() ?? 0)
-          );
+          return (a.lastRequest?.getTime() ?? 0) - (b.lastRequest?.getTime() ?? 0);
         case "name":
           return a.name?.localeCompare(b.name ?? "") ?? -1;
         default:
@@ -69,11 +61,7 @@ function RouteComponent() {
         />
         <UpsertApiKey render={<Button />}>Create API Key</UpsertApiKey>
       </Toolbar>
-      <CardList
-        emptyContent="No API keys found"
-        filters={{ search }}
-        items={apiKeys}
-      >
+      <CardList emptyContent="No API keys found" filters={{ search }} items={apiKeys}>
         {(apiKey) => <ApiKeyItem apiKey={apiKey} />}
       </CardList>
     </div>

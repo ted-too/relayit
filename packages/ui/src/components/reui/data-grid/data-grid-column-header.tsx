@@ -10,10 +10,7 @@ import {
   RiExpandUpDownLine,
   RiUnpinLine,
 } from "@remixicon/react";
-import {
-  getColumnHeaderLabel,
-  useDataGrid,
-} from "@repo/ui/components/reui/data-grid/data-grid";
+import { getColumnHeaderLabel, useDataGrid } from "@repo/ui/components/reui/data-grid/data-grid";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
   DropdownMenu,
@@ -32,8 +29,7 @@ import { cn } from "@repo/ui/lib/utils";
 import type { Column } from "@tanstack/react-table";
 import { type HTMLAttributes, memo, type ReactNode, useMemo } from "react";
 
-interface DataGridColumnHeaderProps<TData, TValue>
-  extends HTMLAttributes<HTMLDivElement> {
+interface DataGridColumnHeaderProps<TData, TValue> extends HTMLAttributes<HTMLDivElement> {
   column: Column<TData, TValue>;
   filter?: ReactNode;
   icon?: ReactNode;
@@ -78,12 +74,12 @@ function DataGridColumnHeaderInner<TData, TValue>({
 
   const headerLabelClassName = cn(
     "inline-flex h-full items-center gap-1.5 font-normal text-[0.8125rem] text-secondary-foreground/80 leading-[calc(1.125/0.8125)] [&_svg]:size-3.5 [&_svg]:opacity-60",
-    className
+    className,
   );
 
   const headerButtonClassName = cn(
     "h-6 rounded-md px-2 font-normal text-secondary-foreground/80 hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground",
-    className
+    className,
   );
 
   const sortIcon =
@@ -111,7 +107,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
       items.push(
         <DropdownMenuGroup key="group-filter">
           <DropdownMenuLabel key="filter">{filter}</DropdownMenuLabel>
-        </DropdownMenuGroup>
+        </DropdownMenuGroup>,
       );
       hasPreviousSection = true;
     }
@@ -135,9 +131,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
         >
           <RiArrowUpLine className="size-3.5!" />
           <span className="grow">Asc</span>
-          {isSorted === "asc" && (
-            <RiCheckLine className="size-4 text-primary opacity-100!" />
-          )}
+          {isSorted === "asc" && <RiCheckLine className="size-4 text-primary opacity-100!" />}
         </DropdownMenuItem>,
         <DropdownMenuItem
           disabled={!canSort}
@@ -152,10 +146,8 @@ function DataGridColumnHeaderInner<TData, TValue>({
         >
           <RiArrowDownLine className="size-3.5!" />
           <span className="grow">Desc</span>
-          {isSorted === "desc" && (
-            <RiCheckLine className="size-4 text-primary opacity-100!" />
-          )}
-        </DropdownMenuItem>
+          {isSorted === "desc" && <RiCheckLine className="size-4 text-primary opacity-100!" />}
+        </DropdownMenuItem>,
       );
       hasPreviousSection = true;
     }
@@ -172,9 +164,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
         >
           <RiContractLeftLine aria-hidden="true" className="size-3.5!" />
           <span className="grow">Pin to left</span>
-          {isPinned === "left" && (
-            <RiCheckLine className="size-4 text-primary opacity-100!" />
-          )}
+          {isPinned === "left" && <RiCheckLine className="size-4 text-primary opacity-100!" />}
         </DropdownMenuItem>,
         <DropdownMenuItem
           key="pin-right"
@@ -182,10 +172,8 @@ function DataGridColumnHeaderInner<TData, TValue>({
         >
           <RiContractRightLine aria-hidden="true" className="size-3.5!" />
           <span className="grow">Pin to right</span>
-          {isPinned === "right" && (
-            <RiCheckLine className="size-4 text-primary opacity-100!" />
-          )}
-        </DropdownMenuItem>
+          {isPinned === "right" && <RiCheckLine className="size-4 text-primary opacity-100!" />}
+        </DropdownMenuItem>,
       );
       hasPreviousSection = true;
     }
@@ -231,7 +219,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
         >
           <RiArrowRightLine aria-hidden="true" className="size-3.5!" />
           <span>Move to Right</span>
-        </DropdownMenuItem>
+        </DropdownMenuItem>,
       );
       hasPreviousSection = true;
     }
@@ -263,7 +251,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
                 </DropdownMenuCheckboxItem>
               ))}
           </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        </DropdownMenuSub>,
       );
     }
 
@@ -349,8 +337,6 @@ function DataGridColumnHeaderInner<TData, TValue>({
   );
 }
 
-const DataGridColumnHeader = memo(
-  DataGridColumnHeaderInner
-) as typeof DataGridColumnHeaderInner;
+const DataGridColumnHeader = memo(DataGridColumnHeaderInner) as typeof DataGridColumnHeaderInner;
 
 export { DataGridColumnHeader, type DataGridColumnHeaderProps };

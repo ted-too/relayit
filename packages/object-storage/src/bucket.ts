@@ -15,12 +15,10 @@ const segmentToString = (segment: ObjectKeySegment): string =>
 
 const objectKey = (
   prefix: readonly ObjectKeySegment[],
-  segments: readonly ObjectKeySegment[]
+  segments: readonly ObjectKeySegment[],
 ): string => [...prefix, ...segments].map(segmentToString).join("/");
 
-export const subBucket = <S extends z.ZodType>(
-  definition: SubBucketDefinition<S>
-) => {
+export const subBucket = <S extends z.ZodType>(definition: SubBucketDefinition<S>) => {
   type KeyParams = z.infer<S>;
   const name = definition.name.map(segmentToString).join("/");
 
@@ -51,33 +49,17 @@ export const subBucket = <S extends z.ZodType>(
       }),
     key: resolveKey,
     name: definition.name,
-    signedDownloadUrl: (
-      params: KeyParams,
-      options?: ObjectSignedDownloadUrlOptions
-    ) =>
+    signedDownloadUrl: (params: KeyParams, options?: ObjectSignedDownloadUrlOptions) =>
       Effect.gen(function* () {
         const storage = yield* ObjectStorage;
-        return yield* storage.signedDownloadUrl(
-          yield* resolveKey(params),
-          options
-        );
+        return yield* storage.signedDownloadUrl(yield* resolveKey(params), options);
       }),
-    signedUploadUrl: (
-      params: KeyParams,
-      options?: ObjectSignedUploadUrlOptions
-    ) =>
+    signedUploadUrl: (params: KeyParams, options?: ObjectSignedUploadUrlOptions) =>
       Effect.gen(function* () {
         const storage = yield* ObjectStorage;
-        return yield* storage.signedUploadUrl(
-          yield* resolveKey(params),
-          options
-        );
+        return yield* storage.signedUploadUrl(yield* resolveKey(params), options);
       }),
-    upload: (
-      params: KeyParams,
-      body: Uint8Array,
-      options?: ObjectUploadOptions
-    ) =>
+    upload: (params: KeyParams, body: Uint8Array, options?: ObjectUploadOptions) =>
       Effect.gen(function* () {
         const storage = yield* ObjectStorage;
         return yield* storage.upload(yield* resolveKey(params), body, options);

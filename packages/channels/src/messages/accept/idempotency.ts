@@ -38,14 +38,11 @@ const findRecord = (db: DatabaseExecutor, input: MessageIdempotencyInput) =>
             cause,
             operation: "find_idempotency",
             organizationId: input.organizationId,
-          })
-      )
+          }),
+      ),
     );
 
-export const findMessageReplay = (
-  db: DatabaseExecutor,
-  input: MessageIdempotencyInput
-) =>
+export const findMessageReplay = (db: DatabaseExecutor, input: MessageIdempotencyInput) =>
   Effect.gen(function* () {
     const record = yield* findRecord(db, input);
     if (!record) {
@@ -65,14 +62,14 @@ export const findMessageReplay = (
               cause,
               operation: "expire_idempotency",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
   });
 
 export const recordMessageIdempotency = (
   db: DatabaseExecutor,
-  input: RecordMessageIdempotencyInput
+  input: RecordMessageIdempotencyInput,
 ) =>
   Effect.gen(function* () {
     const [created] = yield* db
@@ -95,8 +92,8 @@ export const recordMessageIdempotency = (
               messageId: input.messageId,
               operation: "record_idempotency",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (created) {
@@ -118,13 +115,13 @@ export const recordMessageIdempotency = (
               cause,
               operation: "find_idempotency",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
     if (!existing) {
       return yield* new MessageAcceptPersistenceError({
         cause: new Error(
-          `Conflicting Idempotency record was not found for Organization ${input.organizationId}`
+          `Conflicting Idempotency record was not found for Organization ${input.organizationId}`,
         ),
         messageId: input.messageId,
         operation: "find_idempotency",

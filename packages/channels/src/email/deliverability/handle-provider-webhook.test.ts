@@ -25,7 +25,7 @@ const makeFactory = (
         readonly events: readonly NormalizedDeliveryEvent[];
         readonly type: "events";
       }
-    | { readonly type: "noop" }
+    | { readonly type: "noop" },
 ) =>
   ({
     create: () => Effect.die("unused"),
@@ -86,8 +86,7 @@ describe("handleProviderWebhook", () => {
           where: () => Effect.succeed([]),
         }),
       }),
-      transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) =>
-        body(db),
+      transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),
       update: () => ({
         set: () => ({
           where: () => Effect.void,
@@ -104,7 +103,7 @@ describe("handleProviderWebhook", () => {
     const layer = Layer.mergeAll(
       Layer.succeed(DB, db),
       Layer.succeed(EmailProviderRegistry, registry),
-      Layer.succeed(Jobs, jobs)
+      Layer.succeed(Jobs, jobs),
     );
 
     const result = await Effect.runPromise(
@@ -113,7 +112,7 @@ describe("handleProviderWebhook", () => {
         productId: "ses",
         rawBody: "{}",
         vendorId: "aws",
-      }).pipe(Effect.provide(layer))
+      }).pipe(Effect.provide(layer)),
     );
 
     expect(result).toEqual({ ok: true });
@@ -139,7 +138,7 @@ describe("handleProviderWebhook", () => {
     const layer = Layer.mergeAll(
       Layer.succeed(DB, {} as never),
       Layer.succeed(EmailProviderRegistry, registry),
-      Layer.succeed(Jobs, jobs)
+      Layer.succeed(Jobs, jobs),
     );
 
     const error = await Effect.runPromise(
@@ -148,7 +147,7 @@ describe("handleProviderWebhook", () => {
         productId: "x",
         rawBody: "{}",
         vendorId: "nope",
-      }).pipe(Effect.provide(layer), Effect.flip)
+      }).pipe(Effect.provide(layer), Effect.flip),
     );
 
     expect(error.code).toBe("not_found");

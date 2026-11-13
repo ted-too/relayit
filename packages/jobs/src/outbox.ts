@@ -17,12 +17,10 @@ type ClaimedJob = typeof jobOutbox.$inferSelect & {
   readonly claimToken: string;
 };
 
-const dateFromMillis = (millis: number) =>
-  DateTime.toDate(DateTime.makeUnsafe(millis));
+const dateFromMillis = (millis: number) => DateTime.toDate(DateTime.makeUnsafe(millis));
 
 const outboxError =
-  (stage: "outbox-claim" | "outbox-publish", stream?: string) =>
-  (cause: unknown) =>
+  (stage: "outbox-claim" | "outbox-publish", stream?: string) => (cause: unknown) =>
     new JobWorkerRuntimeError({
       cause,
       stage,
@@ -46,11 +44,8 @@ const claimOutboxJobs = (options: OutboxPublisherOptions) =>
             .where(
               and(
                 eq(jobOutbox.status, "pending"),
-                or(
-                  isNull(jobOutbox.claimExpiresAt),
-                  lt(jobOutbox.claimExpiresAt, now)
-                )
-              )
+                or(isNull(jobOutbox.claimExpiresAt), lt(jobOutbox.claimExpiresAt, now)),
+              ),
             )
             .orderBy(asc(jobOutbox.createdAt))
             .limit(options.batchSize)
@@ -75,7 +70,7 @@ const claimOutboxJobs = (options: OutboxPublisherOptions) =>
             claimExpiresAt,
             claimToken,
           }));
-        })
+        }),
       )
       .pipe(Effect.mapError(outboxError("outbox-claim")));
   });
@@ -94,12 +89,8 @@ const releaseClaim = (job: ClaimedJob, cause: unknown) =>
         lastError: cause instanceof Error ? cause.message : String(cause),
         updatedAt: now,
       })
-      .where(
-        and(eq(jobOutbox.id, job.id), eq(jobOutbox.claimToken, job.claimToken))
-      );
-  }).pipe(
-    Effect.mapError(outboxError("outbox-publish", jobKeys(job.jobName).ready))
-  );
+      .where(and(eq(jobOutbox.id, job.id), eq(jobOutbox.claimToken, job.claimToken)));
+  }).pipe(Effect.mapError(outboxError("outbox-publish", jobKeys(job.jobName).ready)));
 
 const markPublished = (job: ClaimedJob) =>
   Effect.gen(function* () {
@@ -116,12 +107,8 @@ const markPublished = (job: ClaimedJob) =>
         status: "published",
         updatedAt: now,
       })
-      .where(
-        and(eq(jobOutbox.id, job.id), eq(jobOutbox.claimToken, job.claimToken))
-      );
-  }).pipe(
-    Effect.mapError(outboxError("outbox-publish", jobKeys(job.jobName).ready))
-  );
+      .where(and(eq(jobOutbox.id, job.id), eq(jobOutbox.claimToken, job.claimToken)));
+  }).pipe(Effect.mapError(outboxError("outbox-publish", jobKeys(job.jobName).ready)));
 
 const publishOutboxJob = (job: ClaimedJob) =>
   Effect.gen(function* () {
@@ -147,7 +134,7 @@ const publishOutboxJob = (job: ClaimedJob) =>
       Effect.match({
         onFailure: (error) => ({ error, success: false }) as const,
         onSuccess: () => ({ success: true }) as const,
-      })
+      }),
     );
 
     if (!result.success) {
@@ -164,6 +151,6 @@ export const publishOutboxBatch = (options: OutboxPublisherOptions) =>
       Effect.forEach(jobs, publishOutboxJob, {
         concurrency: options.concurrency,
         discard: true,
-      })
-    )
+      }),
+    ),
   );

@@ -28,32 +28,22 @@ const resolveMigrationsFolder = (): string => {
 export const migrateOnStartup = async (databaseUrl: string): Promise<void> => {
   const migrationsFolder = resolveMigrationsFolder();
   if (!existsSync(migrationsFolder)) {
-    throw new Error(
-      `Drizzle migrations folder not found at ${migrationsFolder}`
-    );
+    throw new Error(`Drizzle migrations folder not found at ${migrationsFolder}`);
   }
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
   try {
-    await client.query("SELECT pg_advisory_lock($1, $2)", [
-      LOCK_KEY1,
-      LOCK_KEY2,
-    ]);
+    await client.query("SELECT pg_advisory_lock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
     try {
       const db = drizzle({ client });
       const result = await migrate(db, { migrationsFolder });
       if (result != null) {
-        throw new Error(
-          `Database migration failed with exit code: ${result.exitCode}`
-        );
+        throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
       }
     } finally {
-      await client.query("SELECT pg_advisory_unlock($1, $2)", [
-        LOCK_KEY1,
-        LOCK_KEY2,
-      ]);
+      await client.query("SELECT pg_advisory_unlock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
     }
   } finally {
     await client.end();

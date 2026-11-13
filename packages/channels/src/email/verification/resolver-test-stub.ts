@@ -6,8 +6,7 @@ const TRAILING_DOT_REGEX = /\.$/;
 const notFound = (host: string, code = "ENOTFOUND") =>
   Object.assign(new Error(`not found: ${host}`), { code });
 
-const normalizeHost = (host: string) =>
-  host.replace(TRAILING_DOT_REGEX, "").toLowerCase();
+const normalizeHost = (host: string) => host.replace(TRAILING_DOT_REGEX, "").toLowerCase();
 
 /** Stub `dns.promises.Resolver` so tests don't hit the ambient resolver. */
 export const stubResolverNs = (nsByHost: Record<string, string[]>) => {
@@ -27,6 +26,6 @@ export const stubResolverNs = (nsByHost: Record<string, string[]>) => {
         },
         resolveTxt: () => Promise.resolve([]),
         setServers: () => undefined,
-      }) as unknown as dns.promises.Resolver) as never
+      }) as unknown as dns.promises.Resolver) as never,
   );
 };

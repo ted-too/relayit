@@ -20,9 +20,7 @@ export const signWebhookPayload = ({
   body,
 }: SignWebhookPayloadOptions): string => {
   const signedPayload = `${idempotencyId}.${timestamp}.${body}`;
-  const digest = createHmac("sha256", secret)
-    .update(signedPayload)
-    .digest("hex");
+  const digest = createHmac("sha256", secret).update(signedPayload).digest("hex");
 
   return `v1=${digest}`;
 };

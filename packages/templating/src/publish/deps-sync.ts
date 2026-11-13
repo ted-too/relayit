@@ -2,12 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Effect } from "effect";
-import {
-  checkoutRefToDirectory,
-  commitFiles,
-  HOSTED_DEV_REF,
-  withWorkspaceGitLock,
-} from "../git";
+import { checkoutRefToDirectory, commitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { assertHardenedPackageJson } from "./package-json";
@@ -30,8 +25,7 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
               }),
             try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-deps-")),
           }),
-          (dir) =>
-            Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
+          (dir) => Effect.promise(() => fs.rm(dir, { force: true, recursive: true })),
         );
 
         yield* checkoutRefToDirectory({
@@ -78,6 +72,6 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
           ref: HOSTED_DEV_REF,
           workspaceId: input.workspaceId,
         });
-      })
-    )
+      }),
+    ),
   );

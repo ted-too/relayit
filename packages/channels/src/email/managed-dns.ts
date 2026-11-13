@@ -60,9 +60,7 @@ export interface EmailManagedDnsConfig {
 export interface EmailManagedDnsService {
   /** True when Cloudflare credentials are wired (live layer, not noop). */
   readonly cloudflareEnabled: boolean;
-  readonly reconcile: (
-    recordSet: ManagedDnsRecordSet
-  ) => Effect.Effect<void, ManagedDnsError>;
+  readonly reconcile: (recordSet: ManagedDnsRecordSet) => Effect.Effect<void, ManagedDnsError>;
   readonly remove: (owner: string) => Effect.Effect<void, ManagedDnsError>;
 }
 
@@ -86,7 +84,7 @@ const recordKey = (record: {
 }) => `${record.role}:${record.purpose}`;
 
 type ProvideCloudflare = <A, E>(
-  effect: Effect.Effect<A, E, CloudflareOpContext | HttpClient.HttpClient>
+  effect: Effect.Effect<A, E, CloudflareOpContext | HttpClient.HttpClient>,
 ) => Effect.Effect<A, E>;
 
 const isMissingDnsRecord = (error: unknown): boolean => {
@@ -99,9 +97,7 @@ const isMissingDnsRecord = (error: unknown): boolean => {
       return true;
     case "CloudflareError":
       return (
-        tagged.errors?.some(
-          (entry) => entry.code === CF_RECORD_DOES_NOT_EXIST_ERROR_CODE
-        ) ?? false
+        tagged.errors?.some((entry) => entry.code === CF_RECORD_DOES_NOT_EXIST_ERROR_CODE) ?? false
       );
     default:
       return false;
@@ -146,17 +142,15 @@ const upsertCloudflareDnsRecord = ({
     const createdId = yield* provide(DNS.createRecord(payload)).pipe(
       Effect.map((created) => created.id as string | undefined),
       Effect.catchTag("DnsRecordAlreadyExists", () =>
-        Effect.succeed(undefined as string | undefined)
-      )
+        Effect.succeed(undefined as string | undefined),
+      ),
     );
 
     if (createdId) {
       return createdId;
     }
 
-    const fqdn = record.name.endsWith(rootDomain)
-      ? record.name
-      : `${record.name}.${rootDomain}`;
+    const fqdn = record.name.endsWith(rootDomain) ? record.name : `${record.name}.${rootDomain}`;
     const exactName = fqdn.replace(TRAILING_DOT_REGEX, "");
 
     const existing = yield* provide(
@@ -165,13 +159,12 @@ const upsertCloudflareDnsRecord = ({
         perPage: 5,
         type: record.type,
         zoneId,
-      })
+      }),
     ).pipe(Effect.map((page) => page.result[0]));
 
     if (!existing?.id) {
       return yield* new ManagedDnsError({
-        message:
-          "Cloudflare reported a duplicate DNS record but none could be found to overwrite.",
+        message: "Cloudflare reported a duplicate DNS record but none could be found to overwrite.",
         operation: "upsert_cloudflare",
         owner,
         recordName: record.name,
@@ -184,7 +177,7 @@ const upsertCloudflareDnsRecord = ({
         ...payload,
         dnsRecordId: existing.id,
         zoneId,
-      })
+      }),
     );
 
     return existing.id;
@@ -203,16 +196,13 @@ const upsertCloudflareDnsRecord = ({
             zoneId,
           });
       }
-    })
+    }),
   );
 
 const deleteCloudflareRecords = (
   provide: ProvideCloudflare,
-  records: readonly Pick<
-    EmailDnsRecord,
-    "cloudflareRecordId" | "cloudflareZoneId"
-  >[],
-  owner?: string
+  records: readonly Pick<EmailDnsRecord, "cloudflareRecordId" | "cloudflareZoneId">[],
+  owner?: string,
 ) =>
   Effect.gen(function* () {
     const byZone = new Map<string, string[]>();
@@ -230,7 +220,7 @@ const deleteCloudflareRecords = (
         DNS.batchRecord({
           deletes: ids.map((id) => ({ id })),
           zoneId,
-        })
+        }),
       ).pipe(
         Effect.catchIf(isMissingDnsRecord, () => Effect.void),
         Effect.mapError(
@@ -241,8 +231,8 @@ const deleteCloudflareRecords = (
               operation: "delete_cloudflare",
               owner,
               zoneId,
-            })
-        )
+            }),
+        ),
       );
     }
   });
@@ -250,19 +240,14 @@ const deleteCloudflareRecords = (
 const findExistingForRecord = (
   db: DatabaseExecutor,
   recordSet: ManagedDnsRecordSet,
-  record: ManagedDnsRecord
+  record: ManagedDnsRecord,
 ) =>
   Effect.gen(function* () {
     if (record.role === "shared") {
       const [row] = yield* db
         .select()
         .from(emailDnsRecord)
-        .where(
-          and(
-            eq(emailDnsRecord.role, "shared"),
-            eq(emailDnsRecord.purpose, record.purpose)
-          )
-        )
+        .where(and(eq(emailDnsRecord.role, "shared"), eq(emailDnsRecord.purpose, record.purpose)))
         .limit(1);
       return row;
     }
@@ -275,8 +260,8 @@ const findExistingForRecord = (
           and(
             eq(emailDnsRecord.sandboxDomainId, recordSet.sandboxDomainId),
             eq(emailDnsRecord.role, record.role),
-            eq(emailDnsRecord.purpose, record.purpose)
-          )
+            eq(emailDnsRecord.purpose, record.purpose),
+          ),
         )
         .limit(1);
       return row;
@@ -290,8 +275,8 @@ const findExistingForRecord = (
           and(
             eq(emailDnsRecord.customDomainId, recordSet.customDomainId),
             eq(emailDnsRecord.role, record.role),
-            eq(emailDnsRecord.purpose, record.purpose)
-          )
+            eq(emailDnsRecord.purpose, record.purpose),
+          ),
         )
         .limit(1);
       return row;
@@ -304,8 +289,8 @@ const findExistingForRecord = (
         and(
           eq(emailDnsRecord.owner, recordSet.owner),
           eq(emailDnsRecord.role, record.role),
-          eq(emailDnsRecord.purpose, record.purpose)
-        )
+          eq(emailDnsRecord.purpose, record.purpose),
+        ),
       )
       .limit(1);
     return row;
@@ -336,8 +321,8 @@ const upsertManagedRecord = ({
             operation: "persist",
             owner: recordSet.owner,
             recordName: record.name,
-          })
-      )
+          }),
+      ),
     );
     const status = record.status ?? "pending";
     const now = DateTime.toDate(DateTime.nowUnsafe());
@@ -362,7 +347,7 @@ const upsertManagedRecord = ({
             ...(record.recordType === "MX" && record.priority !== undefined
               ? { priority: record.priority }
               : {}),
-          })
+          }),
         ).pipe(
           Effect.as(true),
           Effect.catchIf(isMissingDnsRecord, () => Effect.succeed(false)),
@@ -375,8 +360,8 @@ const upsertManagedRecord = ({
                 owner: recordSet.owner,
                 recordName: record.name,
                 zoneId: existingZoneId,
-              })
-          )
+              }),
+          ),
         );
 
         if (updated) {
@@ -444,8 +429,8 @@ const upsertManagedRecord = ({
                 operation: "persist",
                 owner: recordSet.owner,
                 recordName: record.name,
-              })
-          )
+              }),
+          ),
         );
       return;
     }
@@ -462,22 +447,20 @@ const upsertManagedRecord = ({
               operation: "persist",
               owner: recordSet.owner,
               recordName: record.name,
-            })
-        )
+            }),
+        ),
       );
   });
 
 const makeManagedDnsService = (
   db: Database,
   config: EmailManagedDnsConfig | null,
-  provide: ProvideCloudflare | null
+  provide: ProvideCloudflare | null,
 ): EmailManagedDnsService => {
   const reconcile = (recordSet: ManagedDnsRecordSet) =>
     Effect.gen(function* () {
       const zoneId = recordSet.cloudflareZoneId ?? config?.zoneId;
-      const desiredKeys = new Set(
-        recordSet.records.map((record) => recordKey(record))
-      );
+      const desiredKeys = new Set(recordSet.records.map((record) => recordKey(record)));
 
       for (const record of recordSet.records) {
         yield* upsertManagedRecord({
@@ -502,8 +485,8 @@ const makeManagedDnsService = (
                 message: "Failed to list managed DNS records for owner.",
                 operation: "persist",
                 owner: recordSet.owner,
-              })
-          )
+              }),
+          ),
         );
 
       const extras = owned.filter((row) => !desiredKeys.has(recordKey(row)));
@@ -521,8 +504,8 @@ const makeManagedDnsService = (
         .where(
           inArray(
             emailDnsRecord.id,
-            extras.map((row) => row.id)
-          )
+            extras.map((row) => row.id),
+          ),
         )
         .pipe(
           Effect.mapError(
@@ -532,8 +515,8 @@ const makeManagedDnsService = (
                 message: "Failed to delete extra managed DNS records.",
                 operation: "persist",
                 owner: recordSet.owner,
-              })
-          )
+              }),
+          ),
         );
     }).pipe(
       Effect.mapError((cause) => {
@@ -548,7 +531,7 @@ const makeManagedDnsService = (
               owner: recordSet.owner,
             });
         }
-      })
+      }),
     );
 
   const remove = (owner: string) =>
@@ -565,8 +548,8 @@ const makeManagedDnsService = (
                 message: "Failed to list managed DNS records for owner.",
                 operation: "persist",
                 owner,
-              })
-          )
+              }),
+          ),
         );
 
       if (owned.length === 0) {
@@ -577,7 +560,7 @@ const makeManagedDnsService = (
         yield* deleteCloudflareRecords(
           provide,
           owned.filter((row) => row.cloudflareRecordId !== null),
-          owner
+          owner,
         );
       }
 
@@ -592,8 +575,8 @@ const makeManagedDnsService = (
                 message: "Failed to delete managed DNS records for owner.",
                 operation: "persist",
                 owner,
-              })
-          )
+              }),
+          ),
         );
     }).pipe(
       Effect.mapError((cause) => {
@@ -608,7 +591,7 @@ const makeManagedDnsService = (
               owner,
             });
         }
-      })
+      }),
     );
 
   return {
@@ -618,10 +601,9 @@ const makeManagedDnsService = (
   };
 };
 
-export class EmailManagedDns extends Context.Service<
-  EmailManagedDns,
-  EmailManagedDnsService
->()("Channels/EmailManagedDns") {
+export class EmailManagedDns extends Context.Service<EmailManagedDns, EmailManagedDnsService>()(
+  "Channels/EmailManagedDns",
+) {
   /** No Cloudflare; reconcile/remove still persist and clean DB rows by owner. */
   static noop() {
     return Layer.effect(
@@ -629,7 +611,7 @@ export class EmailManagedDns extends Context.Service<
       Effect.gen(function* () {
         const db = yield* DB;
         return makeManagedDnsService(db, null, null);
-      })
+      }),
     );
   }
 
@@ -644,11 +626,11 @@ export class EmailManagedDns extends Context.Service<
         const provide: ProvideCloudflare = (effect) =>
           effect.pipe(
             Effect.provide(credentialsLive),
-            Effect.provideService(HttpClient.HttpClient, http)
+            Effect.provideService(HttpClient.HttpClient, http),
           );
 
         return makeManagedDnsService(db, config, provide);
-      })
+      }),
     ).pipe(Layer.provide(FetchHttpClient.layer));
   }
 }

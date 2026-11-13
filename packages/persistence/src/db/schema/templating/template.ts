@@ -16,21 +16,15 @@ import { channelEnum } from "../channels";
 import { templatingWorkspaceEntry } from "./workspace";
 
 /** Email (and later other channel) Template variant authoring engines. */
-export const AVAILABLE_TEMPLATE_CHANNEL_ENGINES = [
-  "primitive",
-  "reactEmail",
-] as const;
+export const AVAILABLE_TEMPLATE_CHANNEL_ENGINES = ["primitive", "reactEmail"] as const;
 
-export const zTemplateChannelEngine = z.enum(
-  AVAILABLE_TEMPLATE_CHANNEL_ENGINES
-);
+export const zTemplateChannelEngine = z.enum(AVAILABLE_TEMPLATE_CHANNEL_ENGINES);
 
-export type TemplateChannelEngine =
-  (typeof AVAILABLE_TEMPLATE_CHANNEL_ENGINES)[number];
+export type TemplateChannelEngine = (typeof AVAILABLE_TEMPLATE_CHANNEL_ENGINES)[number];
 
 export const templateChannelEngineEnum = pgEnum(
   "template_channel_engine",
-  AVAILABLE_TEMPLATE_CHANNEL_ENGINES
+  AVAILABLE_TEMPLATE_CHANNEL_ENGINES,
 );
 
 /**
@@ -51,9 +45,7 @@ export interface ReactEmailVariantContent {
   subject: string;
 }
 
-export type TemplateEmailVariantContent =
-  | PrimitiveEmailContent
-  | ReactEmailVariantContent;
+export type TemplateEmailVariantContent = PrimitiveEmailContent | ReactEmailVariantContent;
 
 /**
  * Resend-shaped primitive Template Variables: map keyed by name.
@@ -64,10 +56,7 @@ export interface PrimitiveTemplateVariableDef {
   type: "number" | "string";
 }
 
-export type PrimitiveTemplateVariables = Record<
-  string,
-  PrimitiveTemplateVariableDef
->;
+export type PrimitiveTemplateVariables = Record<string, PrimitiveTemplateVariableDef>;
 
 /**
  * Project-scoped send catalog entry. Addressed by **id** or **slug** on the
@@ -98,7 +87,7 @@ export const template = pgTable(
     uniqueIndex("template_organization_slug_active_uidx")
       .on(t.organizationId, t.slug)
       .where(sql`${t.archivedAt} IS NULL`),
-  ]
+  ],
 );
 
 export type Template = typeof template.$inferSelect;
@@ -131,23 +120,17 @@ export const templateChannelVariant = pgTable(
      * reactEmail link target. Null means broken/cleared (e.g. entry hard-deleted);
      * normal entry removal soft-deletes the entry and keeps this id for broken UX.
      */
-    workspaceEntryId: text("workspace_entry_id").references(
-      () => templatingWorkspaceEntry.id,
-      { onDelete: "set null" }
-    ),
+    workspaceEntryId: text("workspace_entry_id").references(() => templatingWorkspaceEntry.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .$onUpdate(() => new Date())
       .notNull(),
   },
   (t) => [
-    uniqueIndex("template_channel_variant_template_channel_uidx").on(
-      t.templateId,
-      t.channel
-    ),
-    index("template_channel_variant_workspace_entry_idx").on(
-      t.workspaceEntryId
-    ),
+    uniqueIndex("template_channel_variant_template_channel_uidx").on(t.templateId, t.channel),
+    index("template_channel_variant_workspace_entry_idx").on(t.workspaceEntryId),
     check(
       "template_channel_variant_engine_payload_check",
       sql`(
@@ -159,9 +142,9 @@ export const templateChannelVariant = pgTable(
         AND ${t.variables} IS NULL
         AND ${t.content} IS NOT NULL
         AND coalesce(${t.content}->>'subject', '') <> ''
-      )`
+      )`,
     ),
-  ]
+  ],
 );
 
 export type TemplateChannelVariant = typeof templateChannelVariant.$inferSelect;

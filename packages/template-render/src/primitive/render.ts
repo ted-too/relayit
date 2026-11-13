@@ -17,7 +17,7 @@ export type PrimitiveRenderResult =
 function resolveValue(
   name: string,
   def: PrimitiveVariableDef | undefined,
-  values: PrimitiveRenderValues | undefined
+  values: PrimitiveRenderValues | undefined,
 ): { ok: true; value: string } | { ok: false; error: PrimitiveRenderError } {
   if (!def) {
     return { ok: false, error: { code: "undeclared_placeholder", name } };
@@ -50,7 +50,7 @@ function resolveValue(
 function substitute(
   template: string,
   variables: PrimitiveVariables,
-  values: PrimitiveRenderValues | undefined
+  values: PrimitiveRenderValues | undefined,
 ): { ok: true; value: string } | { ok: false; error: PrimitiveRenderError } {
   let error: PrimitiveRenderError | undefined;
   const out = template.replace(PLACEHOLDER_RE, (_match, name: string) => {

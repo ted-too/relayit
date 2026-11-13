@@ -24,10 +24,7 @@ import {
   stageEmailAttachments,
 } from "./attachments";
 import { prepareEmailContent } from "./content";
-import type {
-  AcceptedTransactionalEmail,
-  AcceptTransactionalEmailInput,
-} from "./contracts";
+import type { AcceptedTransactionalEmail, AcceptTransactionalEmailInput } from "./contracts";
 import {
   EmailAcceptInfrastructureError,
   EmailAcceptPersistenceError,
@@ -39,14 +36,12 @@ import {
   resolveEmailSender,
 } from "./policy";
 
-class ConcurrentEmailAcceptReplay extends Data.TaggedError(
-  "ConcurrentEmailAcceptReplay"
-)<{
+class ConcurrentEmailAcceptReplay extends Data.TaggedError("ConcurrentEmailAcceptReplay")<{
   readonly messageId: string;
 }> {}
 
 const compensationRetry = Schedule.recurs(2).pipe(
-  Schedule.addDelay(() => Effect.succeed("100 millis"))
+  Schedule.addDelay(() => Effect.succeed("100 millis")),
 );
 
 const findAcceptedEmail = (db: Effect.Success<typeof DB>, messageId: string) =>
@@ -64,7 +59,7 @@ const findAcceptedEmail = (db: Effect.Success<typeof DB>, messageId: string) =>
               replayed: true,
               stripped: [],
             } satisfies AcceptedTransactionalEmail)
-          : undefined
+          : undefined,
       ),
       Effect.mapError(
         (cause) =>
@@ -72,38 +67,31 @@ const findAcceptedEmail = (db: Effect.Success<typeof DB>, messageId: string) =>
             cause,
             messageId,
             operation: "find_email_delivery",
-          })
-      )
+          }),
+      ),
     );
 
-const findAcceptedEmailWithRetry = (
-  db: Effect.Success<typeof DB>,
-  messageId: string
-) =>
+const findAcceptedEmailWithRetry = (db: Effect.Success<typeof DB>, messageId: string) =>
   findAcceptedEmail(db, messageId).pipe(
     Effect.flatMap((accepted) =>
       accepted
         ? Effect.succeed(accepted)
         : Effect.fail(
             new EmailAcceptPersistenceError({
-              cause: new Error(
-                `Accepted Email Delivery was not found for Message ${messageId}`
-              ),
+              cause: new Error(`Accepted Email Delivery was not found for Message ${messageId}`),
               messageId,
               operation: "find_email_delivery",
-            })
-          )
+            }),
+          ),
     ),
     Effect.retry(compensationRetry),
-    Effect.orElseSucceed(
-      () => undefined as AcceptedTransactionalEmail | undefined
-    )
+    Effect.orElseSucceed(() => undefined as AcceptedTransactionalEmail | undefined),
   );
 
 const compensateAcceptFailure = (
   usage: Effect.Success<typeof Usage>,
   deliveryId: string,
-  stagedAttachments: readonly StagedEmailAttachment[]
+  stagedAttachments: readonly StagedEmailAttachment[],
 ) =>
   Effect.gen(function* () {
     yield* usage.release({ deliveryId }).pipe(
@@ -113,44 +101,39 @@ const compensateAcceptFailure = (
           Effect.annotateLogs({
             deliveryId,
             error: String(error),
-          })
-        )
+          }),
+        ),
       ),
-      Effect.ignore
+      Effect.ignore,
     );
     yield* deleteStagedEmailAttachments(stagedAttachments).pipe(
       Effect.retry(compensationRetry),
       Effect.tapError((error) =>
-        Effect.logError(
-          "Failed to delete staged Attachments after accept failure"
-        ).pipe(
+        Effect.logError("Failed to delete staged Attachments after accept failure").pipe(
           Effect.annotateLogs({
             deliveryId,
             error: String(error),
             stagedCount: stagedAttachments.length,
-          })
-        )
+          }),
+        ),
       ),
-      Effect.ignore
+      Effect.ignore,
     );
   });
 
-export const acceptTransactionalEmail = (
-  input: AcceptTransactionalEmailInput
-) => {
-  const recipientCount =
-    input.email.to.length + input.email.cc.length + input.email.bcc.length;
+export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) => {
+  const recipientCount = input.email.to.length + input.email.cc.length + input.email.bcc.length;
   if (recipientCount === 0) {
     return Effect.fail(
       new EmailAcceptRejected({
         code: "no_recipients",
         message: "At least one recipient is required",
-      })
+      }),
     );
   }
 
   const blockedAttachment = input.email.attachments.find((attachment) =>
-    isBlockedAttachmentFilename(attachment.filename)
+    isBlockedAttachmentFilename(attachment.filename),
   );
   if (blockedAttachment) {
     return Effect.fail(
@@ -161,7 +144,7 @@ export const acceptTransactionalEmail = (
           reason: "blocked_extension",
         },
         message: "This file type isn't allowed for security reasons.",
-      })
+      }),
     );
   }
 
@@ -206,8 +189,8 @@ export const acceptTransactionalEmail = (
             cause: error.cause,
             operation: "suppressions",
             organizationId: input.organizationId,
-          })
-      )
+          }),
+      ),
     );
     const cc = yield* filterSuppressedContacts(db, {
       organizationAppEnvironmentId: appEnvironment.id,
@@ -220,8 +203,8 @@ export const acceptTransactionalEmail = (
             cause: error.cause,
             operation: "suppressions",
             organizationId: input.organizationId,
-          })
-      )
+          }),
+      ),
     );
     const bcc = yield* filterSuppressedContacts(db, {
       organizationAppEnvironmentId: appEnvironment.id,
@@ -234,15 +217,14 @@ export const acceptTransactionalEmail = (
             cause: error.cause,
             operation: "suppressions",
             organizationId: input.organizationId,
-          })
-      )
+          }),
+      ),
     );
     const recipients = [...to.kept, ...cc.kept, ...bcc.kept];
     if (recipients.length === 0) {
       return yield* new EmailAcceptRejected({
         code: "all_recipients_suppressed",
-        message:
-          "Every recipient is suppressed at severity all; no deliverable addresses remain.",
+        message: "Every recipient is suppressed at severity all; no deliverable addresses remain.",
       });
     }
     if (sender.kind === "sandbox") {
@@ -252,14 +234,10 @@ export const acceptTransactionalEmail = (
       });
     }
 
-    const providerKind = yield* resolveEmailProviderKind(
-      db,
-      input.organizationId,
-      sender
-    );
+    const providerKind = yield* resolveEmailProviderKind(db, input.organizationId, sender);
     const attachments = yield* resolveEmailAttachments(
       input.email.attachments,
-      input.organizationId
+      input.organizationId,
     );
     const deliveryId = typeid("edlv").toString();
     const messageId = typeid("msg").toString();
@@ -281,9 +259,7 @@ export const acceptTransactionalEmail = (
             id: messageId,
             organizationAppEnvironmentId: appEnvironment.id,
             purpose: "transactional",
-            scheduledAt: input.scheduledAt
-              ? DateTime.toDate(input.scheduledAt)
-              : null,
+            scheduledAt: input.scheduledAt ? DateTime.toDate(input.scheduledAt) : null,
             tags: input.tags,
             templateId: content.templateId ?? null,
           })
@@ -294,8 +270,8 @@ export const acceptTransactionalEmail = (
                   cause,
                   messageId,
                   operation: "insert_message",
-                })
-            )
+                }),
+            ),
           );
         yield* tx
           .insert(emailDelivery)
@@ -323,8 +299,8 @@ export const acceptTransactionalEmail = (
                   cause,
                   messageId,
                   operation: "insert_email_delivery",
-                })
-            )
+                }),
+            ),
           );
 
         stagedAttachments = yield* stageEmailAttachments(tx, {
@@ -365,9 +341,7 @@ export const acceptTransactionalEmail = (
             startDate: reservedAt,
           },
           tx,
-          input.scheduledAt
-            ? { delayUntil: DateTime.toEpochMillis(input.scheduledAt) }
-            : undefined
+          input.scheduledAt ? { delayUntil: DateTime.toEpochMillis(input.scheduledAt) } : undefined,
         );
 
         if (input.scheduledAt) {
@@ -398,19 +372,16 @@ export const acceptTransactionalEmail = (
               },
               organizationId: input.organizationId,
             }),
-          { concurrency: 1, discard: true }
+          { concurrency: 1, discard: true },
         );
-      })
+      }),
     );
 
     const result = yield* Effect.result(transaction);
     if (Result.isFailure(result)) {
       yield* compensateAcceptFailure(usage, deliveryId, stagedAttachments);
       if (result.failure instanceof ConcurrentEmailAcceptReplay) {
-        const accepted = yield* findAcceptedEmailWithRetry(
-          db,
-          result.failure.messageId
-        );
+        const accepted = yield* findAcceptedEmailWithRetry(db, result.failure.messageId);
         if (accepted) {
           return accepted;
         }
@@ -422,12 +393,10 @@ export const acceptTransactionalEmail = (
       deliveryId,
       messageId,
       replayed: false,
-      stripped: [...to.stripped, ...cc.stripped, ...bcc.stripped].map(
-        (recipient) => ({
-          email: recipient.email,
-          reason: "suppression" as const,
-        })
-      ),
+      stripped: [...to.stripped, ...cc.stripped, ...bcc.stripped].map((recipient) => ({
+        email: recipient.email,
+        reason: "suppression" as const,
+      })),
     } satisfies AcceptedTransactionalEmail;
   });
 };

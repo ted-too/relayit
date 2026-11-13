@@ -1,11 +1,4 @@
-import {
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import type { EmailFrom } from "../validators/channels/email";
 import { organization } from "./auth";
@@ -46,7 +39,7 @@ export const campaign = pgTable(
     index("campaign_template_idx").on(t.templateId),
     index("campaign_archived_at_idx").on(t.archivedAt),
     index("campaign_organization_name_idx").on(t.organizationId, t.name),
-  ]
+  ],
 );
 
 export type Campaign = typeof campaign.$inferSelect;
@@ -68,12 +61,7 @@ export const campaignChannelFrom = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (t) => [
-    uniqueIndex("campaign_channel_from_campaign_channel_uidx").on(
-      t.campaignId,
-      t.channel
-    ),
-  ]
+  (t) => [uniqueIndex("campaign_channel_from_campaign_channel_uidx").on(t.campaignId, t.channel)],
 );
 
 export type CampaignChannelFrom = typeof campaignChannelFrom.$inferSelect;

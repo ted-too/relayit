@@ -27,7 +27,7 @@ export function TemplateEditSlug({ template }: { template: Template }) {
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).template(template.id).queryKey,
-        data
+        data,
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -62,9 +62,7 @@ export function TemplateEditSlug({ template }: { template: Template }) {
       <section className="flex flex-col gap-2 rounded-lg border bg-card p-6">
         <h2 className="font-medium text-lg">Slug</h2>
         <p className="font-mono text-sm">{template.slug}</p>
-        <p className="text-muted-foreground text-sm">
-          Archived Templates cannot be edited.
-        </p>
+        <p className="text-muted-foreground text-sm">Archived Templates cannot be edited.</p>
       </section>
     );
   }
@@ -80,8 +78,8 @@ export function TemplateEditSlug({ template }: { template: Template }) {
       <div className="flex flex-col gap-1">
         <h2 className="font-medium text-lg">Slug</h2>
         <p className="text-muted-foreground text-sm">
-          Stable send-path handle. Must be unique among active Templates in this
-          Project. Changing it does not rename Workspace Entry files.
+          Stable send-path handle. Must be unique among active Templates in this Project. Changing
+          it does not rename Workspace Entry files.
         </p>
       </div>
       <FieldGroup>
@@ -99,9 +97,7 @@ export function TemplateEditSlug({ template }: { template: Template }) {
       <div>
         <form.AppForm>
           <form.Subscribe
-            selector={(state) =>
-              state.values.slug === template.slug || state.isSubmitting
-            }
+            selector={(state) => state.values.slug === template.slug || state.isSubmitting}
           >
             {(disabled) => (
               <Button disabled={disabled} type="submit">

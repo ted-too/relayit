@@ -6,11 +6,7 @@ import { templatingWorkspaceEntry } from "@repo/persistence/db/schema";
 import { renderSealedReactEmailArtifact } from "@repo/template-render/react-email";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
-import {
-  checkoutRefToDirectory,
-  HOSTED_DEV_REF,
-  withWorkspaceGitLock,
-} from "../git";
+import { checkoutRefToDirectory, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
@@ -47,8 +43,8 @@ export const previewHostedWorkspaceEntry = (input: {
             and(
               eq(templatingWorkspaceEntry.id, input.entryId),
               eq(templatingWorkspaceEntry.workspaceId, input.workspaceId),
-              isNull(templatingWorkspaceEntry.deletedAt)
-            )
+              isNull(templatingWorkspaceEntry.deletedAt),
+            ),
           )
           .limit(1)
           .pipe(
@@ -57,8 +53,8 @@ export const previewHostedWorkspaceEntry = (input: {
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to load workspace entry.",
-                })
-            )
+                }),
+            ),
           );
 
         if (!entry) {
@@ -77,8 +73,7 @@ export const previewHostedWorkspaceEntry = (input: {
               }),
             try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-preview-")),
           }),
-          (dir) =>
-            Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
+          (dir) => Effect.promise(() => fs.rm(dir, { force: true, recursive: true })),
         );
 
         const checkedOut = yield* checkoutRefToDirectory({
@@ -142,10 +137,8 @@ export const previewHostedWorkspaceEntry = (input: {
           html: rendered.value.html,
           props: rendered.value.props,
           subject: rendered.value.subject,
-          ...(rendered.value.text === undefined
-            ? {}
-            : { text: rendered.value.text }),
+          ...(rendered.value.text === undefined ? {} : { text: rendered.value.text }),
         } satisfies PreviewResult;
-      })
-    )
+      }),
+    ),
   );

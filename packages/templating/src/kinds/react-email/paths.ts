@@ -1,6 +1,5 @@
 /** `reactEmail/<slug>.tsx` → entry slug. */
-const REACT_EMAIL_ENTRY_PATH_RE =
-  /^reactEmail\/([a-z0-9]+(?:-[a-z0-9]+)*)\.tsx$/;
+const REACT_EMAIL_ENTRY_PATH_RE = /^reactEmail\/([a-z0-9]+(?:-[a-z0-9]+)*)\.tsx$/;
 
 export const REACT_EMAIL_ENTRY_ROOT = "reactEmail";
 

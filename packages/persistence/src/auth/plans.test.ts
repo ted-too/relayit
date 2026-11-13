@@ -57,7 +57,7 @@ const dbWithSubscriptions = (
     periodStart: Date | null;
     plan: string;
     status: string;
-  }>
+  }>,
 ) =>
   ({
     query: {
@@ -71,9 +71,7 @@ describe("resolveUserPlanName", () => {
   const now = new Date("2026-08-14T00:00:00.000Z");
 
   test("returns free when the user has no subscriptions", async () => {
-    expect(
-      await resolveUserPlanName(dbWithSubscriptions([]), "user_1", now)
-    ).toBe("free");
+    expect(await resolveUserPlanName(dbWithSubscriptions([]), "user_1", now)).toBe("free");
   });
 
   test("returns the plan of an active subscription in the current period", async () => {
@@ -88,8 +86,8 @@ describe("resolveUserPlanName", () => {
           },
         ]),
         "user_1",
-        now
-      )
+        now,
+      ),
     ).toBe("signal");
   });
 
@@ -105,8 +103,8 @@ describe("resolveUserPlanName", () => {
           },
         ]),
         "user_1",
-        now
-      )
+        now,
+      ),
     ).toBe("free");
   });
 
@@ -122,8 +120,8 @@ describe("resolveUserPlanName", () => {
           },
         ]),
         "user_1",
-        now
-      )
+        now,
+      ),
     ).toBe("broadcast");
   });
 
@@ -139,8 +137,8 @@ describe("resolveUserPlanName", () => {
           },
         ]),
         "user_1",
-        now
-      )
+        now,
+      ),
     ).toBe("free");
   });
 
@@ -156,8 +154,8 @@ describe("resolveUserPlanName", () => {
           },
         ]),
         "user_1",
-        now
-      )
+        now,
+      ),
     ).toBe("free");
   });
 });
@@ -179,11 +177,7 @@ const capturingDb = () => {
 
   const tx = {
     insert: () => ({
-      values: (row: {
-        channelType: string;
-        limits: unknown;
-        userId: string;
-      }) => ({
+      values: (row: { channelType: string; limits: unknown; userId: string }) => ({
         onConflictDoUpdate: () => {
           writes.channels.push(row);
           return Promise.resolve();
@@ -191,10 +185,7 @@ const capturingDb = () => {
       }),
     }),
     update: () => ({
-      set: (values: {
-        limitOrganizations: number | null;
-        limitRetention: number | null;
-      }) => ({
+      set: (values: { limitOrganizations: number | null; limitRetention: number | null }) => ({
         where: () => {
           writes.user = values;
           return Promise.resolve();
@@ -272,7 +263,7 @@ const sessionDb = (
     periodStart: Date | null;
     plan: string;
     status: string;
-  }>
+  }>,
 ) => {
   const captured = capturingDb();
   const subscriptionsDb = dbWithSubscriptions(subscriptions);

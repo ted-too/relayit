@@ -10,9 +10,7 @@ import { Data, Effect } from "effect";
 import { listCustomDomainsForProject } from "./list.server";
 import { resolveDefaultManagedEmailProviderId } from "./providers.server";
 
-export class CustomDomainAdminError extends Data.TaggedError(
-  "CustomDomainAdminError"
-)<{
+export class CustomDomainAdminError extends Data.TaggedError("CustomDomainAdminError")<{
   readonly cause?: unknown;
   readonly code: "not_found" | "failed" | "claim_conflict";
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -76,8 +74,8 @@ const loadProviderForOrg = (input: {
               cause,
               code: "failed",
               message: "Failed to load provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (row?.channelType !== "email") {
@@ -87,10 +85,7 @@ const loadProviderForOrg = (input: {
       });
     }
 
-    if (
-      row.scope === "project" &&
-      row.organizationId !== input.organizationId
-    ) {
+    if (row.scope === "project" && row.organizationId !== input.organizationId) {
       return yield* new CustomDomainAdminError({
         code: "not_found",
         message: "Email Provider not found.",

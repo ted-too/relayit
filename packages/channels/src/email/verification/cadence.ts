@@ -33,16 +33,11 @@ export const computeNextCheckAt = ({
   }
 
   const level = Math.min(backoffLevel, config.maxBackoffLevel);
-  const intervalMs = Math.min(
-    config.pendingBaseMs * 2 ** level,
-    config.pendingMaxMs
-  );
+  const intervalMs = Math.min(config.pendingBaseMs * 2 ** level, config.pendingMaxMs);
 
   return {
     backoffLevel:
-      verificationStatus === "not_verified"
-        ? Math.min(level + 1, config.maxBackoffLevel)
-        : level,
+      verificationStatus === "not_verified" ? Math.min(level + 1, config.maxBackoffLevel) : level,
     nextCheckAt: new Date(from.getTime() + intervalMs),
   };
 };
@@ -85,10 +80,7 @@ export const nextDomainVerifyAt = (input: {
   readonly identityNextCheckAt: Date;
   readonly nextCheckAt: Date | null;
 }): Date => {
-  if (
-    input.nextCheckAt !== null &&
-    input.nextCheckAt < input.identityNextCheckAt
-  ) {
+  if (input.nextCheckAt !== null && input.nextCheckAt < input.identityNextCheckAt) {
     return input.nextCheckAt;
   }
   return input.identityNextCheckAt;

@@ -39,8 +39,8 @@ export const createPlatformProviderFn = createServerFn({ method: "POST" })
           apiOrigin: origin,
           sandboxCloudflare,
         });
-      })
-    )
+      }),
+    ),
   );
 
 export const updatePlatformProviderFn = createServerFn({ method: "POST" })
@@ -54,16 +54,14 @@ export const updatePlatformProviderFn = createServerFn({ method: "POST" })
           ...data,
           apiOrigin: origin,
         });
-      })
-    )
+      }),
+    ),
   );
 
 export const setDefaultPlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(platformProviderIdSchema)
-  .handler(async ({ data }) =>
-    runApp(setDefaultPlatformProvider(data.providerId))
-  );
+  .handler(async ({ data }) => runApp(setDefaultPlatformProvider(data.providerId)));
 
 export const deletePlatformProviderFn = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
@@ -73,6 +71,6 @@ export const deletePlatformProviderFn = createServerFn({ method: "POST" })
       Effect.gen(function* () {
         const origin = yield* apiOriginOrFail;
         return yield* deletePlatformProvider(data.providerId, origin);
-      })
-    )
+      }),
+    ),
   );

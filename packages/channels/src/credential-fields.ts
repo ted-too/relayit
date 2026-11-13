@@ -5,13 +5,7 @@ export interface CredentialFieldMetadata {
   readonly order?: number;
   readonly placeholder?: string;
   readonly title?: string;
-  readonly type?:
-    | "text"
-    | "password"
-    | "email"
-    | "number"
-    | "textarea"
-    | "select";
+  readonly type?: "text" | "password" | "email" | "number" | "textarea" | "select";
 }
 
 export const credentialFieldRegistry = z.registry<CredentialFieldMetadata>();

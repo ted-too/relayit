@@ -1,17 +1,7 @@
-import {
-  RiArrowRightLine,
-  RiArrowRightSLine,
-  RiCheckLine,
-} from "@remixicon/react";
+import { RiArrowRightLine, RiArrowRightSLine, RiCheckLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { Link } from "@tanstack/react-router";
-import {
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useSpring,
-  useTransform,
-} from "motion/react";
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { heroRequest } from "@/lib/snippets";
 import { CodeHtml } from "./code-html";
 import { RenderedEmail } from "./rendered-email";
@@ -91,13 +81,11 @@ export function Hero({ appUrl, code, signedIn }: HeroProps) {
           </a>
           <h1 className="rise font-semibold text-[3.4rem] leading-[0.95] tracking-[-0.045em] [--rise-delay:60ms] sm:text-7xl lg:text-[6.4rem]">
             You write it.
-            <span className="block text-primary dark:text-brand-mint">
-              We relay it.
-            </span>
+            <span className="block text-primary dark:text-brand-mint">We relay it.</span>
           </h1>
           <p className="rise mt-8 max-w-[44ch] text-lg text-muted-foreground leading-relaxed [--rise-delay:140ms]">
-            One API call and Relayit renders, signs, queues, delivers and tracks
-            your product's email. On our cloud or your servers.
+            One API call and Relayit renders, signs, queues, delivers and tracks your product's
+            email. On our cloud or your servers.
           </p>
           <div className="rise mt-10 flex flex-wrap gap-3 [--rise-delay:220ms]">
             <Button

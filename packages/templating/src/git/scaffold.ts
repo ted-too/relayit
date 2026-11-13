@@ -48,8 +48,7 @@ const generateLockfile = (packageJson: string) =>
         }),
       try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-scaffold-")),
     }),
-    (tempDir) =>
-      Effect.promise(() => fs.rm(tempDir, { force: true, recursive: true }))
+    (tempDir) => Effect.promise(() => fs.rm(tempDir, { force: true, recursive: true })),
   ).pipe(
     Effect.flatMap((tempDir) =>
       Effect.gen(function* () {
@@ -59,8 +58,7 @@ const generateLockfile = (packageJson: string) =>
               code: "failed",
               message: "Failed to generate starter lockfile.",
             }),
-          try: () =>
-            fs.writeFile(path.join(tempDir, "package.json"), packageJson),
+          try: () => fs.writeFile(path.join(tempDir, "package.json"), packageJson),
         });
 
         const install = yield* runBunInstall({
@@ -83,9 +81,9 @@ const generateLockfile = (packageJson: string) =>
             }),
           try: () => fs.readFile(path.join(tempDir, "bun.lock"), "utf8"),
         });
-      })
+      }),
     ),
-    Effect.scoped
+    Effect.scoped,
   );
 
 /**

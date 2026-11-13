@@ -1,8 +1,4 @@
-export {
-  allocateSandboxDomain,
-  SandboxAllocateError,
-  sweepIfSandboxAllocatable,
-} from "./allocate";
+export { allocateSandboxDomain, SandboxAllocateError, sweepIfSandboxAllocatable } from "./allocate";
 export type { DomainKeyMaterial } from "./dns";
 export {
   buildSandboxRootDnsRecords,

@@ -11,10 +11,7 @@ export const Route = createFileRoute("/_authd/")({
   beforeLoad: async ({ context }) => {
     const organizations = await listOrganizations();
 
-    await context.queryClient.setQueryData(
-      queries.organizations.list.queryKey,
-      organizations
-    );
+    await context.queryClient.setQueryData(queries.organizations.list.queryKey, organizations);
 
     if (organizations.length === 0) {
       throw redirect({
@@ -43,9 +40,7 @@ function RouteComponent() {
   return (
     <div className="flex h-svh w-full flex-col items-center justify-between px-4">
       <div className="mt-[20svh] flex w-full max-w-sm flex-col">
-        <h1 className="mb-1 text-center font-bold text-3xl">
-          Select a project
-        </h1>
+        <h1 className="mb-1 text-center font-bold text-3xl">Select a project</h1>
         <p className="mb-6 text-center text-muted-foreground">
           You have access to the following projects:
         </p>

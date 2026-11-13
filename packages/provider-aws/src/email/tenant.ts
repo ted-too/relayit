@@ -16,8 +16,7 @@ export type SesTenantClient = Pick<
 const TENANT_PREFIX = "relayit-";
 
 /** One SES tenant per Project. Project ids are typeids (≤ 64 chars with prefix). */
-export const sesTenantNameFor = (projectId: string) =>
-  `${TENANT_PREFIX}${projectId}`;
+export const sesTenantNameFor = (projectId: string) => `${TENANT_PREFIX}${projectId}`;
 
 /** `arn:aws:ses:{region}:{account}:tenant/...` → account id. */
 const accountIdFromArn = (arn: string) => arn.split(":")[4];
@@ -28,10 +27,7 @@ const identityArn = (input: {
   readonly region: string;
 }) => `arn:aws:ses:${input.region}:${input.accountId}:identity/${input.fqdn}`;
 
-const configurationSetArn = (input: {
-  readonly accountId: string;
-  readonly region: string;
-}) =>
+const configurationSetArn = (input: { readonly accountId: string; readonly region: string }) =>
   `arn:aws:ses:${input.region}:${input.accountId}:configuration-set/${SES_CONFIGURATION_SET_NAME}`;
 
 const ensureTenantArn = (ses: SesTenantClient, tenantName: string) =>
@@ -41,8 +37,8 @@ const ensureTenantArn = (ses: SesTenantClient, tenantName: string) =>
       Effect.catchTag("AlreadyExistsException", () =>
         ses
           .getTenant({ TenantName: tenantName })
-          .pipe(Effect.map((response) => response.Tenant?.TenantArn))
-      )
+          .pipe(Effect.map((response) => response.Tenant?.TenantArn)),
+      ),
     );
     if (!created) {
       return yield* new AwsUnexpectedResponseError({
@@ -55,7 +51,7 @@ const ensureTenantArn = (ses: SesTenantClient, tenantName: string) =>
 
 const associate = (
   ses: SesTenantClient,
-  input: { readonly resourceArn: string; readonly tenantName: string }
+  input: { readonly resourceArn: string; readonly tenantName: string },
 ) =>
   ses
     .createTenantResourceAssociation({
@@ -76,7 +72,7 @@ export const ensureSesTenant = (
     readonly identityFqdn: string;
     readonly region: string;
     readonly tenantName: string;
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const tenantArn = yield* ensureTenantArn(ses, input.tenantName);
@@ -105,9 +101,7 @@ export const ensureSesTenant = (
 export const isSesTenantPaused = (ses: SesTenantClient, tenantName: string) =>
   ses
     .getTenant({ TenantName: tenantName })
-    .pipe(
-      Effect.map((response) => response.Tenant?.SendingStatus === "DISABLED")
-    );
+    .pipe(Effect.map((response) => response.Tenant?.SendingStatus === "DISABLED"));
 
 /**
  * SES refuses to delete an identity that is still associated with a tenant.
@@ -115,7 +109,7 @@ export const isSesTenantPaused = (ses: SesTenantClient, tenantName: string) =>
  */
 export const detachSesIdentityFromTenants = (
   ses: SesTenantClient,
-  input: { readonly fqdn: string; readonly region: string }
+  input: { readonly fqdn: string; readonly region: string },
 ) =>
   Effect.gen(function* () {
     const page = yield* ses.listTenants({ PageSize: 1 });
@@ -136,8 +130,8 @@ export const detachSesIdentityFromTenants = (
         .listResourceTenants({ NextToken: nextToken, ResourceArn: resourceArn })
         .pipe(
           Effect.catchTag("NotFoundException", () =>
-            Effect.succeed({ NextToken: undefined, ResourceTenants: [] })
-          )
+            Effect.succeed({ NextToken: undefined, ResourceTenants: [] }),
+          ),
         );
       for (const tenant of tenants.ResourceTenants ?? []) {
         if (!tenant.TenantName) {
