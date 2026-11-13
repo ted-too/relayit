@@ -5,7 +5,7 @@ How Relayit is put together, and why. [AGENTS.md](../../AGENTS.md) has the gloss
 ## Shape
 
 ```
-customer's code ── x-api-key ──► apps/api (Elysia) ── POST /messages/email, /send/*
+customer's code ── x-api-key ──► apps/api (HttpApi) ── POST /messages/email, /send/*
                                    │  accept: Message + Delivery + job, one transaction
                                    ▼
                              Postgres outbox ──(relayed by the worker)──► Redis Streams
@@ -45,6 +45,8 @@ A job that depends on rows being written is enqueued through the Postgres outbox
 ### `/messages/email` is Resend-compatible
 
 Transactional email is sent with `POST /messages/email`, shaped like Resend's send-email API so a Resend client can point at Relayit with minimal change. Relayit-only fields may be added, never required. It creates a transactional Message and one email Delivery; it is not a second concept and never sends marketing. Two incompatibilities are deliberate: `topic_id` is rejected, because Topic consent belongs to Campaign sends; and webhook event types are channel-agnostic (`message.sent`, `delivery.skipped`), not Resend's `email.*`. The categories match (delivery outcomes, Domain and Contact lifecycle); the names don't. The legacy `/send/*` stays for existing integrations.
+
+The api is an Effect `HttpApi` (`apps/api/src/api.ts`), but its responses are the ones the Elysia server it replaced answered with: the same statuses, bodies, field order and content types (`application/json;charset=utf-8`), a bare `400 Bad Request` for a body that isn't JSON and `404 NOT_FOUND` for an unrouted path. A request's headers and body are checked against their schemas before its API key is, as Elysia did, by the `RequestValidation` middleware; the endpoint's own decoding then never fails. `apps/api/src/contract.test.ts` pins all of it; a change there is a change to a customer contract.
 
 ### Accept, then deliver
 
