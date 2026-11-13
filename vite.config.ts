@@ -1,9 +1,6 @@
 import { defineConfig } from "vite-plus";
 
 const IGNORED = [
-  // Installed skills are vendored; keep them byte-identical to upstream.
-  ".agents/skills/**",
-  "skills-lock.json",
   // shadcn's typeset stylesheet; refreshed by downloading it again, so kept as upstream wrote it.
   "apps/site/src/typeset.css",
   "temp/**",
