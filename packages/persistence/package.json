@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.20.4",
-    "drizzle-kit": "1.0.0-rc.5-ab785fc",
+    "drizzle-kit": "1.0.0-rc.5",
     "vitest": "catalog:"
   }
 }

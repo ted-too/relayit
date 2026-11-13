@@ -9,7 +9,7 @@ import { makeDbLive } from "@repo/persistence/db/effect";
 import { emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { Layer, type Option, Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import type { WorkerConfig } from "./env";
 
 const optionValue = <A>(option: Option.Option<A>): A | undefined =>
@@ -23,7 +23,7 @@ export const cloudflareFromConfig = (config: WorkerConfig) => {
     return;
   }
   return {
-    apiToken: Redacted.value(apiToken),
+    apiToken,
     rootDomain,
     zoneId,
   };

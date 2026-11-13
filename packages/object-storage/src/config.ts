@@ -23,9 +23,9 @@ const DEFAULT_LOCAL_DIRECTORY = NodePath.resolve(
  */
 export const objectStorageConfig = Effect.gen(function* () {
   const configured = Option.getOrUndefined(
-    yield* Config.literals(["local", "s3"], "OBJECT_STORAGE").pipe(Config.option),
+    yield* Config.Literals(["local", "s3"], "OBJECT_STORAGE").pipe(Config.option),
   );
-  const nodeEnv = Option.getOrUndefined(yield* Config.string("NODE_ENV").pipe(Config.option));
+  const nodeEnv = Option.getOrUndefined(yield* Config.String("NODE_ENV").pipe(Config.option));
   if (configured === "local" && nodeEnv === "production") {
     return yield* new LocalObjectStorageInProduction({
       message: "OBJECT_STORAGE=local cannot run with NODE_ENV=production; use a bucket.",
@@ -36,7 +36,7 @@ export const objectStorageConfig = Effect.gen(function* () {
     (configured === undefined && (nodeEnv === "development" || nodeEnv === "test"));
   if (local) {
     return {
-      directory: yield* Config.string("OBJECT_STORAGE_DIR").pipe(
+      directory: yield* Config.String("OBJECT_STORAGE_DIR").pipe(
         Config.withDefault(DEFAULT_LOCAL_DIRECTORY),
       ),
       kind: "local" as const,
@@ -45,11 +45,11 @@ export const objectStorageConfig = Effect.gen(function* () {
   return {
     kind: "s3" as const,
     ...(yield* Config.all({
-      accessKeyId: Config.redacted("S3_ACCESS_KEY_ID"),
-      bucket: Config.string("S3_BUCKET"),
-      endpoint: Config.url("S3_ENDPOINT"),
-      region: Config.string("S3_REGION").pipe(Config.withDefault("auto")),
-      secretAccessKey: Config.redacted("S3_SECRET_ACCESS_KEY"),
+      accessKeyId: Config.Redacted("S3_ACCESS_KEY_ID"),
+      bucket: Config.String("S3_BUCKET"),
+      endpoint: Config.URL("S3_ENDPOINT"),
+      region: Config.String("S3_REGION").pipe(Config.withDefault("auto")),
+      secretAccessKey: Config.Redacted("S3_SECRET_ACCESS_KEY"),
     })),
   };
 });

@@ -12,8 +12,8 @@ import {
   emailDnsRecord,
 } from "@repo/persistence/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { Context, Data, DateTime, Effect, Layer } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { Context, Data, DateTime, Effect, Layer, type Redacted } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 export interface ManagedDnsRecord {
   readonly name: string;
@@ -52,7 +52,7 @@ export class ManagedDnsError extends Data.TaggedError("ManagedDnsError")<{
 }> {}
 
 export interface EmailManagedDnsConfig {
-  readonly apiToken: string;
+  readonly apiToken: Redacted.Redacted<string>;
   readonly rootDomain: string;
   readonly zoneId: string;
 }

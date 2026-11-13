@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, type Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
+import { FetchHttpClient } from "effect/http";
+import { RpcClient, RpcSerialization } from "effect/rpc";
+import type { RpcClientError } from "effect/rpc/RpcClientError";
 import { makeBuilderAuthClientLayer } from "./auth";
 import { TemplatingBuilderRpcs } from "./group";
 
