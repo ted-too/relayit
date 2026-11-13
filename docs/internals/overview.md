@@ -85,6 +85,12 @@ An Email Workspace's source is Git stored in object storage: content-addressed o
 
 Plans and Usage limits come from Stripe through better-auth's Stripe plugin. Without the Stripe keys, every limit is unlimited and billing disappears: that is the self-hosted edition, not a separate build.
 
+### Development runs with nothing real behind it
+
+`EMAIL_BACKEND=fake` replaces SES with a stand-in (`packages/provider-aws/src/email/fake.ts`): it accepts sends, verifies identities and Domain records at once without AWS or public DNS, and reports outcomes for SES's mailbox simulator addresses through the same ingest SES notifications reach, so suppression and Webhook Events behave as they would. It is chosen by environment rather than by Provider rows, because the Provider table is going (below) and the choice has to outlive it. `OBJECT_STORAGE=local` keeps objects under the checkout's `temp/`, and `REDIS_KEY_PREFIX` puts every Redis key under a prefix, better-auth's sessions included, so checkouts sharing one Redis never take each other's jobs.
+
+Left unset, the fake and local storage are chosen only when `NODE_ENV` is `development` or `test`. The api and builder images set no `NODE_ENV`, so an unset one has to keep meaning SES and S3; both refuse to start under `production`.
+
 ### React's `use-sync-external-store` shim in SSR
 
 Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it inlines from `use-sync-external-store/shim` (via `@base-ui/utils`), which loads a second React or none. `apps/web` and `apps/site` resolve the shim to ESM that imports the bundled React (`vite/resolve-use-sync-external-store-from-react.ts`), and the web image sets `NODE_ENV=production`. Delete the plugin once our Nitro version ships `experimental.cjsRequireRewrite`.
