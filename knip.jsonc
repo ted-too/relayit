@@ -52,7 +52,7 @@
       "entry": ["src/**/index.ts", "drizzle.config.ts"],
     },
     "packages/template-render": {
-      // Spawned by path from render.ts and copied into the api and template-builder images.
+      // Spawned by path from render.ts and copied into the api, worker and template-builder images.
       "entry": ["src/**/index.ts", "src/react-email/isolate-runner.ts"],
     },
     "packages/ui": {
