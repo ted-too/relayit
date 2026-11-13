@@ -43,6 +43,11 @@ export interface AuthConfig {
   cookieDomain?: string;
   db: PromiseDb;
   hooks?: BetterAuthOptions["hooks"];
+  /**
+   * Limits requests to `/api/auth/*` per client IP, in Redis. better-auth would decide by
+   * `NODE_ENV`, which the images leave unset; the app decides instead.
+   */
+  rateLimit: boolean;
   plugins?: {
     organization?: {
       hooks: OrganizationOptions["organizationHooks"];
@@ -71,6 +76,7 @@ export const createAuth = ({
   socialProviders,
   hooks,
   plugins,
+  rateLimit,
 }: AuthConfig) =>
   betterAuth({
     baseURL: baseUrl,
@@ -106,6 +112,7 @@ export const createAuth = ({
     },
     socialProviders,
     hooks,
+    rateLimit: { enabled: rateLimit },
     advanced: {
       database: {
         generateId: false,

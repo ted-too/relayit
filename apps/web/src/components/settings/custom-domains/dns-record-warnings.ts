@@ -1,4 +1,4 @@
-import type { DnsRecordWarning } from "@repo/persistence/db/schema";
+import type { DnsRecordWarning } from "@repo/contracts/dashboard";
 
 export const dnsRecordWarningCopy = (
   warning: DnsRecordWarning,

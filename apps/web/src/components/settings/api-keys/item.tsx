@@ -18,11 +18,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { authClient } from "@/lib/auth-client";
-import type { HydratedApiKey } from "@/lib/projects/api-key-types";
+import type { ApiKey } from "@repo/contracts/dashboard";
 import { queries } from "@/lib/queries";
 import { UpsertApiKey } from "./upsert";
 
-export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
+export function ApiKeyItem({ apiKey }: { apiKey: ApiKey }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -41,7 +41,7 @@ export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
     onSuccess: (_, __, ___, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-        (old: HydratedApiKey[] | undefined) => (old ?? []).filter((key) => key.id !== apiKey.id),
+        (old: readonly ApiKey[] | undefined) => (old ?? []).filter((key) => key.id !== apiKey.id),
       );
       client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,

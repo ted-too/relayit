@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "paths": {
+      "@repo/contracts/*": ["./src/*"]
+    }
+  }
+}

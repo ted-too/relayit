@@ -7,10 +7,14 @@ import type {
   AcceptTransactionalEmailInput,
   acceptTransactionalEmail,
 } from "@repo/channels/email/accept";
+import { EmailBackend } from "@repo/channels/email/backend";
+import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { Usage, type UsageService } from "@repo/channels/usage";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
+import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, type Database } from "@repo/persistence/db/effect";
+import type { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
 import type { handleSesNotification } from "@repo/provider-aws/email/webhooks";
 import { Context, Effect, Layer } from "effect";
 import { HttpClient, HttpServer } from "effect/http";
@@ -21,6 +25,7 @@ import { ApiAuth } from "./lib/auth";
 export const GOOD_KEY = "rel_good";
 
 export interface Stubs {
+  readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
   readonly accept: typeof acceptTransactionalEmail;
   readonly handleSes: typeof handleSesNotification;
   /** The verified custom Domain a legacy send without `from` falls back to. */
@@ -92,9 +97,13 @@ const makeAuth = (stubs: Stubs): ApiAuth["Service"] => ({
   } as unknown as ApiAuth["Service"]["db"],
 });
 
-// The routes reach these only through accept and the SES ingest, which are stubbed.
+// The public routes reach these only through accept and the SES ingest, which are
+// stubbed; the dashboard's are tested against real ones (`dashboard/*.test.ts`).
 const unusedServices = Layer.mergeAll(
   Layer.succeed(DB, {} as Database),
+  Layer.succeed(EmailBackend, {} as EmailBackend["Service"]),
+  Layer.succeed(EmailManagedDns, {} as EmailManagedDns["Service"]),
+  Layer.succeed(SymmetricCrypto, {} as SymmetricCrypto["Service"]),
   Layer.succeed(Jobs, {} as JobsService),
   Layer.succeed(HttpClient.HttpClient, {} as HttpClient.HttpClient),
   Layer.succeed(ObjectStorage, {} as ObjectStorageService),
@@ -107,9 +116,12 @@ export const serve = (stubs: Stubs) =>
     const services = yield* Layer.build(
       apiServer({
         accept: stubs.accept,
+        dashboard: { appOrigin: "http://app.test", billing: false, githubSignIn: false },
         handleSes: stubs.handleSes,
         hostname: "127.0.0.1",
         port: 0,
+        unsubscribe: stubs.unsubscribe,
+        unsubscribeSecret: "test-secret",
       }).pipe(
         Layer.provide(Layer.succeed(ApiAuth, makeAuth(stubs))),
         Layer.provide(unusedServices),
