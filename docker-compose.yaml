@@ -1,4 +1,5 @@
 services:
+  # The public API, sign-in and the dashboard, on one origin.
   api:
     image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
     ports:
@@ -8,7 +9,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - APP_URL=${WEB_URL:-http://localhost:3000}
+      - APP_URL=${WEB_URL:-${API_URL:-http://localhost:3005}}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - SES_REGIONS=${SES_REGIONS:?set SES_REGIONS in .env}
       - SES_ACCESS_KEY_ID=${SES_ACCESS_KEY_ID:?set SES_ACCESS_KEY_ID in .env}
@@ -48,7 +49,7 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - API_URL=${API_URL:-http://localhost:3005}
-      - APP_URL=${WEB_URL:-http://localhost:3000}
+      - APP_URL=${WEB_URL:-${API_URL:-http://localhost:3005}}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - SES_REGIONS=${SES_REGIONS:?set SES_REGIONS in .env}
       - SES_ACCESS_KEY_ID=${SES_ACCESS_KEY_ID:?set SES_ACCESS_KEY_ID in .env}
@@ -61,19 +62,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    networks:
-      - relayit-network
-
-  web:
-    image: ghcr.io/ted-too/relayit-web:${IMAGE_TAG:-alpha}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    environment:
-      # The dashboard forwards /api/* and the unsubscribe POST here.
-      - API_URL=http://api:3005
-    depends_on:
-      api:
-        condition: service_started
     networks:
       - relayit-network
 

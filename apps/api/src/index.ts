@@ -18,6 +18,7 @@ const apiProgram = Effect.gen(function* () {
       billing: Option.isSome(config.stripe),
       githubSignIn: Option.isSome(config.github),
     },
+    dashboardDir: Option.getOrUndefined(config.dashboardDir),
     hostname: config.hostname,
     port: config.port,
     unsubscribeSecret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),

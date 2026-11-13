@@ -15,23 +15,26 @@ customer's code ── x-api-key ──► apps/api (HttpApi) ── POST /messa
                                         └─► customer's Webhook Endpoints
 SES ── SNS ──► apps/api /webhooks/providers/aws/ses ─► bounces, complaints, Suppression
 
-browser ──► apps/web (dashboard) ── /api/* ──► apps/api: better-auth /api/auth/*,
-                                                DashboardApi /api/dashboard/* ─► Postgres, Redis, SES
-                                                   └── Effect Rpc + shared secret ──► apps/template-builder
-                                                                                       └─► S3 (Git, artifacts)
+browser ──► apps/api ── GET /…: the dashboard's build (apps/web, a single-page app)
+                   ├── /api/auth/*: better-auth
+                   ├── /api/dashboard/*: DashboardApi ─► Postgres, Redis, SES
+                   │      └── Effect Rpc + shared secret ──► apps/template-builder ─► S3 (Git, artifacts)
+                   └── POST /unsubscribe/…: one-click unsubscribe from mailbox providers
 
 apps/site: marketing site and public docs
 ```
 
-The four apps share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
+The api, worker and builder share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
 
 ## Decisions
 
-### Four deployables, one database
+### Three deployables, one database
 
 Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only the api calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out.
 
 The api runs one process per replica and scales with replicas, not by forking: its `node:cluster` mode existed to keep the worker on one primary, never ran in production (it needed `NODE_ENV=production`, which the images don't set), and went with the worker. Several workers are safe: they share one Redis consumer group, and a dead one's claims are reclaimed after a minute.
+
+All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
 
 ### The dashboard is a client of the api
 
@@ -41,13 +44,13 @@ Everything a signed-in user does runs in the api, and the dashboard only calls i
 
 Authorisation is in two middlewares, never in a handler. `DashboardSession` resolves the cookie to a user (401 without one). `ProjectAccess` also resolves `:orgSlug` to the user's membership of that Project and checks the role's permission named by the endpoint's `RequiresPermission` annotation against the roles in `packages/persistence/src/auth/permissions.ts`; an unknown Project, a non-member and a missing permission are all 403, so a Project's existence isn't revealed. A handler sees only `DashboardMember`, and every query it makes is scoped to that Project's id, so an id taken from another Project finds nothing (404). A change must come from the dashboard's own origin (`APP_URL`): the session cookie is `SameSite=Lax`, which already keeps it off another site's POST.
 
-A Project's slug is the first segment of its dashboard URL, so slugs the api or the dashboard route themselves (`docs`, `health`, `api`, `auth`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed.
+The dashboard is a Vite + TanStack Router single-page app, and the api serves its build: one origin, so no CORS and no cross-site cookie, and nothing about a deployment is baked into the build, which self-hosters get inside the api image. It was a TanStack Start app with server-side rendering; behind sign-in, rendering on the server bought nothing and needed a server of its own with every credential. The api answers a GET it doesn't route from the build: a file that exists as it is (`assets/` cached for good, the rest revalidated), and `index.html` for any other path a browser asks for as HTML (a path may have a dot in it, `/acme/domains/mail.example.com`, so the extension decides nothing), so the dashboard's router can resolve it. The api's own path prefixes and any other request keep the public API's `404 NOT_FOUND`. In development Vite serves the dashboard and forwards `/api/*` and the unsubscribe POST to the api, so it is one origin there too.
 
-All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
+A Project's slug is the first segment of its dashboard URL, so slugs the api or the dashboard route themselves (`docs`, `health`, `api`, `auth`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed.
 
 ### Work crosses processes as typed jobs
 
-A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. Web and the api import contracts and enqueue; only `apps/worker` imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
+A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. The api imports contracts and enqueues; only `apps/worker` imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
 
 A job that depends on rows being written is enqueued through the Postgres outbox in the same transaction, so a send is never accepted without its delivery job, nor a job left pointing at rows that rolled back. The outbox publishes to Redis Streams; a crashed worker's claims are reclaimed after a minute; a job that exhausts its retries is dead-lettered in Postgres.
 
@@ -114,7 +117,7 @@ Left unset, the fake and local storage are chosen only when `NODE_ENV` is `devel
 
 ### React's `use-sync-external-store` shim in SSR
 
-Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it inlines from `use-sync-external-store/shim` (via `@base-ui/utils`), which loads a second React or none. `apps/web` and `apps/site` resolve the shim to ESM that imports the bundled React (`vite/resolve-use-sync-external-store-from-react.ts`), and the web image sets `NODE_ENV=production`. Delete the plugin once our Nitro version ships `experimental.cjsRequireRewrite`.
+Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it inlines from `use-sync-external-store/shim` (via `@base-ui/utils`), which loads a second React or none. `apps/site` resolves the shim to ESM that imports the bundled React (`vite/resolve-use-sync-external-store-from-react.ts`), and its image sets `NODE_ENV=production`. Delete the plugin once our Nitro version ships `experimental.cjsRequireRewrite`.
 
 ## Migrations
 

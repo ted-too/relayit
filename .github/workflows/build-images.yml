@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [api, worker, web, template-builder]
+        app: [api, worker, template-builder]
 
     steps:
       - name: Checkout code

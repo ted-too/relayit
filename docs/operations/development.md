@@ -14,7 +14,9 @@ For a fresh start, drop and recreate the database, then migrate and seed again. 
 
 ## Environment
 
-Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
+Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one.
+
+The dashboard runs on Vite's dev server at `WEB_PORT` and forwards `/api/*` and the unsubscribe POST to the api at `API_URL`, so sign-in and the dashboard's API are on the dashboard's origin, as they are when the api serves the build in a deployment. Open the dashboard there, not on the api's port: the api serves the build only when `DASHBOARD_DIR` is set, as the image does. `APP_URL` is the dashboard's origin, the one better-auth trusts. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
 
 `env.example`, without the dot, is the Docker Compose file for self-hosting, and has nothing to do with this.
 

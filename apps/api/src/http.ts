@@ -11,6 +11,7 @@ import { dashboardRoutes } from "./dashboard/http";
 import { ApiKeyAuthLive, LegacyApiKeyAuthLive } from "./lib/api-key";
 import { RequestValidationLive } from "./lib/validation";
 import { authRoutes } from "./routes/auth";
+import { dashboardAppRoutes } from "./routes/dashboard-app";
 import { legacySendHandlers } from "./routes/compat/send";
 import { sendHandlers } from "./routes/messages/email";
 import { unsubscribeRoutes } from "./routes/unsubscribe";
@@ -47,7 +48,7 @@ const fallback = HttpRouter.middleware(
 /**
  * The api's HTTP server on Bun: the public routes, with `/docs` and `/openapi.json`
  * generated from `Api`; better-auth at `/api/auth/*`; the dashboard's operations under
- * `/api/dashboard`; and one-click unsubscribe. Needs `ApiAuth` and what the routes use; a
+ * `/api/dashboard`; one-click unsubscribe; and, from `dashboardDir`, the dashboard itself. Needs `ApiAuth` and what the routes use; a
  * test passes its own `accept`, `handleSes` and `unsubscribe` to reach every outcome
  * without them.
  */
@@ -55,6 +56,8 @@ export const apiServer = (options: {
   readonly hostname: string;
   readonly port: number;
   readonly dashboard: Parameters<typeof dashboardRoutes>[0];
+  /** The dashboard's build; development serves it from Vite instead. */
+  readonly dashboardDir?: string;
   /** The current better-auth secret, which signs unsubscribe links. */
   readonly unsubscribeSecret: string;
   readonly accept?: typeof acceptTransactionalEmail;
@@ -68,6 +71,7 @@ export const apiServer = (options: {
       dashboardRoutes(options.dashboard),
       authRoutes,
       unsubscribeRoutes({ handle: options.unsubscribe, secret: options.unsubscribeSecret }),
+      options.dashboardDir === undefined ? Layer.empty : dashboardAppRoutes(options.dashboardDir),
       fallback,
     ).pipe(
       Layer.provide(
