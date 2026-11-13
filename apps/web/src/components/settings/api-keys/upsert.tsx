@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/style/noNestedTernary: we need to nest ternaries here */
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {

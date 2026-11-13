@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { dkimRecordName, formatDkimTxtRecord } from "../dkim";
 import { formatTxtRecordContent, type ManagedDnsRecord } from "../managed-dns";
 import type { MailFromDnsRecord } from "../provider-adapter";
@@ -55,4 +55,4 @@ export const ownershipChallengeHost = (fqdn: string): string => `_relayit-challe
 export const ownershipChallengeValue = (token: string): string =>
   formatTxtRecordContent(`${OWNERSHIP_PREFIX}${token}`);
 
-export const createOwnershipToken = (): string => randomBytes(24).toString("hex");
+export const createOwnershipToken = (): string => NodeCrypto.randomBytes(24).toString("hex");

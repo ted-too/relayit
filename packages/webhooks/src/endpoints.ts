@@ -33,13 +33,6 @@ const publicEndpoint = (endpoint: typeof webhookEndpoint.$inferSelect): PublicWe
   url: endpoint.url,
 });
 
-const operationFailed = (message: string, cause: unknown) =>
-  new WebhookManagementError({
-    cause,
-    code: "operation_failed",
-    message,
-  });
-
 export const listWebhookEndpoints = (
   organizationId: string,
 ): Effect.Effect<readonly PublicWebhookEndpoint[], WebhookManagementError, DB> =>
@@ -51,7 +44,14 @@ export const listWebhookEndpoints = (
       .where(eq(webhookEndpoint.organizationId, organizationId))
       .orderBy(asc(webhookEndpoint.createdAt))
       .pipe(
-        Effect.mapError((cause) => operationFailed("Webhook Endpoints could not be listed", cause)),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Endpoints could not be listed",
+            }),
+        ),
       );
     return endpoints.map(publicEndpoint);
   });
@@ -69,7 +69,14 @@ export const getWebhookEndpoint = (
         and(eq(webhookEndpoint.id, endpointId), eq(webhookEndpoint.organizationId, organizationId)),
       )
       .pipe(
-        Effect.mapError((cause) => operationFailed("Webhook Endpoint could not be loaded", cause)),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Endpoint could not be loaded",
+            }),
+        ),
       );
     if (!endpoint) {
       return yield* new WebhookManagementError({
@@ -110,13 +117,21 @@ export const createWebhookEndpoint = (
       })
       .returning()
       .pipe(
-        Effect.mapError((cause) => operationFailed("Webhook Endpoint could not be created", cause)),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Endpoint could not be created",
+            }),
+        ),
       );
     if (!endpoint) {
-      return yield* operationFailed(
-        "Webhook Endpoint could not be created",
-        new Error("Webhook Endpoint insert returned no record"),
-      );
+      return yield* new WebhookManagementError({
+        cause: new Error("Webhook Endpoint insert returned no record"),
+        code: "operation_failed",
+        message: "Webhook Endpoint could not be created",
+      });
     }
 
     return {
@@ -181,7 +196,11 @@ export const updateWebhookEndpoint = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook Endpoint could not be updated", error),
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Webhook Endpoint could not be updated",
+          }),
     ),
   );
 
@@ -208,6 +227,10 @@ export const deleteWebhookEndpoint = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook Endpoint could not be deleted", error),
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Webhook Endpoint could not be deleted",
+          }),
     ),
   );

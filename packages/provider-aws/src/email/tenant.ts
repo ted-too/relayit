@@ -34,11 +34,12 @@ const ensureTenantArn = (ses: SesTenantClient, tenantName: string) =>
   Effect.gen(function* () {
     const created = yield* ses.createTenant({ TenantName: tenantName }).pipe(
       Effect.map((response) => response.TenantArn),
-      Effect.catchTag("AlreadyExistsException", () =>
-        ses
-          .getTenant({ TenantName: tenantName })
-          .pipe(Effect.map((response) => response.Tenant?.TenantArn)),
-      ),
+      Effect.catchTags({
+        AlreadyExistsException: () =>
+          ses
+            .getTenant({ TenantName: tenantName })
+            .pipe(Effect.map((response) => response.Tenant?.TenantArn)),
+      }),
     );
     if (!created) {
       return yield* new AwsUnexpectedResponseError({
@@ -58,7 +59,7 @@ const associate = (
       ResourceArn: input.resourceArn,
       TenantName: input.tenantName,
     })
-    .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
+    .pipe(Effect.catchTags({ AlreadyExistsException: () => Effect.void }));
 
 /**
  * Create the Project's SES tenant (Standard reputation policy is SES's
@@ -129,9 +130,9 @@ export const detachSesIdentityFromTenants = (
       const tenants = yield* ses
         .listResourceTenants({ NextToken: nextToken, ResourceArn: resourceArn })
         .pipe(
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed({ NextToken: undefined, ResourceTenants: [] }),
-          ),
+          Effect.catchTags({
+            NotFoundException: () => Effect.succeed({ NextToken: undefined, ResourceTenants: [] }),
+          }),
         );
       for (const tenant of tenants.ResourceTenants ?? []) {
         if (!tenant.TenantName) {
@@ -142,7 +143,7 @@ export const detachSesIdentityFromTenants = (
             ResourceArn: resourceArn,
             TenantName: tenant.TenantName,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+          .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
       }
       nextToken = tenants.NextToken;
     } while (nextToken);

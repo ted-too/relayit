@@ -1,5 +1,5 @@
 import { Jobs } from "@repo/jobs";
-import { DB } from "@repo/persistence/db/effect";
+import { type Database, DB } from "@repo/persistence/db/effect";
 import { emailDelivery, message } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { contactUpdated, messageScheduled } from "@repo/webhooks/events";
@@ -44,7 +44,7 @@ const compensationRetry = Schedule.recurs(2).pipe(
   Schedule.addDelay(() => Effect.succeed("100 millis")),
 );
 
-const findAcceptedEmail = (db: Effect.Success<typeof DB>, messageId: string) =>
+const findAcceptedEmail = (db: Database, messageId: string) =>
   db
     .select({ deliveryId: emailDelivery.id })
     .from(emailDelivery)
@@ -71,7 +71,7 @@ const findAcceptedEmail = (db: Effect.Success<typeof DB>, messageId: string) =>
       ),
     );
 
-const findAcceptedEmailWithRetry = (db: Effect.Success<typeof DB>, messageId: string) =>
+const findAcceptedEmailWithRetry = (db: Database, messageId: string) =>
   findAcceptedEmail(db, messageId).pipe(
     Effect.flatMap((accepted) =>
       accepted

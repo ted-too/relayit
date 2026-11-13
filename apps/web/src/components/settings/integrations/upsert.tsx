@@ -146,7 +146,7 @@ export function UpsertProvider({
         : generateDefaultFromSchema(config.credentialsSchema),
     } as FormValues,
     validators: {
-      // biome-ignore lint/suspicious/noExplicitAny: zod schema union from create/update + product credentials
+      // zod schema union from create/update + product credentials
       onSubmit: schema as any,
     },
     onSubmit: async ({ value }) => await upsertProvider(value),
@@ -227,7 +227,7 @@ export function UpsertProvider({
             <Separator orientation="horizontal" />
             <DynamicForm
               baseKey="credentials"
-              // biome-ignore lint/suspicious/noExplicitAny: DynamicForm is intentionally untyped across product schemas
+              // DynamicForm is intentionally untyped across product schemas
               form={form as any}
               schema={config.credentialsSchema}
             />

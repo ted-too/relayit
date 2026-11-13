@@ -9,13 +9,6 @@ import { generateWebhookSigningSecret } from "./signing";
 
 const DUAL_SECRET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-const operationFailed = (message: string, cause: unknown) =>
-  new WebhookManagementError({
-    cause,
-    code: "operation_failed",
-    message,
-  });
-
 export interface SetWebhookEndpointEnabledInput {
   readonly enabled: boolean;
   readonly endpointId: string;
@@ -38,7 +31,14 @@ export const setWebhookEndpointEnabled = (
       )
       .returning({ id: webhookEndpoint.id })
       .pipe(
-        Effect.mapError((cause) => operationFailed("Webhook Endpoint could not be updated", cause)),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Endpoint could not be updated",
+            }),
+        ),
       );
 
     if (!endpoint) {
@@ -78,8 +78,13 @@ export const replayWebhookDelivery = (
         ),
       )
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Event Delivery could not be loaded", cause),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Event Delivery could not be loaded",
+            }),
         ),
       );
 
@@ -115,15 +120,25 @@ export const replayWebhookDelivery = (
       })
       .where(eq(webhookEventDelivery.id, record.deliveryId))
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Event Delivery could not be replayed", cause),
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Event Delivery could not be replayed",
+            }),
         ),
       );
-    yield* jobs
-      .enqueue(webhookDeliverJob, { deliveryId: record.deliveryId }, transaction)
-      .pipe(
-        Effect.mapError((cause) => operationFailed("Webhook replay could not be scheduled", cause)),
-      );
+    yield* jobs.enqueue(webhookDeliverJob, { deliveryId: record.deliveryId }, transaction).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WebhookManagementError({
+            cause,
+            code: "operation_failed",
+            message: "Webhook replay could not be scheduled",
+          }),
+      ),
+    );
 
     return { status: "pending" as const };
   });
@@ -170,7 +185,11 @@ export const rotateWebhookSigningSecret = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook signing secret could not be rotated", error),
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Webhook signing secret could not be rotated",
+          }),
     ),
   );
 
@@ -202,6 +221,10 @@ export const clearPreviousWebhookSigningSecret = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Previous Webhook signing secret could not be cleared", error),
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Previous Webhook signing secret could not be cleared",
+          }),
     ),
   );

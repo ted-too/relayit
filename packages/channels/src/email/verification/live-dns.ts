@@ -1,5 +1,5 @@
-import * as dns from "node:dns";
-import * as net from "node:net";
+import * as NodeDns from "node:dns";
+import * as NodeNet from "node:net";
 import type { DnsRecordWarning } from "@repo/persistence/db/schema";
 
 const TRAILING_DOT_REGEX = /\.$/;
@@ -41,14 +41,14 @@ const toFqdn = (host: string): string => (host.endsWith(".") ? host : `${host}.`
 const stripTrailingDot = (value: string): string => value.replace(TRAILING_DOT_REGEX, "");
 
 const createResolver = (servers: readonly string[]) => {
-  const resolver = new dns.promises.Resolver(RESOLVER_OPTIONS);
+  const resolver = new NodeDns.promises.Resolver(RESOLVER_OPTIONS);
   resolver.setServers([...servers]);
   return resolver;
 };
 
 const queryResolver = async <T>(
   servers: readonly string[],
-  run: (resolver: dns.promises.Resolver) => Promise<T>,
+  run: (resolver: NodeDns.promises.Resolver) => Promise<T>,
   emptyOnNotFound: T,
 ): Promise<T> => {
   try {
@@ -89,7 +89,7 @@ const nameserverIps = async (nameservers: readonly string[]): Promise<string[]> 
 
   for (const nameserver of nameservers) {
     const hostname = stripTrailingDot(nameserver).toLowerCase();
-    if (net.isIP(hostname)) {
+    if (NodeNet.isIP(hostname)) {
       ips.push(hostname);
       continue;
     }
@@ -115,7 +115,7 @@ const serversForHost = async (host: string): Promise<string[]> => {
 
 const lookupOnServers = async <T>(
   host: string,
-  run: (resolver: dns.promises.Resolver, fqdn: string) => Promise<T>,
+  run: (resolver: NodeDns.promises.Resolver, fqdn: string) => Promise<T>,
   emptyOnNotFound: T,
 ): Promise<T> => {
   const fqdn = toFqdn(host);

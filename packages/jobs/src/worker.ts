@@ -161,22 +161,6 @@ export const processJob = <
     const redis = yield* Redis;
     const encoded = readField(entry.fields, REDIS_PAYLOAD_FIELD) ?? "";
     const keys = jobKeys(handler.contract.name);
-    const processingError =
-      (
-        stage:
-          | "acknowledge"
-          | "dead-letter"
-          | "dead-letter-cleanup"
-          | "encode-retry"
-          | "schedule-retry",
-      ) =>
-      (cause: unknown) =>
-        new JobProcessingError({
-          cause,
-          entryId: entry.id,
-          jobName: handler.contract.name,
-          stage,
-        });
     const decodedEnvelope = yield* jobEnvelopeCodec.decode(encoded).pipe(
       Effect.map((envelope) => ({ _tag: "Success", envelope }) as const),
       Effect.orElseSucceed(() => ({ _tag: "Failure" }) as const),
@@ -200,7 +184,17 @@ export const processJob = <
           payload: encoded,
           wireVersion: 0,
         })
-        .pipe(Effect.mapError(processingError("dead-letter")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "dead-letter",
+              }),
+          ),
+        );
       yield* Effect.logError("Job envelope could not be decoded").pipe(
         Effect.annotateLogs({ code: "JOB_ENVELOPE_INVALID" }),
       );
@@ -210,7 +204,17 @@ export const processJob = <
           id: entry.id,
           stream: keys.ready,
         })
-        .pipe(Effect.mapError(processingError("acknowledge")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "acknowledge",
+              }),
+          ),
+        );
       return;
     }
 
@@ -239,7 +243,17 @@ export const processJob = <
           payload: envelope.data,
           wireVersion: envelope.wireVersion,
         })
-        .pipe(Effect.mapError(processingError("dead-letter")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "dead-letter",
+              }),
+          ),
+        );
       yield* Effect.logError("Job payload could not be decoded").pipe(
         Effect.annotateLogs({ code: "JOB_PAYLOAD_INVALID" }),
       );
@@ -249,7 +263,17 @@ export const processJob = <
           id: entry.id,
           stream: keys.ready,
         })
-        .pipe(Effect.mapError(processingError("acknowledge")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "acknowledge",
+              }),
+          ),
+        );
       return;
     }
 
@@ -276,14 +300,34 @@ export const processJob = <
             ...envelope,
             attempts: attempt,
           })
-          .pipe(Effect.mapError(processingError("encode-retry")));
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "encode-retry",
+                }),
+            ),
+          );
         yield* redis
           .sortedSetAdd({
             key: keys.delayed,
             member: retry,
             score: now + retryDelay(attempt, handler.contract.retry.backoff),
           })
-          .pipe(Effect.mapError(processingError("schedule-retry")));
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "schedule-retry",
+                }),
+            ),
+          );
         yield* Effect.logDebug("Job scheduled for retry").pipe(
           Effect.annotateLogs({
             attempt,
@@ -292,9 +336,17 @@ export const processJob = <
         );
       } else {
         if (handler.onDeadLetter) {
-          yield* handler
-            .onDeadLetter(decodedPayload.payload, execution, outcome.error)
-            .pipe(Effect.mapError(processingError("dead-letter-cleanup")));
+          yield* handler.onDeadLetter(decodedPayload.payload, execution, outcome.error).pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "dead-letter-cleanup",
+                }),
+            ),
+          );
         }
         const deadLetters = yield* DeadLetterStore;
         const failedAt = yield* Clock.currentTimeMillis;
@@ -309,7 +361,17 @@ export const processJob = <
             payload: envelope.data,
             wireVersion: envelope.wireVersion,
           })
-          .pipe(Effect.mapError(processingError("dead-letter")));
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "dead-letter",
+                }),
+            ),
+          );
         yield* Effect.logError("Job moved to dead letter", Cause.fail(outcome.error)).pipe(
           Effect.annotateLogs({
             attempt,
@@ -325,7 +387,17 @@ export const processJob = <
         id: entry.id,
         stream: keys.ready,
       })
-      .pipe(Effect.mapError(processingError("acknowledge")));
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new JobProcessingError({
+              cause,
+              entryId: entry.id,
+              jobName: handler.contract.name,
+              stage: "acknowledge",
+            }),
+        ),
+      );
   }).pipe(
     Effect.annotateLogs({
       entryId: entry.id,

@@ -256,7 +256,6 @@ function DataGridColumnHeaderInner<TData, TValue>({
     }
 
     return items;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filter,
     canSort,
@@ -286,7 +285,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
                 disabled={isLoading || recordCount === 0}
                 variant="ghost"
               >
-                {icon && icon}
+                {icon}
                 {resolvedTitle}
                 {sortIcon}
               </Button>
@@ -321,7 +320,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
           onClick={handleSort}
           variant="ghost"
         >
-          {icon && icon}
+          {icon}
           {resolvedTitle}
           {sortIcon}
         </Button>
@@ -331,7 +330,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
 
   return (
     <div className={headerLabelClassName}>
-      {icon && icon}
+      {icon}
       {resolvedTitle}
     </div>
   );

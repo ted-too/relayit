@@ -9,7 +9,7 @@ const testName = "recording the same failed stream twice returns its stable ID";
 describe("dead-letter persistence", () => {
   if (!testDatabaseUrl) {
     process.emitWarning("Skipping DLQ integration test: TEST_DATABASE_URL is not set");
-    // biome-ignore lint/suspicious/noSkippedTests: The PostgreSQL test is opt-in.
+    // The PostgreSQL test is opt-in.
     test.skip(testName, () => undefined);
     return;
   }

@@ -1,11 +1,11 @@
-import * as path from "node:path";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
 
 /** Bundle a React Email entry into a sealed ESM artifact. */
 export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: string }) =>
   Effect.gen(function* () {
-    const abs = path.join(input.workspaceDir, input.entryPath);
+    const abs = NodePath.join(input.workspaceDir, input.entryPath);
     // Isolate host provides a single React instance. React Email packages are
     // sealed into the artifact — Bun cannot resolve bare `@react-email/*` imports
     // from the ephemeral /tmp artifact path against the host package.

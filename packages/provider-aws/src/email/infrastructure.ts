@@ -115,7 +115,7 @@ const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicA
       .createConfigurationSet({
         ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
       })
-      .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
+      .pipe(Effect.catchTags({ AlreadyExistsException: () => Effect.void }));
 
     const eventDestination = {
       Enabled: true,
@@ -130,13 +130,14 @@ const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicA
         EventDestinationName: destinationName,
       })
       .pipe(
-        Effect.catchTag("AlreadyExistsException", () =>
-          ses.updateConfigurationSetEventDestination({
-            ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
-            EventDestination: eventDestination,
-            EventDestinationName: destinationName,
-          }),
-        ),
+        Effect.catchTags({
+          AlreadyExistsException: () =>
+            ses.updateConfigurationSetEventDestination({
+              ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
+              EventDestination: eventDestination,
+              EventDestinationName: destinationName,
+            }),
+        }),
       );
   });
 
@@ -170,7 +171,7 @@ export const createAwsSesInfrastructure = ({
             ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
             EventDestinationName: destinationName,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+          .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
 
         const topicArn = yield* findTopicArn(sns, topicName);
         if (!topicArn) {

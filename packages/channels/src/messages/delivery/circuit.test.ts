@@ -13,7 +13,7 @@ const testName = "provider circuit opens after consecutive failures";
 describe("Message delivery provider circuit", () => {
   if (!testRedisUrl) {
     process.emitWarning("Skipping provider circuit tests: TEST_REDIS_URL is not set");
-    // biome-ignore lint/suspicious/noSkippedTests: The Redis test is opt-in.
+    // The Redis test is opt-in.
     test.skip(testName, () => undefined);
     return;
   }

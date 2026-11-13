@@ -1,5 +1,5 @@
 import { ProviderMessageError } from "@repo/channels/provider-errors";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { awsSesProviderDefinition } from "./client";
 import { AwsUnexpectedResponseError, createAwsErrorMapper } from "./errors";
 

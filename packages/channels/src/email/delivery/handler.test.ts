@@ -5,7 +5,7 @@ import {
   type OpenedProviderCredentials,
   ProviderCredentialsVault,
 } from "@repo/persistence/crypto/provider-credentials";
-import { DB } from "@repo/persistence/db/effect";
+import { type Database, DB } from "@repo/persistence/db/effect";
 import { Redis, type RedisService } from "@repo/redis";
 import { Effect, Layer } from "effect";
 import { MessageDeliveryTerminalError } from "../../messages/delivery";
@@ -137,7 +137,7 @@ const makeDb = (overrides: {
     }),
   };
 
-  return { db: db as unknown as Effect.Success<typeof DB>, updates };
+  return { db: db as unknown as Database, updates };
 };
 
 const adapterDefinition = {
@@ -171,7 +171,7 @@ const makeSendFactory = (
   }) satisfies EmailProviderFactory;
 
 const testLayer = (
-  db: Effect.Success<typeof DB>,
+  db: Database,
   options: {
     readonly allowByProvider?: ReadonlyMap<string, boolean>;
     /** Provider ids whose circuit recorded a failure, in order. */

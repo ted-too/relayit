@@ -44,13 +44,6 @@ const retryDelay = (execution: WorkExecution): number =>
     webhookDeliverJob.retry.backoff.maxDelayMs,
   );
 
-const retryable = (deliveryId: string, message: string, cause?: unknown) =>
-  new WebhookDeliveryRetryableError({
-    cause,
-    deliveryId,
-    message,
-  });
-
 const claimDelivery = (deliveryId: string) =>
   Effect.gen(function* () {
     const db = yield* DB;
@@ -68,6 +61,7 @@ const claimDelivery = (deliveryId: string) =>
         if (!delivery) {
           return yield* new WebhookDeliveryTerminalError({
             deliveryId,
+            // oxlint-disable-next-line relayit/static-error-message -- the job worker stores this text with the dead letter; rewording it is a behaviour change for its own PR
             message: `Webhook Event Delivery ${deliveryId} not found`,
           });
         }
@@ -98,6 +92,7 @@ const claimDelivery = (deliveryId: string) =>
         if (!joined) {
           return yield* new WebhookDeliveryTerminalError({
             deliveryId,
+            // oxlint-disable-next-line relayit/static-error-message -- the job worker stores this text with the dead letter; rewording it is a behaviour change for its own PR
             message: `Webhook Event Delivery ${deliveryId} is incomplete`,
           });
         }
@@ -138,7 +133,11 @@ const claimDelivery = (deliveryId: string) =>
     Effect.mapError((error) =>
       error._tag === "WebhookDeliveryTerminalError"
         ? error
-        : retryable(deliveryId, "Webhook delivery could not be claimed", error),
+        : new WebhookDeliveryRetryableError({
+            cause: error,
+            deliveryId,
+            message: "Webhook delivery could not be claimed",
+          }),
     ),
   );
 
@@ -163,8 +162,13 @@ const markDelivered = (delivery: ClaimedDelivery) =>
         ),
       );
   }).pipe(
-    Effect.mapError((error) =>
-      retryable(delivery.deliveryId, "Webhook success could not be persisted", error),
+    Effect.mapError(
+      (error) =>
+        new WebhookDeliveryRetryableError({
+          cause: error,
+          deliveryId: delivery.deliveryId,
+          message: "Webhook success could not be persisted",
+        }),
     ),
   );
 
@@ -187,8 +191,13 @@ const markFailed = (delivery: ClaimedDelivery, execution: WorkExecution, message
         ),
       );
   }).pipe(
-    Effect.mapError((error) =>
-      retryable(delivery.deliveryId, "Webhook failure could not be persisted", error),
+    Effect.mapError(
+      (error) =>
+        new WebhookDeliveryRetryableError({
+          cause: error,
+          deliveryId: delivery.deliveryId,
+          message: "Webhook failure could not be persisted",
+        }),
     ),
   );
 
@@ -218,7 +227,14 @@ export const webhookDeliverHandler = defineJobHandler({
       }).pipe(HttpClientRequest.bodyText(delivery.body, "application/json"));
       const response = yield* http.execute(request).pipe(
         Effect.timeout(REQUEST_TIMEOUT_MS),
-        Effect.mapError((error) => retryable(deliveryId, "Webhook HTTP request failed", error)),
+        Effect.mapError(
+          (error) =>
+            new WebhookDeliveryRetryableError({
+              cause: error,
+              deliveryId,
+              message: "Webhook HTTP request failed",
+            }),
+        ),
         Effect.matchEffect({
           onFailure: (error) =>
             markFailed(delivery, execution, error.message).pipe(Effect.andThen(Effect.fail(error))),
@@ -229,7 +245,7 @@ export const webhookDeliverHandler = defineJobHandler({
       if (response.status < 200 || response.status >= 300) {
         const message = `HTTP ${response.status}`;
         yield* markFailed(delivery, execution, message);
-        return yield* retryable(deliveryId, message);
+        return yield* new WebhookDeliveryRetryableError({ deliveryId, message });
       }
 
       yield* markDelivered(delivery);
@@ -249,8 +265,13 @@ export const webhookDeliverHandler = defineJobHandler({
         })
         .where(eq(webhookEventDelivery.id, deliveryId));
     }).pipe(
-      Effect.mapError((error) =>
-        retryable(deliveryId, "Webhook dead-letter status could not be persisted", error),
+      Effect.mapError(
+        (error) =>
+          new WebhookDeliveryRetryableError({
+            cause: error,
+            deliveryId,
+            message: "Webhook dead-letter status could not be persisted",
+          }),
       ),
     ),
 });

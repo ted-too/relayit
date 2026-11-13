@@ -7,7 +7,7 @@ import type * as React from "react";
 
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: this is intentional as per ShadCN docs.
+    // this is intentional as per ShadCN docs.
     <div
       className={cn(
         "group/item-group flex w-full flex-col gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2",

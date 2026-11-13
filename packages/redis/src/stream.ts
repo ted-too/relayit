@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import {
+  describeReceived,
   execute,
   expectNumber,
   expectString,
   type RedisConnections,
-  unexpectedResponse,
+  RedisResponseError,
 } from "./connection";
 import type { RedisService } from "./redis";
 
@@ -96,7 +97,13 @@ export const decodeAutoClaimResult = (value: unknown) => {
     }
   }
 
-  return Effect.fail(unexpectedResponse("auto-claim", "[next cursor, stream entries]", value));
+  return Effect.fail(
+    new RedisResponseError({
+      expected: "[next cursor, stream entries]",
+      operation: "auto-claim",
+      received: describeReceived(value),
+    }),
+  );
 };
 
 export const decodeReadGroupEntries = (value: unknown) => {
@@ -110,7 +117,13 @@ export const decodeReadGroupEntries = (value: unknown) => {
     for (const [stream, rawEntries] of Object.entries(record)) {
       const parsed = streamEntries(rawEntries);
       if (!parsed) {
-        return Effect.fail(unexpectedResponse("read-group", "stream entry collection", value));
+        return Effect.fail(
+          new RedisResponseError({
+            expected: "stream entry collection",
+            operation: "read-group",
+            received: describeReceived(value),
+          }),
+        );
       }
       entries.push(...parsed.map((entry) => ({ ...entry, stream })));
     }
@@ -118,17 +131,35 @@ export const decodeReadGroupEntries = (value: unknown) => {
   }
 
   if (!Array.isArray(value)) {
-    return Effect.fail(unexpectedResponse("read-group", "stream read response", value));
+    return Effect.fail(
+      new RedisResponseError({
+        expected: "stream read response",
+        operation: "read-group",
+        received: describeReceived(value),
+      }),
+    );
   }
 
   const entries: StreamReadEntry[] = [];
   for (const stream of value) {
     if (!(Array.isArray(stream) && typeof stream[0] === "string" && Array.isArray(stream[1]))) {
-      return Effect.fail(unexpectedResponse("read-group", "stream read response", value));
+      return Effect.fail(
+        new RedisResponseError({
+          expected: "stream read response",
+          operation: "read-group",
+          received: describeReceived(value),
+        }),
+      );
     }
     const parsed = streamEntries(stream[1]);
     if (!parsed) {
-      return Effect.fail(unexpectedResponse("read-group", "stream entry collection", value));
+      return Effect.fail(
+        new RedisResponseError({
+          expected: "stream entry collection",
+          operation: "read-group",
+          received: describeReceived(value),
+        }),
+      );
     }
     entries.push(...parsed.map((entry) => ({ ...entry, stream: stream[0] })));
   }
@@ -163,11 +194,12 @@ export const makeStreamCommands = ({ blocking, commands }: RedisConnections): St
       "MKSTREAM",
     ]).pipe(
       Effect.asVoid,
-      Effect.catchTag("RedisCommandError", (error) =>
-        error.cause instanceof Error && error.cause.message.includes("BUSYGROUP")
-          ? Effect.void
-          : Effect.fail(error),
-      ),
+      Effect.catchTags({
+        RedisCommandError: (error) =>
+          error.cause instanceof Error && error.cause.message.includes("BUSYGROUP")
+            ? Effect.void
+            : Effect.fail(error),
+      }),
     ),
   readGroup: ({ blockMs, consumer, count, group, streams }) =>
     execute(blocking, "read-group", "XREADGROUP", [

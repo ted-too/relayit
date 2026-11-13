@@ -13,11 +13,7 @@ import {
 import { Effect, Layer } from "effect";
 import { awsSesProviderDefinition } from "../client";
 import { awsCredentialsSchema } from "../credentials";
-import {
-  AwsUnexpectedResponseError,
-  createAwsErrorMapper,
-  createAwsWebhookErrorMapper,
-} from "../errors";
+import { AwsUnexpectedResponseError, createAwsErrorMapper } from "../errors";
 import { ensureSesDomainIdentity } from "./identity";
 import { createAwsSesInfrastructure, SES_CONFIGURATION_SET_NAME } from "./infrastructure";
 import {
@@ -137,7 +133,7 @@ export const awsSesProviderFactory = {
               );
               yield* ses
                 .deleteEmailIdentity({ EmailIdentity: fqdn })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+                .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
             }).pipe(Effect.mapError(mapAwsError)),
           getIdentityStatus: ({ fqdn }) =>
             ses.getEmailIdentity({ EmailIdentity: fqdn }).pipe(
@@ -209,24 +205,25 @@ export const awsSesProviderFactory = {
                   ReplyToAddresses: message.replyTo ?? undefined,
                 })
                 .pipe(
-                  Effect.catchTag("SendingPausedException", (error) =>
-                    tenantName
-                      ? isSesTenantPaused(ses, tenantName).pipe(
-                          Effect.orElseSucceed(() => false),
-                          Effect.flatMap((tenantPaused) =>
-                            Effect.fail(
-                              tenantPaused
-                                ? new ProviderRejected({
-                                    ...context,
-                                    cause: error,
-                                    reason: "project_sending_paused",
-                                  })
-                                : error,
+                  Effect.catchTags({
+                    SendingPausedException: (error) =>
+                      tenantName
+                        ? isSesTenantPaused(ses, tenantName).pipe(
+                            Effect.orElseSucceed(() => false),
+                            Effect.flatMap((tenantPaused) =>
+                              Effect.fail(
+                                tenantPaused
+                                  ? new ProviderRejected({
+                                      ...context,
+                                      cause: error,
+                                      reason: "project_sending_paused",
+                                    })
+                                  : error,
+                              ),
                             ),
-                          ),
-                        )
-                      : Effect.fail(error),
-                  ),
+                          )
+                        : Effect.fail(error),
+                  }),
                 );
               if (!result.MessageId) {
                 return yield* new AwsUnexpectedResponseError({
@@ -241,9 +238,5 @@ export const awsSesProviderFactory = {
     );
   },
   definition: awsSesProviderDefinition,
-  webhooks: createAwsSesWebhooks(
-    createAwsWebhookErrorMapper({
-      typeId: awsSesProviderDefinition.typeId,
-    }),
-  ),
+  webhooks: createAwsSesWebhooks({ typeId: awsSesProviderDefinition.typeId }),
 } satisfies EmailProviderFactory;

@@ -264,11 +264,11 @@ export const updatePlatformProvider = (
     if (input.credentials?.encrypted) {
       const merged = {
         encrypted: {
-          ...((existing.credentials.encrypted as Record<string, string>) ?? {}),
+          ...(existing.credentials.encrypted as Record<string, string>),
           ...input.credentials.encrypted,
         },
         unencrypted: {
-          ...((existing.credentials.unencrypted as Record<string, unknown>) ?? {}),
+          ...(existing.credentials.unencrypted as Record<string, unknown>),
           ...input.credentials.unencrypted,
         },
       };
@@ -286,7 +286,7 @@ export const updatePlatformProvider = (
       credentials = {
         ...existing.credentials,
         unencrypted: {
-          ...((existing.credentials.unencrypted as Record<string, unknown>) ?? {}),
+          ...(existing.credentials.unencrypted as Record<string, unknown>),
           ...input.credentials.unencrypted,
         },
       };

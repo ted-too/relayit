@@ -685,7 +685,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                   onMount={(editor, monaco) => {
                     editor.addCommand(
                       // Monaco keybindings are bitflags.
-                      // biome-ignore lint/suspicious/noBitwiseOperators: Monaco KeyMod API
+                      // Monaco KeyMod API
                       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
                       () => {
                         void handleSaveRef.current();

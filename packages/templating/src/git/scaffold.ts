@@ -1,6 +1,6 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
 import { runBunInstall } from "../publish/bun-install";
 import { TemplatingBuilderError } from "../rpc/errors";
@@ -46,9 +46,9 @@ const generateLockfile = (packageJson: string) =>
           code: "failed",
           message: "Failed to create scaffold temp directory.",
         }),
-      try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-scaffold-")),
+      try: () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-scaffold-")),
     }),
-    (tempDir) => Effect.promise(() => fs.rm(tempDir, { force: true, recursive: true })),
+    (tempDir) => Effect.promise(() => NodeFSP.rm(tempDir, { force: true, recursive: true })),
   ).pipe(
     Effect.flatMap((tempDir) =>
       Effect.gen(function* () {
@@ -58,7 +58,7 @@ const generateLockfile = (packageJson: string) =>
               code: "failed",
               message: "Failed to generate starter lockfile.",
             }),
-          try: () => fs.writeFile(path.join(tempDir, "package.json"), packageJson),
+          try: () => NodeFSP.writeFile(NodePath.join(tempDir, "package.json"), packageJson),
         });
 
         const install = yield* runBunInstall({
@@ -79,7 +79,7 @@ const generateLockfile = (packageJson: string) =>
               code: "failed",
               message: "Failed to generate starter lockfile.",
             }),
-          try: () => fs.readFile(path.join(tempDir, "bun.lock"), "utf8"),
+          try: () => NodeFSP.readFile(NodePath.join(tempDir, "bun.lock"), "utf8"),
         });
       }),
     ),

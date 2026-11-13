@@ -115,7 +115,6 @@ export function CreateDomain({
     } as CreateCustomDomainFormValues,
     validators: {
       // Transform on fqdn makes Zod input/output diverge from form values.
-      // biome-ignore lint/suspicious/noExplicitAny: see above
       onSubmit: createCustomDomainFormSchema as any,
     },
     onSubmit: async ({ value }) => {

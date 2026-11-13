@@ -96,7 +96,7 @@ export const auth = createAuth({
                   Effect.annotateLogs(failureAnnotations(error)),
                 ),
               ),
-              Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
+              Effect.catchTags({ SandboxAllocateError: () => Effect.succeed(null) }),
             ),
           );
         },
@@ -228,7 +228,7 @@ export const auth = createAuth({
                 Effect.annotateLogs(failureAnnotations(error)),
               ),
             ),
-            Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
+            Effect.catchTags({ SandboxAllocateError: () => Effect.succeed(null) }),
           ),
         );
       }

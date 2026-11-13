@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/correctness/noNestedComponentDefinitions: This is a wrapper for the DayPicker component */
 "use client";
 
 import { cn } from "@repo/ui/lib/utils";
@@ -59,6 +58,7 @@ export function Calendar({
   );
 
   const defaultComponents = {
+    // oxlint-disable-next-line react/no-unstable-nested-components -- the wrapper hands DayPicker its own Chevron, as upstream coss does
     Chevron: ({
       className,
       orientation,

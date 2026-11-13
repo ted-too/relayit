@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { DB } from "@repo/persistence/db/effect";
 import { contactTopicUnsubscribe } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
@@ -17,7 +17,7 @@ export const signListUnsubscribe = (input: {
   readonly secret: string;
   readonly topicId: string;
 }) =>
-  createHmac("sha256", input.secret)
+  NodeCrypto.createHmac("sha256", input.secret)
     .update(
       listUnsubscribePayload({
         contactId: input.contactId,
@@ -47,7 +47,7 @@ export const verifyListUnsubscribe = (input: {
     return false;
   }
 
-  return timingSafeEqual(expectedBuffer, signatureBuffer);
+  return NodeCrypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 };
 
 export const buildListUnsubscribeUrl = (input: {

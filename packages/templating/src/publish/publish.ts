@@ -1,6 +1,6 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { DB } from "@repo/persistence/db/effect";
 import { templatingWorkspace, templatingWorkspaceEntry } from "@repo/persistence/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -45,11 +45,11 @@ const collectEntryPaths = (root: string) =>
   Effect.tryPromise({
     catch: () => [] as string[],
     try: async () => {
-      const dir = path.join(root, "reactEmail");
+      const dir = NodePath.join(root, "reactEmail");
       try {
-        const names = await fs.readdir(dir);
+        const names = await NodeFSP.readdir(dir);
         return names
-          .map((name) => path.join("reactEmail", name))
+          .map((name) => NodePath.join("reactEmail", name))
           .filter((p) => isReactEmailEntryPath(p));
       } catch {
         return [];
@@ -73,9 +73,9 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 code: "failed",
                 message: "Failed to create publish temp directory.",
               }),
-            try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-publish-")),
+            try: () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-publish-")),
           }),
-          (dir) => Effect.promise(() => fs.rm(dir, { force: true, recursive: true })),
+          (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
         );
 
         yield* scaffoldHostedWorkspace(input.workspaceId);
@@ -92,7 +92,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
               code: "failed",
               message: "Failed to read package.json.",
             }),
-          try: () => fs.readFile(path.join(tempDir, "package.json"), "utf8"),
+          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
         });
 
         yield* assertHardenedPackageJson(packageJson).pipe(
@@ -166,7 +166,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 code: "failed",
                 message: "Failed to read workspace entry source.",
               }),
-            try: () => fs.readFile(path.join(tempDir, entry.path), "utf8"),
+            try: () => NodeFSP.readFile(NodePath.join(tempDir, entry.path), "utf8"),
           });
           const artifact = yield* bundleReactEmailEntry({
             entryPath: entry.path,

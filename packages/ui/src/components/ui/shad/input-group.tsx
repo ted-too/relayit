@@ -43,7 +43,7 @@ function InputGroupAddon({
   ...props
 }: React.ComponentProps<"fieldset"> & VariantProps<typeof inputGroupAddonVariants>) {
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: this is intentional as per ShadCN docs.
+    // this is intentional as per ShadCN docs.
     <fieldset
       className={cn(inputGroupAddonVariants({ align }), className)}
       data-align={align}

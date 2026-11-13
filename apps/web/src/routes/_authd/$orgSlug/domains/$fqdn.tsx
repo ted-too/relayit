@@ -42,7 +42,7 @@ function RouteComponent() {
   const { orgSlug, fqdn } = Route.useParams();
   const { data: domain } = useSuspenseQuery({
     ...queries.organizations.bySlug(orgSlug).listDomains,
-    // biome-ignore lint/style/noNonNullAssertion: we are guaranteed to find the domain
+    // we are guaranteed to find the domain
     select: (domains) => domains.find((domain) => domain.fqdn === fqdn)!,
   });
   const [deleteOpen, setDeleteOpen] = useState(false);

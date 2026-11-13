@@ -140,7 +140,7 @@ export const sweepIfSandboxAllocatable = (sandboxDomainId: string) =>
     let assigned = 0;
     for (const org of unassigned) {
       const picked = yield* allocateSandboxDomain(org.id).pipe(
-        Effect.catchTag("SandboxAllocateError", () => Effect.succeed(null)),
+        Effect.catchTags({ SandboxAllocateError: () => Effect.succeed(null) }),
       );
       if (!picked) {
         break;

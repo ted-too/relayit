@@ -1,5 +1,5 @@
 import { spyOn } from "bun:test";
-import * as dns from "node:dns";
+import * as NodeDns from "node:dns";
 
 const TRAILING_DOT_REGEX = /\.$/;
 
@@ -8,9 +8,9 @@ const notFound = (host: string, code = "ENOTFOUND") =>
 
 const normalizeHost = (host: string) => host.replace(TRAILING_DOT_REGEX, "").toLowerCase();
 
-/** Stub `dns.promises.Resolver` so tests don't hit the ambient resolver. */
+/** Stub `NodeDns.promises.Resolver` so tests don't hit the ambient resolver. */
 export const stubResolverNs = (nsByHost: Record<string, string[]>) => {
-  spyOn(dns.promises, "Resolver").mockImplementation(
+  spyOn(NodeDns.promises, "Resolver").mockImplementation(
     (() =>
       ({
         resolve4: () => Promise.resolve(["192.0.2.53"]),
@@ -26,6 +26,6 @@ export const stubResolverNs = (nsByHost: Record<string, string[]>) => {
         },
         resolveTxt: () => Promise.resolve([]),
         setServers: () => undefined,
-      }) as unknown as dns.promises.Resolver) as never,
+      }) as unknown as NodeDns.promises.Resolver) as never,
   );
 };

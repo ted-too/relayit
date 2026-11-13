@@ -56,7 +56,7 @@ const makeReservation = (
 describe("Usage reservation lifecycle", () => {
   if (!testRedisUrl) {
     process.emitWarning("Skipping Usage integration tests: TEST_REDIS_URL is not set");
-    // biome-ignore lint/suspicious/noSkippedTests: The Redis test is opt-in.
+    // The Redis test is opt-in.
     test.skip(integrationTestName, () => undefined);
     return;
   }

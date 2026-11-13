@@ -136,7 +136,7 @@ function getDefaultFromZodType<T extends z4.$ZodType>(type: T): z4.infer<T> {
 
     case "function": {
       // Return a no-op function for function schemas
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: this is fine
+      // this is fine
       return (() => {}) as z4.infer<T>;
     }
 

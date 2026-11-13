@@ -3,6 +3,10 @@ import type {
   NormalizedDeliveryEvent,
   ProviderWebhookResult,
 } from "@repo/channels/email/provider-webhook";
+import {
+  type ProviderTypeErrorContext,
+  ProviderWebhookError,
+} from "@repo/channels/provider-errors";
 import { Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import MessageValidator from "sns-validator";
@@ -10,7 +14,6 @@ import {
   AwsSnsValidationError,
   AwsSubscriptionConfirmationError,
   type AwsWebhookError,
-  type AwsWebhookErrorMapper,
   AwsWebhookPayloadError,
 } from "../errors";
 
@@ -207,7 +210,7 @@ const confirmSubscription = (value: unknown) =>
     yield* requestSubscription(url);
   });
 
-export const createAwsSesWebhooks = (mapWebhookError: AwsWebhookErrorMapper) =>
+export const createAwsSesWebhooks = (context: ProviderTypeErrorContext) =>
   ({
     handle: ({ rawBody }) =>
       Effect.gen(function* () {
@@ -226,5 +229,5 @@ export const createAwsSesWebhooks = (mapWebhookError: AwsWebhookErrorMapper) =>
         const payload = yield* parseJson(message.Message, "ses_notification");
         const record = asRecord(payload);
         return record ? normalizeSesNotification(record) : ({ type: "noop" } as const);
-      }).pipe(Effect.mapError(mapWebhookError)),
+      }).pipe(Effect.mapError((cause) => new ProviderWebhookError({ ...context, cause }))),
   }) satisfies EmailProviderWebhookAdapter;

@@ -10,7 +10,7 @@ const testName = "legacy default from uses the oldest sendable custom Domain of 
 describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
   if (!testDatabaseUrl) {
     process.emitWarning("Skipping legacy default from test: TEST_DATABASE_URL is not set");
-    // biome-ignore lint/suspicious/noSkippedTests: The PostgreSQL test is opt-in.
+    // The PostgreSQL test is opt-in.
     test.skip(testName, () => undefined);
     return;
   }

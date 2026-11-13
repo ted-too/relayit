@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
 import { runBunInstall } from "./bun-install";
 
 describe("runBunInstall", () => {
   test("returns ok: false with stderr when the install fails", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "relayit-bun-install-"));
+    const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-bun-install-"));
     try {
-      await fs.writeFile(path.join(dir, "package.json"), "{ not json");
+      await NodeFSP.writeFile(NodePath.join(dir, "package.json"), "{ not json");
 
       const result = await Effect.runPromise(
         runBunInstall({
@@ -22,7 +22,7 @@ describe("runBunInstall", () => {
       expect(result.ok).toBe(false);
       expect(result.stderr).toContain("package.json");
     } finally {
-      await fs.rm(dir, { force: true, recursive: true });
+      await NodeFSP.rm(dir, { force: true, recursive: true });
     }
   });
 
@@ -30,7 +30,7 @@ describe("runBunInstall", () => {
     const result = await Effect.runPromise(
       runBunInstall({
         args: ["--ignore-scripts"],
-        cwd: path.join(os.tmpdir(), `relayit-missing-${Bun.randomUUIDv7()}`),
+        cwd: NodePath.join(NodeOS.tmpdir(), `relayit-missing-${Bun.randomUUIDv7()}`),
         operation: "test",
       }),
     );

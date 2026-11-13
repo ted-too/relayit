@@ -49,9 +49,6 @@ export interface EmittedWebhookEvent {
   readonly eventId: string;
 }
 
-const emissionError = (stage: WebhookEmissionError["stage"]) => (cause: unknown) =>
-  new WebhookEmissionError({ cause, stage });
-
 export const emitWebhookEvent = (
   transaction: DatabaseTransaction,
   input: EmitWebhookEventInput,
@@ -67,7 +64,7 @@ export const emitWebhookEvent = (
           eq(webhookEndpoint.enabled, true),
         ),
       )
-      .pipe(Effect.mapError(emissionError("endpoints")));
+      .pipe(Effect.mapError((cause) => new WebhookEmissionError({ cause, stage: "endpoints" })));
     const matching = endpoints.filter((endpoint) =>
       endpointMatches({
         enabled: endpoint.enabled,
@@ -91,7 +88,7 @@ export const emitWebhookEvent = (
         type: input.event.type,
       })
       .returning({ id: webhookEvent.id })
-      .pipe(Effect.mapError(emissionError("event")));
+      .pipe(Effect.mapError((cause) => new WebhookEmissionError({ cause, stage: "event" })));
 
     if (!event) {
       return yield* new WebhookEmissionError({
@@ -114,7 +111,9 @@ export const emitWebhookEvent = (
               webhookEventId: event.id,
             })
             .returning({ id: webhookEventDelivery.id })
-            .pipe(Effect.mapError(emissionError("deliveries")));
+            .pipe(
+              Effect.mapError((cause) => new WebhookEmissionError({ cause, stage: "deliveries" })),
+            );
 
           if (!delivery) {
             return yield* new WebhookEmissionError({
@@ -125,7 +124,7 @@ export const emitWebhookEvent = (
 
           yield* jobs
             .enqueue(webhookDeliverJob, { deliveryId: delivery.id }, transaction)
-            .pipe(Effect.mapError(emissionError("jobs")));
+            .pipe(Effect.mapError((cause) => new WebhookEmissionError({ cause, stage: "jobs" })));
         }),
       { concurrency: 1, discard: true },
     );

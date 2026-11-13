@@ -137,7 +137,7 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
         exists: (key) =>
           s3.headObject({ Bucket: config.bucket, Key: key }).pipe(
             Effect.as(true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
+            Effect.catchTags({ NotFound: () => Effect.succeed(false) }),
             Effect.mapError((cause) => new ObjectStorageError({ cause, key, operation: "exists" })),
           ),
         signedDownloadUrl: (key, options) =>

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
-import { DB } from "@repo/persistence/db/effect";
+import { type Database, DB } from "@repo/persistence/db/effect";
 import { DateTime, Effect, Layer } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { Usage, type UsageService } from "../../usage";
@@ -9,7 +9,7 @@ import { acceptTransactionalEmail } from "./accept";
 
 const unsupported = () => Effect.die("unused test service");
 const testServices = Layer.mergeAll(
-  Layer.succeed(DB, {} as Effect.Success<typeof DB>),
+  Layer.succeed(DB, {} as Database),
   Layer.succeed(Jobs, {
     cancel: unsupported,
     enqueue: unsupported,

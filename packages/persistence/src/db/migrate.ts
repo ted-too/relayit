@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
@@ -18,7 +18,7 @@ const resolveMigrationsFolder = (): string => {
   if (fromEnv !== undefined && fromEnv.length > 0) {
     return fromEnv;
   }
-  return join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+  return NodePath.join(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "../../drizzle");
 };
 
 /**
@@ -27,7 +27,7 @@ const resolveMigrationsFolder = (): string => {
  */
 export const migrateOnStartup = async (databaseUrl: string): Promise<void> => {
   const migrationsFolder = resolveMigrationsFolder();
-  if (!existsSync(migrationsFolder)) {
+  if (!NodeFS.existsSync(migrationsFolder)) {
     throw new Error(`Drizzle migrations folder not found at ${migrationsFolder}`);
   }
 

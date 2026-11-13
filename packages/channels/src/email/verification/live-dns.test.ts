@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import * as dns from "node:dns";
+import * as NodeDns from "node:dns";
 import {
   evaluateLiveDnsRecord,
   inspectDmarcTxtRecords,
@@ -111,7 +111,7 @@ let resolverConfig: ConstructorParameters<typeof FakeResolver>[0] = {};
 
 const installFakeResolver = (config: ConstructorParameters<typeof FakeResolver>[0] = {}) => {
   resolverConfig = config;
-  spyOn(dns.promises, "Resolver").mockImplementation(
+  spyOn(NodeDns.promises, "Resolver").mockImplementation(
     (() => new FakeResolver(resolverConfig)) as never,
   );
 };

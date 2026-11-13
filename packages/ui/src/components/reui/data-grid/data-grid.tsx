@@ -9,7 +9,6 @@ import type {
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
     /** Expands the column to fill remaining table width after fixed-size columns. */
     autoSize?: boolean;
@@ -116,7 +115,7 @@ export interface DataGridProps<TData extends object> {
 }
 
 const DataGridContext = createContext<
-  // biome-ignore lint/suspicious/noExplicitAny: shared context must erase row generics
+  // shared context must erase row generics
   DataGridContextProps<any> | undefined
 >(undefined);
 
@@ -146,7 +145,7 @@ function DataGridProvider<TData extends object>({
   // Memoize context value so consumers don't re-render during column resize.
   // Column sizing state is intentionally excluded from deps -- CSS variables
   // on the <table> element handle width updates without React re-renders.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: omit full `props` (new object each render); list stable fields instead
+  // omit full `props` (new object each render); list stable fields instead
   const value = useMemo(
     () => ({
       props,

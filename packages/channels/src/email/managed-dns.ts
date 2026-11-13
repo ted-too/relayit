@@ -141,9 +141,9 @@ const upsertCloudflareDnsRecord = ({
 
     const createdId = yield* provide(DNS.createRecord(payload)).pipe(
       Effect.map((created) => created.id as string | undefined),
-      Effect.catchTag("DnsRecordAlreadyExists", () =>
-        Effect.succeed(undefined as string | undefined),
-      ),
+      Effect.catchTags({
+        DnsRecordAlreadyExists: () => Effect.succeed(undefined as string | undefined),
+      }),
     );
 
     if (createdId) {

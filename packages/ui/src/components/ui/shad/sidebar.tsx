@@ -80,14 +80,14 @@ function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state.
-      // biome-ignore lint/suspicious/noDocumentCookie: this is intentional as per ShadCN docs.
+      // this is intentional as per ShadCN docs.
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
     [setOpenProp, open],
   );
 
   // Helper to toggle the sidebar.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: this is intentional as per ShadCN docs.
+  // this is intentional as per ShadCN docs.
   const toggleSidebar = React.useCallback(
     () => (isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)),
     [isMobile, setOpen, setOpenMobile],
@@ -100,7 +100,7 @@ function SidebarProvider({
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed";
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: this is intentional as per ShadCN docs.
+  // this is intentional as per ShadCN docs.
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
       state,

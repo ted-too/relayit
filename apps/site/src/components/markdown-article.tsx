@@ -38,7 +38,7 @@ export function MarkdownArticle({ page }: { page: RenderedPage }) {
       </header>
       <div
         className="typeset typeset-docs max-w-[72ch]"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: rendered from repo-owned markdown
+        // rendered from repo-owned markdown
         dangerouslySetInnerHTML={{ __html: page.html }}
         ref={body}
       />

@@ -1,7 +1,8 @@
-import type { Worker } from "node:cluster";
+import type * as NodeCluster from "node:cluster";
+// oxlint-disable-next-line relayit/namespace-node-imports -- cluster is an EventEmitter instance: `on`, `off`, `worker` and `workers` live on the default export, not as named exports
 import cluster from "node:cluster";
-import os from "node:os";
-import { setTimeout as scheduleTimeout } from "node:timers";
+import * as NodeOS from "node:os";
+import * as NodeTimers from "node:timers";
 import openapi from "@elysia/openapi";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
@@ -71,7 +72,7 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
 const jobWorkerOptions = {
   blockMs: 5000,
   concurrency: 10,
-  consumer: `${os.hostname()}:${process.pid}`,
+  consumer: `${NodeOS.hostname()}:${process.pid}`,
   count: 100,
   promotion: {
     intervalMs: 1000,
@@ -214,7 +215,7 @@ const runApi = (startWorker: boolean) => {
 const webConcurrency = () => {
   const configured = Bun.env.WEB_CONCURRENCY;
   if (configured === undefined) {
-    return os.availableParallelism();
+    return NodeOS.availableParallelism();
   }
 
   const concurrency = Number(configured);
@@ -228,10 +229,16 @@ const webConcurrency = () => {
 const clusterProgram = Effect.callback<void>((resume) => {
   let completed = false;
   let shuttingDown = false;
-  let shutdownTimeout: ReturnType<typeof scheduleTimeout> | undefined;
+  let shutdownTimeout: ReturnType<typeof NodeTimers.setTimeout> | undefined;
   const clusterEvents = cluster as typeof cluster & {
-    off(event: "exit", listener: (worker: Worker, code: number, signal: string) => void): void;
-    on(event: "exit", listener: (worker: Worker, code: number, signal: string) => void): void;
+    off(
+      event: "exit",
+      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
+    ): void;
+    on(
+      event: "exit",
+      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
+    ): void;
   };
   const fork = () => cluster.fork();
   const finish = () => {
@@ -244,9 +251,9 @@ const clusterProgram = Effect.callback<void>((resume) => {
     }
     resume(Effect.void);
   };
-  const onExit = (_worker: Worker, _code: number, _signal: string) => {
+  const onExit = (_worker: NodeCluster.Worker, _code: number, _signal: string) => {
     if (!shuttingDown) {
-      scheduleTimeout(() => {
+      NodeTimers.setTimeout(() => {
         if (!shuttingDown) {
           fork();
         }
@@ -263,7 +270,7 @@ const clusterProgram = Effect.callback<void>((resume) => {
       worker?.process.kill(signal);
     }
 
-    shutdownTimeout = scheduleTimeout(() => {
+    shutdownTimeout = NodeTimers.setTimeout(() => {
       process.exitCode = 1;
       finish();
     }, 8000);
