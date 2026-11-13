@@ -4,13 +4,12 @@ import { typeid } from "typeid-js";
 import type { EmailAddressList, EmailFrom, EmailHeaders } from "../../validators/channels/email";
 import { type DeliveryError, deliveryStatusEnum } from "../channels";
 import { message } from "../message";
-import { provider } from "../provider";
 import { customDomain } from "./custom-domain";
 import { sandboxDomain } from "./sandbox-domain";
 
 /**
  * Email Delivery — per-channel attempt of a Message, owning email Channel Format
- * and Delivery status. Soft-bounce retries are Provider-owned (no new Delivery).
+ * and Delivery status. SES retries a soft bounce itself (no new Delivery).
  */
 export const emailDelivery = pgTable(
   "email_delivery",
@@ -37,9 +36,6 @@ export const emailDelivery = pgTable(
     html: text("html"),
     text: text("text"),
     headers: jsonb("headers").$type<EmailHeaders>(),
-    providerId: text("provider_id").references(() => provider.id, {
-      onDelete: "set null",
-    }),
     providerMessageId: text("provider_message_id"),
     error: jsonb("error").$type<DeliveryError>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -56,7 +52,6 @@ export const emailDelivery = pgTable(
     index("email_delivery_status_idx").on(t.status),
     index("email_delivery_custom_domain_idx").on(t.customDomainId),
     index("email_delivery_sandbox_domain_idx").on(t.sandboxDomainId),
-    index("email_delivery_provider_idx").on(t.providerId),
     uniqueIndex("email_delivery_provider_message_id_unique_idx")
       .on(t.providerMessageId)
       .where(sql`${t.providerMessageId} IS NOT NULL`),

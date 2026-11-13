@@ -9,7 +9,6 @@ export const createCustomDomainFormSchema = z.object({
     .max(253)
     .transform((value) => value.trim().toLowerCase())
     .refine((value) => FQDN_REGEX.test(value), "Invalid FQDN"),
-  providerId: z.string().min(1).optional(),
 });
 
 export const createCustomDomainInputSchema = createCustomDomainFormSchema.extend({
@@ -22,10 +21,6 @@ export const customDomainIdInputSchema = z.object({
 });
 
 export const listCustomDomainsInputSchema = z.object({
-  orgSlug: z.string().min(1),
-});
-
-export const listProjectProvidersInputSchema = z.object({
   orgSlug: z.string().min(1),
 });
 

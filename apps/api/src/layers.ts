@@ -3,7 +3,6 @@ import { JobsLive } from "@repo/jobs";
 import { loggingLive } from "@repo/logging";
 import { makeObjectStorageLayer } from "@repo/object-storage";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { Layer, ManagedRuntime, Redacted } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -30,20 +29,8 @@ export const makeRuntime = (config: ApiConfig) => {
       }),
     ),
   );
-  const emailBackendLive = emailBackendLayer(config.emailBackend).pipe(
-    Layer.provide(Layer.mergeAll(dbLive, jobsLive, logging)),
-  );
 
   return ManagedRuntime.make(
-    Layer.mergeAll(
-      dbLive,
-      redisLive,
-      objectStorageLive,
-      usageLive,
-      jobsLive,
-      httpLive,
-      emailBackendLive,
-      logging,
-    ),
+    Layer.mergeAll(dbLive, redisLive, objectStorageLive, usageLive, jobsLive, httpLive, logging),
   );
 };

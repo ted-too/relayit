@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
-import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
+import { EmailBackend, type EmailBackendService } from "../backend";
 import { emailVerifyCustomDomainHandler } from "./handlers";
 import { stubResolverNs } from "./resolver-test-stub";
 
@@ -27,7 +26,7 @@ describe("emailVerifyCustomDomainHandler", () => {
               fqdn: "acme.test",
               id: "dom_1",
               provider: "cloudflare",
-              providerIdentities: [],
+              registration: null,
             }),
         },
       },
@@ -51,13 +50,14 @@ describe("emailVerifyCustomDomainHandler", () => {
               enqueue: unsupported,
               schedule: unsupported,
             } satisfies JobsService),
-            Layer.succeed(EmailProviderRegistry, {
-              get: unsupported,
-            } satisfies EmailProviderRegistryService),
-            Layer.succeed(ProviderCredentialsVault, {
-              open: unsupported,
-              seal: unsupported,
-            } as never),
+            Layer.succeed(EmailBackend, {
+              createIdentity: unsupported,
+              defaultRegion: "eu-central-1",
+              deleteIdentity: unsupported,
+              ensureInfrastructure: unsupported,
+              getIdentityStatus: unsupported,
+              send: unsupported,
+            } satisfies EmailBackendService),
           ),
         ),
         Effect.map(() => {

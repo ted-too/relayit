@@ -1,5 +1,5 @@
 import type { SESv2 } from "@effect-aws/client-sesv2";
-import type { IdentityResult } from "@repo/channels/email/provider-adapter";
+import type { IdentityResult } from "@repo/channels/email/backend";
 import { Effect } from "effect";
 
 export type SesIdentityClient = Pick<
@@ -113,7 +113,6 @@ export const ensureSesDomainIdentity = (
           },
         ],
       },
-      providerData: { dkimSelector: input.dkimSelector },
     } satisfies IdentityResult;
   });
 };

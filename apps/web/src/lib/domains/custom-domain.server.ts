@@ -4,11 +4,8 @@ import {
   pauseCustomDomain,
   unpauseCustomDomain,
 } from "@repo/channels/email/custom-domain";
-import { DB } from "@repo/persistence/db/effect";
-import type { Provider } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
 import { listCustomDomainsForProject } from "./list.server";
-import { resolveDefaultManagedEmailProviderId } from "./providers.server";
 
 export class CustomDomainAdminError extends Data.TaggedError("CustomDomainAdminError")<{
   readonly cause?: unknown;
@@ -57,64 +54,12 @@ const mapLifecycleError = (cause: {
   }
 };
 
-const loadProvider = (providerId: string) =>
-  Effect.gen(function* () {
-    const db = yield* DB;
-    const row = yield* db.query.provider
-      .findFirst({
-        where: { id: providerId },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainAdminError({
-              cause,
-              code: "failed",
-              message: "Failed to load provider.",
-            }),
-        ),
-      );
-
-    if (row?.channelType !== "email") {
-      return yield* new CustomDomainAdminError({
-        code: "not_found",
-        message: "Email Provider not found.",
-      });
-    }
-
-    return row satisfies Provider;
-  });
-
-const resolveEmailProvider = (providerId: string | undefined) =>
-  Effect.gen(function* () {
-    if (providerId) {
-      return yield* loadProvider(providerId);
-    }
-
-    const defaultId = yield* resolveDefaultManagedEmailProviderId;
-    if (!defaultId) {
-      return yield* new CustomDomainAdminError({
-        code: "not_found",
-        message: "No default managed email Provider is configured.",
-      });
-    }
-
-    return yield* loadProvider(defaultId);
-  });
-
 export const createCustomDomainForProject = (input: {
   readonly fqdn: string;
   readonly organizationId: string;
-  readonly providerId?: string;
 }) =>
   Effect.gen(function* () {
-    const provider = yield* resolveEmailProvider(input.providerId);
-
-    const created = yield* createCustomDomain({
-      fqdn: input.fqdn,
-      organizationId: input.organizationId,
-      provider,
-    }).pipe(Effect.mapError(mapLifecycleError));
+    const created = yield* createCustomDomain(input).pipe(Effect.mapError(mapLifecycleError));
 
     const [domain] = yield* listCustomDomainsForProject({
       customDomainId: created.customDomainId,

@@ -1,183 +1,138 @@
 import { describe, expect, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
-import type { Provider } from "@repo/persistence/db/schema";
 import { Effect, Layer } from "effect";
+import { EmailBackend, type EmailBackendService } from "../backend";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
-import { ensureSandboxForProvider, removeSandboxProviderIdentity } from "./provision";
-
-const provider = {
-  id: "prov_1",
-} as Provider;
+import { ensureSandboxDomain } from "./provision";
 
 const unused = () => Effect.die("unused");
 
 const unusedServices = Layer.mergeAll(
-  Layer.succeed(DB, {} as never),
   Layer.succeed(EmailManagedDns, {
-    cloudflareEnabled: false,
+    cloudflareEnabled: true,
     reconcile: unused,
     remove: unused,
   } satisfies EmailManagedDnsService),
-  Layer.succeed(EmailProviderRegistry, {
-    get: unused,
-  } satisfies EmailProviderRegistryService),
+  Layer.succeed(EmailBackend, {
+    createIdentity: unused,
+    defaultRegion: "eu-central-1",
+    deleteIdentity: unused,
+    ensureInfrastructure: unused,
+    getIdentityStatus: unused,
+    send: unused,
+  } satisfies EmailBackendService),
   Layer.succeed(Jobs, {
     cancel: unused,
     enqueue: unused,
     schedule: unused,
   } satisfies JobsService),
-  Layer.succeed(ProviderCredentialsVault, {
-    open: unused,
-    seal: unused,
-  } as never),
   Layer.succeed(SymmetricCrypto, {
     decrypt: unused,
     encrypt: unused,
   } as never),
 );
 
-describe("ensureSandboxForProvider", () => {
-  test("no-ops when Cloudflare is not configured", () =>
-    Effect.runPromise(
-      ensureSandboxForProvider({
-        cloudflareZoneId: null,
-        provider,
-        rootDomain: null,
-      }).pipe(
-        Effect.provide(unusedServices),
-        Effect.map((result) => {
-          expect(result).toEqual({
-            allocated: 0,
-            identityId: null,
-            sandboxDomainId: null,
-          });
-          return result;
-        }),
-      ),
-    ));
+const sandbox = {
+  cloudflareZoneId: "zone_1",
+  dkimPrivateKey: "sealed",
+  dkimPublicKey: "pub",
+  dkimSelector: "relayitabc",
+  id: "sbxd_1",
+  isActive: false,
+  isPaused: false,
+  rootDomain: "relayit.fyi",
+  verificationStatus: "not_verified",
+};
 
-  test("sweeps unassigned Projects when the Provider already has an identity", () => {
+describe("ensureSandboxDomain", () => {
+  test("only sweeps when the sandbox is already registered", () => {
     const db = {
       query: {
         sandboxDomain: {
-          findFirst: () =>
-            Effect.succeed({
-              id: "snd_1",
-              isActive: true,
-              isPaused: false,
-              rootDomain: "relayit.fyi",
-              verificationStatus: "not_verified",
-            }),
-        },
-        emailDomainProviderIdentity: {
-          findFirst: () => Effect.succeed({ id: "epid_1" }),
+          findFirst: () => Effect.succeed({ ...sandbox, registration: { id: "epid_1" } }),
         },
       },
     };
 
     return Effect.runPromise(
-      ensureSandboxForProvider({
-        cloudflareZoneId: "zone_1",
-        provider,
-        rootDomain: "relayit.fyi",
-      }).pipe(
+      ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
         Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
-        Effect.map((result) => {
-          expect(result).toEqual({
-            allocated: 0,
-            identityId: "epid_1",
-            sandboxDomainId: "snd_1",
-          });
-          return result;
+        Effect.map((allocated) => {
+          expect(allocated).toBe(0);
+          return allocated;
         }),
       ),
     );
   });
-});
 
-describe("removeSandboxProviderIdentity", () => {
-  test("no-ops when the Provider has no sandbox identity", () => {
+  test("registers an unregistered sandbox in the default region and schedules its verify", () => {
+    const registrations: unknown[] = [];
+    const owners: string[] = [];
+    const scheduled: unknown[] = [];
     const db = {
-      query: {
-        emailDomainProviderIdentity: {
-          findFirst: () => Effect.succeed(null),
-        },
-      },
-    };
-
-    return Effect.runPromise(
-      removeSandboxProviderIdentity(provider).pipe(
-        Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
-      ),
-    );
-  });
-
-  test("keeps the sandbox root after removing the last identity", () => {
-    const deleted: string[] = [];
-    const cancelled: string[] = [];
-    const sandboxUpdates: Array<{ isActive: boolean }> = [];
-
-    const db = {
-      query: {
-        emailDomainProviderIdentity: {
-          findFirst: () =>
-            Effect.succeed({
-              id: "epid_1",
-              isActive: true,
-              providerId: "prov_1",
-              sandboxDomainId: "snd_1",
-            }),
-          findMany: () => Effect.succeed([]),
-        },
-        sandboxDomain: {
-          findFirst: () => Effect.succeed(null),
-        },
-      },
-      delete: () => ({
-        where: () => {
-          deleted.push("epid_1");
+      insert: () => ({
+        values: (values: unknown) => {
+          registrations.push(values);
           return Effect.void;
         },
       }),
-      update: () => ({
-        set: (values: { isActive: boolean }) => ({
-          where: () => {
-            sandboxUpdates.push(values);
-            return Effect.void;
-          },
-        }),
-      }),
+      query: {
+        sandboxDomain: {
+          findFirst: () => Effect.succeed({ ...sandbox, registration: null }),
+        },
+      },
     };
 
     return Effect.runPromise(
-      removeSandboxProviderIdentity(provider).pipe(
+      ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            unusedServices,
             Layer.succeed(DB, db as never),
             Layer.succeed(EmailManagedDns, {
               cloudflareEnabled: true,
-              reconcile: unused,
-              remove: () => Effect.void,
-            } satisfies EmailManagedDnsService),
-            Layer.succeed(Jobs, {
-              cancel: (_contract: unknown, payload: { identityId: string }) => {
-                cancelled.push(payload.identityId);
+              reconcile: ({ owner }) => {
+                owners.push(owner);
                 return Effect.void;
               },
+              remove: unused,
+            } satisfies EmailManagedDnsService),
+            Layer.succeed(EmailBackend, {
+              createIdentity: ({ fqdn, region }) => {
+                expect({ fqdn, region }).toEqual({ fqdn: "relayit.fyi", region: "eu-central-1" });
+                return Effect.succeed({ mailFrom: { domain: "send.relayit.fyi", records: [] } });
+              },
+              defaultRegion: "eu-central-1",
+              deleteIdentity: unused,
+              ensureInfrastructure: unused,
+              getIdentityStatus: unused,
+              send: unused,
+            } satisfies EmailBackendService),
+            Layer.succeed(Jobs, {
+              cancel: unused,
               enqueue: unused,
-              schedule: unused,
+              schedule: (_contract: unknown, payload: unknown) => {
+                scheduled.push(payload);
+                return Effect.void;
+              },
+            } as never),
+            Layer.succeed(SymmetricCrypto, {
+              decrypt: () => Effect.succeed("private-key"),
+              encrypt: unused,
             } as never),
           ),
         ),
         Effect.map(() => {
-          expect(deleted).toEqual(["epid_1"]);
-          expect(cancelled).toEqual(["epid_1"]);
-          expect(sandboxUpdates).toEqual([{ isActive: false }]);
+          expect(owners).toEqual(["sandbox:sbxd_1:identity"]);
+          expect(registrations).toEqual([
+            {
+              region: "eu-central-1",
+              sandboxDomainId: "sbxd_1",
+              verificationStatus: "not_verified",
+            },
+          ]);
+          expect(scheduled).toEqual([{ sandboxDomainId: "sbxd_1" }]);
           return null;
         }),
       ),

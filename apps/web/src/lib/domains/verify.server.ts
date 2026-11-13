@@ -1,18 +1,13 @@
 import {
   verifyCustomDomainOwnership,
-  verifyCustomDomainProviderIdentity,
+  verifyCustomDomainRegistration,
 } from "@repo/channels/email/verification";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
 import { CustomDomainAdminError } from "./custom-domain.server";
 import { listCustomDomainsForProject } from "./list.server";
 
-const isPendingClaim = (link: {
-  ownershipVerificationStatus: string;
-  pendingProviderId: string | null;
-}) => link.ownershipVerificationStatus !== "verified" || link.pendingProviderId != null;
-
-/** Synchronously refresh provider + ownership verification for UI. */
+/** Synchronously refresh SES, DNS and ownership verification for the UI. */
 export const refreshCustomDomainForProject = (input: {
   readonly customDomainId: string;
   readonly organizationId: string;
@@ -28,11 +23,7 @@ export const refreshCustomDomainForProject = (input: {
         },
         with: {
           customDomain: {
-            with: {
-              providerIdentities: {
-                with: { provider: true },
-              },
-            },
+            with: { registration: true },
           },
         },
       })
@@ -55,37 +46,30 @@ export const refreshCustomDomainForProject = (input: {
     }
 
     const domain = link.customDomain;
-    if (domain.providerIdentities.length === 0) {
+    if (!domain.registration) {
       return yield* new CustomDomainAdminError({
         code: "failed",
-        message: "Domain has no Provider pairings.",
+        message: "Domain is not registered with SES.",
       });
     }
 
-    for (const identity of domain.providerIdentities) {
-      if (!identity.provider) {
-        continue;
-      }
+    yield* verifyCustomDomainRegistration({
+      db,
+      domain,
+      registration: domain.registration,
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CustomDomainAdminError({
+            cause,
+            code: "failed",
+            message: "Failed to refresh Custom Domain verification.",
+          }),
+      ),
+    );
 
-      yield* verifyCustomDomainProviderIdentity({
-        customDomainId: domain.id,
-        db,
-        fqdn: domain.fqdn,
-        identity,
-        provider: identity.provider,
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainAdminError({
-              cause,
-              code: "failed",
-              message: "Failed to refresh Custom Domain verification.",
-            }),
-        ),
-      );
-    }
-
-    if (isPendingClaim(link)) {
+    // A link starts unverified only as a claim on a Domain another Project holds.
+    if (link.ownershipVerificationStatus !== "verified") {
       yield* verifyCustomDomainOwnership({
         customDomain: domain,
         db,

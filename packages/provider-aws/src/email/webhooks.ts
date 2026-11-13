@@ -1,12 +1,4 @@
-import type {
-  EmailProviderWebhookAdapter,
-  NormalizedDeliveryEvent,
-  ProviderWebhookResult,
-} from "@repo/channels/email/provider-webhook";
-import {
-  type ProviderTypeErrorContext,
-  ProviderWebhookError,
-} from "@repo/channels/provider-errors";
+import type { NormalizedDeliveryEvent } from "@repo/channels/email/deliverability";
 import { Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import MessageValidator from "sns-validator";
@@ -16,6 +8,17 @@ import {
   type AwsWebhookError,
   AwsWebhookPayloadError,
 } from "../errors";
+
+/**
+ * Where the api receives SES's notifications, and where the worker subscribes SNS. The
+ * shape is left from when Providers were pluggable; production's SNS subscriptions point
+ * here, so changing it means re-subscribing every region.
+ */
+export const SES_NOTIFICATIONS_PATH = "/webhooks/providers/aws/ses";
+
+export type SesNotificationResult =
+  | { readonly events: readonly NormalizedDeliveryEvent[]; readonly type: "events" }
+  | { readonly type: "noop" };
 
 const validator = new MessageValidator();
 const SNS_HOSTNAME = /^sns\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/;
@@ -110,7 +113,7 @@ const eventKind = (notificationType: string): NormalizedDeliveryEvent["kind"] | 
 
 export const normalizeSesNotification = (
   payload: Record<string, unknown>,
-): ProviderWebhookResult => {
+): SesNotificationResult => {
   const notificationType = String(payload.eventType ?? payload.notificationType ?? "");
   const kind = eventKind(notificationType);
   const providerMessageId = asRecord(payload.mail)?.messageId;
@@ -210,24 +213,25 @@ const confirmSubscription = (value: unknown) =>
     yield* requestSubscription(url);
   });
 
-export const createAwsSesWebhooks = (context: ProviderTypeErrorContext) =>
-  ({
-    handle: ({ rawBody }) =>
-      Effect.gen(function* () {
-        const body = yield* parseJson(rawBody, "sns_envelope");
-        const message = yield* validateSnsMessage(body);
+/**
+ * Reads one SNS delivery to the notifications endpoint: confirms a subscription, or
+ * normalizes the SES event it carries. Every message is checked against SNS's signature.
+ */
+export const handleSesNotification = (rawBody: string) =>
+  Effect.gen(function* () {
+    const body = yield* parseJson(rawBody, "sns_envelope");
+    const message = yield* validateSnsMessage(body);
 
-        if (message.Type === "SubscriptionConfirmation") {
-          yield* confirmSubscription(message.SubscribeURL);
-          return { type: "noop" } as const;
-        }
+    if (message.Type === "SubscriptionConfirmation") {
+      yield* confirmSubscription(message.SubscribeURL);
+      return { type: "noop" } as const;
+    }
 
-        if (message.Type !== "Notification" || typeof message.Message !== "string") {
-          return { type: "noop" } as const;
-        }
+    if (message.Type !== "Notification" || typeof message.Message !== "string") {
+      return { type: "noop" } as const;
+    }
 
-        const payload = yield* parseJson(message.Message, "ses_notification");
-        const record = asRecord(payload);
-        return record ? normalizeSesNotification(record) : ({ type: "noop" } as const);
-      }).pipe(Effect.mapError((cause) => new ProviderWebhookError({ ...context, cause }))),
-  }) satisfies EmailProviderWebhookAdapter;
+    const payload = yield* parseJson(message.Message, "ses_notification");
+    const record = asRecord(payload);
+    return record ? normalizeSesNotification(record) : ({ type: "noop" } as const);
+  });

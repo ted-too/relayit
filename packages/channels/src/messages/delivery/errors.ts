@@ -15,12 +15,3 @@ export class MessageDeliveryRetryableError extends Data.TaggedError(
   readonly message: string;
   readonly stage: string;
 }> {}
-
-export class MessageDeliveryInfrastructureError extends Data.TaggedError(
-  "MessageDeliveryInfrastructureError",
-)<{
-  readonly cause: unknown;
-  readonly deliveryId?: string;
-  readonly operation: "circuit" | "suppressions" | "usage";
-  readonly organizationId?: string;
-}> {}

@@ -1,0 +1,3 @@
+ALTER TABLE "email_domain_provider_identity" ADD COLUMN "region" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "email_domain_registration_custom_domain_uidx" ON "email_domain_provider_identity" ("custom_domain_id") WHERE "custom_domain_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "email_domain_registration_sandbox_domain_uidx" ON "email_domain_provider_identity" ("sandbox_domain_id") WHERE "sandbox_domain_id" IS NOT NULL;

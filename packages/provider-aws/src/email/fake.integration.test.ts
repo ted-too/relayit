@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
-import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
-import { verifyCustomDomainProviderIdentity } from "@repo/channels/email/verification/custom-identity";
+import { EmailBackend } from "@repo/channels/email/backend";
+import { verifyCustomDomainRegistration } from "@repo/channels/email/verification/custom-identity";
 import { Jobs, JobsLive } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
@@ -14,7 +13,6 @@ import {
   message,
   organization,
   organizationAppEnvironment,
-  provider,
   webhookEndpoint,
 } from "@repo/persistence/db/schema";
 import { makeRedisClient, makeRedisLive } from "@repo/redis";
@@ -44,15 +42,13 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
     const dbLive = makeDbLive({ databaseUrl: testDatabaseUrl });
     const jobsLive = JobsLive.pipe(Layer.provide(makeRedisLive({ keyPrefix, url: testRedisUrl })));
     const layer = Layer.mergeAll(
-      emailBackendLayer("fake"),
+      emailBackendLayer({ defaultRegion: "fake", kind: "fake" }),
       EmailManagedDns.noop(),
-      ProviderCredentialsVault.live(secrets),
       SymmetricCrypto.live(secrets),
     ).pipe(Layer.provideMerge(Layer.mergeAll(dbLive, jobsLive)));
 
     const program = Effect.gen(function* () {
       const db = yield* DB;
-      const vault = yield* ProviderCredentialsVault;
       yield* Jobs;
       const organizationId = typeid("orgn").toString();
       const environmentId = typeid("oenv").toString();
@@ -63,36 +59,19 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
         .insert(organization)
         .values({ id: organizationId, name: "Fake backend", slug: `fake-${run}` });
       yield* db.insert(organizationAppEnvironment).values({ id: environmentId, organizationId });
-      const [ses] = yield* db
-        .insert(provider)
-        .values({
-          channelType: "email",
-          credentials: yield* vault.seal({
-            encrypted: { accessKeyId: "not-a-key", secretAccessKey: "not-a-secret" },
-            unencrypted: { region: "us-east-1" },
-          }),
-          name: "Fake SES",
-          productId: "ses",
-          vendorId: "aws",
-        })
-        .returning();
-      if (!ses) {
-        return yield* Effect.die("provider insert returned nothing");
-      }
-
-      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId, provider: ses });
-      const identity = yield* db.query.emailDomainProviderIdentity.findFirst({
-        where: { customDomainId },
+      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
+      const domain = yield* db.query.customDomain.findFirst({
+        where: { id: customDomainId },
+        with: { registration: true },
       });
-      if (!identity) {
-        return yield* Effect.die("Domain has no provider identity");
+      if (!domain?.registration) {
+        return yield* Effect.die("Domain has no registration");
       }
-      const verified = yield* verifyCustomDomainProviderIdentity({
-        customDomainId,
+      expect(domain.registration.region).toBe("fake");
+      const verified = yield* verifyCustomDomainRegistration({
         db,
-        fqdn,
-        identity,
-        provider: ses,
+        domain,
+        registration: domain.registration,
       });
       expect(verified.verificationStatus).toBe("verified");
 
@@ -112,31 +91,28 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
         url: "https://receiver.example.test/hooks",
       });
 
-      const registry = yield* EmailProviderRegistry;
-      const factory = yield* registry.get("aws.ses");
-      const adapter = yield* factory.create({
-        credentials: yield* vault.open(ses.credentials),
-        providerId: ses.id,
-      });
+      const backend = yield* EmailBackend;
       const from = { address: `hello@${fqdn}`, normalized: `hello@${fqdn}` };
-      const sent = yield* adapter.send({
-        bcc: null,
-        cc: null,
-        from,
-        headers: null,
-        html: null,
-        replyTo: null,
-        sender: { identityFqdn: fqdn, projectId: organizationId },
-        subject: "Bounce me",
-        text: "Hello",
-        to: [bounceAddress],
+      const sent = yield* backend.send({
+        message: {
+          bcc: null,
+          cc: null,
+          from,
+          headers: null,
+          html: null,
+          replyTo: null,
+          sender: { identityFqdn: fqdn, projectId: organizationId },
+          subject: "Bounce me",
+          text: "Hello",
+          to: [bounceAddress],
+        },
+        region: domain.registration.region,
       });
       // What the worker writes once send returns; the simulated bounce waits for it.
       yield* db.insert(emailDelivery).values({
         customDomainId,
         from,
         messageId,
-        providerId: ses.id,
         providerMessageId: sent.providerMessageId,
         status: "sent",
         subject: "Bounce me",

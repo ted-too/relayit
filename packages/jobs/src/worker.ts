@@ -24,13 +24,7 @@ const retryDelay = (
   },
 ) => Math.min(backoff.baseDelayMs * 2 ** (attempt - 1), backoff.maxDelayMs);
 
-const SAFE_FAILURE_CONTEXT = [
-  "filename",
-  "providerId",
-  "reason",
-  "retryAfterMs",
-  "typeId",
-] as const;
+const SAFE_FAILURE_CONTEXT = ["filename", "reason", "region", "retryAfterMs"] as const;
 
 const describeFailure = (failure: unknown): DeadLetterFailure => {
   const record =
