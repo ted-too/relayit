@@ -15,16 +15,6 @@ const IGNORED = [
   "packages/persistence/drizzle/**",
 ];
 
-// Agent instructions, domain glossaries and ADRs are edited by hand and reviewed as prose;
-// the formatter leaves them as written.
-const FORMAT_ONLY_IGNORED = [
-  "AGENTS.md",
-  "CONTEXT-MAP.md",
-  "**/CONTEXT.md",
-  "docs/adr/**",
-  "docs/agents/**",
-];
-
 export default defineConfig({
   test: {
     environment: "node",
@@ -38,7 +28,7 @@ export default defineConfig({
     "*": "vp check --fix --no-error-on-unmatched-pattern",
   },
   fmt: {
-    ignorePatterns: [...IGNORED, ...FORMAT_ONLY_IGNORED],
+    ignorePatterns: IGNORED,
     sortPackageJson: {},
   },
   lint: {

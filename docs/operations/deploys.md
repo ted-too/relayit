@@ -1,0 +1,17 @@
+# Deploys
+
+Relayit ships as three images on GitHub Container Registry, `ghcr.io/ted-too/relayit-{api,web,template-builder}`, each built from `apps/<app>/Dockerfile` with the repository root as context. Self-hosters run them with the root `docker-compose.yaml` (api, web, Postgres 18, Redis 7; the builder is not in it); their guide is the public [self-hosting page](../../apps/site/content/docs/self-hosting.md).
+
+## Releases
+
+- **A pull request into `main`** builds all three images and pushes them as `:pr-<number>` (`.github/workflows/build-images.yml`). A stacked PR whose base is another branch builds none.
+- **A push to `main`** runs semantic-release (`.github/workflows/semantic-release.yml`, `release.config.cjs`). `main` is a prerelease branch, so a release is the next `v1.0.0-alpha.N`: a GitHub Release and tag, no changelog commit. `feat`, `fix`, `perf`, `refactor` and `revert` commits release; `docs`, `chore`, `test`, `build`, `ci` and `style` don't. PRs are squash-merged, so the PR title is the commit it reads.
+- **A release** builds the three images in the same workflow and pushes them as `:<version>` and `:alpha`. The `stable` branch exists only because semantic-release requires a non-prerelease branch; nothing is pushed to it, and the `:main` tag it would produce is unused.
+
+## What lives where
+
+- **The images** hold the bundled app, the migrations (`/app/drizzle`, found through `DRIZZLE_MIGRATIONS_FOLDER`) and, for api and builder, the React Email isolate runner and the few runtime packages the bundle doesn't inline. They run as an unprivileged user.
+- **Migrations** apply when each app starts, under an advisory lock, so a deploy migrates before the new version serves. A failed migration stops the app from starting.
+- **The web image's public URL** is baked as a placeholder and replaced at container start from `VITE_*` variables (`scripts/entrypoint-vite.sh`), so changing it needs a restart, not a rebuild.
+- **Variables** are each app's schema (`apps/*/src/env.ts`); the README's tables describe the required ones. `BETTER_AUTH_SECRETS` must match across apps and is rotated by prepending a new version (`2:new,1:old`).
+- **The api in production on Linux** forks `WEB_CONCURRENCY` HTTP processes (default: one per CPU) and runs the job worker only in the primary.
