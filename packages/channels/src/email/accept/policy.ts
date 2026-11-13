@@ -1,12 +1,9 @@
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   customDomain,
-  emailDomainProviderIdentity,
   member,
   organization,
   organizationDomain,
-  type ProviderKind,
-  provider,
   sandboxDomain,
   user,
 } from "@repo/persistence/db/schema";
@@ -106,40 +103,6 @@ export const resolveEmailSender = (
       message: "The 'from' address is not a verified sending domain for this Project.",
     });
   });
-
-export const resolveEmailProviderKind = (
-  db: DatabaseExecutor,
-  organizationId: string,
-  sender: ResolvedEmailSender,
-): Effect.Effect<ProviderKind, EmailAcceptInfrastructureError> => {
-  if (sender.kind === "sandbox") {
-    return Effect.succeed("managed");
-  }
-
-  return db
-    .select({ scope: provider.scope })
-    .from(emailDomainProviderIdentity)
-    .innerJoin(provider, eq(emailDomainProviderIdentity.providerId, provider.id))
-    .where(
-      and(
-        eq(emailDomainProviderIdentity.customDomainId, sender.customDomainId),
-        eq(emailDomainProviderIdentity.isActive, true),
-        eq(emailDomainProviderIdentity.verificationStatus, "verified"),
-      ),
-    )
-    .limit(1)
-    .pipe(
-      Effect.map(([identity]) => (identity?.scope === "platform" ? "managed" : "byo")),
-      Effect.mapError(
-        (cause) =>
-          new EmailAcceptInfrastructureError({
-            cause,
-            operation: "sender",
-            organizationId,
-          }),
-      ),
-    );
-};
 
 export const assertSandboxRecipientsAreMembers = (
   db: DatabaseExecutor,

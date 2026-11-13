@@ -30,11 +30,7 @@ import {
   EmailAcceptPersistenceError,
   EmailAcceptRejected,
 } from "./errors";
-import {
-  assertSandboxRecipientsAreMembers,
-  resolveEmailProviderKind,
-  resolveEmailSender,
-} from "./policy";
+import { assertSandboxRecipientsAreMembers, resolveEmailSender } from "./policy";
 
 class ConcurrentEmailAcceptReplay extends Data.TaggedError("ConcurrentEmailAcceptReplay")<{
   readonly messageId: string;
@@ -234,7 +230,6 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
       });
     }
 
-    const providerKind = yield* resolveEmailProviderKind(db, input.organizationId, sender);
     const attachments = yield* resolveEmailAttachments(
       input.email.attachments,
       input.organizationId,
@@ -245,7 +240,6 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
       channel: "email",
       deliveryId,
       organizationId: input.organizationId,
-      providerKind,
       purpose: "transactional",
       reservedAt,
     });
@@ -336,7 +330,6 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
           {
             billingUserId: policy.billingUserId,
             deliveryId,
-            providerKind,
             purpose: "transactional",
             startDate: reservedAt,
           },

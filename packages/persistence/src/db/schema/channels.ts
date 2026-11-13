@@ -10,24 +10,24 @@ export type ChannelType = (typeof AVAILABLE_CHANNELS)[number];
 export const AVAILABLE_MESSAGE_PURPOSES = ["transactional", "marketing"] as const;
 export type MessagePurpose = (typeof AVAILABLE_MESSAGE_PURPOSES)[number];
 
-export const AVAILABLE_PROVIDER_KINDS = ["managed", "byo"] as const;
-export type ProviderKind = (typeof AVAILABLE_PROVIDER_KINDS)[number];
-
 export interface BucketSendLimits {
   dailySends: number | null;
   monthlySends: number | null;
 }
 
-export interface PurposeProviderLimits {
-  byo: BucketSendLimits;
+/**
+ * One purpose's caps. Still keyed `managed`, from when sends were also split by BYO
+ * Provider: every `user_channel.limits` row already has that shape, and dropping the key
+ * means rewriting those rows first (#ISSUE_LIMITS).
+ */
+export interface PurposeLimits {
   managed: BucketSendLimits;
 }
 
 export interface EmailLimits {
-  byoProviders: boolean;
   customDomains: number | null;
-  marketing: PurposeProviderLimits;
-  transactional: PurposeProviderLimits;
+  marketing: PurposeLimits;
+  transactional: PurposeLimits;
 }
 
 export interface ChannelLimits {

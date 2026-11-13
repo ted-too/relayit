@@ -12,8 +12,7 @@ export class EmailDeliveryProviderError extends Data.TaggedError("EmailDeliveryP
   readonly cause?: unknown;
   readonly deliveryId: string;
   readonly leaveActive: boolean;
-  /** Static summary — put identifiers in `providerId` / `providerKind`, not here. */
+  /** Static summary — put identifiers in `providerId`, not here. */
   readonly message: string;
   readonly providerId: string;
-  readonly providerKind?: "byo" | "managed";
 }> {}

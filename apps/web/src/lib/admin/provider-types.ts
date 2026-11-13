@@ -11,7 +11,6 @@ export interface PlatformProviderListItem {
   readonly isDefault: boolean;
   readonly name: string | null;
   readonly productId: string;
-  readonly scope: "platform" | "project";
   readonly updatedAt: Date;
   readonly vendorId: string;
 }

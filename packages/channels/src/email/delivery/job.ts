@@ -7,7 +7,6 @@ export const emailDeliverJob = defineJob({
   payload: Schema.Struct({
     billingUserId: Schema.String,
     deliveryId: Schema.String,
-    providerKind: Schema.Literals(["managed", "byo"]),
     purpose: Schema.Literals(["transactional", "marketing"]),
     startDate: Schema.String,
     /** Campaign Topic id — required for List-Unsubscribe on marketing sends. */

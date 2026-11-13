@@ -13,9 +13,9 @@ type ProviderEmailDeliveryFields = Pick<
 >;
 
 /**
- * Sending on a shared (managed) Provider: which Project is sending and from
- * which Domain / Sandbox Domain identity, so the vendor can isolate that
- * Project's reputation (SES: one tenant per Project). Absent for BYO.
+ * Which Project is sending and from which Domain / Sandbox Domain identity, so the
+ * vendor can isolate that Project's reputation on the shared account (SES: one tenant
+ * per Project).
  */
 export interface ProviderEmailSender {
   readonly identityFqdn: string;
@@ -24,5 +24,5 @@ export interface ProviderEmailSender {
 
 export interface ProviderEmailMessage extends ProviderEmailDeliveryFields {
   readonly attachments?: readonly ProviderEmailAttachment[];
-  readonly sender?: ProviderEmailSender;
+  readonly sender: ProviderEmailSender;
 }

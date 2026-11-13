@@ -1,17 +1,11 @@
 import { DB } from "@repo/persistence/db/effect";
-import type {
-  ChannelType,
-  EmailLimits,
-  MessagePurpose,
-  ProviderKind,
-} from "@repo/persistence/db/schema";
+import type { ChannelType, EmailLimits, MessagePurpose } from "@repo/persistence/db/schema";
 import { Context, Data, Effect, Layer } from "effect";
 
 export interface UsagePolicyInput {
   readonly billingUserId?: string;
   readonly channel: ChannelType;
   readonly organizationId: string;
-  readonly providerKind: ProviderKind;
   readonly purpose: MessagePurpose;
   readonly reservedAt: string;
 }
@@ -178,7 +172,7 @@ export const UsagePolicyLive = Layer.effect(
                 }
               : anniversaryPeriod(asDate(user.createdAt), reservedAt);
           const limits = channel.limits as EmailLimits;
-          const bucket = limits[input.purpose][input.providerKind];
+          const bucket = limits[input.purpose].managed;
 
           return {
             billingUserId,

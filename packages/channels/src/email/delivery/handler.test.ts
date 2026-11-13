@@ -10,7 +10,7 @@ import { Redis, type RedisService } from "@repo/redis";
 import { Effect, Layer } from "effect";
 import { MessageDeliveryTerminalError } from "../../messages/delivery";
 import { ProviderRejected } from "../../provider-errors";
-import { Usage, UsageLimitExceeded, type UsageService } from "../../usage";
+import { Usage, type UsageService } from "../../usage";
 import type { EmailProviderAdapter, EmailProviderFactory } from "../provider-adapter";
 import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
 import { makeEmailDeliverHandler } from "./handler";
@@ -21,11 +21,10 @@ const openedCredentials = {
   unencrypted: {},
 } as OpenedProviderCredentials;
 
-const makeProvider = (input: { readonly id: string; readonly scope?: "platform" | "project" }) => ({
+const makeProvider = (input: { readonly id: string }) => ({
   credentials: { ciphertext: "sealed", keyVersion: 1, nonce: "n" },
   id: input.id,
   productId: "ses",
-  scope: input.scope ?? ("platform" as const),
   vendorId: "aws",
 });
 
@@ -230,7 +229,6 @@ const testLayer = (
     Layer.succeed(Usage, {
       confirm: () => Effect.void,
       release: () => Effect.void,
-      remeter: () => Effect.void,
       reserve: unsupported,
       ...options.usage,
     } satisfies UsageService),
@@ -269,7 +267,6 @@ const emailDeliverHandler = makeEmailDeliverHandler({
 const payload = {
   billingUserId: "billing_test",
   deliveryId: "edlv_test",
-  providerKind: "managed" as const,
   purpose: "transactional" as const,
   startDate: "2026-08-10T00:00:00.000Z",
 };
@@ -277,10 +274,7 @@ const payload = {
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
 
 const primaryProvider = makeProvider({ id: "prov_primary" });
-const standbyProvider = makeProvider({
-  id: "prov_standby",
-  scope: "project",
-});
+const standbyProvider = makeProvider({ id: "prov_standby" });
 const primaryIdentity = makeIdentity({
   id: "ident_primary",
   isActive: true,
@@ -391,45 +385,6 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  test("remeters Usage when failover provider kind differs", () => {
-    const { db } = makeDb({
-      identities: [primaryIdentity, standbyIdentity],
-    });
-    const remeterKinds: string[] = [];
-    let sendCount = 0;
-    const factory = makeSendFactory(() => {
-      sendCount += 1;
-      if (sendCount === 1) {
-        return Effect.fail(new Error("primary down"));
-      }
-      return Effect.succeed({ providerMessageId: "ses_failover" });
-    });
-
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            openCircuitAfterFailure: new Set(["prov_primary"]),
-            registry: {
-              get: () => Effect.succeed(factory),
-            },
-            usage: {
-              remeter: ({ providerKind }) => {
-                remeterKinds.push(providerKind);
-                return Effect.void;
-              },
-            },
-          }),
-        ),
-        Effect.map(() => {
-          expect(remeterKinds).toContain("byo");
-          expect(sendCount).toBe(2);
-          return true;
-        }),
-      ),
-    );
-  });
-
   test("fails over when the primary provider circuit is open", () => {
     const { db, updates } = makeDb({
       identities: [primaryIdentity, standbyIdentity],
@@ -466,36 +421,24 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  test.each([
-    {
-      expected: { identityFqdn: "example.com", projectId: "org_test" },
-      scope: "platform" as const,
-    },
-    { expected: undefined, scope: "project" as const },
-  ])(
-    "passes the sending Project to $scope Providers only for reputation isolation",
-    ({ expected, scope }) => {
-      const provider = makeProvider({ id: "prov_primary", scope });
-      const { db } = makeDb({
-        identities: [makeIdentity({ id: "ident_primary", isActive: true, provider })],
-      });
-      let sender: unknown = "unset";
-      const factory = makeSendFactory((message) => {
-        sender = message?.sender;
-        return Effect.succeed({ providerMessageId: "ses_msg_1" });
-      });
+  test("passes the sending Project for reputation isolation", () => {
+    const { db } = makeDb({ identities: [primaryIdentity] });
+    let sender: unknown;
+    const factory = makeSendFactory((message) => {
+      sender = message?.sender;
+      return Effect.succeed({ providerMessageId: "ses_msg_1" });
+    });
 
-      return Effect.runPromise(
-        emailDeliverHandler.handle(payload, execution).pipe(
-          Effect.provide(testLayer(db, { registry: { get: () => Effect.succeed(factory) } })),
-          Effect.map(() => {
-            expect(sender).toEqual(expected);
-            return true;
-          }),
-        ),
-      );
-    },
-  );
+    return Effect.runPromise(
+      emailDeliverHandler.handle(payload, execution).pipe(
+        Effect.provide(testLayer(db, { registry: { get: () => Effect.succeed(factory) } })),
+        Effect.map(() => {
+          expect(sender).toEqual({ identityFqdn: "example.com", projectId: "org_test" });
+          return true;
+        }),
+      ),
+    );
+  });
 
   test("Project-level provider pause pauses the Domain and fails terminally without failover or tripping the circuit", () => {
     const { db, updates } = makeDb({
@@ -581,38 +524,6 @@ describe("emailDeliverHandler", () => {
                 (update as { status?: string }).status === "sending",
             ),
           ).toBe(true);
-          return error;
-        }),
-      ),
-    );
-  });
-
-  test("surfaces remeter UsageLimitExceeded as leave-active failure then retries", () => {
-    const { db } = makeDb({
-      identities: [primaryIdentity],
-    });
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            usage: {
-              remeter: () =>
-                Effect.fail(
-                  new UsageLimitExceeded({
-                    deliveryId: "edlv_test",
-                    providerKind: "managed",
-                    retryAt: new Date("2026-08-11T00:00:00.000Z"),
-                    window: "daily",
-                  }),
-                ),
-            },
-          }),
-        ),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryRetryableError",
-          });
           return error;
         }),
       ),

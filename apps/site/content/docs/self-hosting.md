@@ -128,7 +128,7 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 ## How self-hosted differs from Cloud
 
-- **No Plans, unlimited entitlements.** Without Stripe keys, every user gets unlimited Projects, Domains, retention, and sends. BYO Providers are always allowed.
+- **No Plans, unlimited entitlements.** Without Stripe keys, every user gets unlimited Projects, Domains, retention, and sends.
 - **Email and password sign-in.** Social sign-in is not set up by default.
 - **No managed Provider or Sandbox Domain by default.** On Cloud, Relayit provides these. On your own install, an administrator adds email Providers in the dashboard's admin area, and the Sandbox Domain only exists if you configure Cloudflare for it. Until a Provider exists you cannot add a Domain.
 - **Template workspace is optional.** Without a template-builder service, sending with existing Templates works, but editing the React Email workspace does not.

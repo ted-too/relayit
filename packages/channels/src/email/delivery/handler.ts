@@ -16,17 +16,13 @@ import {
 } from "../../messages/delivery";
 import { filterSuppressedContacts } from "../../messages/suppressions";
 import { makeProviderTypeId } from "../../provider-type";
-import { Usage, UsageLimitExceeded } from "../../usage";
+import { Usage } from "../../usage";
 import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
 import type { ProviderEmailAttachment, ProviderEmailSender } from "../provider-message";
 import { EmailProviderRegistry } from "../provider-registry";
 import { loadEmailAttachmentsForSend } from "./attachments";
 import { EmailDeliveryPersistenceError, EmailDeliveryProviderError } from "./errors";
-import {
-  listFailoverProviderIdentities,
-  providerKindFor,
-  type RoutableEmailProviderIdentity,
-} from "./identities";
+import { listFailoverProviderIdentities, type RoutableEmailProviderIdentity } from "./identities";
 import { emailDeliverJob } from "./job";
 
 export interface EmailDeliverHandlerOptions {
@@ -124,32 +120,6 @@ const trySendWithIdentity = (
   },
 ) =>
   Effect.gen(function* () {
-    const usage = yield* Usage;
-    const targetKind = providerKindFor(identity.provider);
-    const remeterError = yield* usage
-      .remeter({ deliveryId: input.delivery.id, providerKind: targetKind })
-      .pipe(
-        Effect.as(null as UsageLimitExceeded | null),
-        Effect.catchIf(
-          (error): error is UsageLimitExceeded => error instanceof UsageLimitExceeded,
-          (error) => Effect.succeed(error),
-        ),
-      );
-    if (remeterError) {
-      return {
-        error: new EmailDeliveryProviderError({
-          cause: remeterError,
-          deliveryId: input.delivery.id,
-          leaveActive: true,
-          message: "Usage bucket exhausted",
-          providerId: identity.provider.id,
-          providerKind: targetKind,
-        }),
-        leaveActive: true,
-        ok: false as const,
-      };
-    }
-
     const sendError = yield* Effect.gen(function* () {
       const vault = yield* ProviderCredentialsVault;
       const registry = yield* EmailProviderRegistry;
@@ -169,8 +139,7 @@ const trySendWithIdentity = (
         headers: input.delivery.headers,
         html: input.delivery.html,
         replyTo: input.delivery.replyTo,
-        // Reputation isolation only matters on shared (managed) Providers.
-        sender: targetKind === "managed" ? input.sender : undefined,
+        sender: input.sender,
         subject: input.delivery.subject,
         text: input.delivery.text,
         to: [...input.to],

@@ -44,7 +44,6 @@ const testEmailProvider = {
   credentials: { ciphertext: "x", keyVersion: 1, nonce: "n" },
   id: "prov_1",
   productId: "ses",
-  scope: "platform",
   vendorId: "aws",
 } as never;
 
@@ -160,7 +159,6 @@ describe("createCustomDomain claim guard", () => {
           credentials: { ciphertext: "x", keyVersion: 1, nonce: "n" },
           id: "prov_1",
           productId: "ses",
-          scope: "platform",
           vendorId: "aws",
         } as never,
       }).pipe(
@@ -204,7 +202,6 @@ describe("createCustomDomain claim guard", () => {
         provider: {
           id: "prov_1",
           productId: "ses",
-          scope: "platform",
           vendorId: "aws",
         } as never,
       }).pipe(
