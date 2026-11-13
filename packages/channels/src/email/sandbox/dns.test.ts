@@ -9,9 +9,7 @@ import {
 describe("sandbox dns helpers", () => {
   test("owners are stable per sandbox and identity", () => {
     expect(sandboxRootDnsOwner("sbxd_1")).toBe("sandbox:sbxd_1:root");
-    expect(sandboxIdentityDnsOwner("sbxd_1", "prov_1")).toBe(
-      "sandbox:sbxd_1:identity:prov_1"
-    );
+    expect(sandboxIdentityDnsOwner("sbxd_1", "prov_1")).toBe("sandbox:sbxd_1:identity:prov_1");
   });
 
   test("buildSandboxRootDnsRecords emits DKIM and DMARC", () => {

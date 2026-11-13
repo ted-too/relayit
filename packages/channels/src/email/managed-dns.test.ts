@@ -4,7 +4,7 @@ import { formatTxtRecordContent } from "./managed-dns";
 describe("formatTxtRecordContent", () => {
   test("wraps bare TXT values in quotes", () => {
     expect(formatTxtRecordContent("v=spf1 include:amazonses.com ~all")).toBe(
-      '"v=spf1 include:amazonses.com ~all"'
+      '"v=spf1 include:amazonses.com ~all"',
     );
   });
 

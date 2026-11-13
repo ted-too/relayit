@@ -1,30 +1,31 @@
 {
   "name": "@repo/persistence",
   "version": "0.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "db:studio": "bunx --bun drizzle-kit studio",
     "db:generate": "bunx --bun drizzle-kit generate",
-    "db:migrate": "bunx --bun drizzle-kit migrate"
+    "db:migrate": "bunx --bun drizzle-kit migrate",
+    "test": "bun test"
   },
   "dependencies": {
     "@better-auth/api-key": "^1.6.25",
     "@better-auth/stripe": "^1.6.25",
-    "@effect/sql-pg": "4.0.0-rc.108",
-    "better-auth": "^1.6.25",
+    "@effect/sql-pg": "catalog:",
+    "better-auth": "catalog:",
     "better-auth-harmony": "^1.3.2",
-    "drizzle-orm": "1.0.0-rc.5-ab785fc",
-    "effect": "4.0.0-rc.108",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
     "pg": "^8.22.0",
-    "stripe": "^22.2.0",
-    "typeid-js": "^1.2.0",
-    "zod": "^4.3.6"
+    "stripe": "catalog:",
+    "typeid-js": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/pg": "^8.20.4",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
-    "vitest": "^4.1.10"
+    "vitest": "catalog:"
   }
 }

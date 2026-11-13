@@ -17,11 +17,10 @@ export interface UpsertMessageContactsInput {
   readonly organizationAppEnvironmentId: string;
 }
 
-export const normalizeContactEmail = (email: string): string =>
-  email.trim().toLowerCase();
+export const normalizeContactEmail = (email: string): string => email.trim().toLowerCase();
 
 export const mergeMessageContacts = (
-  contacts: readonly MessageContactInput[]
+  contacts: readonly MessageContactInput[],
 ): readonly MessageContactInput[] => {
   const byEmail = new Map<string, MessageContactInput>();
 
@@ -52,10 +51,7 @@ export const mergeMessageContacts = (
   return [...byEmail.values()];
 };
 
-export const upsertMessageContacts = (
-  db: DatabaseExecutor,
-  input: UpsertMessageContactsInput
-) =>
+export const upsertMessageContacts = (db: DatabaseExecutor, input: UpsertMessageContactsInput) =>
   Effect.forEach(
     mergeMessageContacts(input.contacts),
     (candidate) =>
@@ -94,19 +90,18 @@ export const upsertMessageContacts = (
               new MessageAcceptPersistenceError({
                 cause,
                 operation: "upsert_contact",
-                organizationAppEnvironmentId:
-                  input.organizationAppEnvironmentId,
-              })
+                organizationAppEnvironmentId: input.organizationAppEnvironmentId,
+              }),
           ),
           Effect.flatMap(([record]) =>
             record
               ? Effect.succeed(record)
               : Effect.die(
                   new Error(
-                    `Contact upsert returned no record for App Environment ${input.organizationAppEnvironmentId}`
-                  )
-                )
-          )
+                    `Contact upsert returned no record for App Environment ${input.organizationAppEnvironmentId}`,
+                  ),
+                ),
+          ),
         ),
-    { concurrency: 1 }
+    { concurrency: 1 },
   );

@@ -21,7 +21,7 @@ export function RenderedEmail({
     <div
       className={cn(
         "overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-800 shadow-[0_30px_80px_-40px] shadow-brand-ink/40",
-        className
+        className,
       )}
     >
       <div className="flex items-center gap-3 border-neutral-100 border-b px-5 py-3.5">
@@ -40,8 +40,7 @@ export function RenderedEmail({
           Order #{orderId} is on its way
         </p>
         <p className="mt-3 text-[13.5px] text-neutral-600 leading-relaxed">
-          Your parcel left our workshop this morning. Tracking updates as it
-          moves.
+          Your parcel left our workshop this morning. Tracking updates as it moves.
         </p>
         <span className="mt-5 inline-flex rounded-md bg-[#2f3b2a] px-4 py-2 font-medium text-[13px] text-white">
           Track parcel

@@ -18,17 +18,17 @@ export const getTemplateInputSchema = z.object({
   templateId: z.string().min(1),
 });
 
+/** @alias Named for the archive call; same input as reading a Template. */
 export const archiveTemplateInputSchema = getTemplateInputSchema;
 
 export const updateTemplateSlugFormSchema = z.object({
   slug: safeString.min(1).max(128),
 });
 
-export const updateTemplateSlugInputSchema =
-  updateTemplateSlugFormSchema.extend({
-    orgSlug: z.string().min(1),
-    templateId: z.string().min(1),
-  });
+export const updateTemplateSlugInputSchema = updateTemplateSlugFormSchema.extend({
+  orgSlug: z.string().min(1),
+  templateId: z.string().min(1),
+});
 
 export const putReactEmailChannelInputSchema = z.object({
   orgSlug: z.string().min(1),
@@ -42,8 +42,10 @@ export const listWorkspaceEntriesInputSchema = z.object({
   orgSlug: z.string().min(1),
 });
 
+/** @alias Named for its call; same input as listing Workspace Entries. */
 export const getWorkspaceInputSchema = listWorkspaceEntriesInputSchema;
 
+/** @alias Named for its call; same input as listing Workspace Entries. */
 export const listWorkspaceFilesInputSchema = listWorkspaceEntriesInputSchema;
 
 export const readWorkspaceFileInputSchema = z.object({
@@ -73,6 +75,4 @@ export const previewWorkspaceEntryInputSchema = z.object({
 });
 
 export type CreateTemplateFormValues = z.infer<typeof createTemplateFormSchema>;
-export type UpdateTemplateSlugFormValues = z.infer<
-  typeof updateTemplateSlugFormSchema
->;
+export type UpdateTemplateSlugFormValues = z.infer<typeof updateTemplateSlugFormSchema>;

@@ -1,20 +1,12 @@
 import { RiDeleteBin6Line, RiEyeLine, RiRefreshLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@repo/ui/components/ui/coss/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@repo/ui/components/ui/coss/menu";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
-import {
-  deleteCustomDomainFn,
-  refreshCustomDomainFn,
-} from "@/lib/domains/custom-domain.functions";
+import { deleteCustomDomainFn, refreshCustomDomainFn } from "@/lib/domains/custom-domain.functions";
 import type { ProjectDomainListItem } from "@/lib/domains/types";
 import { queries } from "@/lib/queries";
 import type { Domain } from "./types";
@@ -35,8 +27,8 @@ export function useRefreshDomain({ domain }: { domain: Domain }) {
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
         (old: ProjectDomainListItem[] | undefined) =>
           (old ?? []).map((existingDomain) =>
-            existingDomain.id === data.id ? data : existingDomain
-          )
+            existingDomain.id === data.id ? data : existingDomain,
+          ),
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listDomains.queryKey,
@@ -51,13 +43,7 @@ export function useRefreshDomain({ domain }: { domain: Domain }) {
   });
 }
 
-export function useDeleteDomain({
-  domain,
-  onDeleted,
-}: {
-  domain: Domain;
-  onDeleted?: () => void;
-}) {
+export function useDeleteDomain({ domain, onDeleted }: { domain: Domain; onDeleted?: () => void }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   return useMutation({
@@ -73,9 +59,7 @@ export function useDeleteDomain({
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
         (old: ProjectDomainListItem[] | undefined) =>
-          (old ?? []).filter(
-            (existingDomain) => existingDomain.id !== domain.id
-          )
+          (old ?? []).filter((existingDomain) => existingDomain.id !== domain.id),
       );
       client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listDomains.queryKey,
@@ -106,12 +90,12 @@ export function DomainMenu({
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { mutate: refreshDomain, isPending: isRefreshingDomain } =
-    useRefreshDomain({ domain });
+  const { mutate: refreshDomain, isPending: isRefreshingDomain } = useRefreshDomain({ domain });
 
-  const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain(
-    { domain, onDeleted }
-  );
+  const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain({
+    domain,
+    onDeleted,
+  });
 
   return (
     <>
@@ -130,10 +114,7 @@ export function DomainMenu({
               <RiEyeLine /> View Details
             </MenuItem>
           )}
-          <MenuItem
-            disabled={isRefreshingDomain}
-            onClick={() => refreshDomain()}
-          >
+          <MenuItem disabled={isRefreshingDomain} onClick={() => refreshDomain()}>
             <RiRefreshLine />
             Refresh
           </MenuItem>

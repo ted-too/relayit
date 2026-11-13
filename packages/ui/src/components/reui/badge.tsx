@@ -20,34 +20,22 @@ const badgeVariants = cva(
         destructive: "bg-destructive text-white",
         focus: "bg-focus text-focus-foreground",
         invert: "bg-invert text-invert-foreground",
-        "primary-light":
-          "border-none bg-primary/10 text-primary dark:bg-primary/20",
-        "warning-light":
-          "border-none bg-warning/10 text-warning-foreground dark:bg-warning/20",
-        "success-light":
-          "border-none bg-success/10 text-success-foreground dark:bg-success/20",
-        "info-light":
-          "border-none bg-info/10 text-info-foreground dark:bg-info/20",
+        "primary-light": "border-none bg-primary/10 text-primary dark:bg-primary/20",
+        "warning-light": "border-none bg-warning/10 text-warning-foreground dark:bg-warning/20",
+        "success-light": "border-none bg-success/10 text-success-foreground dark:bg-success/20",
+        "info-light": "border-none bg-info/10 text-info-foreground dark:bg-info/20",
         "destructive-light":
           "border-none bg-destructive/10 text-destructive-foreground dark:bg-destructive/20",
-        "invert-light":
-          "border-none bg-invert/10 text-foreground dark:bg-invert/20",
-        "focus-light":
-          "border-none bg-focus/10 text-focus-foreground dark:bg-focus/20",
-        "primary-outline":
-          "border-border bg-background text-primary dark:bg-input/30",
-        "warning-outline":
-          "border-border bg-background text-warning-foreground dark:bg-input/30",
-        "success-outline":
-          "border-border bg-background text-success-foreground dark:bg-input/30",
-        "info-outline":
-          "border-border bg-background text-info-foreground dark:bg-input/30",
+        "invert-light": "border-none bg-invert/10 text-foreground dark:bg-invert/20",
+        "focus-light": "border-none bg-focus/10 text-focus-foreground dark:bg-focus/20",
+        "primary-outline": "border-border bg-background text-primary dark:bg-input/30",
+        "warning-outline": "border-border bg-background text-warning-foreground dark:bg-input/30",
+        "success-outline": "border-border bg-background text-success-foreground dark:bg-input/30",
+        "info-outline": "border-border bg-background text-info-foreground dark:bg-input/30",
         "destructive-outline":
           "border-border bg-background text-destructive-foreground dark:bg-input/30",
-        "invert-outline":
-          "border-border bg-background text-invert-foreground dark:bg-input/30",
-        "focus-outline":
-          "border-border bg-background text-focus-foreground dark:bg-input/30",
+        "invert-outline": "border-border bg-background text-invert-foreground dark:bg-input/30",
+        "focus-outline": "border-border bg-background text-focus-foreground dark:bg-input/30",
       },
       size: {
         xs: "h-4 min-w-4 gap-1 px-1 py-0.25 text-[0.6rem] leading-none",
@@ -67,7 +55,7 @@ const badgeVariants = cva(
       size: "default",
       radius: "default",
     },
-  }
+  },
 );
 
 export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
@@ -107,7 +95,7 @@ function Badge({
               default: "size-5!",
               lg: "size-5.5!",
               xl: "size-6!",
-            }[size ?? "default"]
+            }[size ?? "default"],
           )}
           onClick={copyToClipboard}
           size="icon"
@@ -121,7 +109,7 @@ function Badge({
                 default: "size-3!",
                 lg: "size-3!",
                 xl: "size-3.5!",
-              }[size ?? "default"]
+              }[size ?? "default"],
             )}
           />
         </Button>
@@ -133,7 +121,7 @@ function Badge({
       badgeVariants({ variant, size, radius, className }),
       copyFirst && "flex-row-reverse",
       copyText && !copyFirst && "pr-0",
-      copyText && copyFirst && "pl-0"
+      copyText && copyFirst && "pl-0",
     ),
   };
 

@@ -1,11 +1,6 @@
 import { RiEyeCloseLine, RiEyeLine, RiKeyLine } from "@remixicon/react";
 import { useFieldContext } from "@repo/ui/components/ui/custom/form/context";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@repo/ui/components/ui/shad/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/ui/shad/field";
 import {
   InputGroup,
   InputGroupAddon,
@@ -46,10 +41,7 @@ export function TextField({
   rightAddon,
   ...rest
 }: Omit<BaseFieldProps, "className"> &
-  Omit<
-    React.ComponentProps<typeof InputGroupInput>,
-    "value" | "onValueChange" | "className"
-  > & {
+  Omit<React.ComponentProps<typeof InputGroupInput>, "value" | "onValueChange" | "className"> & {
     leftAddon?: React.ReactNode;
     rightAddon?: React.ReactNode;
     className?: BaseFieldProps["className"] & {
@@ -87,9 +79,7 @@ export function TextField({
           {...rest}
         />
         {leftAddon && (
-          <InputGroupAddon className={className.leftAddon}>
-            {leftAddon}
-          </InputGroupAddon>
+          <InputGroupAddon className={className.leftAddon}>{leftAddon}</InputGroupAddon>
         )}
         {rightAddon && (
           <InputGroupAddon align="inline-end" className={className.rightAddon}>
@@ -98,16 +88,9 @@ export function TextField({
         )}
       </InputGroup>
       {description && (
-        <FieldDescription className={className.description}>
-          {description}
-        </FieldDescription>
+        <FieldDescription className={className.description}>{description}</FieldDescription>
       )}
-      {!hideError && (
-        <FieldError
-          className={className.error}
-          errors={field.state.meta.errors}
-        />
-      )}
+      {!hideError && <FieldError className={className.error} errors={field.state.meta.errors} />}
     </Field>
   );
 }
@@ -153,16 +136,9 @@ export function PasswordField({
         </InputGroupAddon>
       </InputGroup>
       {description && (
-        <FieldDescription className={className.description}>
-          {description}
-        </FieldDescription>
+        <FieldDescription className={className.description}>{description}</FieldDescription>
       )}
-      {!hideError && (
-        <FieldError
-          className={className.error}
-          errors={field.state.meta.errors}
-        />
-      )}
+      {!hideError && <FieldError className={className.error} errors={field.state.meta.errors} />}
     </Field>
   );
 }
@@ -178,10 +154,7 @@ export function SelectField({
   alignItemWithTrigger = false,
   ...rest
 }: BaseFieldProps &
-  Omit<
-    React.ComponentProps<typeof Select>,
-    "value" | "onValueChange" | "className"
-  > & {
+  Omit<React.ComponentProps<typeof Select>, "value" | "onValueChange" | "className"> & {
     items: { label: string; value: string }[];
     alignItemWithTrigger?: boolean;
     triggerProps?: React.ComponentProps<typeof SelectTrigger>;
@@ -219,16 +192,9 @@ export function SelectField({
         </SelectContent>
       </Select>
       {description && (
-        <FieldDescription className={className.description}>
-          {description}
-        </FieldDescription>
+        <FieldDescription className={className.description}>{description}</FieldDescription>
       )}
-      {isInvalid && (
-        <FieldError
-          className={className.error}
-          errors={field.state.meta.errors}
-        />
-      )}
+      {isInvalid && <FieldError className={className.error} errors={field.state.meta.errors} />}
     </Field>
   );
 }

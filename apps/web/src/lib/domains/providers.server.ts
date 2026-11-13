@@ -48,8 +48,8 @@ export const resolveDefaultManagedEmailProviderId = Effect.gen(function* () {
             cause,
             code: "failed",
             message: "Failed to resolve default managed Provider.",
-          })
-      )
+          }),
+      ),
     );
 
   if (defaults) {
@@ -72,8 +72,8 @@ export const resolveDefaultManagedEmailProviderId = Effect.gen(function* () {
             cause,
             code: "failed",
             message: "Failed to resolve default managed Provider.",
-          })
-      )
+          }),
+      ),
     );
 
   return any?.id ?? null;
@@ -108,8 +108,8 @@ export const listProvidersForProject = (organizationId: string) =>
               cause,
               code: "failed",
               message: "Failed to list Project Providers.",
-            })
-        )
+            }),
+        ),
       );
 
     const managed = yield* db.query.provider
@@ -137,12 +137,11 @@ export const listProvidersForProject = (organizationId: string) =>
               cause,
               code: "failed",
               message: "Failed to list managed Providers.",
-            })
-        )
+            }),
+        ),
       );
 
-    const defaultManagedProviderId =
-      yield* resolveDefaultManagedEmailProviderId;
+    const defaultManagedProviderId = yield* resolveDefaultManagedEmailProviderId;
 
     return {
       byo: byo.flatMap((row) =>
@@ -160,7 +159,7 @@ export const listProvidersForProject = (organizationId: string) =>
                 vendorId: row.vendorId,
               },
             ]
-          : []
+          : [],
       ),
       defaultManagedProviderId,
       managed: managed.flatMap((row) =>
@@ -178,7 +177,7 @@ export const listProvidersForProject = (organizationId: string) =>
                 vendorId: row.vendorId,
               },
             ]
-          : []
+          : [],
       ),
     } satisfies ProjectProvidersList;
   });

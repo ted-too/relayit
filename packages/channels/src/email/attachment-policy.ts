@@ -120,20 +120,14 @@ export const BLOCKED_ATTACHMENT_EXTENSIONS = [
   "xnk",
 ] as const;
 
-const blockedExtensionRegex = new RegExp(
-  `\\.(${BLOCKED_ATTACHMENT_EXTENSIONS.join("|")})$`,
-  "i"
-);
+const blockedExtensionRegex = new RegExp(`\\.(${BLOCKED_ATTACHMENT_EXTENSIONS.join("|")})$`, "i");
 
 export const isBlockedAttachmentFilename = (filename: string): boolean =>
   blockedExtensionRegex.test(filename);
 
 export const contentTypeFromFilename = (filename: string): string => {
   const extension = filename.split(".").pop()?.toLowerCase();
-  return (
-    (extension && ATTACHMENT_CONTENT_TYPES[extension]) ??
-    "application/octet-stream"
-  );
+  return (extension && ATTACHMENT_CONTENT_TYPES[extension]) ?? "application/octet-stream";
 };
 
 export const BLOCKED_ATTACHMENT_FILENAME_MESSAGE =

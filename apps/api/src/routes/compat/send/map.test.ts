@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type AcceptedTransactionalEmail,
-  EmailAcceptRejected,
-} from "@repo/channels/email/accept";
+import { type AcceptedTransactionalEmail, EmailAcceptRejected } from "@repo/channels/email/accept";
 import { UsageLimitExceeded } from "@repo/channels/usage";
 import {
   mapAcceptResultToLegacyResponse,
@@ -140,11 +137,10 @@ describe("mapLegacyRawToAccept", () => {
           to: "recipient@example.com",
         },
         organizationId: "org_1",
-      })
+      }),
     ).toEqual({
       details: [],
-      message:
-        "No sender identity available; pass from or provision Sandbox Domain",
+      message: "No sender identity available; pass from or provision Sandbox Domain",
       ok: false,
       status: 400,
     });
@@ -199,8 +195,7 @@ describe("resolveLegacyDefaultFromAddress", () => {
     const db = {
       query: {
         organization: {
-          findFirst: () =>
-            Promise.reject(new Error("sandbox should not be consulted")),
+          findFirst: () => Promise.reject(new Error("sandbox should not be consulted")),
         },
         organizationDomain: {
           findFirst: async () => ({
@@ -215,7 +210,7 @@ describe("resolveLegacyDefaultFromAddress", () => {
       await resolveLegacyDefaultFromAddress({
         db: db as never,
         organizationId: "org_1",
-      })
+      }),
     ).toBe("noreply@acme.test");
   });
 
@@ -240,7 +235,7 @@ describe("resolveLegacyDefaultFromAddress", () => {
       await resolveLegacyDefaultFromAddress({
         db: db as never,
         organizationId: "org_1",
-      })
+      }),
     ).toBe("sandbox@relayit.test");
   });
 
@@ -265,7 +260,7 @@ describe("resolveLegacyDefaultFromAddress", () => {
       await resolveLegacyDefaultFromAddress({
         db: db as never,
         organizationId: "org_1",
-      })
+      }),
     ).toBeNull();
   });
 });
@@ -278,7 +273,7 @@ describe("mapAcceptResultToLegacyResponse", () => {
         messageId: "msg_1",
         replayed: false,
         stripped: [],
-      } satisfies AcceptedTransactionalEmail)
+      } satisfies AcceptedTransactionalEmail),
     ).toEqual({
       body: { id: "msg_1", status: "queued" },
       status: 201,
@@ -291,8 +286,8 @@ describe("mapAcceptResultToLegacyResponse", () => {
         new EmailAcceptRejected({
           code: "template_not_found",
           message: "Template not found.",
-        })
-      )
+        }),
+      ),
     ).toEqual({
       body: { details: ["template_not_found"], message: "Template not found." },
       status: 400,
@@ -307,8 +302,8 @@ describe("mapAcceptResultToLegacyResponse", () => {
           providerKind: "managed",
           retryAt: new Date("2026-08-15T00:00:00.000Z"),
           window: "daily",
-        })
-      )
+        }),
+      ),
     ).toEqual({
       body: {
         details: ["daily_limit_exceeded"],

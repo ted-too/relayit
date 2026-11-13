@@ -1,7 +1,8 @@
-import type { Worker } from "node:cluster";
+import type * as NodeCluster from "node:cluster";
+// oxlint-disable-next-line relayit/namespace-node-imports -- cluster is an EventEmitter instance: `on`, `off`, `worker` and `workers` live on the default export, not as named exports
 import cluster from "node:cluster";
-import os from "node:os";
-import { setTimeout as scheduleTimeout } from "node:timers";
+import * as NodeOS from "node:os";
+import * as NodeTimers from "node:timers";
 import openapi from "@elysia/openapi";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
@@ -45,8 +46,7 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
               name: "Send",
             },
             {
-              description:
-                "Compatibility send endpoints for existing integrations",
+              description: "Compatibility send endpoints for existing integrations",
               name: "Legacy Send",
             },
           ],
@@ -57,7 +57,7 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
         path: "/docs",
         specPath: "/openapi.json",
         provider: "scalar",
-      })
+      }),
     )
     .get("/health", () => ({ status: "ok" as const }), {
       detail: {
@@ -65,18 +65,14 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
       },
     })
     .use(createLegacySendRoutes(auth, runEffect))
-    .group("/messages", (group) =>
-      group.use(createEmailRoutes(auth, runEffect))
-    )
-    .group("/webhooks", (group) =>
-      group.use(createProviderWebhookRoutes(runEffect))
-    );
+    .group("/messages", (group) => group.use(createEmailRoutes(auth, runEffect)))
+    .group("/webhooks", (group) => group.use(createProviderWebhookRoutes(runEffect)));
 }
 
 const jobWorkerOptions = {
   blockMs: 5000,
   concurrency: 10,
-  consumer: `${os.hostname()}:${process.pid}`,
+  consumer: `${NodeOS.hostname()}:${process.pid}`,
   count: 100,
   promotion: {
     intervalMs: 1000,
@@ -95,16 +91,14 @@ const jobWorkerOptions = {
 
 const ensureEmailProvidersOnStartup = (
   runtime: ReturnType<typeof makeRuntime>,
-  apiOrigin: string
+  apiOrigin: string,
 ) =>
   Effect.promise(() =>
     runtime.runPromise(
       ensureAllEmailProviderInfrastructure(apiOrigin).pipe(
-        Effect.catchCause(
-          logEffectFailure("Failed to ensure email Provider infrastructure")
-        )
-      )
-    )
+        Effect.catchCause(logEffectFailure("Failed to ensure email Provider infrastructure")),
+      ),
+    ),
   );
 
 const makeJobWorkerProgram = (listUnsubscribe: {
@@ -120,16 +114,14 @@ const makeJobWorkerProgram = (listUnsubscribe: {
       registerJobHandler(emailVerifyCustomDomainHandler),
       registerJobHandler(emailVerifyOwnershipHandler),
     ],
-    jobWorkerOptions
+    jobWorkerOptions,
   );
 
 const apiProgram = (startWorker: boolean) =>
   Effect.scoped(
     Effect.gen(function* () {
       const config = yield* apiConfig;
-      yield* Effect.promise(() =>
-        migrateOnStartup(Redacted.value(config.databaseUrl))
-      );
+      yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
       yield* Effect.logInfo("Database migrations up to date");
       const services = yield* Effect.context<never>();
       const auth = yield* Effect.acquireRelease(
@@ -139,53 +131,45 @@ const apiProgram = (startWorker: boolean) =>
             databaseUrl: Redacted.value(config.databaseUrl),
             redisUrl: Redacted.value(config.redisUrl),
             runLog: Effect.runForkWith(services),
-          })
+          }),
         ),
-        (apiAuth) => Effect.promise(apiAuth.close)
+        (apiAuth) => Effect.promise(apiAuth.close),
       );
       const runtime = yield* Effect.acquireRelease(
         Effect.sync(() => makeRuntime(config)),
-        (apiRuntime) => apiRuntime.disposeEffect
+        (apiRuntime) => apiRuntime.disposeEffect,
       );
       yield* Effect.promise(runtime.context);
       if (startWorker) {
         yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
         const jobWorkerProgram = makeJobWorkerProgram({
-          secret: getCurrentBetterAuthSecret(
-            Redacted.value(config.betterAuthSecrets)
-          ),
+          secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
           webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
         });
         yield* Effect.acquireRelease(
           Effect.sync(() =>
-            runtime.runFork(
-              jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))
-            )
+            runtime.runFork(jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))),
           ),
-          Fiber.interrupt
+          Fiber.interrupt,
         );
         yield* Effect.logInfo("Relayit Job worker started");
       }
       const runEffect: RunApiEffect = (effect, options) =>
         runtime.runPromise(
           effect.pipe(Effect.tapCause(logEffectFailure("API request failed"))),
-          options
+          options,
         );
 
       const app = createHttpApp(auth, runEffect);
 
       yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          app.listen({ hostname: config.hostname, port: config.port })
-        ),
-        () => Effect.promise(() => app.stop())
+        Effect.sync(() => app.listen({ hostname: config.hostname, port: config.port })),
+        () => Effect.promise(() => app.stop()),
       );
-      yield* Effect.logInfo(
-        `Relayit API listening on ${config.hostname}:${config.port}`
-      );
+      yield* Effect.logInfo(`Relayit API listening on ${config.hostname}:${config.port}`);
 
       return yield* Effect.never;
-    })
+    }),
   );
 
 const reportFailure = Effect.catchCause((cause) => {
@@ -197,14 +181,14 @@ const reportFailure = Effect.catchCause((cause) => {
     Effect.andThen(
       Effect.sync(() => {
         process.exitCode = 1;
-      })
-    )
+      }),
+    ),
   );
 });
 
 const runApi = (startWorker: boolean) => {
   const fiber = Effect.runFork(
-    apiProgram(startWorker).pipe(reportFailure, Effect.provide(LoggingLive))
+    apiProgram(startWorker).pipe(reportFailure, Effect.provide(LoggingLive)),
   );
   let shuttingDown = false;
 
@@ -231,7 +215,7 @@ const runApi = (startWorker: boolean) => {
 const webConcurrency = () => {
   const configured = Bun.env.WEB_CONCURRENCY;
   if (configured === undefined) {
-    return os.availableParallelism();
+    return NodeOS.availableParallelism();
   }
 
   const concurrency = Number(configured);
@@ -245,15 +229,15 @@ const webConcurrency = () => {
 const clusterProgram = Effect.callback<void>((resume) => {
   let completed = false;
   let shuttingDown = false;
-  let shutdownTimeout: ReturnType<typeof scheduleTimeout> | undefined;
+  let shutdownTimeout: ReturnType<typeof NodeTimers.setTimeout> | undefined;
   const clusterEvents = cluster as typeof cluster & {
     off(
       event: "exit",
-      listener: (worker: Worker, code: number, signal: string) => void
+      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
     ): void;
     on(
       event: "exit",
-      listener: (worker: Worker, code: number, signal: string) => void
+      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
     ): void;
   };
   const fork = () => cluster.fork();
@@ -267,9 +251,9 @@ const clusterProgram = Effect.callback<void>((resume) => {
     }
     resume(Effect.void);
   };
-  const onExit = (_worker: Worker, _code: number, _signal: string) => {
+  const onExit = (_worker: NodeCluster.Worker, _code: number, _signal: string) => {
     if (!shuttingDown) {
-      scheduleTimeout(() => {
+      NodeTimers.setTimeout(() => {
         if (!shuttingDown) {
           fork();
         }
@@ -286,7 +270,7 @@ const clusterProgram = Effect.callback<void>((resume) => {
       worker?.process.kill(signal);
     }
 
-    shutdownTimeout = scheduleTimeout(() => {
+    shutdownTimeout = NodeTimers.setTimeout(() => {
       process.exitCode = 1;
       finish();
     }, 8000);
@@ -316,44 +300,32 @@ const clusterProgram = Effect.callback<void>((resume) => {
 const primaryProgram = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* apiConfig;
-    yield* Effect.promise(() =>
-      migrateOnStartup(Redacted.value(config.databaseUrl))
-    );
+    yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
     yield* Effect.logInfo("Database migrations up to date");
     const runtime = yield* Effect.acquireRelease(
       Effect.sync(() => makeRuntime(config)),
-      (apiRuntime) => apiRuntime.disposeEffect
+      (apiRuntime) => apiRuntime.disposeEffect,
     );
     yield* Effect.promise(runtime.context);
     yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
     const jobWorkerProgram = makeJobWorkerProgram({
-      secret: getCurrentBetterAuthSecret(
-        Redacted.value(config.betterAuthSecrets)
-      ),
+      secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
       webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
     });
     yield* Effect.acquireRelease(
       Effect.sync(() =>
-        runtime.runFork(
-          jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))
-        )
+        runtime.runFork(jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))),
       ),
-      Fiber.interrupt
+      Fiber.interrupt,
     );
     yield* Effect.logInfo("Relayit Job worker started in cluster primary");
 
     yield* clusterProgram;
-  })
+  }),
 );
 
-if (
-  cluster.isPrimary &&
-  Bun.env.NODE_ENV === "production" &&
-  process.platform === "linux"
-) {
-  Effect.runFork(
-    primaryProgram.pipe(reportFailure, Effect.provide(LoggingLive))
-  );
+if (cluster.isPrimary && Bun.env.NODE_ENV === "production" && process.platform === "linux") {
+  Effect.runFork(primaryProgram.pipe(reportFailure, Effect.provide(LoggingLive)));
 } else {
   const isClusterChild = cluster.isWorker;
   runApi(!isClusterChild);

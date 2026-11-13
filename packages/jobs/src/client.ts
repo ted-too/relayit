@@ -26,44 +26,44 @@ export interface EnqueueOptions {
 export interface JobsService {
   readonly cancel: {
     <const Name extends string>(
-      contract: RecurringJob<Name, JobPayloadNone>
+      contract: RecurringJob<Name, JobPayloadNone>,
     ): Effect.Effect<void, JobEnqueueError>;
     <const Name extends string, PayloadSchema extends JobSchema>(
       contract: RecurringJob<Name, PayloadSchema>,
-      payload: PayloadSchema["Type"]
+      payload: PayloadSchema["Type"],
     ): Effect.Effect<void, JobEnqueueError>;
   };
   readonly enqueue: {
     <const Name extends string>(
       contract: Job<Name, JobPayloadNone, "immediate">,
-      options?: EnqueueOptions
+      options?: EnqueueOptions,
     ): Effect.Effect<void, JobEnqueueError>;
     <const Name extends string, PayloadSchema extends JobSchema>(
       contract: Job<Name, PayloadSchema, "immediate">,
       payload: PayloadSchema["Type"],
-      options?: EnqueueOptions
+      options?: EnqueueOptions,
     ): Effect.Effect<void, JobEnqueueError>;
     <const Name extends string>(
       contract: Job<Name, JobPayloadNone, "transactional">,
       transaction: DatabaseTransaction,
-      options?: EnqueueOptions
+      options?: EnqueueOptions,
     ): Effect.Effect<void, JobEnqueueError>;
     <const Name extends string, PayloadSchema extends JobSchema>(
       contract: Job<Name, PayloadSchema, "transactional">,
       payload: PayloadSchema["Type"],
       transaction: DatabaseTransaction,
-      options?: EnqueueOptions
+      options?: EnqueueOptions,
     ): Effect.Effect<void, JobEnqueueError>;
   };
   readonly schedule: {
     <const Name extends string>(
       contract: RecurringJob<Name, JobPayloadNone>,
-      runAt: number
+      runAt: number,
     ): Effect.Effect<void, JobEnqueueError>;
     <const Name extends string, PayloadSchema extends JobSchema>(
       contract: RecurringJob<Name, PayloadSchema>,
       payload: PayloadSchema["Type"],
-      runAt: number
+      runAt: number,
     ): Effect.Effect<void, JobEnqueueError>;
   };
 }
@@ -83,33 +83,27 @@ export const JobsLive = Layer.effect(
       contract: Job<Name, PayloadSchema, Dispatch>,
       payload: PayloadSchema["Type"],
       transactionOrOptions?: DatabaseTransaction | EnqueueOptions,
-      transactionalOptions?: EnqueueOptions
+      transactionalOptions?: EnqueueOptions,
     ) =>
       Effect.gen(function* () {
         const firstEnqueuedAt = yield* Clock.currentTimeMillis;
-        const encoded = yield* encodeJob(
-          contract,
-          payload,
-          firstEnqueuedAt
-        ).pipe(
+        const encoded = yield* encodeJob(contract, payload, firstEnqueuedAt).pipe(
           Effect.mapError(
             (cause) =>
               new JobEnqueueError({
                 cause,
                 jobName: contract.name,
                 stage: "encode",
-              })
-          )
+              }),
+          ),
         );
 
         if (contract.dispatch === "transactional") {
-          const transaction = transactionOrOptions as
-            | DatabaseTransaction
-            | undefined;
+          const transaction = transactionOrOptions as DatabaseTransaction | undefined;
           if (!(transaction && "insert" in transaction)) {
             return yield* new JobEnqueueError({
               cause: new Error(
-                `Transactional Job ${contract.name} requires a database transaction`
+                `Transactional Job ${contract.name} requires a database transaction`,
               ),
               jobName: contract.name,
               stage: "outbox",
@@ -122,9 +116,7 @@ export const JobsLive = Layer.effect(
               delayUntil:
                 transactionalOptions?.delayUntil === undefined
                   ? null
-                  : DateTime.toDate(
-                      DateTime.makeUnsafe(transactionalOptions.delayUntil)
-                    ),
+                  : DateTime.toDate(DateTime.makeUnsafe(transactionalOptions.delayUntil)),
               jobName: contract.name,
               payload: encoded,
             })
@@ -135,8 +127,8 @@ export const JobsLive = Layer.effect(
                     cause,
                     jobName: contract.name,
                     stage: "outbox",
-                  })
-              )
+                  }),
+              ),
             );
           return;
         }
@@ -158,8 +150,8 @@ export const JobsLive = Layer.effect(
                     cause,
                     jobName: contract.name,
                     stage: "schedule",
-                  })
-              )
+                  }),
+              ),
             );
           return;
         }
@@ -176,34 +168,27 @@ export const JobsLive = Layer.effect(
                   cause,
                   jobName: contract.name,
                   stage: "append",
-                })
-            )
+                }),
+            ),
           );
       });
 
-    const scheduleImpl = <
-      const Name extends string,
-      PayloadSchema extends JobSchema,
-    >(
+    const scheduleImpl = <const Name extends string, PayloadSchema extends JobSchema>(
       contract: RecurringJob<Name, PayloadSchema>,
       payload: PayloadSchema["Type"],
-      runAt: number
+      runAt: number,
     ) =>
       Effect.gen(function* () {
         const firstEnqueuedAt = yield* Clock.currentTimeMillis;
-        const encoded = yield* encodeJob(
-          contract,
-          payload,
-          firstEnqueuedAt
-        ).pipe(
+        const encoded = yield* encodeJob(contract, payload, firstEnqueuedAt).pipe(
           Effect.mapError(
             (cause) =>
               new JobEnqueueError({
                 cause,
                 jobName: contract.name,
                 stage: "encode",
-              })
-          )
+              }),
+          ),
         );
         const identity = contract.recurrence.identity(payload);
         const keys = jobKeys(contract.name);
@@ -220,17 +205,14 @@ export const JobsLive = Layer.effect(
                   cause,
                   jobName: contract.name,
                   stage: "schedule",
-                })
-            )
+                }),
+            ),
           );
       });
 
-    const cancelImpl = <
-      const Name extends string,
-      PayloadSchema extends JobSchema,
-    >(
+    const cancelImpl = <const Name extends string, PayloadSchema extends JobSchema>(
       contract: RecurringJob<Name, PayloadSchema>,
-      payload: PayloadSchema["Type"]
+      payload: PayloadSchema["Type"],
     ) =>
       Effect.gen(function* () {
         const keys = jobKeys(contract.name);
@@ -247,19 +229,16 @@ export const JobsLive = Layer.effect(
                   cause,
                   jobName: contract.name,
                   stage: "cancel",
-                })
-            )
+                }),
+            ),
           );
       });
 
     const enqueue = (
       contract: Job<string, JobSchema, JobDispatch>,
-      payloadOrTransactionOrOptions?:
-        | unknown
-        | DatabaseTransaction
-        | EnqueueOptions,
+      payloadOrTransactionOrOptions?: unknown | DatabaseTransaction | EnqueueOptions,
       transactionOrOptions?: DatabaseTransaction | EnqueueOptions,
-      transactionalOptions?: EnqueueOptions
+      transactionalOptions?: EnqueueOptions,
     ) => {
       if (isJobPayloadNone(contract)) {
         if (
@@ -271,13 +250,13 @@ export const JobsLive = Layer.effect(
             contract,
             null,
             payloadOrTransactionOrOptions as DatabaseTransaction,
-            transactionOrOptions as EnqueueOptions | undefined
+            transactionOrOptions as EnqueueOptions | undefined,
           );
         }
         return enqueueImpl(
           contract,
           null,
-          payloadOrTransactionOrOptions as EnqueueOptions | undefined
+          payloadOrTransactionOrOptions as EnqueueOptions | undefined,
         );
       }
 
@@ -285,14 +264,14 @@ export const JobsLive = Layer.effect(
         contract,
         payloadOrTransactionOrOptions,
         transactionOrOptions,
-        transactionalOptions
+        transactionalOptions,
       );
     };
 
     const schedule = (
       contract: RecurringJob<string, JobSchema>,
       payloadOrRunAt: unknown,
-      maybeRunAt?: number
+      maybeRunAt?: number,
     ) => {
       if (isJobPayloadNone(contract)) {
         return scheduleImpl(contract, null, payloadOrRunAt as number);
@@ -300,10 +279,7 @@ export const JobsLive = Layer.effect(
       return scheduleImpl(contract, payloadOrRunAt, maybeRunAt as number);
     };
 
-    const cancel = (
-      contract: RecurringJob<string, JobSchema>,
-      payload?: unknown
-    ) => {
+    const cancel = (contract: RecurringJob<string, JobSchema>, payload?: unknown) => {
       if (isJobPayloadNone(contract)) {
         return cancelImpl(contract, null);
       }
@@ -315,5 +291,5 @@ export const JobsLive = Layer.effect(
       enqueue: enqueue as JobsService["enqueue"],
       schedule: schedule as JobsService["schedule"],
     } satisfies JobsService;
-  })
+  }),
 );

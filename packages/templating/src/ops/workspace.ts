@@ -49,16 +49,10 @@ export const ensureScaffolded = (input: { readonly workspaceId: string }) =>
       }
     }
 
-    return yield* withWorkspaceGitLock(
-      input.workspaceId,
-      seedAndSyncEntries(input.workspaceId)
-    );
+    return yield* withWorkspaceGitLock(input.workspaceId, seedAndSyncEntries(input.workspaceId));
   });
 
-export const listFiles = (input: {
-  readonly ref?: string;
-  readonly workspaceId: string;
-}) =>
+export const listFiles = (input: { readonly ref?: string; readonly workspaceId: string }) =>
   Effect.gen(function* () {
     const ref = input.ref ?? HOSTED_DEV_REF;
     if (ref === HOSTED_DEV_REF) {
@@ -121,8 +115,7 @@ export const commitFiles = (input: {
       if (path === "bun.lock" || path === "bun.lockb") {
         return yield* new TemplatingBuilderError({
           code: "invalid",
-          message:
-            "Lockfile is platform-owned; use deps sync instead of editing it.",
+          message: "Lockfile is platform-owned; use deps sync instead of editing it.",
         });
       }
       if (path === "package.json" && content !== null) {
@@ -149,15 +142,13 @@ export const commitFiles = (input: {
         yield* syncWorkspaceEntriesFromPaths(input.workspaceId, listed.paths);
 
         return { commitSha: committed.commitSha };
-      })
+      }),
     );
   });
 
-export const depsSync = (input: { readonly workspaceId: string }) =>
-  depsSyncHostedWorkspace(input);
+export const depsSync = (input: { readonly workspaceId: string }) => depsSyncHostedWorkspace(input);
 
-export const publish = (input: { readonly workspaceId: string }) =>
-  publishHostedWorkspace(input);
+export const publish = (input: { readonly workspaceId: string }) => publishHostedWorkspace(input);
 
 export const preview = (input: {
   readonly entryId: string;

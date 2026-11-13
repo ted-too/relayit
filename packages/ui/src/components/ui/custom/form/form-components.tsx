@@ -15,9 +15,7 @@ export function SubmitButton({
 }) {
   const form = useFormContext();
   return (
-    <form.Subscribe
-      selector={(state) => [state.isSubmitting, state.canSubmit, state.isDirty]}
-    >
+    <form.Subscribe selector={(state) => [state.isSubmitting, state.canSubmit, state.isDirty]}>
       {([isSubmitting, canSubmit, isDirty]) => {
         let disabled = !(canSubmit && isDirty);
 

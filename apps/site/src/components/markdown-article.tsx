@@ -5,9 +5,7 @@ const COPIED_MS = 1600;
 
 /** Copy buttons live in server-rendered HTML; one delegated handler serves all. */
 const handleCopy = (event: MouseEvent) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-    "[data-copy]"
-  );
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-copy]");
   const code = button?.closest("[data-code-block]")?.querySelector("pre");
   if (!(button && code)) {
     return;
@@ -31,9 +29,7 @@ export function MarkdownArticle({ page }: { page: RenderedPage }) {
   return (
     <article className="min-w-0">
       <header className="border-b pb-8">
-        <h1 className="font-semibold text-3xl tracking-tight md:text-4xl">
-          {page.title}
-        </h1>
+        <h1 className="font-semibold text-3xl tracking-tight md:text-4xl">{page.title}</h1>
         {page.description && (
           <p className="mt-3 max-w-[65ch] text-lg text-muted-foreground leading-relaxed">
             {page.description}
@@ -42,7 +38,7 @@ export function MarkdownArticle({ page }: { page: RenderedPage }) {
       </header>
       <div
         className="typeset typeset-docs max-w-[72ch]"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: rendered from repo-owned markdown
+        // rendered from repo-owned markdown
         dangerouslySetInnerHTML={{ __html: page.html }}
         ref={body}
       />
@@ -55,10 +51,7 @@ export function TableOfContents({ page }: { page: RenderedPage }) {
     return null;
   }
   return (
-    <nav
-      aria-label="On this page"
-      className="sticky top-24 hidden flex-col gap-2 text-sm xl:flex"
-    >
+    <nav aria-label="On this page" className="sticky top-24 hidden flex-col gap-2 text-sm xl:flex">
       <p className="font-medium">On this page</p>
       {page.toc.map((item) => (
         <a

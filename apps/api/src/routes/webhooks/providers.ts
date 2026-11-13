@@ -11,7 +11,7 @@ const providerWebhookParamsSchema = t.Object({
 
 export const createProviderWebhookRoutes = (
   runEffect: RunApiEffect,
-  handle = handleProviderWebhook
+  handle = handleProviderWebhook,
 ) =>
   new Elysia({
     prefix: "/providers",
@@ -52,18 +52,16 @@ export const createProviderWebhookRoutes = (
                     }
                   }
                 default:
-                  yield* logEffectFailure("Provider webhook handling failed")(
-                    Cause.fail(error)
-                  );
+                  yield* logEffectFailure("Provider webhook handling failed")(Cause.fail(error));
                   return status(500, {
                     code: "internal_server_error",
                     message: "Provider webhook handling failed",
                   });
               }
-            })
-          )
+            }),
+          ),
         ),
-        { signal: request.signal }
+        { signal: request.signal },
       );
     },
     {
@@ -71,5 +69,5 @@ export const createProviderWebhookRoutes = (
         hide: true,
       },
       params: providerWebhookParamsSchema,
-    }
+    },
   );

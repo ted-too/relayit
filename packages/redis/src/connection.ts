@@ -41,56 +41,52 @@ export interface RedisConnections {
   readonly commands: RedisCommandClient;
 }
 
-const redisFailure =
-  (operation: RedisOperation) =>
-  (cause: unknown): RedisCommandError =>
-    new RedisCommandError({ cause, operation });
-
-export const unexpectedResponse = (
-  operation: RedisOperation,
-  expected: string,
-  value: unknown
-) =>
-  new RedisResponseError({
-    expected,
-    operation,
-    received:
-      value === null ? "null" : Array.isArray(value) ? "array" : typeof value,
-  });
+/** How a `RedisResponseError` describes a reply it did not expect. */
+export const describeReceived = (value: unknown) =>
+  value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
 
 export const execute = (
   client: RedisCommandClient,
   operation: RedisOperation,
   command: string,
-  args: string[]
+  args: string[],
 ) =>
   Effect.tryPromise({
-    catch: redisFailure(operation),
+    catch: (cause) => new RedisCommandError({ cause, operation }),
     try: (): Promise<unknown> => client.send(command, args),
   });
 
 export const expectNumber = (operation: RedisOperation, value: unknown) =>
   typeof value === "number"
     ? Effect.succeed(value)
-    : Effect.fail(unexpectedResponse(operation, "number", value));
+    : Effect.fail(
+        new RedisResponseError({
+          expected: "number",
+          operation,
+          received: describeReceived(value),
+        }),
+      );
 
 export const expectString = (operation: RedisOperation, value: unknown) =>
   typeof value === "string"
     ? Effect.succeed(value)
-    : Effect.fail(unexpectedResponse(operation, "string", value));
+    : Effect.fail(
+        new RedisResponseError({
+          expected: "string",
+          operation,
+          received: describeReceived(value),
+        }),
+      );
 
 const acquireConnection = (config: RedisClientConfig) =>
   Effect.acquireRelease(
     Effect.sync(() => makeRedisClient(config)),
-    (client) => Effect.sync(() => client.close())
+    (client) => Effect.sync(() => client.close()),
   );
 
 export const acquireConnections = (
   config: RedisLayerConfig,
-  onReconnect: (
-    connection: keyof RedisConnections,
-    event: RedisReconnectEvent
-  ) => void
+  onReconnect: (connection: keyof RedisConnections, event: RedisReconnectEvent) => void,
 ) =>
   Effect.gen(function* () {
     const commands = yield* acquireConnection({
@@ -113,9 +109,8 @@ export const ping = (client: RedisCommandClient, label = "Redis") =>
             new RedisResponseError({
               expected: `${label} PONG`,
               operation: "ping",
-              received:
-                typeof response === "string" ? response : typeof response,
-            })
-          )
-    )
+              received: typeof response === "string" ? response : typeof response,
+            }),
+          ),
+    ),
   );

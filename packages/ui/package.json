@@ -1,8 +1,11 @@
 {
   "name": "@repo/ui",
   "version": "0.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@dnd-kit/core": "^6.3.1",
@@ -11,26 +14,26 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@fontsource-variable/outfit": "^5.2.8",
-    "@remixicon/react": "^4.9.0",
+    "@remixicon/react": "catalog:",
     "@tanstack/react-form": "^1.29.0",
-    "@tanstack/react-hotkeys": "^0.10.0",
-    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-hotkeys": "catalog:",
+    "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "^5.97.0",
-    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-table": "catalog:",
     "@tanstack/react-virtual": "^3.14.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "next-themes": "^0.4.6",
-    "react": "^19.2.8",
+    "react": "catalog:",
     "react-day-picker": "^10.0.1",
-    "sonner": "^2.0.7",
+    "sonner": "catalog:",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "tailwindcss": "^4"
   }
 }

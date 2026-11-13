@@ -15,7 +15,7 @@ node_modules
 # Testing
 coverage
 
-# Turbo
+# Turbo caches left in checkouts from before Vite+
 .turbo
 
 # Vercel
@@ -42,9 +42,7 @@ yarn-error.log*
 
 docs/v1
 legacy
-biome
 
-# Api - We have to do this so biome ignores all files that shouldn't be processed as it can't use the nested .gitignore files.
 # dependencies
 /node_modules
 /.pnp

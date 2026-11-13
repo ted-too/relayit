@@ -10,19 +10,17 @@ const readSession = async () => {
 };
 
 export const getSession = createServerFn({ method: "GET" }).handler(
-  async () => await readSession()
+  async () => await readSession(),
 );
 
 /** Requires a signed-in session; attaches it to server-fn context. */
-export const sessionMiddleware = createMiddleware({ type: "function" }).server(
-  async ({ next }) => {
-    const session = await readSession();
-    if (!session) {
-      throw new Error("Unauthorized");
-    }
-    return next({ context: { session } });
+export const sessionMiddleware = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  const session = await readSession();
+  if (!session) {
+    throw new Error("Unauthorized");
   }
-);
+  return next({ context: { session } });
+});
 
 /** Requires an Admin role (composes sessionMiddleware). */
 export const adminMiddleware = createMiddleware({ type: "function" })
@@ -53,9 +51,7 @@ export const getFullOrganization = createServerFn({ method: "GET" })
       });
     } catch (error) {
       const statusCode =
-        error instanceof Error &&
-        "statusCode" in error &&
-        typeof error.statusCode === "number"
+        error instanceof Error && "statusCode" in error && typeof error.statusCode === "number"
           ? error.statusCode
           : undefined;
 

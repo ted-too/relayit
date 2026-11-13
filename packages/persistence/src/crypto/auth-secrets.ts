@@ -12,16 +12,12 @@ export const parseBetterAuthSecrets = (value: string): SecretConfig => {
     .map((part) => {
       const separator = part.indexOf(":");
       if (separator <= 0) {
-        throw new Error(
-          'BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"'
-        );
+        throw new Error('BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"');
       }
       const version = Number.parseInt(part.slice(0, separator), 10);
       const secret = part.slice(separator + 1);
       if (!Number.isFinite(version) || secret.length === 0) {
-        throw new Error(
-          'BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"'
-        );
+        throw new Error('BETTER_AUTH_SECRETS must be "<version>:<secret>[,<version>:<secret>…]"');
       }
       return { secret, version };
     });

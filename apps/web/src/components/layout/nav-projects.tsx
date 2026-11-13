@@ -46,23 +46,17 @@ export function OrganizationLogo({
     );
   }
 
-  return (
-    <Logo className={cn("size-4 rounded-full", className)} variant="icon" />
-  );
+  return <Logo className={cn("size-4 rounded-full", className)} variant="icon" />;
 }
 
-export function NavProject({
-  linkParams,
-}: {
-  linkParams?: { orgSlug: string };
-}) {
+export function NavProject({ linkParams }: { linkParams?: { orgSlug: string } }) {
   const { isMobile } = useSidebar();
   const [{ data: organizations }, { data: me }] = useSuspenseQueries({
     queries: [queries.organizations.list, queries.session.me],
   });
 
   const activeOrganization = organizations.find(
-    (organization) => organization.slug === linkParams?.orgSlug
+    (organization) => organization.slug === linkParams?.orgSlug,
   );
 
   return (
@@ -115,19 +109,12 @@ export function NavProject({
               </>
             )}
             <MenuGroup>
-              <MenuGroupLabel className="text-muted-foreground text-xs">
-                Projects
-              </MenuGroupLabel>
+              <MenuGroupLabel className="text-muted-foreground text-xs">Projects</MenuGroupLabel>
               {organizations.map((organization, index) => (
                 <MenuItem
                   className="gap-2 p-2"
                   key={organization.name}
-                  render={
-                    <Link
-                      params={{ orgSlug: organization.slug }}
-                      to="/$orgSlug"
-                    />
-                  }
+                  render={<Link params={{ orgSlug: organization.slug }} to="/$orgSlug" />}
                 >
                   <div className="flex size-6 items-center justify-center rounded-md border">
                     <OrganizationLogo
@@ -142,16 +129,11 @@ export function NavProject({
               ))}
             </MenuGroup>
             <MenuSeparator />
-            <MenuItem
-              className="gap-2 p-2"
-              render={<Link to="/create-project" />}
-            >
+            <MenuItem className="gap-2 p-2" render={<Link to="/create-project" />}>
               <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
                 <RiAddLine className="size-4" />
               </div>
-              <div className="font-medium text-muted-foreground">
-                Create a project
-              </div>
+              <div className="font-medium text-muted-foreground">Create a project</div>
             </MenuItem>
           </MenuPopup>
         </Menu>

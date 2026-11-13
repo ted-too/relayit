@@ -29,9 +29,9 @@ export const makeTemplatingBuilderProtocolLive = (input: {
   return Layer.mergeAll(
     RpcClient.layerProtocolHttp({ url: rpcUrl }).pipe(
       Layer.provide(RpcSerialization.layerNdjson),
-      Layer.provide(FetchHttpClient.layer)
+      Layer.provide(FetchHttpClient.layer),
     ),
-    makeBuilderAuthClientLayer(input.secret)
+    makeBuilderAuthClientLayer(input.secret),
   );
 };
 
@@ -40,10 +40,9 @@ export const makeTemplatingBuilderClientLive = (input: {
   readonly secret: Redacted.Redacted<string>;
   readonly url: string;
 }) =>
-  Layer.effect(
-    TemplatingBuilderClient,
-    RpcClient.make(TemplatingBuilderRpcs)
-  ).pipe(Layer.provide(makeTemplatingBuilderProtocolLive(input)));
+  Layer.effect(TemplatingBuilderClient, RpcClient.make(TemplatingBuilderRpcs)).pipe(
+    Layer.provide(makeTemplatingBuilderProtocolLive(input)),
+  );
 
 /** One-shot helper: open a client, run `use`, dispose. */
 export const withTemplatingBuilderClient = <A, E, R>(
@@ -51,11 +50,11 @@ export const withTemplatingBuilderClient = <A, E, R>(
     readonly secret: Redacted.Redacted<string>;
     readonly url: string;
   },
-  use: (client: TemplatingBuilderRpcClient) => Effect.Effect<A, E, R>
+  use: (client: TemplatingBuilderRpcClient) => Effect.Effect<A, E, R>,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(TemplatingBuilderRpcs);
       return yield* use(client);
-    }).pipe(Effect.provide(makeTemplatingBuilderProtocolLive(input)))
+    }).pipe(Effect.provide(makeTemplatingBuilderProtocolLive(input))),
   );

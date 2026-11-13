@@ -3,8 +3,7 @@ import { BrandMark } from "@/components/brand";
 import { legalNav } from "@/lib/docs-nav";
 import { site } from "@/lib/site";
 
-const linkClass =
-  "text-muted-foreground text-sm transition-colors hover:text-foreground";
+const linkClass = "text-muted-foreground text-sm transition-colors hover:text-foreground";
 
 export function SiteFooter() {
   return (
@@ -13,8 +12,7 @@ export function SiteFooter() {
         <div className="flex flex-col items-start gap-4">
           <BrandMark />
           <p className="max-w-[34ch] text-muted-foreground text-sm leading-relaxed">
-            Email infrastructure for products. Run it on Relayit Cloud or on
-            your own servers.
+            Email infrastructure for products. Run it on Relayit Cloud or on your own servers.
           </p>
         </div>
         <div className="flex flex-col gap-2.5">
@@ -34,11 +32,7 @@ export function SiteFooter() {
           <a className={linkClass} href={site.links.github}>
             GitHub
           </a>
-          <Link
-            className={linkClass}
-            params={{ _splat: "self-hosting" }}
-            to="/docs/$"
-          >
+          <Link className={linkClass} params={{ _splat: "self-hosting" }} to="/docs/$">
             Self-hosting
           </Link>
           <a className={linkClass} href={site.links.openapi}>
@@ -57,7 +51,7 @@ export function SiteFooter() {
               >
                 {item.title}
               </Link>
-            ) : null
+            ) : null,
           )}
         </div>
       </div>

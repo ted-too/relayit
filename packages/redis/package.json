@@ -1,12 +1,13 @@
 {
   "name": "@repo/redis",
   "version": "0.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
-    "effect": "4.0.0-rc.108"
+    "effect": "catalog:"
   }
 }

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  EmailManagedDns,
-  type EmailManagedDnsService,
-} from "@repo/channels/email/managed-dns";
+import { EmailManagedDns, type EmailManagedDnsService } from "@repo/channels/email/managed-dns";
 import {
   EmailProviderRegistry,
   type EmailProviderRegistryService,
@@ -12,10 +9,7 @@ import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-cred
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
-import {
-  createCustomDomainForProject,
-  pauseCustomDomainForProject,
-} from "./custom-domain.server";
+import { createCustomDomainForProject, pauseCustomDomainForProject } from "./custom-domain.server";
 
 const unsupported = () => Effect.die("unused");
 
@@ -40,7 +34,7 @@ const unusedCreateServices = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {
     decrypt: unsupported,
     encrypt: unsupported,
-  } as never)
+  } as never),
 );
 
 const provideDb = (db: unknown) =>
@@ -70,8 +64,8 @@ describe("createCustomDomainForProject", () => {
             message: "Email Provider not found.",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -99,8 +93,8 @@ describe("pauseCustomDomainForProject", () => {
             code: "not_found",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 });

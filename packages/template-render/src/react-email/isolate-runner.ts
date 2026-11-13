@@ -34,11 +34,7 @@ const SSR_ERROR_MSG_RE = /data-msg="([^"]*)"/;
 
 function readPreviewProps(component: EmailComponent): Record<string, unknown> {
   const previewProps = component.PreviewProps;
-  if (
-    previewProps &&
-    typeof previewProps === "object" &&
-    !Array.isArray(previewProps)
-  ) {
+  if (previewProps && typeof previewProps === "object" && !Array.isArray(previewProps)) {
     return previewProps;
   }
   return {};
@@ -63,8 +59,7 @@ async function main() {
       ok: false,
       error: {
         code: "missing_subject",
-        message:
-          "reactEmail render requires a subject from the Template variant or request.",
+        message: "reactEmail render requires a subject from the Template variant or request.",
       },
     });
     process.exit(1);
@@ -95,11 +90,7 @@ async function main() {
     const text = await render(element, { plainText: true });
 
     // React 19 may recover into an error <template> instead of throwing.
-    if (
-      html.includes(
-        "Switched to client rendering because the server rendering errored"
-      )
-    ) {
+    if (html.includes("Switched to client rendering because the server rendering errored")) {
       const match = html.match(SSR_ERROR_MSG_RE);
       const detail = match?.[1]
         ? match[1]

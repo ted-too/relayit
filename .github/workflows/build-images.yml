@@ -53,9 +53,6 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          secrets: |
-            turbo_token=${{ secrets.TURBO_TOKEN }}
-            turbo_team=${{ secrets.TURBO_TEAM }}
 
       - name: Build complete
         run: |

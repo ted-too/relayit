@@ -29,26 +29,18 @@ type EvaluateStringInput = EvaluateNumberInput;
 
 export interface RedisService {
   readonly acknowledge: (
-    input: Omit<ConsumerInput, "consumer"> & { readonly id: string }
+    input: Omit<ConsumerInput, "consumer"> & { readonly id: string },
   ) => Effect.Effect<number, RedisError>;
-  readonly append: (
-    input: AppendInput
-  ) => Effect.Effect<StreamEntry["id"], RedisError>;
-  readonly autoClaim: (
-    input: AutoClaimInput
-  ) => Effect.Effect<AutoClaimResult, RedisError>;
+  readonly append: (input: AppendInput) => Effect.Effect<StreamEntry["id"], RedisError>;
+  readonly autoClaim: (input: AutoClaimInput) => Effect.Effect<AutoClaimResult, RedisError>;
   readonly createConsumerGroup: (
-    input: Omit<ConsumerInput, "consumer">
+    input: Omit<ConsumerInput, "consumer">,
   ) => Effect.Effect<void, RedisError>;
-  readonly evaluateNumber: (
-    input: EvaluateNumberInput
-  ) => Effect.Effect<number, RedisError>;
-  readonly evaluateString: (
-    input: EvaluateStringInput
-  ) => Effect.Effect<string, RedisError>;
+  readonly evaluateNumber: (input: EvaluateNumberInput) => Effect.Effect<number, RedisError>;
+  readonly evaluateString: (input: EvaluateStringInput) => Effect.Effect<string, RedisError>;
   readonly ping: Effect.Effect<void, RedisError>;
   readonly readGroup: (
-    input: ReadGroupInput
+    input: ReadGroupInput,
   ) => Effect.Effect<readonly StreamReadEntry[], RedisError>;
   readonly sortedSetAdd: (input: {
     readonly key: string;
@@ -61,9 +53,7 @@ export interface RedisService {
   }) => Effect.Effect<number, RedisError>;
 }
 
-export class Redis extends Context.Service<Redis, RedisService>()(
-  "Redis/Commands"
-) {}
+export class Redis extends Context.Service<Redis, RedisService>()("Redis/Commands") {}
 
 export const makeRedisLive = (config: RedisLayerConfig) =>
   Layer.effect(
@@ -72,23 +62,17 @@ export const makeRedisLive = (config: RedisLayerConfig) =>
       // Reconnects surface from promise land; run the log with the layer's
       // services so it reaches the configured logger.
       const services = yield* Effect.context<never>();
-      const connections = yield* acquireConnections(
-        config,
-        (connection, event) => {
-          Effect.runForkWith(services)(
-            Effect.logWarning(
-              "Redis connection lost; replaced client and retried",
-              event.cause
-            ).pipe(
-              Effect.annotateLogs({
-                code: event.code,
-                command: event.command,
-                connection,
-              })
-            )
-          );
-        }
-      );
+      const connections = yield* acquireConnections(config, (connection, event) => {
+        Effect.runForkWith(services)(
+          Effect.logWarning("Redis connection lost; replaced client and retried", event.cause).pipe(
+            Effect.annotateLogs({
+              code: event.code,
+              command: event.command,
+              connection,
+            }),
+          ),
+        );
+      });
       const healthcheck = ping(connections.commands);
 
       yield* healthcheck;
@@ -116,16 +100,11 @@ export const makeRedisLive = (config: RedisLayerConfig) =>
             key,
             String(score),
             member,
-          ]).pipe(
-            Effect.flatMap((value) => expectNumber("sorted-set-add", value))
-          ),
+          ]).pipe(Effect.flatMap((value) => expectNumber("sorted-set-add", value))),
         sortedSetRemove: ({ key, member }) =>
-          execute(connections.commands, "sorted-set-remove", "ZREM", [
-            key,
-            member,
-          ]).pipe(
-            Effect.flatMap((value) => expectNumber("sorted-set-remove", value))
+          execute(connections.commands, "sorted-set-remove", "ZREM", [key, member]).pipe(
+            Effect.flatMap((value) => expectNumber("sorted-set-remove", value)),
           ),
       } satisfies RedisService;
-    })
+    }),
   );

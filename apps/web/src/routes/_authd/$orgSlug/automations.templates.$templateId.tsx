@@ -7,17 +7,14 @@ import { TemplateEditSlug } from "@/components/templates/edit-slug";
 import { TemplateEmailChannel } from "@/components/templates/email-channel";
 import { queries } from "@/lib/queries";
 
-export const Route = createFileRoute(
-  "/_authd/$orgSlug/automations/templates/$templateId"
-)({
+export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/$templateId")({
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(
-        queries.organizations.bySlug(params.orgSlug).template(params.templateId)
+        queries.organizations.bySlug(params.orgSlug).template(params.templateId),
       ),
       context.queryClient.ensureQueryData(
-        queries.organizations.bySlug(params.orgSlug).workspace("reactEmail")
-          .entries
+        queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").entries,
       ),
     ]);
   },
@@ -27,7 +24,7 @@ export const Route = createFileRoute(
 function RouteComponent() {
   const { orgSlug, templateId } = Route.useParams();
   const { data: template } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug).template(templateId)
+    queries.organizations.bySlug(orgSlug).template(templateId),
   );
 
   if (!template) {
@@ -41,19 +38,14 @@ function RouteComponent() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-medium text-3xl">{template.name}</h1>
             <Badge variant="secondary">{template.slug}</Badge>
-            {template.archivedAt ? (
-              <Badge variant="destructive">Archived</Badge>
-            ) : null}
+            {template.archivedAt ? <Badge variant="destructive">Archived</Badge> : null}
           </div>
           <p className="text-muted-foreground text-sm">
-            Created {formatDateTime(new Date(template.createdAt))} · send with
-            slug or id
+            Created {formatDateTime(new Date(template.createdAt))} · send with slug or id
           </p>
         </div>
         <Button
-          render={
-            <Link params={{ orgSlug }} to="/$orgSlug/automations/templates" />
-          }
+          render={<Link params={{ orgSlug }} to="/$orgSlug/automations/templates" />}
           variant="outline"
         >
           Back to Templates

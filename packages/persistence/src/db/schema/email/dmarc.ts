@@ -31,11 +31,11 @@ export const dmarcReport = pgTable(
   (t) => [
     uniqueIndex("dmarc_report_domain_external_id_unique_idx").on(
       t.customDomainId,
-      t.externalReportId
+      t.externalReportId,
     ),
     index("dmarc_report_custom_domain_idx").on(t.customDomainId),
     index("dmarc_report_date_range_idx").on(t.dateRangeBegin, t.dateRangeEnd),
-  ]
+  ],
 );
 
 export type DmarcReport = typeof dmarcReport.$inferSelect;
@@ -59,7 +59,7 @@ export const dmarcReportRow = pgTable(
     headerFrom: text("header_from").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("dmarc_report_row_report_idx").on(t.reportId)]
+  (t) => [index("dmarc_report_row_report_idx").on(t.reportId)],
 );
 
 export type DmarcReportRow = typeof dmarcReportRow.$inferSelect;

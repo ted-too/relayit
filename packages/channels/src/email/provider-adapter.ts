@@ -1,9 +1,5 @@
 import type { OpenedProviderCredentials } from "@repo/persistence/crypto/provider-credentials";
-import type {
-  DnsRecordPurpose,
-  EmailDnsRecordInsert,
-  Provider,
-} from "@repo/persistence/db/schema";
+import type { DnsRecordPurpose, EmailDnsRecordInsert, Provider } from "@repo/persistence/db/schema";
 import type { Effect } from "effect";
 import type { ProviderOperationError } from "../provider-errors";
 import type { EmailProviderTypeDefinition } from "../provider-type";
@@ -50,18 +46,18 @@ export type MailFromDnsRecord = Pick<
 export interface EmailProviderAdapter {
   readonly checkConnection: Effect.Effect<boolean, ProviderOperationError>;
   readonly createIdentity: (
-    input: CreateIdentityInput
+    input: CreateIdentityInput,
   ) => Effect.Effect<IdentityResult, ProviderOperationError>;
   readonly definition: EmailProviderTypeDefinition;
   readonly deleteIdentity: (
-    input: IdentityStatusInput
+    input: IdentityStatusInput,
   ) => Effect.Effect<void, ProviderOperationError>;
   readonly getIdentityStatus: (
-    input: IdentityStatusInput
+    input: IdentityStatusInput,
   ) => Effect.Effect<IdentityStatus, ProviderOperationError>;
   readonly infrastructure?: EmailProviderInfrastructureAdapter;
   readonly send: (
-    message: ProviderEmailMessage
+    message: ProviderEmailMessage,
   ) => Effect.Effect<SendEmailResult, ProviderOperationError>;
 }
 
@@ -72,7 +68,7 @@ export interface CreateEmailProviderInput {
 
 export interface EmailProviderFactory {
   readonly create: (
-    input: CreateEmailProviderInput
+    input: CreateEmailProviderInput,
   ) => Effect.Effect<EmailProviderAdapter, ProviderOperationError>;
   readonly definition: EmailProviderTypeDefinition;
   /** Type-level notification ingress — no provider credentials required. */

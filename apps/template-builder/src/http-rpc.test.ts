@@ -6,18 +6,12 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import {
-  Rpc,
-  RpcClient,
-  RpcGroup,
-  RpcSerialization,
-  RpcServer,
-} from "effect/unstable/rpc";
+import { Rpc, RpcClient, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 const PingRpcs = RpcGroup.make(
   Rpc.make("ping", {
     success: Schema.String,
-  })
+  }),
 );
 
 const PingLive = PingRpcs.toLayer({
@@ -29,14 +23,14 @@ const callPing = (rpcUrl: string) =>
     Effect.gen(function* () {
       const client = yield* RpcClient.make(PingRpcs);
       return yield* client.ping();
-    })
+    }),
   ).pipe(
     Effect.provide(
       RpcClient.layerProtocolHttp({ url: rpcUrl }).pipe(
         Layer.provide(RpcSerialization.layerNdjson),
-        Layer.provide(FetchHttpClient.layer)
-      )
-    )
+        Layer.provide(FetchHttpClient.layer),
+      ),
+    ),
   );
 
 test("HttpRouter.toWebHandler returns an RPC body", async () => {
@@ -44,9 +38,9 @@ test("HttpRouter.toWebHandler returns an RPC body", async () => {
     Layer.provide(PingLive),
     Layer.provide(
       RpcServer.layerProtocolHttp({ path: "/rpc" }).pipe(
-        Layer.provide(RpcSerialization.layerNdjson)
-      )
-    )
+        Layer.provide(RpcSerialization.layerNdjson),
+      ),
+    ),
   );
   const { dispose, handler } = HttpRouter.toWebHandler(App, {
     disableLogger: true,
@@ -57,9 +51,7 @@ test("HttpRouter.toWebHandler returns an RPC body", async () => {
     port: 0,
   });
   try {
-    const result = await Effect.runPromise(
-      callPing(`http://127.0.0.1:${server.port}/rpc`)
-    );
+    const result = await Effect.runPromise(callPing(`http://127.0.0.1:${server.port}/rpc`));
     expect(result).toBe("pong");
   } finally {
     server.stop(true);
@@ -72,19 +64,17 @@ test("per-request scoped toWeb() yields an empty RPC body", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const rpcHttpEffect = yield* RpcServer.toHttpEffect(PingRpcs).pipe(
-          Effect.provide(
-            Layer.mergeAll(PingLive, RpcSerialization.layerNdjson)
-          )
+          Effect.provide(Layer.mergeAll(PingLive, RpcSerialization.layerNdjson)),
         );
         const handleRpc = async (request: Request) => {
           const exit = await Effect.runPromiseExit(
             rpcHttpEffect.pipe(
               Effect.provideService(
                 HttpServerRequest.HttpServerRequest,
-                HttpServerRequest.fromWeb(request)
+                HttpServerRequest.fromWeb(request),
               ),
-              Effect.scoped
-            )
+              Effect.scoped,
+            ),
           );
           if (exit._tag === "Success") {
             return HttpServerResponse.toWeb(exit.value);
@@ -93,10 +83,7 @@ test("per-request scoped toWeb() yields an empty RPC body", async () => {
         };
         const server = Bun.serve({
           fetch: (request) => {
-            if (
-              request.method === "POST" &&
-              new URL(request.url).pathname === "/rpc"
-            ) {
+            if (request.method === "POST" && new URL(request.url).pathname === "/rpc") {
               return handleRpc(request);
             }
             return new Response("Not Found", { status: 404 });
@@ -105,14 +92,12 @@ test("per-request scoped toWeb() yields an empty RPC body", async () => {
           port: 0,
         });
         try {
-          const error = yield* callPing(
-            `http://127.0.0.1:${server.port}/rpc`
-          ).pipe(Effect.flip);
+          const error = yield* callPing(`http://127.0.0.1:${server.port}/rpc`).pipe(Effect.flip);
           expect(String(error)).toContain("empty HTTP response");
         } finally {
           server.stop(true);
         }
-      })
-    )
+      }),
+    ),
   );
 });

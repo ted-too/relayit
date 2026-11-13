@@ -1,23 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createPromiseDb } from "@repo/persistence/db/promise";
-import {
-  customDomain,
-  organization,
-  organizationDomain,
-} from "@repo/persistence/db/schema";
+import { customDomain, organization, organizationDomain } from "@repo/persistence/db/schema";
 import { typeid } from "typeid-js";
 import { resolveLegacyDefaultFromAddress } from "./map";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
-const testName =
-  "legacy default from uses the oldest sendable custom Domain of the Project";
+const testName = "legacy default from uses the oldest sendable custom Domain of the Project";
 
 describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
   if (!testDatabaseUrl) {
-    process.emitWarning(
-      "Skipping legacy default from test: TEST_DATABASE_URL is not set"
-    );
-    // biome-ignore lint/suspicious/noSkippedTests: The PostgreSQL test is opt-in.
+    process.emitWarning("Skipping legacy default from test: TEST_DATABASE_URL is not set");
+    // The PostgreSQL test is opt-in.
     test.skip(testName, () => undefined);
     return;
   }
@@ -27,12 +20,8 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
   const customDomainIds: string[] = [];
 
   afterAll(async () => {
-    await db.$client.query("delete from custom_domain where id = any($1)", [
-      customDomainIds,
-    ]);
-    await db.$client.query("delete from organization where id = any($1)", [
-      organizationIds,
-    ]);
+    await db.$client.query("delete from custom_domain where id = any($1)", [customDomainIds]);
+    await db.$client.query("delete from organization where id = any($1)", [organizationIds]);
     await db.$client.end();
   });
 
@@ -106,7 +95,7 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
     });
 
     expect(await resolveLegacyDefaultFromAddress({ db, organizationId })).toBe(
-      `noreply@${oldestSendable}`
+      `noreply@${oldestSendable}`,
     );
   });
 
@@ -118,8 +107,6 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
       verificationStatus: "not_verified",
     });
 
-    expect(
-      await resolveLegacyDefaultFromAddress({ db, organizationId })
-    ).toBeNull();
+    expect(await resolveLegacyDefaultFromAddress({ db, organizationId })).toBeNull();
   });
 });

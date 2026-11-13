@@ -16,34 +16,25 @@ import { organization } from "../auth";
 /** Kinded authoring workspaces under `/templating/workspace/:kind`. */
 export const AVAILABLE_TEMPLATING_WORKSPACE_KINDS = ["reactEmail"] as const;
 
-export const zTemplatingWorkspaceKind = z.enum(
-  AVAILABLE_TEMPLATING_WORKSPACE_KINDS
-);
+export const zTemplatingWorkspaceKind = z.enum(AVAILABLE_TEMPLATING_WORKSPACE_KINDS);
 
-export type TemplatingWorkspaceKind =
-  (typeof AVAILABLE_TEMPLATING_WORKSPACE_KINDS)[number];
+export type TemplatingWorkspaceKind = (typeof AVAILABLE_TEMPLATING_WORKSPACE_KINDS)[number];
 
 export const templatingWorkspaceKindEnum = pgEnum(
   "templating_workspace_kind",
-  AVAILABLE_TEMPLATING_WORKSPACE_KINDS
+  AVAILABLE_TEMPLATING_WORKSPACE_KINDS,
 );
 
 /** How an Email Workspace’s Git tree is authored/updated. */
-export const AVAILABLE_TEMPLATING_WORKSPACE_SOURCES = [
-  "hosted",
-  "github",
-] as const;
+export const AVAILABLE_TEMPLATING_WORKSPACE_SOURCES = ["hosted", "github"] as const;
 
-export const zTemplatingWorkspaceSource = z.enum(
-  AVAILABLE_TEMPLATING_WORKSPACE_SOURCES
-);
+export const zTemplatingWorkspaceSource = z.enum(AVAILABLE_TEMPLATING_WORKSPACE_SOURCES);
 
-export type TemplatingWorkspaceSource =
-  (typeof AVAILABLE_TEMPLATING_WORKSPACE_SOURCES)[number];
+export type TemplatingWorkspaceSource = (typeof AVAILABLE_TEMPLATING_WORKSPACE_SOURCES)[number];
 
 export const templatingWorkspaceSourceEnum = pgEnum(
   "templating_workspace_source",
-  AVAILABLE_TEMPLATING_WORKSPACE_SOURCES
+  AVAILABLE_TEMPLATING_WORKSPACE_SOURCES,
 );
 
 /**
@@ -95,9 +86,9 @@ export const templatingWorkspace = pgTable(
         ${t.source} = 'github'
         AND ${t.githubRepository} IS NOT NULL
         AND ${t.githubTrackBranch} IS NOT NULL
-      )`
+      )`,
     ),
-  ]
+  ],
 );
 
 export type TemplatingWorkspace = typeof templatingWorkspace.$inferSelect;
@@ -125,12 +116,9 @@ export const templatingWorkspaceRef = pgTable(
       .notNull(),
   },
   (t) => [
-    uniqueIndex("templating_workspace_ref_workspace_name_uidx").on(
-      t.workspaceId,
-      t.name
-    ),
+    uniqueIndex("templating_workspace_ref_workspace_name_uidx").on(t.workspaceId, t.name),
     index("templating_workspace_ref_workspace_idx").on(t.workspaceId),
-  ]
+  ],
 );
 
 export type TemplatingWorkspaceRef = typeof templatingWorkspaceRef.$inferSelect;
@@ -170,8 +158,7 @@ export const templatingWorkspaceEntry = pgTable(
     uniqueIndex("templating_workspace_entry_workspace_path_active_uidx")
       .on(t.workspaceId, t.path)
       .where(sql`${t.deletedAt} IS NULL`),
-  ]
+  ],
 );
 
-export type TemplatingWorkspaceEntry =
-  typeof templatingWorkspaceEntry.$inferSelect;
+export type TemplatingWorkspaceEntry = typeof templatingWorkspaceEntry.$inferSelect;

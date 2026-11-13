@@ -1,19 +1,15 @@
 {
   "name": "@repo/api",
   "version": "0.0.0",
-  "portless": {
-    "name": "api.relayit",
-    "script": "dev:app"
-  },
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "portless",
     "dev:app": "bun run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
-    "check-types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
-  "type": "module",
   "dependencies": {
     "@elysia/openapi": "^1.4.15",
     "@opentelemetry/api": "^1.9.1",
@@ -24,8 +20,15 @@
     "@repo/provider-aws": "workspace:*",
     "@repo/redis": "workspace:*",
     "@repo/webhooks": "workspace:*",
-    "better-auth": "^1.6.26",
-    "effect": "4.0.0-rc.108",
+    "better-auth": "catalog:",
+    "effect": "catalog:",
     "elysia": "^1.4.29"
+  },
+  "devDependencies": {
+    "typeid-js": "catalog:"
+  },
+  "portless": {
+    "name": "api.relayit",
+    "script": "dev:app"
   }
 }

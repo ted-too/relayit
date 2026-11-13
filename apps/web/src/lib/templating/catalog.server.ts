@@ -10,9 +10,7 @@ import { and, count, eq, isNull, ne } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import type { TemplateListItem } from "./types";
 
-export class TemplateCatalogError extends Data.TaggedError(
-  "TemplateCatalogError"
-)<{
+export class TemplateCatalogError extends Data.TaggedError("TemplateCatalogError")<{
   readonly cause?: unknown;
   readonly code: "not_found" | "failed" | "forbidden" | "conflict";
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -90,8 +88,8 @@ export const listTemplatesForProject = (organizationId: string) =>
               cause,
               code: "failed",
               message: "Failed to list Templates.",
-            })
-        )
+            }),
+        ),
       );
 
     return rows.map(serializeTemplate);
@@ -122,8 +120,8 @@ export const getTemplateForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to load Template.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!row) {
@@ -143,10 +141,7 @@ export const createTemplateForProject = (input: {
   Effect.gen(function* () {
     const db = yield* DB;
     const slug = yield* generateDbSlug(db, template, input.name, {
-      scope: and(
-        eq(template.organizationId, input.organizationId),
-        isNull(template.archivedAt)
-      ),
+      scope: and(eq(template.organizationId, input.organizationId), isNull(template.archivedAt)),
     }).pipe(
       Effect.mapError(
         (cause) =>
@@ -154,8 +149,8 @@ export const createTemplateForProject = (input: {
             cause,
             code: "failed",
             message: "Failed to allocate Template slug.",
-          })
-      )
+          }),
+      ),
     );
 
     const [created] = yield* db
@@ -173,8 +168,8 @@ export const createTemplateForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to create Template.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!created) {
@@ -187,10 +182,7 @@ export const createTemplateForProject = (input: {
     return serializeTemplate({ ...created, channelVariants: [] });
   });
 
-const loadTemplateRow = (input: {
-  readonly organizationId: string;
-  readonly templateId: string;
-}) =>
+const loadTemplateRow = (input: { readonly organizationId: string; readonly templateId: string }) =>
   Effect.gen(function* () {
     const db = yield* DB;
     return yield* db.query.template
@@ -212,8 +204,8 @@ const loadTemplateRow = (input: {
               cause,
               code: "failed",
               message: "Failed to load Template.",
-            })
-        )
+            }),
+        ),
       );
   });
 
@@ -241,8 +233,8 @@ export const archiveTemplateForProject = (input: {
         and(
           eq(template.id, existing.id),
           eq(template.organizationId, input.organizationId),
-          isNull(template.archivedAt)
-        )
+          isNull(template.archivedAt),
+        ),
       )
       .returning()
       .pipe(
@@ -252,13 +244,13 @@ export const archiveTemplateForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to archive Template.",
-            })
-        )
+            }),
+        ),
       );
 
     return serializeTemplate({
       ...existing,
-      ...(archived ?? {}),
+      ...archived,
     });
   });
 
@@ -303,8 +295,8 @@ export const updateTemplateSlugForProject = (input: {
           eq(template.organizationId, input.organizationId),
           eq(template.slug, normalized),
           isNull(template.archivedAt),
-          ne(template.id, existing.id)
-        )
+          ne(template.id, existing.id),
+        ),
       )
       .pipe(
         Effect.mapError(
@@ -313,8 +305,8 @@ export const updateTemplateSlugForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to check Template slug.",
-            })
-        )
+            }),
+        ),
       );
 
     if ((takenRows[0]?.count ?? 0) > 0) {
@@ -331,8 +323,8 @@ export const updateTemplateSlugForProject = (input: {
         and(
           eq(template.id, existing.id),
           eq(template.organizationId, input.organizationId),
-          isNull(template.archivedAt)
-        )
+          isNull(template.archivedAt),
+        ),
       )
       .returning()
       .pipe(
@@ -342,13 +334,13 @@ export const updateTemplateSlugForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to update Template slug.",
-            })
-        )
+            }),
+        ),
       );
 
     return serializeTemplate({
       ...existing,
-      ...(updated ?? {}),
+      ...updated,
     });
   });
 
@@ -388,8 +380,8 @@ export const putReactEmailChannelForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to load Workspace Entry.",
-            })
-        )
+            }),
+        ),
       );
 
     if (
@@ -423,9 +415,7 @@ export const putReactEmailChannelForProject = (input: {
       workspaceEntryId: entry.id,
     };
 
-    const currentEmail = existing.channelVariants.find(
-      (variant) => variant.channel === "email"
-    );
+    const currentEmail = existing.channelVariants.find((variant) => variant.channel === "email");
 
     if (currentEmail) {
       yield* db
@@ -439,8 +429,8 @@ export const putReactEmailChannelForProject = (input: {
                 cause,
                 code: "failed",
                 message: "Failed to update email channel.",
-              })
-          )
+              }),
+          ),
         );
     } else {
       yield* db
@@ -456,8 +446,8 @@ export const putReactEmailChannelForProject = (input: {
                 cause,
                 code: "failed",
                 message: "Failed to create email channel.",
-              })
-          )
+              }),
+          ),
         );
     }
 

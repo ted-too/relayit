@@ -4,9 +4,7 @@ import type { ProviderTypeId } from "../provider-type";
 import type { EmailProviderFactory } from "./provider-adapter";
 
 export interface EmailProviderRegistryService {
-  readonly get: (
-    typeId: ProviderTypeId
-  ) => Effect.Effect<EmailProviderFactory, ProviderNotFound>;
+  readonly get: (typeId: ProviderTypeId) => Effect.Effect<EmailProviderFactory, ProviderNotFound>;
 }
 
 const buildProviderRegistry = (factories: readonly EmailProviderFactory[]) =>
@@ -27,9 +25,7 @@ const buildProviderRegistry = (factories: readonly EmailProviderFactory[]) =>
       get: (typeId) => {
         const factory = factoriesByType.get(typeId);
 
-        return factory
-          ? Effect.succeed(factory)
-          : Effect.fail(new ProviderNotFound({ typeId }));
+        return factory ? Effect.succeed(factory) : Effect.fail(new ProviderNotFound({ typeId }));
       },
     } satisfies EmailProviderRegistryService;
   });
@@ -39,9 +35,6 @@ export class EmailProviderRegistry extends Context.Service<
   EmailProviderRegistryService
 >()("Channels/EmailProviderRegistry") {
   static live(...factories: readonly EmailProviderFactory[]) {
-    return Layer.effect(
-      EmailProviderRegistry,
-      buildProviderRegistry(factories)
-    );
+    return Layer.effect(EmailProviderRegistry, buildProviderRegistry(factories));
   }
 }

@@ -22,7 +22,7 @@ export const createProjectFn = createServerFn({ method: "POST" })
       Effect.gen(function* () {
         const db = yield* DB;
         return yield* generateDbSlug(db, organization, data.name);
-      })
+      }),
     );
 
     const createdOrg = await auth.api.createOrganization({

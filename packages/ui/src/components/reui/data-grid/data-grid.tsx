@@ -9,7 +9,6 @@ import type {
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
     /** Expands the column to fill remaining table width after fixed-size columns. */
     autoSize?: boolean;
@@ -22,9 +21,7 @@ declare module "@tanstack/react-table" {
 }
 
 /** Label for headers / column visibility: `meta.headerTitle`, string `columnDef.header`, or `column.id`. */
-export function getColumnHeaderLabel<TData, TValue>(
-  column: Column<TData, TValue>
-): string {
+export function getColumnHeaderLabel<TData, TValue>(column: Column<TData, TValue>): string {
   const meta = column.columnDef.meta as { headerTitle?: string } | undefined;
   if (typeof meta?.headerTitle === "string") {
     return meta.headerTitle;
@@ -118,7 +115,7 @@ export interface DataGridProps<TData extends object> {
 }
 
 const DataGridContext = createContext<
-  // biome-ignore lint/suspicious/noExplicitAny: shared context must erase row generics
+  // shared context must erase row generics
   DataGridContextProps<any> | undefined
 >(undefined);
 
@@ -135,8 +132,7 @@ function DataGridProvider<TData extends object>({
   table,
   ...props
 }: DataGridProps<TData> & { table: Table<TData> }) {
-  const resolvedColumnsResizeMode =
-    props.tableLayout?.columnsResizeMode ?? "onEnd";
+  const resolvedColumnsResizeMode = props.tableLayout?.columnsResizeMode ?? "onEnd";
 
   // Keep resize mode aligned with the DataGrid contract every render so
   // consumer-level useReactTable options cannot flip it back between drags.
@@ -149,7 +145,7 @@ function DataGridProvider<TData extends object>({
   // Memoize context value so consumers don't re-render during column resize.
   // Column sizing state is intentionally excluded from deps -- CSS variables
   // on the <table> element handle width updates without React re-renders.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: omit full `props` (new object each render); list stable fields instead
+  // omit full `props` (new object each render); list stable fields instead
   const value = useMemo(
     () => ({
       props,
@@ -171,21 +167,13 @@ function DataGridProvider<TData extends object>({
       props.className,
       props.tableLayout,
       props.tableClassNames,
-    ]
+    ],
   );
 
-  return (
-    <DataGridContext.Provider value={value}>
-      {children}
-    </DataGridContext.Provider>
-  );
+  return <DataGridContext.Provider value={value}>{children}</DataGridContext.Provider>;
 }
 
-function DataGrid<TData extends object>({
-  children,
-  table,
-  ...props
-}: DataGridProps<TData>) {
+function DataGrid<TData extends object>({ children, table, ...props }: DataGridProps<TData>) {
   const defaultProps: Partial<DataGridProps<TData>> = {
     loadingMode: "skeleton",
     tableLayout: {
@@ -225,11 +213,11 @@ function DataGrid<TData extends object>({
     ...props,
     tableLayout: {
       ...defaultProps.tableLayout,
-      ...(props.tableLayout || {}),
+      ...props.tableLayout,
     },
     tableClassNames: {
       ...defaultProps.tableClassNames,
-      ...(props.tableClassNames || {}),
+      ...props.tableClassNames,
     },
   };
 
@@ -254,10 +242,7 @@ function DataGridContainer({
   border?: boolean;
 }) {
   return (
-    <div
-      className={cn("w-full overflow-hidden", className)}
-      data-slot="data-grid"
-    >
+    <div className={cn("w-full overflow-hidden", className)} data-slot="data-grid">
       {children}
     </div>
   );

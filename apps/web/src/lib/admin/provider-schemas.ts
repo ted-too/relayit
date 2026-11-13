@@ -30,9 +30,5 @@ export const platformProviderIdSchema = z.object({
   providerId: z.string().min(1),
 });
 
-export type CreatePlatformProviderBody = z.infer<
-  typeof createPlatformProviderBodySchema
->;
-export type UpdatePlatformProviderBody = z.infer<
-  typeof updatePlatformProviderBodySchema
->;
+export type CreatePlatformProviderBody = z.infer<typeof createPlatformProviderBodySchema>;
+export type UpdatePlatformProviderBody = z.infer<typeof updatePlatformProviderBodySchema>;

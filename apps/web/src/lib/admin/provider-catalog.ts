@@ -30,12 +30,9 @@ export const PLATFORM_EMAIL_PRODUCTS = [
 
 export type PlatformCredentials = z.infer<typeof awsCredentialsSchema>;
 
-export const DEFAULT_PLATFORM_PRODUCT =
-  PLATFORM_EMAIL_PRODUCTS[0] as PlatformEmailProduct;
+export const DEFAULT_PLATFORM_PRODUCT = PLATFORM_EMAIL_PRODUCTS[0] as PlatformEmailProduct;
 
-export const platformProductByKey = (
-  key: PlatformProductKey
-): PlatformEmailProduct => {
+export const platformProductByKey = (key: PlatformProductKey): PlatformEmailProduct => {
   const product = PLATFORM_EMAIL_PRODUCTS.find((entry) => entry.value === key);
   return product ?? DEFAULT_PLATFORM_PRODUCT;
 };

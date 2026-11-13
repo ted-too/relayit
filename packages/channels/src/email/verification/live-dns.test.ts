@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import * as dns from "node:dns";
+import * as NodeDns from "node:dns";
 import {
   evaluateLiveDnsRecord,
   inspectDmarcTxtRecords,
@@ -16,8 +16,7 @@ const TRAILING_DOT_REGEX = /\.$/;
 const notFound = (host: string, code = "ENOTFOUND") =>
   Object.assign(new Error(`not found: ${host}`), { code });
 
-const normalizeHost = (host: string) =>
-  host.replace(TRAILING_DOT_REGEX, "").toLowerCase();
+const normalizeHost = (host: string) => host.replace(TRAILING_DOT_REGEX, "").toLowerCase();
 
 const usesPublicResolvers = (servers: readonly string[]) =>
   servers.some((server) => PUBLIC_RESOLVER_IPS.has(server));
@@ -41,7 +40,7 @@ class FakeResolver {
       nsByHost?: Record<string, string[]>;
       nsIpByHost?: Record<string, string[]>;
       publicTxtByHost?: Record<string, string[][]>;
-    } = {}
+    } = {},
   ) {
     this.authCnameByHost = config.authCnameByHost ?? {};
     this.authMxByHost = config.authMxByHost ?? {};
@@ -110,12 +109,10 @@ class FakeResolver {
 
 let resolverConfig: ConstructorParameters<typeof FakeResolver>[0] = {};
 
-const installFakeResolver = (
-  config: ConstructorParameters<typeof FakeResolver>[0] = {}
-) => {
+const installFakeResolver = (config: ConstructorParameters<typeof FakeResolver>[0] = {}) => {
   resolverConfig = config;
-  spyOn(dns.promises, "Resolver").mockImplementation(
-    (() => new FakeResolver(resolverConfig)) as never
+  spyOn(NodeDns.promises, "Resolver").mockImplementation(
+    (() => new FakeResolver(resolverConfig)) as never,
   );
 };
 
@@ -154,17 +151,14 @@ describe("txtRecordsIncludeValue", () => {
     expect(
       txtRecordsIncludeValue(
         [["v=spf1 include:amazonses.com ~all"]],
-        '"v=spf1 include:amazonses.com ~all"'
-      )
+        '"v=spf1 include:amazonses.com ~all"',
+      ),
     ).toBe(true);
   });
 
   test("joins character-string chunks of one TXT record", () => {
     expect(
-      txtRecordsIncludeValue(
-        [["v=DKIM1; k=rsa; p=abc", "def"]],
-        "v=DKIM1; k=rsa; p=abcdef"
-      )
+      txtRecordsIncludeValue([["v=DKIM1; k=rsa; p=abc", "def"]], "v=DKIM1; k=rsa; p=abcdef"),
     ).toBe(true);
   });
 });
@@ -175,16 +169,13 @@ describe("inspectDmarcTxtRecords", () => {
       inspectDmarcTxtRecords([
         ["v=DMARC1; p=none;"],
         ["v=DMARC1; p=quarantine; rua=mailto:security@acme.test; sp=none;"],
-      ])
+      ]),
     ).toEqual([{ code: "multiple_dmarc_records", recordCount: 2 }]);
   });
 
   test("ignores unrelated TXT records at the same name", () => {
     expect(
-      inspectDmarcTxtRecords([
-        ["v=DMARC1; p=none;"],
-        ["google-site-verification=abc"],
-      ])
+      inspectDmarcTxtRecords([["v=DMARC1; p=none;"], ["google-site-verification=abc"]]),
     ).toEqual([]);
   });
 
@@ -219,7 +210,7 @@ describe("authoritative live DNS lookups", () => {
         name: "send.acme.test",
         recordType: "TXT",
         value: '"v=spf1 include:amazonses.com ~all"',
-      })
+      }),
     ).toBe(true);
   });
 
@@ -270,7 +261,7 @@ describe("authoritative live DNS lookups", () => {
         name: "send.acme.test",
         recordType: "MX",
         value: "feedback-smtp.eu-central-1.amazonses.com",
-      })
+      }),
     ).toBe(true);
 
     expect(
@@ -278,7 +269,7 @@ describe("authoritative live DNS lookups", () => {
         name: "relayit._domainkey.acme.test",
         recordType: "CNAME",
         value: "dkim.relayit.fyi",
-      })
+      }),
     ).toBe(true);
   });
 
@@ -299,7 +290,7 @@ describe("authoritative live DNS lookups", () => {
         purpose: "dmarc",
         recordType: "TXT",
         value: '"v=DMARC1; p=none;"',
-      })
+      }),
     ).toEqual({
       matches: true,
       warnings: [],
@@ -319,7 +310,7 @@ describe("authoritative live DNS lookups", () => {
         purpose: "dmarc",
         recordType: "TXT",
         value: '"v=DMARC1; p=none;"',
-      })
+      }),
     ).toEqual({
       matches: false,
       warnings: [],
@@ -342,7 +333,7 @@ describe("authoritative live DNS lookups", () => {
         purpose: "dmarc",
         recordType: "TXT",
         value: '"v=DMARC1; p=none;"',
-      })
+      }),
     ).toEqual({
       matches: true,
       warnings: [{ code: "multiple_dmarc_records", recordCount: 2 }],

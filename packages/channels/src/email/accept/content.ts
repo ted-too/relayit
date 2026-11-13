@@ -7,10 +7,7 @@ import {
   templateChannelVariant,
   templatingWorkspaceEntry,
 } from "@repo/persistence/db/schema";
-import {
-  renderPrimitiveEmail,
-  renderSealedReactEmailArtifact,
-} from "@repo/template-render";
+import { renderPrimitiveEmail, renderSealedReactEmailArtifact } from "@repo/template-render";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import type { EmailContentInput } from "./contracts";
@@ -24,7 +21,7 @@ export interface PreparedEmailContent {
 }
 
 const primitiveValues = (
-  values: Readonly<Record<string, unknown>> | undefined
+  values: Readonly<Record<string, unknown>> | undefined,
 ): Record<string, string | number> | undefined => {
   if (!values) {
     return;
@@ -43,7 +40,7 @@ export const prepareEmailContent = (
   input: {
     readonly content: EmailContentInput;
     readonly organizationId: string;
-  }
+  },
 ) => {
   const reference = input.content;
   if (reference.kind === "inline") {
@@ -62,12 +59,10 @@ export const prepareEmailContent = (
       .from(template)
       .where(
         and(
-          byId
-            ? eq(template.id, reference.idOrSlug)
-            : eq(template.slug, reference.idOrSlug),
+          byId ? eq(template.id, reference.idOrSlug) : eq(template.slug, reference.idOrSlug),
           eq(template.organizationId, input.organizationId),
-          isNull(template.archivedAt)
-        )
+          isNull(template.archivedAt),
+        ),
       )
       .limit(1)
       .pipe(
@@ -77,8 +72,8 @@ export const prepareEmailContent = (
               cause,
               operation: "content",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!resolvedTemplate) {
@@ -94,8 +89,8 @@ export const prepareEmailContent = (
       .where(
         and(
           eq(templateChannelVariant.templateId, resolvedTemplate.id),
-          eq(templateChannelVariant.channel, "email")
-        )
+          eq(templateChannelVariant.channel, "email"),
+        ),
       )
       .limit(1)
       .pipe(
@@ -105,8 +100,8 @@ export const prepareEmailContent = (
               cause,
               operation: "content",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!variant) {
@@ -128,8 +123,7 @@ export const prepareEmailContent = (
       const rendered = renderPrimitiveEmail({
         content,
         values: primitiveValues(reference.values),
-        variables:
-          (variant.variables as PrimitiveTemplateVariables | null) ?? {},
+        variables: (variant.variables as PrimitiveTemplateVariables | null) ?? {},
       });
       if (!rendered.ok) {
         const messages = {
@@ -155,8 +149,7 @@ export const prepareEmailContent = (
     if (!variant.workspaceEntryId) {
       return yield* new EmailAcceptRejected({
         code: "broken_react_email_link",
-        message:
-          "Template email variant link is broken; relink a Workspace Entry.",
+        message: "Template email variant link is broken; relink a Workspace Entry.",
       });
     }
 
@@ -168,8 +161,8 @@ export const prepareEmailContent = (
       .where(
         and(
           eq(templatingWorkspaceEntry.id, variant.workspaceEntryId),
-          isNull(templatingWorkspaceEntry.deletedAt)
-        )
+          isNull(templatingWorkspaceEntry.deletedAt),
+        ),
       )
       .limit(1)
       .pipe(
@@ -179,28 +172,24 @@ export const prepareEmailContent = (
               cause,
               operation: "content",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
     if (!entry) {
       return yield* new EmailAcceptRejected({
         code: "broken_react_email_link",
-        message:
-          "Template email variant link is broken; relink a Workspace Entry.",
+        message: "Template email variant link is broken; relink a Workspace Entry.",
       });
     }
     if (!entry.artifactStorageKey) {
       return yield* new EmailAcceptRejected({
         code: "missing_react_email_artifact",
-        message:
-          "Workspace Entry has no live sealed artifact; Publish the Email Workspace first.",
+        message: "Workspace Entry has no live sealed artifact; Publish the Email Workspace first.",
       });
     }
 
     const variantSubject =
-      typeof variant.content?.subject === "string"
-        ? variant.content.subject.trim()
-        : "";
+      typeof variant.content?.subject === "string" ? variant.content.subject.trim() : "";
     const subject = reference.subjectOverride?.trim() || variantSubject;
     if (!subject) {
       return yield* new EmailAcceptRejected({
@@ -217,15 +206,15 @@ export const prepareEmailContent = (
             cause,
             operation: "content",
             organizationId: input.organizationId,
-          })
-      )
+          }),
+      ),
     );
     const rendered = yield* Effect.promise(() =>
       renderSealedReactEmailArtifact({
         artifact: artifact.body,
         props: reference.values ?? {},
         subjectOverride: subject,
-      })
+      }),
     );
     if (!rendered.ok) {
       return yield* new EmailAcceptRejected({

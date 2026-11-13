@@ -1,13 +1,8 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
-import {
-  checkoutRefToDirectory,
-  commitFiles,
-  HOSTED_DEV_REF,
-  withWorkspaceGitLock,
-} from "../git";
+import { checkoutRefToDirectory, commitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { assertHardenedPackageJson } from "./package-json";
@@ -28,10 +23,9 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
                 code: "failed",
                 message: "Failed to create deps-sync temp directory.",
               }),
-            try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-deps-")),
+            try: () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-deps-")),
           }),
-          (dir) =>
-            Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
+          (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
         );
 
         yield* checkoutRefToDirectory({
@@ -46,7 +40,7 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
               code: "failed",
               message: "Failed to read package.json.",
             }),
-          try: () => fs.readFile(path.join(tempDir, "package.json"), "utf8"),
+          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
         });
         yield* assertHardenedPackageJson(packageJson);
 
@@ -62,14 +56,14 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
           });
         }
 
-        const lockPath = path.join(tempDir, "bun.lock");
+        const lockPath = NodePath.join(tempDir, "bun.lock");
         const lockfile = yield* Effect.tryPromise({
           catch: () =>
             new TemplatingBuilderError({
               code: "failed",
               message: "Deps sync did not produce bun.lock.",
             }),
-          try: () => fs.readFile(lockPath, "utf8"),
+          try: () => NodeFSP.readFile(lockPath, "utf8"),
         });
 
         return yield* commitFiles({
@@ -78,6 +72,6 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
           ref: HOSTED_DEV_REF,
           workspaceId: input.workspaceId,
         });
-      })
-    )
+      }),
+    ),
   );

@@ -82,7 +82,7 @@ export const createCustomDomainFn = createServerFn({ method: "POST" })
         fqdn: data.fqdn,
         organizationId: org.id,
         providerId: data.providerId,
-      })
+      }),
     );
   });
 
@@ -99,7 +99,7 @@ export const refreshCustomDomainFn = createServerFn({ method: "POST" })
       refreshCustomDomainForProject({
         customDomainId: data.customDomainId,
         organizationId: org.id,
-      })
+      }),
     );
   });
 
@@ -116,10 +116,11 @@ export const deleteCustomDomainFn = createServerFn({ method: "POST" })
       deleteCustomDomainForProject({
         customDomainId: data.customDomainId,
         organizationId: org.id,
-      })
+      }),
     );
   });
 
+/** @public Pausing is built and tested server-side; the dashboard does not call it yet. */
 export const pauseCustomDomainFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(pauseBodySchema)
@@ -134,10 +135,11 @@ export const pauseCustomDomainFn = createServerFn({ method: "POST" })
         customDomainId: data.customDomainId,
         organizationId: org.id,
         reason: data.reason,
-      })
+      }),
     );
   });
 
+/** @public Pausing is built and tested server-side; the dashboard does not call it yet. */
 export const unpauseCustomDomainFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(customDomainIdInputSchema)
@@ -151,6 +153,6 @@ export const unpauseCustomDomainFn = createServerFn({ method: "POST" })
       unpauseCustomDomainForProject({
         customDomainId: data.customDomainId,
         organizationId: org.id,
-      })
+      }),
     );
   });

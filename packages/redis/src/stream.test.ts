@@ -13,9 +13,9 @@ describe("Bun Redis stream responses", () => {
               _tag: "RedisResponseError",
               operation: "read-group",
             });
-          })
-        )
-      )
+          }),
+        ),
+      ),
     ));
 
   test("decodes auto-claimed entries and the next cursor", () =>
@@ -35,7 +35,7 @@ describe("Bun Redis stream responses", () => {
           ],
           nextStart: "3-0",
         });
-      })
+      }),
     ));
 
   test("decodes object-shaped reads", () =>
@@ -51,17 +51,14 @@ describe("Bun Redis stream responses", () => {
             stream: "relayit:jobs",
           },
         ]);
-      })
+      }),
     ));
 
   test("decodes protocol-shaped reads", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const result = yield* decodeReadGroupEntries([
-          [
-            "relayit:jobs",
-            [["2-0", ["payload", '{"deliveryId":"delivery_2"}']]],
-          ],
+          ["relayit:jobs", [["2-0", ["payload", '{"deliveryId":"delivery_2"}']]]],
         ]);
         expect(result).toEqual([
           {
@@ -70,6 +67,6 @@ describe("Bun Redis stream responses", () => {
             stream: "relayit:jobs",
           },
         ]);
-      })
+      }),
     ));
 });

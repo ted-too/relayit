@@ -24,9 +24,9 @@ const awsProvider = {
 
 describe("emailProviderDeliveryWebhookUrl", () => {
   test("builds the provider webhook URL from the API origin", () => {
-    expect(
-      emailProviderDeliveryWebhookUrl("https://api.relayit.fyi/", "aws", "ses")
-    ).toBe("https://api.relayit.fyi/webhooks/providers/aws/ses");
+    expect(emailProviderDeliveryWebhookUrl("https://api.relayit.fyi/", "aws", "ses")).toBe(
+      "https://api.relayit.fyi/webhooks/providers/aws/ses",
+    );
   });
 });
 
@@ -65,23 +65,20 @@ describe("ensureEmailProviderInfrastructure", () => {
               }),
             definition: { typeId: "email:aws:ses" },
           }),
-      } as never)
+      } as never),
     );
 
     return Effect.runPromise(
       ensureEmailProviderInfrastructure(awsProvider, {
-        deliveryWebhookUrl:
-          "https://api.relayit.fyi/webhooks/providers/aws/ses",
+        deliveryWebhookUrl: "https://api.relayit.fyi/webhooks/providers/aws/ses",
       }).pipe(
         Effect.provide(services),
         Effect.map(() => {
-          expect(ensureUrls).toEqual([
-            "https://api.relayit.fyi/webhooks/providers/aws/ses",
-          ]);
+          expect(ensureUrls).toEqual(["https://api.relayit.fyi/webhooks/providers/aws/ses"]);
           expect(owners).toEqual(["provider:prov_aws:infrastructure"]);
           return ensureUrls;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -120,23 +117,20 @@ describe("teardownEmailProviderInfrastructure", () => {
               }),
             definition: { typeId: "email:aws:ses" },
           }),
-      } as never)
+      } as never),
     );
 
     return Effect.runPromise(
       teardownEmailProviderInfrastructure(awsProvider, {
-        deliveryWebhookUrl:
-          "https://api.relayit.fyi/webhooks/providers/aws/ses",
+        deliveryWebhookUrl: "https://api.relayit.fyi/webhooks/providers/aws/ses",
       }).pipe(
         Effect.provide(services),
         Effect.map(() => {
-          expect(teardownUrls).toEqual([
-            "https://api.relayit.fyi/webhooks/providers/aws/ses",
-          ]);
+          expect(teardownUrls).toEqual(["https://api.relayit.fyi/webhooks/providers/aws/ses"]);
           expect(removed).toEqual(["provider:prov_aws:infrastructure"]);
           return teardownUrls;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -184,7 +178,7 @@ describe("ensureAllEmailProviderInfrastructure", () => {
               }),
             definition: { typeId: "email:aws:ses" },
           }),
-      } as never)
+      } as never),
     );
 
     return Effect.runPromise(
@@ -196,8 +190,8 @@ describe("ensureAllEmailProviderInfrastructure", () => {
             "https://api.relayit.fyi/webhooks/providers/acme/other",
           ]);
           return ensureUrls;
-        })
-      )
+        }),
+      ),
     );
   });
 });

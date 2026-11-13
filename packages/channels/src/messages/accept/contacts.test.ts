@@ -19,7 +19,7 @@ describe("Message acceptance Contacts", () => {
           lastName: "Lovelace",
           properties: { plan: "free", region: "uk" },
         },
-      ])
+      ]),
     ).toEqual([
       {
         email: "ada@example.com",

@@ -1,11 +1,7 @@
 import { Schema } from "effect";
 import { defineWebhookEvent, type WebhookEventInput } from "./definition";
 
-const domainStatus = Schema.Literals([
-  "not_verified",
-  "partially_verified",
-  "verified",
-]);
+const domainStatus = Schema.Literals(["not_verified", "partially_verified", "verified"]);
 
 const domainPayload = Schema.Struct({
   domain_id: Schema.String,

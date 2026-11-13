@@ -1,19 +1,7 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import type {
-  EmailAddressList,
-  EmailFrom,
-  EmailHeaders,
-} from "../../validators/channels/email";
+import type { EmailAddressList, EmailFrom, EmailHeaders } from "../../validators/channels/email";
 import { type DeliveryError, deliveryStatusEnum } from "../channels";
 import { message } from "../message";
 import { provider } from "../provider";
@@ -36,10 +24,9 @@ export const emailDelivery = pgTable(
     customDomainId: text("custom_domain_id").references(() => customDomain.id, {
       onDelete: "restrict",
     }),
-    sandboxDomainId: text("sandbox_domain_id").references(
-      () => sandboxDomain.id,
-      { onDelete: "restrict" }
-    ),
+    sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
+      onDelete: "restrict",
+    }),
     status: deliveryStatusEnum("status").notNull().default("queued"),
     from: jsonb("from").$type<EmailFrom>().notNull(),
     to: jsonb("to").$type<EmailAddressList>().notNull(),
@@ -60,13 +47,10 @@ export const emailDelivery = pgTable(
     completedAt: timestamp("completed_at"),
   },
   (t) => [
-    check(
-      "email_delivery_body_present_check",
-      sql`${t.html} IS NOT NULL OR ${t.text} IS NOT NULL`
-    ),
+    check("email_delivery_body_present_check", sql`${t.html} IS NOT NULL OR ${t.text} IS NOT NULL`),
     check(
       "email_delivery_sender_kind_check",
-      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`
+      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`,
     ),
     index("email_delivery_message_idx").on(t.messageId),
     index("email_delivery_status_idx").on(t.status),
@@ -76,7 +60,7 @@ export const emailDelivery = pgTable(
     uniqueIndex("email_delivery_provider_message_id_unique_idx")
       .on(t.providerMessageId)
       .where(sql`${t.providerMessageId} IS NOT NULL`),
-  ]
+  ],
 );
 
 export type EmailDelivery = typeof emailDelivery.$inferSelect;

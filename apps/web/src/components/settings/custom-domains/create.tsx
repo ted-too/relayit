@@ -88,7 +88,7 @@ export function CreateDomain({
         (old: ProjectDomainListItem[] | undefined) => [
           ...(old ?? []).filter((domain) => domain.id !== data.id),
           data,
-        ]
+        ],
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listDomains.queryKey,
@@ -115,7 +115,6 @@ export function CreateDomain({
     } as CreateCustomDomainFormValues,
     validators: {
       // Transform on fqdn makes Zod input/output diverge from form values.
-      // biome-ignore lint/suspicious/noExplicitAny: see above
       onSubmit: createCustomDomainFormSchema as any,
     },
     onSubmit: async ({ value }) => {
@@ -159,8 +158,8 @@ export function CreateDomain({
         <DialogHeader>
           <DialogTitle>Add Custom Domain</DialogTitle>
           <DialogDescription>
-            Enter the domain you want to send email from. You'll verify
-            ownership with DNS records after adding it.
+            Enter the domain you want to send email from. You'll verify ownership with DNS records
+            after adding it.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -177,20 +176,13 @@ export function CreateDomain({
             </form.AppField>
             {showProviderPicker && (
               <form.AppField name="providerId">
-                {(field) => (
-                  <field.SelectField
-                    items={providerItems}
-                    label="Email provider"
-                  />
-                )}
+                {(field) => <field.SelectField items={providerItems} label="Email provider" />}
               </form.AppField>
             )}
           </FieldGroup>
         </DialogPanel>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <form.AppForm>
             <form.SubmitButton>Add Domain</form.SubmitButton>
           </form.AppForm>

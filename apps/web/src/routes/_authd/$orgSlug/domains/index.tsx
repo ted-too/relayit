@@ -14,7 +14,7 @@ import { queries } from "@/lib/queries";
 export const Route = createFileRoute("/_authd/$orgSlug/domains/")({
   loader: ({ context, params }) => {
     void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).listDomains
+      queries.organizations.bySlug(params.orgSlug).listDomains,
     );
   },
   component: RouteComponent,
@@ -29,17 +29,11 @@ const SORT_OPTIONS = [
 function RouteComponent() {
   const { orgSlug } = Route.useParams();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0] ?? null
-  );
-  const { data: rawDomains } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug).listDomains
-  );
+  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(SORT_OPTIONS[0] ?? null);
+  const { data: rawDomains } = useSuspenseQuery(queries.organizations.bySlug(orgSlug).listDomains);
 
   const domains = rawDomains
-    .filter((domain) =>
-      domain.fqdn.toLowerCase().includes(search.toLowerCase())
-    )
+    .filter((domain) => domain.fqdn.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       switch (sort?.value) {
         case "createdAt":

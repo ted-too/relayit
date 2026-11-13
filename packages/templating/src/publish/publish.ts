@@ -1,11 +1,8 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { DB } from "@repo/persistence/db/effect";
-import {
-  templatingWorkspace,
-  templatingWorkspaceEntry,
-} from "@repo/persistence/db/schema";
+import { templatingWorkspace, templatingWorkspaceEntry } from "@repo/persistence/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { syncWorkspaceEntriesForPaths } from "../entries";
@@ -48,11 +45,11 @@ const collectEntryPaths = (root: string) =>
   Effect.tryPromise({
     catch: () => [] as string[],
     try: async () => {
-      const dir = path.join(root, "reactEmail");
+      const dir = NodePath.join(root, "reactEmail");
       try {
-        const names = await fs.readdir(dir);
+        const names = await NodeFSP.readdir(dir);
         return names
-          .map((name) => path.join("reactEmail", name))
+          .map((name) => NodePath.join("reactEmail", name))
           .filter((p) => isReactEmailEntryPath(p));
       } catch {
         return [];
@@ -76,10 +73,9 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 code: "failed",
                 message: "Failed to create publish temp directory.",
               }),
-            try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-publish-")),
+            try: () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-publish-")),
           }),
-          (dir) =>
-            Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
+          (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
         );
 
         yield* scaffoldHostedWorkspace(input.workspaceId);
@@ -96,13 +92,11 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
               code: "failed",
               message: "Failed to read package.json.",
             }),
-          try: () => fs.readFile(path.join(tempDir, "package.json"), "utf8"),
+          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
         });
 
         yield* assertHardenedPackageJson(packageJson).pipe(
-          Effect.tapError((error) =>
-            recordBuildError(input.workspaceId, error.message)
-          )
+          Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)),
         );
 
         const installResult = yield* runBunInstall({
@@ -113,7 +107,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
         if (!installResult.ok) {
           yield* recordBuildError(
             input.workspaceId,
-            installResult.stderr || "Publish install failed."
+            installResult.stderr || "Publish install failed.",
           );
           return yield* new TemplatingBuilderError({
             code: "failed",
@@ -143,8 +137,8 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           .where(
             and(
               eq(templatingWorkspaceEntry.workspaceId, input.workspaceId),
-              isNull(templatingWorkspaceEntry.deletedAt)
-            )
+              isNull(templatingWorkspaceEntry.deletedAt),
+            ),
           )
           .pipe(
             Effect.mapError(
@@ -152,13 +146,11 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to load workspace entries.",
-                })
-            )
+                }),
+            ),
           );
 
-        const active = entries.filter((entry) =>
-          isReactEmailEntryPath(entry.path)
-        );
+        const active = entries.filter((entry) => isReactEmailEntryPath(entry.path));
         const staged: Array<{
           artifact: Uint8Array;
           entryId: string;
@@ -174,16 +166,12 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 code: "failed",
                 message: "Failed to read workspace entry source.",
               }),
-            try: () => fs.readFile(path.join(tempDir, entry.path), "utf8"),
+            try: () => NodeFSP.readFile(NodePath.join(tempDir, entry.path), "utf8"),
           });
           const artifact = yield* bundleReactEmailEntry({
             entryPath: entry.path,
             workspaceDir: tempDir,
-          }).pipe(
-            Effect.tapError((error) =>
-              recordBuildError(input.workspaceId, error.message)
-            )
-          );
+          }).pipe(Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)));
           staged.push({
             artifact,
             entryId: entry.id,
@@ -205,7 +193,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 workspaceId: input.workspaceId,
               },
               item.artifact,
-              { contentType: "application/javascript" }
+              { contentType: "application/javascript" },
             )
             .pipe(
               Effect.mapError(
@@ -213,11 +201,11 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                   new TemplatingBuilderError({
                     code: "failed",
                     message: "Failed to upload sealed artifact.",
-                  })
+                  }),
               ),
               Effect.tapError((error: TemplatingBuilderError) =>
-                recordBuildError(input.workspaceId, error.message)
-              )
+                recordBuildError(input.workspaceId, error.message),
+              ),
             );
 
           const storageKey = yield* templatingArtifacts
@@ -232,8 +220,8 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                   new TemplatingBuilderError({
                     code: "failed",
                     message: "Failed to resolve artifact storage key.",
-                  })
-              )
+                  }),
+              ),
             );
 
           yield* db
@@ -252,8 +240,8 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                   new TemplatingBuilderError({
                     code: "failed",
                     message: "Failed to persist sealed entry metadata.",
-                  })
-              )
+                  }),
+              ),
             );
 
           resultEntries.push({
@@ -269,11 +257,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           name: HOSTED_MAIN_REF,
           sha: checkedOut.commitSha,
           workspaceId: input.workspaceId,
-        }).pipe(
-          Effect.tapError((error) =>
-            recordBuildError(input.workspaceId, error.message)
-          )
-        );
+        }).pipe(Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)));
 
         yield* db
           .update(templatingWorkspace)
@@ -289,14 +273,14 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to clear workspace build error.",
-                })
-            )
+                }),
+            ),
           );
 
         return {
           commitSha: checkedOut.commitSha,
           entries: resultEntries,
         } satisfies PublishResult;
-      })
-    )
+      }),
+    ),
   );

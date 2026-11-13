@@ -51,8 +51,7 @@ const makeDb = (options: {
         where: () => Effect.succeed([]),
       }),
     }),
-    transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) =>
-      body(db),
+    transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),
     update: () => ({
       set: (values: unknown) => ({
         where: () => {
@@ -95,7 +94,7 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer()))
+      }).pipe(Effect.provide(testLayer())),
     );
 
     expect(events).toEqual([
@@ -130,7 +129,7 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer()))
+      }).pipe(Effect.provide(testLayer())),
     );
 
     expect(events).toEqual([
@@ -165,14 +164,14 @@ describe("ingestDeliveryEvents", () => {
             suppress: false,
           },
         ],
-      }).pipe(Effect.provide(testLayer()))
+      }).pipe(Effect.provide(testLayer())),
     );
 
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual(
       expect.objectContaining({
         kind: "bounced",
-      })
+      }),
     );
     expect(suppressions).toEqual([]);
   });
@@ -191,7 +190,7 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer()))
+      }).pipe(Effect.provide(testLayer())),
     );
 
     expect(events).toEqual([]);

@@ -3,7 +3,6 @@ import type { SNS } from "@effect-aws/client-sns";
 import type {
   ProviderInstanceErrorContext,
   ProviderOperationError,
-  ProviderTypeErrorContext,
 } from "@repo/channels/provider-errors";
 import {
   ProviderAuthenticationError,
@@ -11,32 +10,25 @@ import {
   ProviderRateLimited,
   ProviderRejected,
   ProviderUnavailable,
-  ProviderWebhookError,
 } from "@repo/channels/provider-errors";
 import { Data, type Effect } from "effect";
 
-export class AwsUnexpectedResponseError extends Data.TaggedError(
-  "AwsUnexpectedResponseError"
-)<{
+export class AwsUnexpectedResponseError extends Data.TaggedError("AwsUnexpectedResponseError")<{
   readonly missingField: "MessageId" | "TenantArn" | "TopicArn";
   readonly operation: "CreateTenant" | "CreateTopic" | "SendEmail";
 }> {}
 
-export class AwsWebhookPayloadError extends Data.TaggedError(
-  "AwsWebhookPayloadError"
-)<{
+export class AwsWebhookPayloadError extends Data.TaggedError("AwsWebhookPayloadError")<{
   readonly cause?: unknown;
   readonly source: "ses_notification" | "sns_envelope";
 }> {}
 
-export class AwsSnsValidationError extends Data.TaggedError(
-  "AwsSnsValidationError"
-)<{
+export class AwsSnsValidationError extends Data.TaggedError("AwsSnsValidationError")<{
   readonly cause?: unknown;
 }> {}
 
 export class AwsSubscriptionConfirmationError extends Data.TaggedError(
-  "AwsSubscriptionConfirmationError"
+  "AwsSubscriptionConfirmationError",
 )<{
   readonly cause?: unknown;
   readonly hostname?: string;
@@ -50,8 +42,7 @@ export type AwsWebhookError =
   | AwsSubscriptionConfirmationError
   | AwsWebhookPayloadError;
 
-type EffectError<T> =
-  T extends Effect.Effect<unknown, infer Error, unknown> ? Error : never;
+type EffectError<T> = T extends Effect.Effect<unknown, infer Error, unknown> ? Error : never;
 
 type SesOperation =
   | "createConfigurationSet"
@@ -159,12 +150,3 @@ export const createAwsErrorMapper =
   };
 
 export type AwsErrorMapper = ReturnType<typeof createAwsErrorMapper>;
-
-export const createAwsWebhookErrorMapper =
-  (context: ProviderTypeErrorContext) =>
-  (cause: AwsWebhookError): ProviderWebhookError =>
-    new ProviderWebhookError({ ...context, cause });
-
-export type AwsWebhookErrorMapper = ReturnType<
-  typeof createAwsWebhookErrorMapper
->;

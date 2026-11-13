@@ -74,6 +74,7 @@ zero-touch (SPF indirected, DKIM key portable); only a region change or a
 cross-vendor move would require the customer to update the MX.
 
 **Best-practice solution — delegate a dedicated bounce subdomain:**
+
 - Customer adds NS records once, delegating e.g. `send.zenra.app` to Relayit's
   authoritative nameservers.
 - After that we own every record under `send.zenra.app` (MX, SPF, DKIM) and can

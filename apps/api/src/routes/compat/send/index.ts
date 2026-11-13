@@ -95,7 +95,7 @@ const authenticateLegacySend = async ({
 export const createLegacySendRoutes = (
   auth: ApiAuth,
   runEffect: RunApiEffect,
-  accept = acceptTransactionalEmail
+  accept = acceptTransactionalEmail,
 ) =>
   new Elysia({ prefix: "/send/:project", tags: ["Legacy Send"] })
     .guard({
@@ -150,28 +150,25 @@ export const createLegacySendRoutes = (
                     return status(response.status, response.body);
                   }
                   default:
-                    yield* logEffectFailure("Legacy raw send failed")(
-                      Cause.fail(error)
-                    );
+                    yield* logEffectFailure("Legacy raw send failed")(Cause.fail(error));
                     return status(500, {
                       details: [] as string[],
                       message: "Something went wrong",
                     });
                 }
-              })
-            )
+              }),
+            ),
           ),
-          { signal: request.signal }
+          { signal: request.signal },
         );
       },
       {
         body: legacySendRawBodySchema,
         detail: {
-          description:
-            "Compatibility send with inline html/text. Prefer POST /messages/email.",
+          description: "Compatibility send with inline html/text. Prefer POST /messages/email.",
           summary: "Send raw email",
         },
-      }
+      },
     )
     .post(
       "/template/email",
@@ -221,26 +218,23 @@ export const createLegacySendRoutes = (
                     return status(response.status, response.body);
                   }
                   default:
-                    yield* logEffectFailure("Legacy template send failed")(
-                      Cause.fail(error)
-                    );
+                    yield* logEffectFailure("Legacy template send failed")(Cause.fail(error));
                     return status(500, {
                       details: [] as string[],
                       message: "Something went wrong",
                     });
                 }
-              })
-            )
+              }),
+            ),
           ),
-          { signal: request.signal }
+          { signal: request.signal },
         );
       },
       {
         body: legacySendTemplateBodySchema,
         detail: {
-          description:
-            "Compatibility send using a Template. Prefer POST /messages/email.",
+          description: "Compatibility send using a Template. Prefer POST /messages/email.",
           summary: "Send template email",
         },
-      }
+      },
     );

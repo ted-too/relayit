@@ -22,18 +22,11 @@ export interface ProviderTypeDefinition<
   readonly vendorId: TVendorId;
 }
 
-export type EmailProviderTypeDefinition = ProviderTypeDefinition<
-  string,
-  string,
-  "email"
->;
+export type EmailProviderTypeDefinition = ProviderTypeDefinition<string, string, "email">;
 
-export const makeProviderTypeId = <
-  const TVendorId extends string,
-  const TProductId extends string,
->(
+export const makeProviderTypeId = <const TVendorId extends string, const TProductId extends string>(
   vendorId: TVendorId,
-  productId: TProductId
+  productId: TProductId,
 ) => `${vendorId}.${productId}` as ProviderTypeId<TVendorId, TProductId>;
 
 export const defineProviderType = <
@@ -45,10 +38,7 @@ export const defineProviderType = <
   vendorId,
   productId,
   ...definition
-}: Omit<
-  ProviderTypeDefinition<TVendorId, TProductId, TChannel, TCredentialsSchema>,
-  "typeId"
->) => {
+}: Omit<ProviderTypeDefinition<TVendorId, TProductId, TChannel, TCredentialsSchema>, "typeId">) => {
   const typeId = makeProviderTypeId(vendorId, productId);
 
   return {
@@ -56,10 +46,5 @@ export const defineProviderType = <
     productId,
     typeId,
     vendorId,
-  } satisfies ProviderTypeDefinition<
-    TVendorId,
-    TProductId,
-    TChannel,
-    TCredentialsSchema
-  >;
+  } satisfies ProviderTypeDefinition<TVendorId, TProductId, TChannel, TCredentialsSchema>;
 };

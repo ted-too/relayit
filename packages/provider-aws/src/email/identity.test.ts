@@ -74,14 +74,14 @@ const makeSes = (options: {
         return Effect.fail(
           new BadRequestException({
             message: "Cannot switch Easy DKIM to BYODKIM",
-          })
+          }),
         );
       }
       if (options.rejectExternalPut === "SdkError") {
         return Effect.fail(
           new SdkError({
             message: "Already exists",
-          })
+          }),
         );
       }
       origin = "EXTERNAL";
@@ -105,9 +105,7 @@ describe("ensureSesDomainIdentity", () => {
   test("creates a BYODKIM identity when SES has none", async () => {
     const fake = makeSes({});
 
-    const result = await Effect.runPromise(
-      ensureSesDomainIdentity(fake.ses, input)
-    );
+    const result = await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
 
     expect(result).toEqual({
       mailFrom,

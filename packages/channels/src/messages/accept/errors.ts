@@ -1,7 +1,7 @@
 import { Data } from "effect";
 
 export class MessageAcceptPersistenceError extends Data.TaggedError(
-  "MessageAcceptPersistenceError"
+  "MessageAcceptPersistenceError",
 )<{
   readonly cause: unknown;
   readonly messageId?: string;

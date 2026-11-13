@@ -13,18 +13,13 @@ import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import { provider } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
-import type {
-  CreatePlatformProviderBody,
-  UpdatePlatformProviderBody,
-} from "./provider-schemas";
+import type { CreatePlatformProviderBody, UpdatePlatformProviderBody } from "./provider-schemas";
 import type {
   PlatformProviderListItem,
   SerializableUnencryptedCredentials,
 } from "./provider-types";
 
-export class PlatformProviderError extends Data.TaggedError(
-  "PlatformProviderError"
-)<{
+export class PlatformProviderError extends Data.TaggedError("PlatformProviderError")<{
   readonly cause?: unknown;
   readonly code: "not_found" | "in_use" | "failed";
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -54,7 +49,7 @@ const mapSandboxDomainError = (cause: SandboxDomainError) => {
 };
 
 const toSerializableUnencrypted = (
-  value: Record<string, unknown> | undefined
+  value: Record<string, unknown> | undefined,
 ): SerializableUnencryptedCredentials => {
   const out: SerializableUnencryptedCredentials = {};
   for (const [key, entry] of Object.entries(value ?? {})) {
@@ -107,8 +102,8 @@ export const listPlatformProviders = Effect.gen(function* () {
             cause,
             code: "failed",
             message: "Failed to list platform Providers.",
-          })
-      )
+          }),
+      ),
     );
 
   return rows.map(toListItem);
@@ -118,9 +113,7 @@ const clearEmailDefaults = (db: DatabaseExecutor) =>
   db
     .update(provider)
     .set({ isDefault: false })
-    .where(
-      and(eq(provider.scope, "platform"), eq(provider.channelType, "email"))
-    )
+    .where(and(eq(provider.scope, "platform"), eq(provider.channelType, "email")))
     .pipe(
       Effect.mapError(
         (cause) =>
@@ -128,15 +121,15 @@ const clearEmailDefaults = (db: DatabaseExecutor) =>
             cause,
             code: "failed",
             message: "Failed to clear default managed backends.",
-          })
-      )
+          }),
+      ),
     );
 
 export const createPlatformProvider = (
   input: CreatePlatformProviderBody & {
     readonly apiOrigin: string;
     readonly sandboxCloudflare: SandboxCloudflareConfig | null;
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const db = yield* DB;
@@ -149,8 +142,8 @@ export const createPlatformProvider = (
             cause,
             code: "failed",
             message: "Failed to seal Provider credentials.",
-          })
-      )
+          }),
+      ),
     );
 
     const makeDefault = input.isDefault === true;
@@ -175,8 +168,8 @@ export const createPlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to check existing default Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     const [row] = yield* db
@@ -199,8 +192,8 @@ export const createPlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to create platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!row) {
@@ -214,7 +207,7 @@ export const createPlatformProvider = (
       deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
         input.apiOrigin,
         row.vendorId,
-        row.productId
+        row.productId,
       ),
     }).pipe(
       Effect.mapError(
@@ -223,8 +216,8 @@ export const createPlatformProvider = (
             cause,
             code: "failed",
             message: "Failed to provision Provider infrastructure.",
-          })
-      )
+          }),
+      ),
     );
 
     yield* ensureSandboxForProvider({
@@ -239,7 +232,7 @@ export const createPlatformProvider = (
 export const updatePlatformProvider = (
   input: UpdatePlatformProviderBody & {
     readonly apiOrigin: string;
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const db = yield* DB;
@@ -256,8 +249,8 @@ export const updatePlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to load platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!existing) {
@@ -271,13 +264,12 @@ export const updatePlatformProvider = (
     if (input.credentials?.encrypted) {
       const merged = {
         encrypted: {
-          ...((existing.credentials.encrypted as Record<string, string>) ?? {}),
+          ...(existing.credentials.encrypted as Record<string, string>),
           ...input.credentials.encrypted,
         },
         unencrypted: {
-          ...((existing.credentials.unencrypted as Record<string, unknown>) ??
-            {}),
-          ...(input.credentials.unencrypted ?? {}),
+          ...(existing.credentials.unencrypted as Record<string, unknown>),
+          ...input.credentials.unencrypted,
         },
       };
       credentials = yield* vault.seal(merged).pipe(
@@ -287,15 +279,14 @@ export const updatePlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to seal Provider credentials.",
-            })
-        )
+            }),
+        ),
       );
     } else if (input.credentials?.unencrypted) {
       credentials = {
         ...existing.credentials,
         unencrypted: {
-          ...((existing.credentials.unencrypted as Record<string, unknown>) ??
-            {}),
+          ...(existing.credentials.unencrypted as Record<string, unknown>),
           ...input.credentials.unencrypted,
         },
       };
@@ -321,8 +312,8 @@ export const updatePlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to update platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!row) {
@@ -337,7 +328,7 @@ export const updatePlatformProvider = (
         deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
           input.apiOrigin,
           row.vendorId,
-          row.productId
+          row.productId,
         ),
       }).pipe(
         Effect.mapError(
@@ -346,8 +337,8 @@ export const updatePlatformProvider = (
               cause,
               code: "failed",
               message: "Failed to provision Provider infrastructure.",
-            })
-        )
+            }),
+        ),
       );
     }
 
@@ -373,8 +364,8 @@ export const setDefaultPlatformProvider = (providerId: string) =>
               cause,
               code: "failed",
               message: "Failed to load platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!existing) {
@@ -396,8 +387,8 @@ export const setDefaultPlatformProvider = (providerId: string) =>
               cause,
               code: "failed",
               message: "Failed to set default managed backend.",
-            })
-        )
+            }),
+        ),
       );
 
     return { id: providerId, isDefault: true as const };
@@ -417,8 +408,8 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
               cause,
               code: "failed",
               message: "Failed to load platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!existing) {
@@ -440,8 +431,8 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
               cause,
               code: "failed",
               message: "Failed to check Provider pairings.",
-            })
-        )
+            }),
+        ),
       );
 
     if (customIdentity) {
@@ -451,15 +442,13 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
       });
     }
 
-    yield* removeSandboxProviderIdentity(existing).pipe(
-      Effect.mapError(mapSandboxDomainError)
-    );
+    yield* removeSandboxProviderIdentity(existing).pipe(Effect.mapError(mapSandboxDomainError));
 
     yield* teardownEmailProviderInfrastructure(existing, {
       deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
         apiOrigin,
         existing.vendorId,
-        existing.productId
+        existing.productId,
       ),
     }).pipe(
       Effect.mapError(
@@ -468,8 +457,8 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
             cause,
             code: "failed",
             message: "Failed to tear down Provider infrastructure.",
-          })
-      )
+          }),
+      ),
     );
 
     yield* db
@@ -482,8 +471,8 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
               cause,
               code: "failed",
               message: "Failed to delete platform Provider.",
-            })
-        )
+            }),
+        ),
       );
 
     return { id: providerId };

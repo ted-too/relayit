@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { defineJob, Jobs, JobsLive } from "@repo/jobs";
 import type { DatabaseTransaction } from "@repo/persistence/db/effect";
-import {
-  makeSchemaJsonCodec,
-  Redis,
-  RedisCommandError,
-  type RedisService,
-} from "@repo/redis";
+import { makeSchemaJsonCodec, Redis, RedisCommandError, type RedisService } from "@repo/redis";
 import { Effect, Layer, Schema } from "effect";
 import { jobEnvelopeSchema } from "./storage";
 
@@ -103,20 +98,16 @@ describe("job producers", () => {
         yield* jobs.enqueue(deliverEmail, { deliveryId: "delivery_1" });
 
         expect(redis.appends).toHaveLength(1);
-        expect(redis.appends[0]?.stream).toBe(
-          "relayit:jobs:email.deliver:ready"
-        );
+        expect(redis.appends[0]?.stream).toBe("relayit:jobs:email.deliver:ready");
 
         const envelope = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
-          redis.appends[0]?.fields.payload ?? ""
+          redis.appends[0]?.fields.payload ?? "",
         );
-        const payload = yield* makeSchemaJsonCodec(deliverEmail.payload).decode(
-          envelope.data
-        );
+        const payload = yield* makeSchemaJsonCodec(deliverEmail.payload).decode(envelope.data);
 
         expect(envelope.attempts).toBe(0);
         expect(payload).toEqual({ deliveryId: "delivery_1" });
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 
@@ -140,7 +131,7 @@ describe("job producers", () => {
           jobName: "email.deliver",
           stage: "append",
         });
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 
@@ -150,18 +141,12 @@ describe("job producers", () => {
     return Effect.runPromise(
       Effect.gen(function* () {
         const jobs = yield* Jobs;
-        yield* jobs.enqueue(
-          deliverEmail,
-          { deliveryId: "delivery_2" },
-          { delayUntil: 5000 }
-        );
+        yield* jobs.enqueue(deliverEmail, { deliveryId: "delivery_2" }, { delayUntil: 5000 });
 
         expect(redis.appends).toHaveLength(0);
-        expect(redis.sortedSetAdds[0]?.key).toBe(
-          "relayit:jobs:email.deliver:delayed"
-        );
+        expect(redis.sortedSetAdds[0]?.key).toBe("relayit:jobs:email.deliver:delayed");
         expect(redis.sortedSetAdds[0]?.score).toBe(5000);
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 
@@ -184,7 +169,7 @@ describe("job producers", () => {
           deliverEmailTransactionally,
           { deliveryId: "delivery_3" },
           transaction,
-          { delayUntil: 5000 }
+          { delayUntil: 5000 },
         );
 
         expect(redis.appends).toHaveLength(0);
@@ -193,10 +178,8 @@ describe("job producers", () => {
         expect(inserts[0]).toMatchObject({
           jobName: "email.deliver-transactionally",
         });
-        expect(
-          (inserts[0] as { readonly delayUntil: Date }).delayUntil.getTime()
-        ).toBe(5000);
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+        expect((inserts[0] as { readonly delayUntil: Date }).delayUntil.getTime()).toBe(5000);
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 
@@ -215,23 +198,18 @@ describe("job producers", () => {
           "relayit:jobs:email.verify-domain:scheduled",
           "relayit:jobs:email.verify-domain:payloads",
         ]);
-        expect(redis.evaluations[0]?.args.slice(0, 2)).toEqual([
-          "10000",
-          "domain_1",
-        ]);
+        expect(redis.evaluations[0]?.args.slice(0, 2)).toEqual(["10000", "domain_1"]);
         expect(redis.evaluations[1]?.keys).toEqual(redis.evaluations[0]?.keys);
         expect(redis.evaluations[1]?.args).toEqual(["domain_1"]);
 
         const envelope = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
-          redis.evaluations[0]?.args[2] ?? ""
+          redis.evaluations[0]?.args[2] ?? "",
         );
-        const decoded = yield* makeSchemaJsonCodec(verifyDomain.payload).decode(
-          envelope.data
-        );
+        const decoded = yield* makeSchemaJsonCodec(verifyDomain.payload).decode(envelope.data);
 
         expect(envelope.attempts).toBe(0);
         expect(decoded).toEqual(payload);
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 
@@ -254,20 +232,15 @@ describe("job producers", () => {
         yield* jobs.schedule(reconcilePlatform, 10_000);
         yield* jobs.cancel(reconcilePlatform);
 
-        expect(redis.evaluations[0]?.args.slice(0, 2)).toEqual([
-          "10000",
-          "platform",
-        ]);
+        expect(redis.evaluations[0]?.args.slice(0, 2)).toEqual(["10000", "platform"]);
         expect(redis.evaluations[1]?.args).toEqual(["platform"]);
 
         const envelope = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
-          redis.evaluations[0]?.args[2] ?? ""
+          redis.evaluations[0]?.args[2] ?? "",
         );
-        const decoded = yield* makeSchemaJsonCodec(
-          reconcilePlatform.payload
-        ).decode(envelope.data);
+        const decoded = yield* makeSchemaJsonCodec(reconcilePlatform.payload).decode(envelope.data);
         expect(decoded).toBeNull();
-      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer))))
+      }).pipe(Effect.provide(JobsLive.pipe(Layer.provide(redis.layer)))),
     );
   });
 });

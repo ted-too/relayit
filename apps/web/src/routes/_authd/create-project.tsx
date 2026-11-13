@@ -6,10 +6,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NavUser } from "@/components/layout/nav-user";
 import { createProjectFn } from "@/lib/projects/project.functions";
-import {
-  type CreateProjectBody,
-  createProjectBodySchema,
-} from "@/lib/projects/schemas";
+import { type CreateProjectBody, createProjectBodySchema } from "@/lib/projects/schemas";
 import { queries } from "@/lib/queries";
 
 // FIXME: We need to ensure slugs on the api don't collide with this page
@@ -27,14 +24,10 @@ function RouteComponent() {
   const { data: organizations } = useSuspenseQuery(queries.organizations.list);
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: CreateProjectBody) =>
-      await createProjectFn({ data: body }),
+    mutationFn: async (body: CreateProjectBody) => await createProjectFn({ data: body }),
     onSuccess: (data, _, __, { client }) => {
       toast.success("Project created successfully");
-      client.setQueryData(
-        queries.organizations.bySlug(data.slug).queryKey,
-        data
-      );
+      client.setQueryData(queries.organizations.bySlug(data.slug).queryKey, data);
       client.invalidateQueries({
         queryKey: queries.organizations.queryKey,
       });

@@ -15,21 +15,18 @@ const TRAILING_SLASH = /\/$/;
 export const emailProviderDeliveryWebhookUrl = (
   apiOrigin: string,
   vendorId: string,
-  productId: string
-) =>
-  `${apiOrigin.replace(TRAILING_SLASH, "")}/webhooks/providers/${vendorId}/${productId}`;
+  productId: string,
+) => `${apiOrigin.replace(TRAILING_SLASH, "")}/webhooks/providers/${vendorId}/${productId}`;
 
 export const ensureEmailProviderInfrastructure = (
   provider: Provider,
-  config: EmailProviderInfrastructureConfig
+  config: EmailProviderInfrastructureConfig,
 ) =>
   Effect.gen(function* () {
     const credentialsVault = yield* ProviderCredentialsVault;
     const providers = yield* EmailProviderRegistry;
     const managedDns = yield* EmailManagedDns;
-    const factory = yield* providers.get(
-      makeProviderTypeId(provider.vendorId, provider.productId)
-    );
+    const factory = yield* providers.get(makeProviderTypeId(provider.vendorId, provider.productId));
     const credentials = yield* credentialsVault.open(provider.credentials);
     const adapter = yield* factory.create({
       credentials,
@@ -64,24 +61,22 @@ export const ensureAllEmailProviderInfrastructure = (apiOrigin: string) =>
           deliveryWebhookUrl: emailProviderDeliveryWebhookUrl(
             apiOrigin,
             provider.vendorId,
-            provider.productId
+            provider.productId,
           ),
         }),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     );
   });
 
 export const teardownEmailProviderInfrastructure = (
   provider: Provider,
-  config: EmailProviderInfrastructureConfig
+  config: EmailProviderInfrastructureConfig,
 ) =>
   Effect.gen(function* () {
     const credentialsVault = yield* ProviderCredentialsVault;
     const providers = yield* EmailProviderRegistry;
     const managedDns = yield* EmailManagedDns;
-    const factory = yield* providers.get(
-      makeProviderTypeId(provider.vendorId, provider.productId)
-    );
+    const factory = yield* providers.get(makeProviderTypeId(provider.vendorId, provider.productId));
     const credentials = yield* credentialsVault.open(provider.credentials);
     const adapter = yield* factory.create({
       credentials,

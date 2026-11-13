@@ -14,12 +14,10 @@ import { logEffectFailure } from "@/lib/log-failure.server";
 
 const loggingLive = Layer.mergeAll(
   Logger.layer([
-    process.env.NODE_ENV === "production"
-      ? Logger.consoleJson
-      : Logger.consolePretty(),
+    process.env.NODE_ENV === "production" ? Logger.consoleJson : Logger.consolePretty(),
     Logger.tracerLogger,
   ]),
-  Layer.succeed(References.MinimumLogLevel, env.LOG_LEVEL ?? "Info")
+  Layer.succeed(References.MinimumLogLevel, env.LOG_LEVEL ?? "Info"),
 );
 
 const secrets = parseBetterAuthSecrets(env.BETTER_AUTH_SECRETS);
@@ -29,18 +27,14 @@ const dbLive = makeDbLive({
 });
 
 // Redis logs reconnects from the layer itself; give it the app logger.
-const redisLive = makeRedisLive({ url: env.REDIS_URL }).pipe(
-  Layer.provide(loggingLive)
-);
+const redisLive = makeRedisLive({ url: env.REDIS_URL }).pipe(Layer.provide(loggingLive));
 
 const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
 
 const credentialsVaultLive = ProviderCredentialsVault.live(secrets);
 const symmetricCryptoLive = SymmetricCrypto.live(secrets);
 
-const emailProviderRegistryLive = EmailProviderRegistry.live(
-  awsSesProviderFactory
-);
+const emailProviderRegistryLive = EmailProviderRegistry.live(awsSesProviderFactory);
 
 const cloudflareConfigured =
   env.CF_API_TOKEN && env.CF_ROOT_DOMAIN && env.CF_ZONE_ID
@@ -77,7 +71,7 @@ export const AppLive = Layer.mergeAll(
   emailProviderRegistryLive,
   managedDnsLive,
   templatingBuilderLive,
-  loggingLive
+  loggingLive,
 );
 
 /** Cloudflare zone when sandbox capability is configured; else null. */
@@ -99,6 +93,6 @@ export const runApp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.runPromise(
     effect.pipe(
       Effect.tapCause(logEffectFailure("Server function failed")),
-      Effect.provide(AppLive as unknown as Layer.Layer<R>)
-    )
+      Effect.provide(AppLive as unknown as Layer.Layer<R>),
+    ),
   );

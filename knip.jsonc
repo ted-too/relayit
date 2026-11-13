@@ -1,0 +1,74 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Exported types are part of our contracts even before they have consumers.
+  "rules": { "types": "off", "nsTypes": "off" },
+  // An export its own file also uses is over-exported at worst, not dead code.
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["temp/**", ".agents/**"],
+  // Portless runs each app's dev server; it is installed globally, not per package.
+  "ignoreBinaries": ["portless"],
+  "workspaces": {
+    ".": {
+      "project": ["*.{js,mjs,cjs,ts,mts,cts}"],
+      "ignoreDependencies": [
+        // The tsconfig plugin name; @effect/tsgo bundles the language service.
+        "@effect/language-service",
+        // The editor's TypeScript native preview; no script runs it.
+        "@typescript/native-preview",
+        // Read through release.config.cjs by the release workflow.
+        "semantic-release",
+      ],
+    },
+    "apps/api": {
+      "entry": ["src/index.ts"],
+      // The bundle inlines better-auth through @repo/persistence; @opentelemetry/api is an
+      // optional peer of @better-auth/core that this package provides for it.
+      "ignoreDependencies": ["@opentelemetry/api", "better-auth"],
+    },
+    "apps/site": {
+      "entry": ["src/router.tsx", "src/routes/**/*.{ts,tsx}"],
+    },
+    "apps/template-builder": {
+      "entry": ["src/index.ts"],
+    },
+    "apps/web": {
+      "entry": ["src/router.tsx", "src/server.ts", "src/routes/**/*.{ts,tsx}"],
+    },
+    // A package's index.ts barrels are its public API: what they re-export stays exported
+    // whether or not an app imports it yet.
+    "packages/*": {
+      "entry": ["src/**/index.ts"],
+    },
+    "packages/channels": {
+      "entry": ["src/**/index.ts"],
+      // The inbound-email contract, not wired up yet; the provider rework decides its fate.
+      "ignore": ["src/email/email-ingress.ts"],
+    },
+    "packages/persistence": {
+      // drizzle.config.ts throws without DATABASE_URL, so knip cannot load it through the
+      // Drizzle plugin; it is read as a plain entry instead.
+      "drizzle": false,
+      "entry": ["src/**/index.ts", "drizzle.config.ts"],
+    },
+    "packages/template-render": {
+      // Spawned by path from render.ts and copied into the api and template-builder images.
+      "entry": ["src/**/index.ts", "src/react-email/isolate-runner.ts"],
+    },
+    "packages/ui": {
+      // shadcn, coss and reui generate each component whole; the parts we don't use yet
+      // stay as upstream wrote them.
+      "ignore": ["src/components/ui/**", "src/components/reui/**"],
+      // Imported only by those vendored components.
+      "ignoreDependencies": [
+        "@dnd-kit/core",
+        "@dnd-kit/modifiers",
+        "@dnd-kit/sortable",
+        "@dnd-kit/utilities",
+        "@tanstack/react-virtual",
+      ],
+    },
+    "tooling/oxlint-plugin": {
+      "entry": ["index.ts"],
+    },
+  },
+}

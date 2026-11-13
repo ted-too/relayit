@@ -14,11 +14,7 @@ import {
 import { Separator } from "@repo/ui/components/ui/coss/separator";
 import { Switch } from "@repo/ui/components/ui/coss/switch";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-} from "@repo/ui/components/ui/shad/field";
+import { Field, FieldGroup, FieldLabel } from "@repo/ui/components/ui/shad/field";
 import {
   Select,
   SelectContent,
@@ -33,10 +29,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type * as z from "zod";
 import { DynamicForm } from "@/components/dynamic-form";
-import {
-  createPlatformProviderFn,
-  updatePlatformProviderFn,
-} from "@/lib/admin/provider.functions";
+import { createPlatformProviderFn, updatePlatformProviderFn } from "@/lib/admin/provider.functions";
 import {
   DEFAULT_PLATFORM_PRODUCT,
   PLATFORM_EMAIL_PRODUCTS,
@@ -75,7 +68,7 @@ export function UpsertProvider({
   const [productKey, setProductKey] = useState<PlatformProductKey>(
     initialData
       ? (`${initialData.vendorId}.${initialData.productId}` as PlatformProductKey)
-      : DEFAULT_PLATFORM_PRODUCT.value
+      : DEFAULT_PLATFORM_PRODUCT.value,
   );
   const selectedProduct = platformProductByKey(productKey);
   const config = selectedProduct;
@@ -114,9 +107,7 @@ export function UpsertProvider({
           ...body,
           productId: selectedProduct.productId,
           vendorId: selectedProduct.vendorId,
-          credentials: body.credentials as z.infer<
-            typeof config.credentialsSchema
-          >,
+          credentials: body.credentials as z.infer<typeof config.credentialsSchema>,
         },
       });
     },
@@ -126,15 +117,13 @@ export function UpsertProvider({
         (old: PlatformProviderListItem[] | undefined) => [
           ...(old ?? []).filter((provider) => provider.id !== data.id),
           data,
-        ]
+        ],
       );
       await client.invalidateQueries({
         queryKey: queries.admin.listProviders.queryKey,
       });
       toast.success(
-        initialData
-          ? "Provider updated successfully"
-          : "Provider created successfully"
+        initialData ? "Provider updated successfully" : "Provider created successfully",
       );
       form.reset();
       setOpen(false);
@@ -157,7 +146,7 @@ export function UpsertProvider({
         : generateDefaultFromSchema(config.credentialsSchema),
     } as FormValues,
     validators: {
-      // biome-ignore lint/suspicious/noExplicitAny: zod schema union from create/update + product credentials
+      // zod schema union from create/update + product credentials
       onSubmit: schema as any,
     },
     onSubmit: async ({ value }) => await upsertProvider(value),
@@ -185,9 +174,7 @@ export function UpsertProvider({
         }
       >
         <DialogHeader>
-          <DialogTitle>
-            {initialData ? "Update Provider" : "Create Provider"}
-          </DialogTitle>
+          <DialogTitle>{initialData ? "Update Provider" : "Create Provider"}</DialogTitle>
           <DialogDescription>
             {initialData
               ? "Update the name and credentials of the managed email backend"
@@ -198,13 +185,7 @@ export function UpsertProvider({
           <FieldGroup>
             <div className="grid grid-cols-2 gap-4">
               <form.AppField name="name">
-                {(field) => (
-                  <field.TextField
-                    label="Name"
-                    placeholder="My provider"
-                    type="text"
-                  />
-                )}
+                {(field) => <field.TextField label="Name" placeholder="My provider" type="text" />}
               </form.AppField>
               <Field>
                 <FieldLabel htmlFor="provider-config-id">Provider</FieldLabel>
@@ -212,10 +193,7 @@ export function UpsertProvider({
                   disabled={Boolean(initialData)}
                   items={PRODUCTS}
                   onValueChange={(value) =>
-                    setProductKey(
-                      (value as PlatformProductKey) ??
-                        DEFAULT_PLATFORM_PRODUCT.value
-                    )
+                    setProductKey((value as PlatformProductKey) ?? DEFAULT_PLATFORM_PRODUCT.value)
                   }
                   value={productKey}
                 >
@@ -249,20 +227,16 @@ export function UpsertProvider({
             <Separator orientation="horizontal" />
             <DynamicForm
               baseKey="credentials"
-              // biome-ignore lint/suspicious/noExplicitAny: DynamicForm is intentionally untyped across product schemas
+              // DynamicForm is intentionally untyped across product schemas
               form={form as any}
               schema={config.credentialsSchema}
             />
           </FieldGroup>
         </DialogPanel>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <form.AppForm>
-            <form.SubmitButton>
-              {initialData ? "Update" : "Create"}
-            </form.SubmitButton>
+            <form.SubmitButton>{initialData ? "Update" : "Create"}</form.SubmitButton>
           </form.AppForm>
         </DialogFooter>
       </DialogPopup>

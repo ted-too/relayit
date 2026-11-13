@@ -20,31 +20,31 @@ Body fields use snake_case. You can try every field in the interactive reference
 
 ## Headers
 
-| Header | Required | Description |
-| --- | --- | --- |
-| `x-api-key` | Yes | A Project API key. See [API keys](/docs/api-keys). |
-| `Content-Type` | Yes | `application/json`. |
-| `Idempotency-Key` | No | Up to 256 characters. Repeating a key returns the original Message. See [Idempotency](#idempotency). |
-| `app` | No | App attribution. Must be sent together with `environment`. |
-| `environment` | No | App Environment attribution. Must be sent together with `app`. |
+| Header            | Required | Description                                                                                          |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `x-api-key`       | Yes      | A Project API key. See [API keys](/docs/api-keys).                                                   |
+| `Content-Type`    | Yes      | `application/json`.                                                                                  |
+| `Idempotency-Key` | No       | Up to 256 characters. Repeating a key returns the original Message. See [Idempotency](#idempotency). |
+| `app`             | No       | App attribution. Must be sent together with `environment`.                                           |
+| `environment`     | No       | App Environment attribution. Must be sent together with `app`.                                       |
 
 ## Body fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `from` | string | Yes | Sender address. See [From](#from). |
-| `to` | Recipient | Yes | Primary recipients. See [Recipients](#recipients). |
-| `subject` | string | With inline content | Subject line. Optional with `template` (overrides the Template subject). |
-| `cc` | Recipient | No | Carbon copy recipients. |
-| `bcc` | Recipient | No | Blind carbon copy recipients. |
-| `reply_to` | string or string[] | No | Reply-To address or addresses (max 50). |
-| `html` | string | One of `html`, `text`, or `template` | HTML body. |
-| `text` | string | One of `html`, `text`, or `template` | Plain-text body. |
-| `template` | object | One of `html`, `text`, or `template` | `{ "id": "...", "variables": { ... } }`. |
-| `attachments` | Attachment[] | No | Files to attach. See [Attachments](#attachments). |
-| `headers` | object | No | Custom email headers, string values only. |
-| `tags` | Tag[] | No | `{ "name": "...", "value": "..." }` pairs. |
-| `scheduled_at` | string | No | When to send. ISO 8601 preferred. |
+| Field          | Type               | Required                             | Description                                                              |
+| -------------- | ------------------ | ------------------------------------ | ------------------------------------------------------------------------ |
+| `from`         | string             | Yes                                  | Sender address. See [From](#from).                                       |
+| `to`           | Recipient          | Yes                                  | Primary recipients. See [Recipients](#recipients).                       |
+| `subject`      | string             | With inline content                  | Subject line. Optional with `template` (overrides the Template subject). |
+| `cc`           | Recipient          | No                                   | Carbon copy recipients.                                                  |
+| `bcc`          | Recipient          | No                                   | Blind carbon copy recipients.                                            |
+| `reply_to`     | string or string[] | No                                   | Reply-To address or addresses (max 50).                                  |
+| `html`         | string             | One of `html`, `text`, or `template` | HTML body.                                                               |
+| `text`         | string             | One of `html`, `text`, or `template` | Plain-text body.                                                         |
+| `template`     | object             | One of `html`, `text`, or `template` | `{ "id": "...", "variables": { ... } }`.                                 |
+| `attachments`  | Attachment[]       | No                                   | Files to attach. See [Attachments](#attachments).                        |
+| `headers`      | object             | No                                   | Custom email headers, string values only.                                |
+| `tags`         | Tag[]              | No                                   | `{ "name": "...", "value": "..." }` pairs.                               |
+| `scheduled_at` | string             | No                                   | When to send. ISO 8601 preferred.                                        |
 
 ## From
 
@@ -92,10 +92,7 @@ Anything else fails with `422 invalid_from_address`. A string that is not a vali
 
 ```json
 {
-  "to": [
-    { "email": "jane@example.com", "first_name": "Jane" },
-    { "email": "sam@example.com" }
-  ]
+  "to": [{ "email": "jane@example.com", "first_name": "Jane" }, { "email": "sam@example.com" }]
 }
 ```
 
@@ -174,13 +171,13 @@ Each attachment has a `filename` and exactly one source: base64 `content` or a h
 }
 ```
 
-| Field | Description |
-| --- | --- |
-| `filename` | Required. Include the extension. It is used to pick the MIME type. |
-| `content` | Base64-encoded file contents. Whitespace is ignored. |
-| `path` | URL of a hosted file. Relayit downloads it when it accepts the request. |
+| Field          | Description                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `filename`     | Required. Include the extension. It is used to pick the MIME type.                                             |
+| `content`      | Base64-encoded file contents. Whitespace is ignored.                                                           |
+| `path`         | URL of a hosted file. Relayit downloads it when it accepts the request.                                        |
 | `content_type` | Optional MIME type. When omitted it is derived from the extension, falling back to `application/octet-stream`. |
-| `content_id` | Optional id for an inline image. Reference it in HTML as `cid:<content_id>`. |
+| `content_id`   | Optional id for an inline image. Reference it in HTML as `cid:<content_id>`.                                   |
 
 Limits and behavior:
 
@@ -306,9 +303,7 @@ If some recipients were removed because they are suppressed, the response also l
 ```json
 {
   "id": "msg_01jbxk3c1ef6h8w2m4n9qz7r5t",
-  "stripped": [
-    { "email": "bounced@example.com", "reason": "suppression" }
-  ]
+  "stripped": [{ "email": "bounced@example.com", "reason": "suppression" }]
 }
 ```
 

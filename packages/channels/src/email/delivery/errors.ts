@@ -1,20 +1,14 @@
 import { Data } from "effect";
 
 export class EmailDeliveryPersistenceError extends Data.TaggedError(
-  "EmailDeliveryPersistenceError"
+  "EmailDeliveryPersistenceError",
 )<{
   readonly cause: unknown;
   readonly deliveryId: string;
-  readonly operation:
-    | "load_attachments"
-    | "load_delivery"
-    | "load_identities"
-    | "update_status";
+  readonly operation: "load_attachments" | "load_delivery" | "load_identities" | "update_status";
 }> {}
 
-export class EmailDeliveryProviderError extends Data.TaggedError(
-  "EmailDeliveryProviderError"
-)<{
+export class EmailDeliveryProviderError extends Data.TaggedError("EmailDeliveryProviderError")<{
   readonly cause?: unknown;
   readonly deliveryId: string;
   readonly leaveActive: boolean;

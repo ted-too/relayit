@@ -24,5 +24,5 @@ export const defineWebhookEvent = <
   const Type extends string,
   PayloadSchema extends WebhookPayloadSchema,
 >(
-  definition: WebhookEventDefinition<Type, PayloadSchema>
+  definition: WebhookEventDefinition<Type, PayloadSchema>,
 ) => definition;

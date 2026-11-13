@@ -7,33 +7,23 @@ describe("providerFromNameservers", () => {
   });
 
   test("detects Cloudflare from ns.cloudflare.com hostnames", () => {
-    expect(
-      providerFromNameservers([
-        "ada.ns.cloudflare.com",
-        "bob.ns.cloudflare.com",
-      ])
-    ).toBe("cloudflare");
+    expect(providerFromNameservers(["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"])).toBe(
+      "cloudflare",
+    );
   });
 
   test("detects Route 53 from awsdns hostnames", () => {
-    expect(
-      providerFromNameservers([
-        "ns-1234.awsdns-12.com",
-        "ns-5678.awsdns-34.net",
-      ])
-    ).toBe("route53");
+    expect(providerFromNameservers(["ns-1234.awsdns-12.com", "ns-5678.awsdns-34.net"])).toBe(
+      "route53",
+    );
   });
 
   test("normalizes trailing dots and case before matching", () => {
-    expect(providerFromNameservers(["ADA.NS.CLOUDFLARE.COM."])).toBe(
-      "cloudflare"
-    );
+    expect(providerFromNameservers(["ADA.NS.CLOUDFLARE.COM."])).toBe("cloudflare");
   });
 
   test("returns unknown for unrecognized nameservers", () => {
-    expect(providerFromNameservers(["ns1.example-registrar.test"])).toBe(
-      "unknown"
-    );
+    expect(providerFromNameservers(["ns1.example-registrar.test"])).toBe("unknown");
   });
 
   test("matches known DNS host suffixes", () => {

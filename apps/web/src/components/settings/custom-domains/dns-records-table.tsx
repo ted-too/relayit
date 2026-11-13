@@ -1,14 +1,7 @@
 import { RiErrorWarningFill } from "@remixicon/react";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@repo/ui/components/reui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
-import {
-  DataGrid,
-  DataGridContainer,
-} from "@repo/ui/components/reui/data-grid/data-grid";
+import { DataGrid, DataGridContainer } from "@repo/ui/components/reui/data-grid/data-grid";
 import { DataGridScrollArea } from "@repo/ui/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@repo/ui/components/reui/data-grid/data-grid-table";
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
@@ -40,8 +33,7 @@ export function DNSRecordsTable({
       },
     },
     enableHiding: hasPriority,
-    getRowId: (row) =>
-      `${row.purpose}-${row.name}${row.priority ? `-${row.priority}` : ""}`,
+    getRowId: (row) => `${row.purpose}-${row.name}${row.priority ? `-${row.priority}` : ""}`,
     getCoreRowModel: getCoreRowModel(),
     meta: {
       fqdn,
@@ -60,10 +52,7 @@ export function DNSRecordsTable({
       {warnings.map((warning) => {
         const copy = dnsRecordWarningCopy(warning);
         return (
-          <Alert
-            key={`${warning.code}-${warning.recordCount}`}
-            variant="warning"
-          >
+          <Alert key={`${warning.code}-${warning.recordCount}`} variant="warning">
             <RiErrorWarningFill />
             <AlertTitle>{copy.title}</AlertTitle>
             <AlertDescription>{copy.description}</AlertDescription>

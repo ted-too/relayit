@@ -18,10 +18,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import {
-  type CreateTemplateFormValues,
-  createTemplateFormSchema,
-} from "@/lib/templating/schemas";
+import { type CreateTemplateFormValues, createTemplateFormSchema } from "@/lib/templating/schemas";
 import { createTemplateFn } from "@/lib/templating/template.functions";
 import type { TemplateListItem } from "@/lib/templating/types";
 
@@ -53,7 +50,7 @@ export function CreateTemplate({
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
-        (old: TemplateListItem[] | undefined) => [...(old ?? []), data]
+        (old: TemplateListItem[] | undefined) => [...(old ?? []), data],
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -87,15 +84,12 @@ export function CreateTemplate({
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
-      {children ? (
-        <DialogTrigger render={render}>{children}</DialogTrigger>
-      ) : null}
+      {children ? <DialogTrigger render={render}>{children}</DialogTrigger> : null}
       <DialogPopup>
         <DialogHeader>
           <DialogTitle>Create Template</DialogTitle>
           <DialogDescription>
-            Name your Template. A unique slug is generated automatically for the
-            send API.
+            Name your Template. A unique slug is generated automatically for the send API.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -109,25 +103,15 @@ export function CreateTemplate({
           >
             <FieldGroup>
               <form.AppField name="name">
-                {(field) => (
-                  <field.TextField
-                    autoFocus
-                    label="Name"
-                    placeholder="Welcome email"
-                  />
-                )}
+                {(field) => <field.TextField autoFocus label="Name" placeholder="Welcome email" />}
               </form.AppField>
             </FieldGroup>
           </form>
         </DialogPanel>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <form.AppForm>
-            <form.SubmitButton form="create-template-form">
-              Create
-            </form.SubmitButton>
+            <form.SubmitButton form="create-template-form">Create</form.SubmitButton>
           </form.AppForm>
         </DialogFooter>
       </DialogPopup>

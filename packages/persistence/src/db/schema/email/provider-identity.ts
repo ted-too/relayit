@@ -33,10 +33,9 @@ export const emailDomainProviderIdentity = pgTable(
     customDomainId: text("custom_domain_id").references(() => customDomain.id, {
       onDelete: "cascade",
     }),
-    sandboxDomainId: text("sandbox_domain_id").references(
-      () => sandboxDomain.id,
-      { onDelete: "cascade" }
-    ),
+    sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
+      onDelete: "cascade",
+    }),
     providerId: text("provider_id")
       .notNull()
       .references(() => provider.id, { onDelete: "restrict" }),
@@ -64,7 +63,7 @@ export const emailDomainProviderIdentity = pgTable(
   (t) => [
     check(
       "email_domain_provider_identity_domain_kind_check",
-      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`
+      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`,
     ),
     uniqueIndex("email_domain_provider_identity_custom_provider_unique_idx")
       .on(t.customDomainId, t.providerId)
@@ -72,18 +71,11 @@ export const emailDomainProviderIdentity = pgTable(
     uniqueIndex("email_domain_provider_identity_sandbox_provider_unique_idx")
       .on(t.sandboxDomainId, t.providerId)
       .where(sql`${t.sandboxDomainId} IS NOT NULL`),
-    index("email_domain_provider_identity_custom_domain_idx").on(
-      t.customDomainId
-    ),
-    index("email_domain_provider_identity_sandbox_domain_idx").on(
-      t.sandboxDomainId
-    ),
+    index("email_domain_provider_identity_custom_domain_idx").on(t.customDomainId),
+    index("email_domain_provider_identity_sandbox_domain_idx").on(t.sandboxDomainId),
     index("email_domain_provider_identity_provider_idx").on(t.providerId),
-    index("email_domain_provider_identity_next_verify_at_idx").on(
-      t.nextVerifyAt
-    ),
-  ]
+    index("email_domain_provider_identity_next_verify_at_idx").on(t.nextVerifyAt),
+  ],
 );
 
-export type EmailDomainProviderIdentity =
-  typeof emailDomainProviderIdentity.$inferSelect;
+export type EmailDomainProviderIdentity = typeof emailDomainProviderIdentity.$inferSelect;

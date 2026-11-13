@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  computeNextCheckAt,
-  mergeVerificationStatus,
-  nextDomainVerifyAt,
-} from "./cadence";
+import { computeNextCheckAt, mergeVerificationStatus, nextDomainVerifyAt } from "./cadence";
 
 describe("computeNextCheckAt", () => {
   test("verified resets backoff and uses long interval", () => {
@@ -48,7 +44,7 @@ describe("mergeVerificationStatus", () => {
         missingRecords: 0,
         providerDkimVerified: true,
         providerVerified: true,
-      })
+      }),
     ).toBe("not_verified");
 
     expect(
@@ -57,7 +53,7 @@ describe("mergeVerificationStatus", () => {
         missingRecords: 0,
         providerDkimVerified: true,
         providerVerified: true,
-      })
+      }),
     ).toBe("verified");
   });
 });
@@ -68,7 +64,7 @@ describe("nextDomainVerifyAt", () => {
       nextDomainVerifyAt({
         identityNextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
         nextCheckAt: new Date("2026-01-01T00:02:00.000Z"),
-      }).toISOString()
+      }).toISOString(),
     ).toBe("2026-01-01T00:02:00.000Z");
   });
 
@@ -77,7 +73,7 @@ describe("nextDomainVerifyAt", () => {
       nextDomainVerifyAt({
         identityNextCheckAt: new Date("2026-01-01T00:02:00.000Z"),
         nextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
-      }).toISOString()
+      }).toISOString(),
     ).toBe("2026-01-01T00:02:00.000Z");
   });
 
@@ -86,7 +82,7 @@ describe("nextDomainVerifyAt", () => {
       nextDomainVerifyAt({
         identityNextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
         nextCheckAt: null,
-      }).toISOString()
+      }).toISOString(),
     ).toBe("2026-01-01T12:00:00.000Z");
   });
 });

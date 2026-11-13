@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { DB } from "@repo/persistence/db/effect";
 import { contactTopicUnsubscribe } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
@@ -17,13 +17,13 @@ export const signListUnsubscribe = (input: {
   readonly secret: string;
   readonly topicId: string;
 }) =>
-  createHmac("sha256", input.secret)
+  NodeCrypto.createHmac("sha256", input.secret)
     .update(
       listUnsubscribePayload({
         contactId: input.contactId,
         messageId: input.messageId,
         topicId: input.topicId,
-      })
+      }),
     )
     .digest("base64url");
 
@@ -47,7 +47,7 @@ export const verifyListUnsubscribe = (input: {
     return false;
   }
 
-  return timingSafeEqual(expectedBuffer, signatureBuffer);
+  return NodeCrypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 };
 
 export const buildListUnsubscribeUrl = (input: {
@@ -125,14 +125,12 @@ export const mergeListUnsubscribeHeadersForSend = (input: {
   });
 
   return {
-    ...(existing ?? {}),
+    ...existing,
     ...buildListUnsubscribeHeaders({ httpsUrl }),
   };
 };
 
-export class ListUnsubscribeError extends Data.TaggedError(
-  "ListUnsubscribeError"
-)<{
+export class ListUnsubscribeError extends Data.TaggedError("ListUnsubscribeError")<{
   readonly cause?: unknown;
   readonly code: "bad_request" | "invalid_signature" | "not_found";
   readonly message: string;
@@ -176,8 +174,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (!organization) {
@@ -204,8 +202,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (contact?.appEnvironment?.organizationId !== organization.id) {
@@ -230,8 +228,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (!topic) {
@@ -258,8 +256,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe lookup failed",
-            })
-        )
+            }),
+        ),
       );
 
     if (message?.appEnvironment?.organizationId !== organization.id) {
@@ -283,10 +281,7 @@ export const handleListUnsubscribeOneClick = (input: {
         topicId: topic.id,
       })
       .onConflictDoNothing({
-        target: [
-          contactTopicUnsubscribe.contactId,
-          contactTopicUnsubscribe.topicId,
-        ],
+        target: [contactTopicUnsubscribe.contactId, contactTopicUnsubscribe.topicId],
       })
       .pipe(
         Effect.mapError(
@@ -295,8 +290,8 @@ export const handleListUnsubscribeOneClick = (input: {
               cause,
               code: "bad_request",
               message: "Unsubscribe write failed",
-            })
-        )
+            }),
+        ),
       );
 
     return {

@@ -16,5 +16,5 @@ export type ApiServices =
 
 export type RunApiEffect = <Success, Error>(
   effect: Effect.Effect<Success, Error, ApiServices>,
-  options?: { readonly signal?: AbortSignal }
+  options?: { readonly signal?: AbortSignal },
 ) => Promise<Success>;

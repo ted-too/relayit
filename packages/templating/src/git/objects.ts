@@ -4,11 +4,7 @@ import { templatingGitObjects } from "../storage";
 import { decodeJson, encodeJson, hashObject } from "./hash";
 import type { GitCommit, GitObjectType, GitTree } from "./types";
 
-const putRaw = (
-  workspaceId: string,
-  type: GitObjectType,
-  content: Uint8Array
-) =>
+const putRaw = (workspaceId: string, type: GitObjectType, content: Uint8Array) =>
   Effect.gen(function* () {
     const objectId = hashObject(type, content);
     yield* templatingGitObjects
@@ -21,36 +17,32 @@ const putRaw = (
             new TemplatingBuilderError({
               code: "failed",
               message: "Failed to store Git object.",
-            })
-        )
+            }),
+        ),
       );
     return objectId;
   });
 
 const getRaw = (workspaceId: string, objectId: string) =>
   Effect.gen(function* () {
-    const downloaded = yield* templatingGitObjects
-      .download({ objectId, workspaceId })
-      .pipe(
-        Effect.mapError(
-          () =>
-            new TemplatingBuilderError({
-              code: "not_found",
-              message: "Git object not found.",
-            })
-        )
-      );
+    const downloaded = yield* templatingGitObjects.download({ objectId, workspaceId }).pipe(
+      Effect.mapError(
+        () =>
+          new TemplatingBuilderError({
+            code: "not_found",
+            message: "Git object not found.",
+          }),
+      ),
+    );
     return downloaded.body;
   });
 
 export const putBlob = (workspaceId: string, content: Uint8Array | string) => {
-  const bytes =
-    typeof content === "string" ? new TextEncoder().encode(content) : content;
+  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
   return putRaw(workspaceId, "blob", bytes);
 };
 
-export const getBlob = (workspaceId: string, objectId: string) =>
-  getRaw(workspaceId, objectId);
+export const getBlob = (workspaceId: string, objectId: string) => getRaw(workspaceId, objectId);
 
 export const putTree = (workspaceId: string, tree: GitTree) =>
   putRaw(workspaceId, "tree", encodeJson(tree));

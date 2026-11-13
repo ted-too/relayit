@@ -19,8 +19,7 @@ export function CardList<T>({
     );
   }
 
-  const hasActiveSearch =
-    filters?.search !== undefined && filters.search !== "";
+  const hasActiveSearch = filters?.search !== undefined && filters.search !== "";
 
   return (
     <div className="flex flex-col items-center justify-center gap-1 p-6 text-lg text-muted-foreground">

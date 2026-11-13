@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { normalizeSesNotification } from "./webhooks";
 
 const mail = {
@@ -13,7 +13,7 @@ describe("normalizeSesNotification", () => {
         delivery: { recipients: ["recipient@example.com"] },
         mail,
         notificationType: "Delivery",
-      })
+      }),
     ).toEqual({
       events: [
         {
@@ -55,7 +55,7 @@ describe("normalizeSesNotification", () => {
       normalizeSesNotification({
         mail,
         notificationType: "Received",
-      })
+      }),
     ).toEqual({ type: "noop" });
   });
 });

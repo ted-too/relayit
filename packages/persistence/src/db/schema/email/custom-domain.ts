@@ -64,10 +64,7 @@ export const customDomain = pgTable(
     verificationStatus: domainVerificationStatusEnum("verification_status")
       .notNull()
       .default("not_verified"),
-    provider: text("provider")
-      .$type<DomainProvider>()
-      .notNull()
-      .default("unknown"),
+    provider: text("provider").$type<DomainProvider>().notNull().default("unknown"),
     isPaused: boolean("is_paused").default(false).notNull(),
     pausedReason: domainPausedReasonEnum("paused_reason"),
     lastCheckedAt: timestamp("last_checked_at"),
@@ -80,7 +77,7 @@ export const customDomain = pgTable(
     index("custom_domain_fqdn_idx").on(t.fqdn),
     index("custom_domain_status_idx").on(t.verificationStatus),
     index("custom_domain_next_verify_at_idx").on(t.nextVerifyAt),
-  ]
+  ],
 );
 
 export type CustomDomain = typeof customDomain.$inferSelect;
@@ -88,7 +85,7 @@ export type CustomDomainInsert = typeof customDomain.$inferInsert;
 
 export const domainOwnershipVerificationStatusEnum = pgEnum(
   "domain_ownership_verification_status",
-  ["not_verified", "verified"]
+  ["not_verified", "verified"],
 );
 
 export type DomainOwnershipVerificationStatus =
@@ -108,7 +105,7 @@ export const organizationDomain = pgTable(
       .notNull()
       .references(() => customDomain.id, { onDelete: "cascade" }),
     ownershipVerificationStatus: domainOwnershipVerificationStatusEnum(
-      "ownership_verification_status"
+      "ownership_verification_status",
     )
       .notNull()
       .default("not_verified"),
@@ -122,22 +119,16 @@ export const organizationDomain = pgTable(
     ownershipLastCheckedAt: timestamp("ownership_last_checked_at"),
     ownershipEverVerifiedAt: timestamp("ownership_ever_verified_at"),
     ownershipNextVerifyAt: timestamp("ownership_next_verify_at"),
-    ownershipBackoffLevel: integer("ownership_backoff_level")
-      .default(0)
-      .notNull(),
+    ownershipBackoffLevel: integer("ownership_backoff_level").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.organizationId, t.customDomainId] }),
-    uniqueIndex("organization_domain_ownership_token_unique_idx").on(
-      t.ownershipToken
-    ),
+    uniqueIndex("organization_domain_ownership_token_unique_idx").on(t.ownershipToken),
     index("organization_domain_organization_idx").on(t.organizationId),
     index("organization_domain_custom_domain_idx").on(t.customDomainId),
-    index("organization_domain_ownership_next_verify_at_idx").on(
-      t.ownershipNextVerifyAt
-    ),
-  ]
+    index("organization_domain_ownership_next_verify_at_idx").on(t.ownershipNextVerifyAt),
+  ],
 );
 
 export type OrganizationDomain = typeof organizationDomain.$inferSelect;

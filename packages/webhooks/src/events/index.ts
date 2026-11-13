@@ -14,10 +14,7 @@ import {
 import { domainCreated, domainUpdated } from "./domain";
 import { messageFailed, messageScheduled, messageSent } from "./message";
 
-export {
-  type CampaignSendWebhookEvent,
-  campaignSendCompleted,
-} from "./campaign-send";
+export { type CampaignSendWebhookEvent, campaignSendCompleted } from "./campaign-send";
 export { type ContactWebhookEvent, contactUpdated } from "./contact";
 export {
   defineWebhookEvent,
@@ -36,17 +33,8 @@ export {
   deliveryOpened,
   deliverySkipped,
 } from "./delivery";
-export {
-  type DomainWebhookEvent,
-  domainCreated,
-  domainUpdated,
-} from "./domain";
-export {
-  type MessageWebhookEvent,
-  messageFailed,
-  messageScheduled,
-  messageSent,
-} from "./message";
+export { type DomainWebhookEvent, domainCreated, domainUpdated } from "./domain";
+export { type MessageWebhookEvent, messageFailed, messageScheduled, messageSent } from "./message";
 
 export const webhookEventDefinitions = {
   "delivery.accepted": deliveryAccepted,

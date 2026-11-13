@@ -1,9 +1,4 @@
-import {
-  RiArrowRightLine,
-  RiCloseLine,
-  RiGithubFill,
-  RiMenuLine,
-} from "@remixicon/react";
+import { RiArrowRightLine, RiCloseLine, RiGithubFill, RiMenuLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { cn } from "@repo/ui/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -98,19 +93,10 @@ export function SiteHeader({ appUrl, viewer }: SiteHeaderProps) {
           <Link className={navLinkClass} params={{ _splat: "" }} to="/docs/$">
             Docs
           </Link>
-          <Link
-            activeOptions={{ includeHash: true }}
-            className={navLinkClass}
-            hash="plans"
-            to="/"
-          >
+          <Link activeOptions={{ includeHash: true }} className={navLinkClass} hash="plans" to="/">
             Plans
           </Link>
-          <Link
-            className={navLinkClass}
-            params={{ _splat: "self-hosting" }}
-            to="/docs/$"
-          >
+          <Link className={navLinkClass} params={{ _splat: "self-hosting" }} to="/docs/$">
             Self-host
           </Link>
           <a className={navLinkClass} href={site.links.apiReference}>
@@ -121,9 +107,7 @@ export function SiteHeader({ appUrl, viewer }: SiteHeaderProps) {
           <Button
             aria-label="Relayit on GitHub"
             className="hidden md:inline-flex"
-            render={
-              <a href={site.links.github} rel="noreferrer" target="_blank" />
-            }
+            render={<a href={site.links.github} rel="noreferrer" target="_blank" />}
             size="icon"
             variant="ghost"
           >
@@ -147,7 +131,7 @@ export function SiteHeader({ appUrl, viewer }: SiteHeaderProps) {
       <nav
         className={cn(
           "grid gap-1 border-b bg-background px-4 pb-4 md:hidden",
-          open ? "grid" : "hidden"
+          open ? "grid" : "hidden",
         )}
       >
         <Link
@@ -158,12 +142,7 @@ export function SiteHeader({ appUrl, viewer }: SiteHeaderProps) {
         >
           Docs
         </Link>
-        <Link
-          className={navLinkClass}
-          hash="plans"
-          onClick={() => setOpen(false)}
-          to="/"
-        >
+        <Link className={navLinkClass} hash="plans" onClick={() => setOpen(false)} to="/">
           Plans
         </Link>
         <Link

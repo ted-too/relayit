@@ -13,26 +13,13 @@ import {
 import { and, eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { makeProviderTypeId } from "../../provider-type";
-import {
-  ownershipChallengeHost,
-  ownershipChallengeValue,
-} from "../custom-domain/dns";
+import { ownershipChallengeHost, ownershipChallengeValue } from "../custom-domain/dns";
 import { completeDomainClaimTransfer } from "../custom-domain/lifecycle";
 import { EmailProviderRegistry } from "../provider-registry";
-import {
-  computeNextCheckAt,
-  defaultVerifyCadenceConfig,
-  mergeVerificationStatus,
-} from "./cadence";
-import {
-  evaluateLiveDnsRecord,
-  lookupTxtRecords,
-  txtRecordsIncludeValue,
-} from "./live-dns";
+import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
+import { evaluateLiveDnsRecord, lookupTxtRecords, txtRecordsIncludeValue } from "./live-dns";
 
-export class VerifyCustomDomainError extends Data.TaggedError(
-  "VerifyCustomDomainError"
-)<{
+export class VerifyCustomDomainError extends Data.TaggedError("VerifyCustomDomainError")<{
   readonly cause?: unknown;
   readonly customDomainId?: string;
   readonly identityId?: string;
@@ -53,18 +40,15 @@ export interface CustomDomainVerifyResult {
 }
 
 const rollupDomainVerificationStatus = (
-  identities: readonly Pick<
-    EmailDomainProviderIdentity,
-    "isActive" | "verificationStatus"
-  >[],
-  dns: { activeRecords: number; missingRecords: number }
+  identities: readonly Pick<EmailDomainProviderIdentity, "isActive" | "verificationStatus">[],
+  dns: { activeRecords: number; missingRecords: number },
 ): DomainVerificationStatus => {
   const activeIdentities = identities.filter((identity) => identity.isActive);
   const anyVerified = activeIdentities.some(
-    (identity) => identity.verificationStatus === "verified"
+    (identity) => identity.verificationStatus === "verified",
   );
   const anyPartial = activeIdentities.some(
-    (identity) => identity.verificationStatus === "partially_verified"
+    (identity) => identity.verificationStatus === "partially_verified",
   );
 
   let providerVerified = anyVerified;
@@ -83,10 +67,7 @@ const rollupDomainVerificationStatus = (
   });
 };
 
-const verifyCustomDomainDnsRecords = (
-  db: DatabaseExecutor,
-  customDomainId: string
-) =>
+const verifyCustomDomainDnsRecords = (db: DatabaseExecutor, customDomainId: string) =>
   Effect.gen(function* () {
     const now = new Date();
     let activeRecords = 0;
@@ -104,8 +85,8 @@ const verifyCustomDomainDnsRecords = (
               customDomainId,
               message: "Failed to list custom domain DNS records.",
               operation: "dns",
-            })
-        )
+            }),
+        ),
       );
 
     for (const record of records) {
@@ -151,8 +132,8 @@ const verifyCustomDomainDnsRecords = (
                 customDomainId,
                 message: "Failed to update DNS record status.",
                 operation: "persist",
-              })
-          )
+              }),
+          ),
         );
     }
 
@@ -171,9 +152,7 @@ export const verifyCustomDomainProviderIdentity = (input: {
     const providers = yield* EmailProviderRegistry;
 
     const factory = yield* providers
-      .get(
-        makeProviderTypeId(input.provider.vendorId, input.provider.productId)
-      )
+      .get(makeProviderTypeId(input.provider.vendorId, input.provider.productId))
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -183,24 +162,22 @@ export const verifyCustomDomainProviderIdentity = (input: {
               identityId: input.identity.id,
               message: "Email provider type is not registered.",
               operation: "provider",
-            })
-        )
+            }),
+        ),
       );
 
-    const credentials = yield* credentialsVault
-      .open(input.provider.credentials)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyCustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              identityId: input.identity.id,
-              message: "Failed to open provider credentials.",
-              operation: "provider",
-            })
-        )
-      );
+    const credentials = yield* credentialsVault.open(input.provider.credentials).pipe(
+      Effect.mapError(
+        (cause) =>
+          new VerifyCustomDomainError({
+            cause,
+            customDomainId: input.customDomainId,
+            identityId: input.identity.id,
+            message: "Failed to open provider credentials.",
+            operation: "provider",
+          }),
+      ),
+    );
 
     const adapter = yield* factory
       .create({
@@ -216,24 +193,22 @@ export const verifyCustomDomainProviderIdentity = (input: {
               identityId: input.identity.id,
               message: "Failed to create email provider adapter.",
               operation: "provider",
-            })
-        )
+            }),
+        ),
       );
 
-    const identityStatus = yield* adapter
-      .getIdentityStatus({ fqdn: input.fqdn })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyCustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              identityId: input.identity.id,
-              message: "Failed to read provider identity status.",
-              operation: "status",
-            })
-        )
-      );
+    const identityStatus = yield* adapter.getIdentityStatus({ fqdn: input.fqdn }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new VerifyCustomDomainError({
+            cause,
+            customDomainId: input.customDomainId,
+            identityId: input.identity.id,
+            message: "Failed to read provider identity status.",
+            operation: "status",
+          }),
+      ),
+    );
 
     const identityVerificationStatus = mergeVerificationStatus({
       activeRecords: identityStatus.verified ? 1 : 0,
@@ -268,14 +243,11 @@ export const verifyCustomDomainProviderIdentity = (input: {
               identityId: input.identity.id,
               message: "Failed to update identity verification state.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
-    const dns = yield* verifyCustomDomainDnsRecords(
-      input.db,
-      input.customDomainId
-    );
+    const dns = yield* verifyCustomDomainDnsRecords(input.db, input.customDomainId);
 
     const identities = yield* input.db.query.emailDomainProviderIdentity
       .findMany({
@@ -289,8 +261,8 @@ export const verifyCustomDomainProviderIdentity = (input: {
               customDomainId: input.customDomainId,
               message: "Failed to list custom domain identities for rollup.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     const verificationStatus = rollupDomainVerificationStatus(identities, dns);
@@ -308,8 +280,8 @@ export const verifyCustomDomainProviderIdentity = (input: {
               customDomainId: input.customDomainId,
               message: "Failed to load custom domain backoff.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     const domainCadence = computeNextCheckAt({
@@ -336,8 +308,8 @@ export const verifyCustomDomainProviderIdentity = (input: {
               customDomainId: input.customDomainId,
               message: "Failed to update custom domain verification state.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     return {
@@ -373,8 +345,8 @@ export const verifyCustomDomainOwnership = (input: {
               message: "Failed to load ownership link.",
               operation: "persist",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (!link) {
@@ -396,13 +368,8 @@ export const verifyCustomDomainOwnership = (input: {
           organizationId: input.organizationId,
         }),
       try: async () => {
-        const records = await lookupTxtRecords(
-          ownershipChallengeHost(input.customDomain.fqdn)
-        );
-        return txtRecordsIncludeValue(
-          records,
-          ownershipChallengeValue(link.ownershipToken)
-        );
+        const records = await lookupTxtRecords(ownershipChallengeHost(input.customDomain.fqdn));
+        return txtRecordsIncludeValue(records, ownershipChallengeValue(link.ownershipToken));
       },
     });
 
@@ -423,9 +390,7 @@ export const verifyCustomDomainOwnership = (input: {
       .set({
         ownershipBackoffLevel: cadence.backoffLevel,
         ownershipEverVerifiedAt:
-          ownershipVerified && !link.ownershipEverVerifiedAt
-            ? now
-            : link.ownershipEverVerifiedAt,
+          ownershipVerified && !link.ownershipEverVerifiedAt ? now : link.ownershipEverVerifiedAt,
         ownershipLastCheckedAt: now,
         ownershipNextVerifyAt: cadence.nextCheckAt,
         ownershipVerificationStatus,
@@ -434,8 +399,8 @@ export const verifyCustomDomainOwnership = (input: {
       .where(
         and(
           eq(organizationDomain.organizationId, input.organizationId),
-          eq(organizationDomain.customDomainId, input.customDomain.id)
-        )
+          eq(organizationDomain.customDomainId, input.customDomain.id),
+        ),
       )
       .pipe(
         Effect.mapError(
@@ -446,8 +411,8 @@ export const verifyCustomDomainOwnership = (input: {
               message: "Failed to update ownership verification state.",
               operation: "persist",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (ownershipVerified && link.pendingProviderId) {
@@ -465,8 +430,8 @@ export const verifyCustomDomainOwnership = (input: {
               message: "Failed to complete domain claim transfer.",
               operation: "claim",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
     }
 

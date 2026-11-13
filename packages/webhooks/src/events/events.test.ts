@@ -76,7 +76,7 @@ describe("Message Webhook Events", () => {
     expect(() =>
       Schema.decodeUnknownSync(messageScheduled.payload)({
         message_id: "msg_test",
-      })
+      }),
     ).toThrow();
   });
 });
@@ -112,7 +112,7 @@ describe("Contact Webhook Events", () => {
       Schema.decodeUnknownSync(contactUpdated.payload)({
         email: "customer@example.com",
         source: "contact.api",
-      })
+      }),
     ).toThrow();
   });
 });
@@ -123,13 +123,13 @@ describe("Domain Webhook Events", () => {
       Schema.decodeSync(domainCreated.payload)({
         domain_id: "domn_test",
         status: "not_verified",
-      }).status
+      }).status,
     ).toBe("not_verified");
     expect(
       Schema.decodeSync(domainUpdated.payload)({
         domain_id: "domn_test",
         status: "verified",
-      }).status
+      }).status,
     ).toBe("verified");
   });
 });

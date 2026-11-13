@@ -113,14 +113,13 @@ export const limitsFor = (input: LimitsForInput): UserLimits => {
 export const resolveUserPlanName = async (
   db: PromiseDb,
   userId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<PlanName> => {
   const subscriptions = await db.query.subscription.findMany({
     where: { referenceId: userId },
   });
 
-  const asDate = (value: Date | string) =>
-    value instanceof Date ? value : new Date(value);
+  const asDate = (value: Date | string) => (value instanceof Date ? value : new Date(value));
 
   const subscription = subscriptions.find((row) => {
     if (
@@ -152,10 +151,7 @@ export const resolveUserPlanName = async (
  * unknown or absent falls back to free. Self-hosted: pass `{ selfHosted: true }`
  * for unlimited entitlements (no Plans).
  */
-export async function ensureUserLimits(
-  db: PromiseDb,
-  input: LimitsForInput & { userId: string }
-) {
+export async function ensureUserLimits(db: PromiseDb, input: LimitsForInput & { userId: string }) {
   const limits = limitsFor(input);
 
   await db.transaction(async (tx) => {
@@ -189,11 +185,7 @@ export async function ensureUserLimits(
 
 export const syncSessionUserLimits = async (
   db: PromiseDb,
-  {
-    now,
-    stripeConfigured,
-    userId,
-  }: { now?: Date; stripeConfigured: boolean; userId: string }
+  { now, stripeConfigured, userId }: { now?: Date; stripeConfigured: boolean; userId: string },
 ) => {
   if (stripeConfigured) {
     const planName = await resolveUserPlanName(db, userId, now);

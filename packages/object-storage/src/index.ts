@@ -1,9 +1,5 @@
 export { subBucket } from "./bucket";
-export {
-  makeObjectStorageLive,
-  ObjectStorage,
-  type ObjectStorageService,
-} from "./client";
+export { makeObjectStorageLive, ObjectStorage, type ObjectStorageService } from "./client";
 export {
   ObjectBodyEmpty,
   ObjectKeyParamsError,
