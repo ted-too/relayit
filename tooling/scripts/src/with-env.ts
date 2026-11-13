@@ -4,7 +4,9 @@
  *
  *   bun tooling/scripts/src/with-env.ts --app api bun --no-env-file run --watch ./src/index.ts
  */
-import { developmentEnv } from "./root-env";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import { developmentEnv, ROOT } from "./root-env";
 
 const PORT_VARIABLES = {
   api: "API_PORT",
@@ -21,6 +23,20 @@ if (app !== undefined && !(app in PORT_VARIABLES)) {
 }
 if (command.length === 0) {
   throw new Error("with-env.ts needs a command to run");
+}
+
+// Vite and Nitro still load a .env beside the app, under the root one: anything only it
+// sets (a Stripe or Cloudflare key, say) would reach the dev server unseen.
+const stray = [".env", ".env.local", ".env.development", ".env.development.local"]
+  .map((name) => NodePath.join(process.cwd(), name))
+  .filter((path) => NodeFS.existsSync(path));
+if (stray.length > 0) {
+  console.error(
+    `${stray.map((path) => NodePath.relative(ROOT, path)).join(", ")}: development reads only` +
+      " the root .env. Move what you need into it, delete these, and run this again" +
+      " (docs/operations/development.md).",
+  );
+  process.exit(1);
 }
 
 const env = developmentEnv();
