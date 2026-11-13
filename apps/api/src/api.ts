@@ -47,10 +47,10 @@ export const requestSchemas = {
 };
 
 /** A path no route takes: answered with the bare text, as an unrouted request is. */
-export const RouteNotFound = Schema.Literal("NOT_FOUND").pipe(HttpApiSchema.status(404), text);
+const RouteNotFound = Schema.Literal("NOT_FOUND").pipe(HttpApiSchema.status(404), text);
 
 /** A body that is not JSON: answered with the bare status text. */
-export const MalformedBody = Schema.Literal("Bad Request").pipe(HttpApiSchema.status(400), text);
+const MalformedBody = Schema.Literal("Bad Request").pipe(HttpApiSchema.status(400), text);
 
 /** A request that fails a schema: the failing property and what was wrong with it. */
 export class SchemaValidationFailed extends Schema.Error<SchemaValidationFailed>(
