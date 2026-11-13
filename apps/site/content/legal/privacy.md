@@ -5,7 +5,7 @@ description: "How Relayit collects, uses, and protects your personal information
 
 Effective date: 6 June 2025
 
-Last updated: 30 October 2026
+Last updated: 13 November 2026
 
 ## 1. Introduction
 
@@ -19,7 +19,6 @@ This policy applies to both our cloud-hosted service (Relayit Cloud) and our sou
 
 - **Account information:** email address, project name, and any profile information you choose to provide.
 - **Payment information:** billing details processed through Stripe. We do not store credit card information.
-- **API credentials:** third-party provider credentials you provide to enable message delivery, encrypted and securely stored.
 - **Configuration data:** domains, webhook URLs, notification preferences, and service settings.
 
 ### 2.2 Message data
@@ -70,7 +69,7 @@ We share data with:
 
 - **Payment processors:** Stripe, for payment processing.
 - **Analytics providers:** PostHog, for usage analytics.
-- **Delivery providers:** the email providers that deliver your messages (for example Amazon SES), whether managed by us or connected by you.
+- **Delivery providers:** the email providers that deliver your messages (for example Amazon SES).
 - **Infrastructure providers:** hosting and security service providers.
 
 ### 5.2 Legal requirements
