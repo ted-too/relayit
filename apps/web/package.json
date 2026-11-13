@@ -4,12 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless",
-    "dev:app": "bun --bun vp dev",
+    "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app web bun --no-env-file --bun vp dev",
     "build": "bun --bun vp build",
     "preview": "bun --bun vp preview",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun --no-env-file test"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -56,11 +55,6 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
-    "dotenv": "catalog:",
     "vite": "catalog:"
-  },
-  "portless": {
-    "name": "app.relayit",
-    "script": "dev:app"
   }
 }

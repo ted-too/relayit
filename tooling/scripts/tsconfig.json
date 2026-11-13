@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "paths": {
+      "@repo/channels/*": ["../../packages/channels/src/*"],
+      "@repo/jobs": ["../../packages/jobs/src/index.ts"],
+      "@repo/jobs/*": ["../../packages/jobs/src/*"],
+      "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
+      "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
+      "@repo/persistence/*": ["../../packages/persistence/src/*"],
+      "@repo/provider-aws/*": ["../../packages/provider-aws/src/*"],
+      "@repo/redis": ["../../packages/redis/src/index.ts"],
+      "@repo/redis/*": ["../../packages/redis/src/*"],
+      "@repo/template-render": ["../../packages/template-render/src/index.ts"],
+      "@repo/template-render/*": ["../../packages/template-render/src/*"],
+      "@repo/webhooks": ["../../packages/webhooks/src/index.ts"],
+      "@repo/webhooks/*": ["../../packages/webhooks/src/*"]
+    }
+  }
+}

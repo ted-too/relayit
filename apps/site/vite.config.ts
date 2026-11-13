@@ -1,4 +1,3 @@
-import "dotenv/config";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -9,9 +8,11 @@ import { resolveUseSyncExternalStoreFromReact } from "./vite/resolve-use-sync-ex
 
 const config = defineConfig({
   server: {
-    // Portless sets HOST=127.0.0.1 so the proxy can reach Vite over IPv4.
     host: process.env.HOST,
+    // `bun run dev` passes this app's port from the root .env. Strict, because the other
+    // apps' URLs name that port: a server that moved elsewhere would be unreachable.
     port: process.env.PORT ? Number(process.env.PORT) : undefined,
+    strictPort: true,
   },
   resolve: {
     tsconfigPaths: true,
