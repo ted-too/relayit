@@ -5,25 +5,19 @@ import { useMutation } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import {
-  type UpdateTemplateSlugFormValues,
-  updateTemplateSlugFormSchema,
-} from "@/lib/templating/schemas";
-import { updateTemplateSlugFn } from "@/lib/templating/template.functions";
+import { TemplateSlugInput } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
+import { dashboard } from "@/lib/dashboard";
 import type { Template } from "./types";
 
 export function TemplateEditSlug({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: UpdateTemplateSlugFormValues) =>
-      await updateTemplateSlugFn({
-        data: {
-          ...body,
-          orgSlug,
-          templateId: template.id,
-        },
-      }),
+    mutationFn: async (payload: typeof TemplateSlugInput.Type) =>
+      await dashboard((client) =>
+        client.templates.updateSlug({ params: { orgSlug, templateId: template.id }, payload }),
+      ),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).template(template.id).queryKey,
@@ -45,9 +39,9 @@ export function TemplateEditSlug({ template }: { template: Template }) {
   const form = useAppForm({
     defaultValues: {
       slug: template.slug,
-    } satisfies UpdateTemplateSlugFormValues,
+    } satisfies typeof TemplateSlugInput.Type,
     validators: {
-      onSubmit: updateTemplateSlugFormSchema,
+      onSubmit: Schema.toStandardSchemaV1(TemplateSlugInput),
     },
     onSubmit: async ({ value }) => {
       if (value.slug === template.slug) {

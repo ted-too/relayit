@@ -1,7 +1,5 @@
-import type { TemplateListItem, WorkspaceEntryListItem } from "@/lib/templating/types";
+import type { Template } from "@repo/contracts/dashboard";
 
-export type Template = TemplateListItem;
+export type { Template, WorkspaceEntry } from "@repo/contracts/dashboard";
 
 export type TemplateChannelVariant = Template["channelVariants"][number];
-
-export type WorkspaceEntry = WorkspaceEntryListItem;

@@ -1,4 +1,5 @@
 import type { acceptTransactionalEmail } from "@repo/channels/email/accept";
+import type { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
 import { logEffectFailure } from "@repo/logging";
 import type { handleSesNotification } from "@repo/provider-aws/email/webhooks";
 import { BunHttpServer } from "@effect/platform-bun";
@@ -6,10 +7,13 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerError, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import { Api } from "./api";
+import { dashboardRoutes } from "./dashboard/http";
 import { ApiKeyAuthLive, LegacyApiKeyAuthLive } from "./lib/api-key";
 import { RequestValidationLive } from "./lib/validation";
+import { authRoutes } from "./routes/auth";
 import { legacySendHandlers } from "./routes/compat/send";
 import { sendHandlers } from "./routes/messages/email";
+import { unsubscribeRoutes } from "./routes/unsubscribe";
 import { sesNotificationHandlers } from "./routes/webhooks/ses";
 
 const healthHandlers = HttpApiBuilder.group(Api, "health", (handlers) =>
@@ -41,20 +45,29 @@ const fallback = HttpRouter.middleware(
 );
 
 /**
- * The api's HTTP server: every route, `/docs` and `/openapi.json` generated from `Api`, on
- * Bun. Needs `ApiAuth` and what accept and the SES ingest use; a test passes its own
- * `accept` and `handleSes` to reach every outcome without them.
+ * The api's HTTP server on Bun: the public routes, with `/docs` and `/openapi.json`
+ * generated from `Api`; better-auth at `/api/auth/*`; the dashboard's operations under
+ * `/api/dashboard`; and one-click unsubscribe. Needs `ApiAuth` and what the routes use; a
+ * test passes its own `accept`, `handleSes` and `unsubscribe` to reach every outcome
+ * without them.
  */
 export const apiServer = (options: {
   readonly hostname: string;
   readonly port: number;
+  readonly dashboard: Parameters<typeof dashboardRoutes>[0];
+  /** The current better-auth secret, which signs unsubscribe links. */
+  readonly unsubscribeSecret: string;
   readonly accept?: typeof acceptTransactionalEmail;
   readonly handleSes?: typeof handleSesNotification;
+  readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
 }) =>
   HttpRouter.serve(
     Layer.mergeAll(
       HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }),
       HttpApiScalar.layerCdn(Api, { path: "/docs" }),
+      dashboardRoutes(options.dashboard),
+      authRoutes,
+      unsubscribeRoutes({ handle: options.unsubscribe, secret: options.unsubscribeSecret }),
       fallback,
     ).pipe(
       Layer.provide(

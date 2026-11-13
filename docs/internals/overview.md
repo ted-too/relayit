@@ -15,9 +15,10 @@ customer's code ── x-api-key ──► apps/api (HttpApi) ── POST /messa
                                         └─► customer's Webhook Endpoints
 SES ── SNS ──► apps/api /webhooks/providers/aws/ses ─► bounces, complaints, Suppression
 
-browser ──► apps/web (TanStack Start) ── server functions, better-auth
-                │                          └─► Postgres, Redis, SES
-                └── Effect Rpc + shared secret ──► apps/template-builder ─► S3 (Git objects, artifacts)
+browser ──► apps/web (dashboard) ── /api/* ──► apps/api: better-auth /api/auth/*,
+                                                DashboardApi /api/dashboard/* ─► Postgres, Redis, SES
+                                                   └── Effect Rpc + shared secret ──► apps/template-builder
+                                                                                       └─► S3 (Git, artifacts)
 
 apps/site: marketing site and public docs
 ```
@@ -28,13 +29,21 @@ The four apps share one Postgres and one Redis. The domain lives in `packages/*`
 
 ### Four deployables, one database
 
-Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only web calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out.
+Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only the api calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out.
 
 The api runs one process per replica and scales with replicas, not by forking: its `node:cluster` mode existed to keep the worker on one primary, never ran in production (it needed `NODE_ENV=production`, which the images don't set), and went with the worker. Several workers are safe: they share one Redis consumer group, and a dead one's claims are reclaimed after a minute.
 
-Everything a signed-in user does (Projects, members, API keys, Domains, Templates) is a web server function, so the api has no session surface at all: it authenticates API keys only, and each key resolves to one Project.
+### The dashboard is a client of the api
 
-All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api, web and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
+Everything a signed-in user does runs in the api, and the dashboard only calls it. better-auth is mounted at `/api/auth/*` (sign-in, sessions, organizations and members, deleting an API key, the GitHub callback, Stripe's webhook); the rest (creating a Project, API keys, Domains, Templates, Email Workspaces) is `DashboardApi`, an `HttpApi` contract in `packages/contracts` that the api implements under `/api/dashboard` and the dashboard calls with the client derived from it. It is a separate `HttpApi` from the public one, so none of it reaches `/docs`, and the contract package depends on `effect` alone, so nothing server-side follows it into the browser.
+
+`HttpApi` rather than Effect Rpc because these are plain request and response over the same origin, authenticated by the session cookie: each operation gets a readable URL and status, the session middleware is the same shape as the API key one, and errors are typed per endpoint. Rpc stays where it is: between the api and the builder, one service calling another with a shared secret.
+
+Authorisation is in two middlewares, never in a handler. `DashboardSession` resolves the cookie to a user (401 without one). `ProjectAccess` also resolves `:orgSlug` to the user's membership of that Project and checks the role's permission named by the endpoint's `RequiresPermission` annotation against the roles in `packages/persistence/src/auth/permissions.ts`; an unknown Project, a non-member and a missing permission are all 403, so a Project's existence isn't revealed. A handler sees only `DashboardMember`, and every query it makes is scoped to that Project's id, so an id taken from another Project finds nothing (404). A change must come from the dashboard's own origin (`APP_URL`): the session cookie is `SameSite=Lax`, which already keeps it off another site's POST.
+
+A Project's slug is the first segment of its dashboard URL, so slugs the api or the dashboard route themselves (`docs`, `health`, `api`, `auth`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed.
+
+All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
 
 ### Work crosses processes as typed jobs
 
@@ -68,7 +77,7 @@ Relayit helps a Project finish the setup a vendor needs before it can send, and 
 
 ### One SES account, configured by ops
 
-A deployment sends through one SES account, named in the environment of web and the worker (`SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`, `SES_REGIONS`); the database holds no vendor credentials and customers bring none. Code sends and registers through the `EmailBackend` service (`packages/channels/src/email/backend.ts`), implemented for SES and for the fake in `packages/provider-aws`. Pluggable providers, Project-owned credentials and Domains paired with several providers were removed: each multiplied the paths a send could take for customers who never asked for them.
+A deployment sends through one SES account, named in the environment of the api and the worker (`SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`, `SES_REGIONS`); the database holds no vendor credentials and customers bring none. Code sends and registers through the `EmailBackend` service (`packages/channels/src/email/backend.ts`), implemented for SES and for the fake in `packages/provider-aws`. Pluggable providers, Project-owned credentials and Domains paired with several providers were removed: each multiplied the paths a send could take for customers who never asked for them.
 
 The account can span several regions, so a later channel can route by destination without the customer choosing; email uses that only to place Domains. A Domain is registered in one region, the first of `SES_REGIONS` when it is added, recorded on its registration (`email_domain_provider_identity`, a name kept so its rows did not have to move), and always sent through that region: there is no failover between regions. A registration with no recorded region predates regions and is in the default one, so the first entry of `SES_REGIONS` must stay the region those Domains were registered in. A send SES refuses for any reason but a Project Sending Pause is retried with backoff; when the retries run out the Delivery fails with that reason.
 
@@ -109,4 +118,4 @@ Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it 
 
 ## Migrations
 
-`packages/persistence/drizzle.config.ts` reads the schema from `packages/persistence/src/db/schema/` and the jobs package's two table files, and writes `packages/persistence/drizzle/<timestamp>_<name>/`. Generate with `vp run --filter @repo/persistence db:generate`; the config insists on a `DATABASE_URL` but generating never connects. The api, web and builder apply migrations on start (`packages/persistence/src/db/migrate.ts`); their images find them through `DRIZZLE_MIGRATIONS_FOLDER`. The worker image carries none.
+`packages/persistence/drizzle.config.ts` reads the schema from `packages/persistence/src/db/schema/` and the jobs package's two table files, and writes `packages/persistence/drizzle/<timestamp>_<name>/`. Generate with `vp run --filter @repo/persistence db:generate`; the config insists on a `DATABASE_URL` but generating never connects. The api and builder apply migrations on start (`packages/persistence/src/db/migrate.ts`); their images find them through `DRIZZLE_MIGRATIONS_FOLDER`. The worker image carries none.

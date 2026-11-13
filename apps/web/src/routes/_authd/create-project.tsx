@@ -5,11 +5,10 @@ import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NavUser } from "@/components/layout/nav-user";
-import { createProjectFn } from "@/lib/projects/project.functions";
-import { type CreateProjectBody, createProjectBodySchema } from "@/lib/projects/schemas";
+import { CreateProjectInput } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
+import { dashboard } from "@/lib/dashboard";
 import { queries } from "@/lib/queries";
-
-// FIXME: We need to ensure slugs on the api don't collide with this page
 
 export const Route = createFileRoute("/_authd/create-project")({
   loader: ({ context }) => {
@@ -24,10 +23,10 @@ function RouteComponent() {
   const { data: organizations } = useSuspenseQuery(queries.organizations.list);
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: CreateProjectBody) => await createProjectFn({ data: body }),
+    mutationFn: async (payload: typeof CreateProjectInput.Type) =>
+      await dashboard((client) => client.projects.create({ payload })),
     onSuccess: (data, _, __, { client }) => {
       toast.success("Project created successfully");
-      client.setQueryData(queries.organizations.bySlug(data.slug).queryKey, data);
       client.invalidateQueries({
         queryKey: queries.organizations.queryKey,
       });
@@ -43,9 +42,9 @@ function RouteComponent() {
   const form = useAppForm({
     defaultValues: {
       name: "",
-    } as CreateProjectBody,
+    } as typeof CreateProjectInput.Type,
     validators: {
-      onSubmit: createProjectBodySchema,
+      onSubmit: Schema.toStandardSchemaV1(CreateProjectInput),
     },
     onSubmit: async ({ value }) => await mutateAsync(value),
   });

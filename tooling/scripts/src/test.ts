@@ -140,12 +140,6 @@ try {
     ...process.env,
     TEST_DATABASE_URL: services.databaseUrl,
     TEST_REDIS_URL: services.redisUrl,
-    // apps/web's tests import its env module, which validates these at load. Nothing
-    // connects to them: a closed port, and a secret that signs nothing real.
-    BETTER_AUTH_SECRETS: "1:test-placeholder-not-a-secret",
-    DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
-    REDIS_URL: "redis://127.0.0.1:1",
-    VITE_BASE_URL: "http://localhost:3000",
   };
 
   const queue = await packagesWithTests();

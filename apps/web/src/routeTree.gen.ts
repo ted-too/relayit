@@ -16,6 +16,7 @@ import { Route as AuthdOrgSlugRouteImport } from './routes/_authd/$orgSlug'
 import { Route as AuthdAdminRouteImport } from './routes/_authd/admin'
 import { Route as AuthdCreateProjectRouteImport } from './routes/_authd/create-project'
 import { Route as AuthdUserRouteImport } from './routes/_authd/user'
+import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AuthSignInRouteImport } from './routes/auth/sign-in'
 import { Route as AuthSignUpRouteImport } from './routes/auth/sign-up'
 import { Route as AuthdOrgSlugIndexRouteImport } from './routes/_authd/$orgSlug/index'
@@ -27,7 +28,6 @@ import { Route as AuthdAdminProjectsRouteImport } from './routes/_authd/admin/pr
 import { Route as AuthdAdminUsersRouteImport } from './routes/_authd/admin/users'
 import { Route as AuthdUserAccountRouteImport } from './routes/_authd/user.account'
 import { Route as AuthdUserBillingRouteImport } from './routes/_authd/user.billing'
-import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 import { Route as UnsubscribeOrgSlugContactIdRouteImport } from './routes/unsubscribe.$orgSlug.$contactId'
 import { Route as AuthdOrgSlugAutomationsWorkflowsRouteImport } from './routes/_authd/$orgSlug/automations.workflows'
 import { Route as AuthdOrgSlugDomainsIndexRouteImport } from './routes/_authd/$orgSlug/domains/index'
@@ -69,6 +69,11 @@ const AuthdUserRoute = AuthdUserRouteImport.update({
   id: '/user',
   path: '/user',
   getParentRoute: () => AuthdRoute,
+} as any)
+const ApiSplatRoute = ApiSplatRouteImport.update({
+  id: '/api/$',
+  path: '/api/$',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
   id: '/sign-in',
@@ -125,11 +130,6 @@ const AuthdUserBillingRoute = AuthdUserBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => AuthdUserRoute,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const UnsubscribeOrgSlugContactIdRoute =
   UnsubscribeOrgSlugContactIdRouteImport.update({
     id: '/unsubscribe/$orgSlug/$contactId',
@@ -179,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthdAdminRouteWithChildren
   '/create-project': typeof AuthdCreateProjectRoute
   '/user': typeof AuthdUserRouteWithChildren
+  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/$orgSlug/api-keys': typeof AuthdOrgSlugApiKeysRoute
@@ -188,7 +189,6 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AuthdAdminUsersRoute
   '/user/account': typeof AuthdUserAccountRoute
   '/user/billing': typeof AuthdUserBillingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/admin/': typeof AuthdAdminIndexRoute
@@ -203,6 +203,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/create-project': typeof AuthdCreateProjectRoute
   '/user': typeof AuthdUserRouteWithChildren
+  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AuthdIndexRoute
@@ -213,7 +214,6 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AuthdAdminUsersRoute
   '/user/account': typeof AuthdUserAccountRoute
   '/user/billing': typeof AuthdUserBillingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/$orgSlug': typeof AuthdOrgSlugIndexRoute
   '/admin': typeof AuthdAdminIndexRoute
@@ -232,6 +232,7 @@ export interface FileRoutesById {
   '/_authd/admin': typeof AuthdAdminRouteWithChildren
   '/_authd/create-project': typeof AuthdCreateProjectRoute
   '/_authd/user': typeof AuthdUserRouteWithChildren
+  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/_authd/': typeof AuthdIndexRoute
@@ -242,7 +243,6 @@ export interface FileRoutesById {
   '/_authd/admin/users': typeof AuthdAdminUsersRoute
   '/_authd/user/account': typeof AuthdUserAccountRoute
   '/_authd/user/billing': typeof AuthdUserBillingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/unsubscribe/$orgSlug/$contactId': typeof UnsubscribeOrgSlugContactIdRoute
   '/_authd/$orgSlug/': typeof AuthdOrgSlugIndexRoute
   '/_authd/admin/': typeof AuthdAdminIndexRoute
@@ -262,6 +262,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/create-project'
     | '/user'
+    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/$orgSlug/api-keys'
@@ -271,7 +272,6 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/user/account'
     | '/user/billing'
-    | '/api/auth/$'
     | '/unsubscribe/$orgSlug/$contactId'
     | '/$orgSlug/'
     | '/admin/'
@@ -286,6 +286,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/create-project'
     | '/user'
+    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
@@ -296,7 +297,6 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/user/account'
     | '/user/billing'
-    | '/api/auth/$'
     | '/unsubscribe/$orgSlug/$contactId'
     | '/$orgSlug'
     | '/admin'
@@ -314,6 +314,7 @@ export interface FileRouteTypes {
     | '/_authd/admin'
     | '/_authd/create-project'
     | '/_authd/user'
+    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/_authd/'
@@ -324,7 +325,6 @@ export interface FileRouteTypes {
     | '/_authd/admin/users'
     | '/_authd/user/account'
     | '/_authd/user/billing'
-    | '/api/auth/$'
     | '/unsubscribe/$orgSlug/$contactId'
     | '/_authd/$orgSlug/'
     | '/_authd/admin/'
@@ -339,7 +339,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthdRoute: typeof AuthdRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiSplatRoute: typeof ApiSplatRoute
   UnsubscribeOrgSlugContactIdRoute: typeof UnsubscribeOrgSlugContactIdRoute
 }
 
@@ -393,6 +393,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/user'
       preLoaderRoute: typeof AuthdUserRouteImport
       parentRoute: typeof AuthdRoute
+    }
+    '/api/$': {
+      id: '/api/$'
+      path: '/api/$'
+      fullPath: '/api/$'
+      preLoaderRoute: typeof ApiSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth/sign-in': {
       id: '/auth/sign-in'
@@ -470,13 +477,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/user/billing'
       preLoaderRoute: typeof AuthdUserBillingRouteImport
       parentRoute: typeof AuthdUserRoute
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/unsubscribe/$orgSlug/$contactId': {
       id: '/unsubscribe/$orgSlug/$contactId'
@@ -626,7 +626,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AuthdRoute: AuthdRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiSplatRoute: ApiSplatRoute,
   UnsubscribeOrgSlugContactIdRoute: UnsubscribeOrgSlugContactIdRoute,
 }
 export const routeTree = rootRouteImport
@@ -634,10 +634,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

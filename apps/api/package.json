@@ -13,14 +13,18 @@
     "@effect/platform-bun": "catalog:",
     "@opentelemetry/api": "^1.9.1",
     "@repo/channels": "workspace:*",
+    "@repo/contracts": "workspace:*",
     "@repo/jobs": "workspace:*",
     "@repo/logging": "workspace:*",
     "@repo/object-storage": "workspace:*",
     "@repo/persistence": "workspace:*",
     "@repo/provider-aws": "workspace:*",
     "@repo/redis": "workspace:*",
+    "@repo/templating": "workspace:*",
     "better-auth": "catalog:",
-    "effect": "catalog:"
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "stripe": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

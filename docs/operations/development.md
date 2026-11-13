@@ -14,7 +14,7 @@ For a fresh start, drop and recreate the database, then migrate and seed again. 
 
 ## Environment
 
-Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/web/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
+Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
 
 `env.example`, without the dot, is the Docker Compose file for self-hosting, and has nothing to do with this.
 
@@ -30,7 +30,7 @@ What the apps reach, and what `.env.example` sets so that none of it is real:
 
 `bun run dev` sets `NODE_ENV=development`, so the fake and local storage are the defaults there even without the first two lines. Both refuse to start under `NODE_ENV=production`.
 
-`TEMPLATING_BUILDER_SECRET` connects web to the builder; without it the Template catalog works but Email Workspaces don't. `BETTER_AUTH_SECRETS` signs sessions and seals DKIM keys.
+`TEMPLATING_BUILDER_SECRET` connects the api to the builder; without it the Template catalog works but Email Workspaces don't. `BETTER_AUTH_SECRETS` signs sessions and seals DKIM keys.
 
 ## The fake email backend
 
@@ -79,4 +79,4 @@ Tests are Vitest, run through Vite+ under Bun: each package's `test` script is `
 
 ## Schema changes
 
-Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate`, or the next start of the api, web or builder, applies it; the worker never migrates. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.
+Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate`, or the next start of the api or builder, applies it; the worker never migrates. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.
