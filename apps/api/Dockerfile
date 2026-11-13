@@ -9,6 +9,9 @@ FROM base AS builder
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
 RUN cd apps/api && NODE_ENV=production bun run build
+# The dashboard: a static build the api serves from DASHBOARD_DIR. It reads its origin
+# from the page, so nothing about a deployment is baked into it.
+RUN cd apps/web && NODE_ENV=production bun run build
 
 FROM base AS runner
 WORKDIR /app
@@ -24,7 +27,8 @@ ENV HOME=/home/relayit \
     TMPDIR=/tmp \
     BUN_TMPDIR=/tmp \
     XDG_CACHE_HOME=/home/relayit/.cache \
-    DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle
+    DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle \
+    DASHBOARD_DIR=/app/dashboard
 
 # This install runs as root with XDG_CACHE_HOME set, so bun creates its cache
 # under /home/relayit as root; chown it back or runtime installs fail (EACCES).
@@ -36,8 +40,9 @@ RUN echo '{"dependencies":{"pino":"10.3.1", "react": "^19.0.0", "react-dom": "^1
 COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
 COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
+COPY --from=builder --chown=relayit:relayit /app/apps/web/dist ./dashboard
 
-# Combined HTTP ingress + job worker. Railway sets PORT.
+# The public API, auth and the dashboard. Railway sets PORT.
 USER relayit
 EXPOSE 8080
 

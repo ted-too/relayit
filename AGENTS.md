@@ -49,7 +49,7 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 
 ## How it works
 
-Four deployables share one Postgres and one Redis. `apps/api` is an Effect `HttpApi` on Bun serving the public API (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`), declared with every response in `apps/api/src/api.ts`, from which the OpenAPI document is generated; and, for the dashboard, better-auth at `/api/auth/*`, one-click unsubscribe, and every session-authenticated operation as the `DashboardApi` contract in `packages/contracts`, under `/api/dashboard`. `apps/web` is the dashboard, a client of those: a TanStack Start app with SSR off whose server only forwards `/api/*` and the unsubscribe POST to the api. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only the api calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
+Three deployables share one Postgres and one Redis. `apps/api` is an Effect `HttpApi` on Bun serving the public API (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`), declared with every response in `apps/api/src/api.ts`, from which the OpenAPI document is generated; and the dashboard: better-auth at `/api/auth/*`, one-click unsubscribe, every session-authenticated operation as the `DashboardApi` contract in `packages/contracts` under `/api/dashboard`, and the dashboard's static build for every other GET a browser makes. `apps/web` is that dashboard: a Vite + TanStack Router single-page app, a client of the api only; it is built into the api's image and has no server of its own. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only the api calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
 
 The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, the `EmailBackend` contract and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
 
@@ -58,9 +58,9 @@ Architecture, decisions and their reasons: [docs/internals/overview.md](docs/int
 ## Where code lives
 
 ```
-apps/api/                 HttpApi ingress, HTTP only
+apps/api/                 HTTP: the public API, auth, the dashboard's API and its build
 apps/worker/              the job worker: every job handler, no HTTP
-apps/web/                 the dashboard: TanStack Start, SSR off, calls the api
+apps/web/                 the dashboard: a Vite + TanStack Router SPA, built into the api
 apps/template-builder/    Email Workspace build and publish, Effect Rpc
 apps/site/                marketing site; public docs in content/
 packages/channels/        accept, delivery, Domains, the EmailBackend contract, Usage
@@ -86,7 +86,7 @@ Apps never import another app's source; shared behaviour belongs in a package.
 Bun installs and runs the apps; Vite+ (`vp`) runs lint, format and the workspace's scripts. Lint and format config is in the root `vite.config.ts`.
 
 - `bun install`: also patches `tsc` with the Effect language service and installs the commit hook.
-- `bun run dev`: all five apps, reading the root `.env`: dashboard on `WEB_PORT`, site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout), and the worker, which has no port. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
+- `bun run dev`: all five apps, reading the root `.env`: the dashboard on Vite at `WEB_PORT` (it forwards `/api/*` and the unsubscribe POST to the api, so open it there), site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout), and the worker, which has no port. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
 - `bun run db:migrate`, `bun run db:seed`: migrate and seed the root `.env`'s local database; the seed prints how to sign in and an API key.
 - `bun run db:generate`: a migration from the schema. The api and builder apply migrations when they start; the worker doesn't.
 - `bun run worktree:setup` (`--reset`), `bun run worktree:prune` (`--dry-run`): see Worktrees.

@@ -3,6 +3,9 @@
  * API key verification, the Project lookups, accept and the SES ingest. Every outcome a
  * route maps is reachable without a database.
  */
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import type {
   AcceptTransactionalEmailInput,
   acceptTransactionalEmail,
@@ -21,10 +24,19 @@ import { HttpClient, HttpServer } from "effect/http";
 import { apiServer } from "./http";
 import { ApiAuth } from "./lib/auth";
 
+/**
+ * A dashboard build, so every test runs against the api as its image serves it: the
+ * public routes must answer the same with the dashboard behind them.
+ */
+const DASHBOARD_DIR = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "relayit-api-test-"));
+NodeFS.writeFileSync(NodePath.join(DASHBOARD_DIR, "index.html"), "<!doctype html>");
+
 /** The one API key the stubbed better-auth accepts; it belongs to Project `acme` (`org_1`). */
 export const GOOD_KEY = "rel_good";
 
 export interface Stubs {
+  /** A dashboard build to serve, as the image does. */
+  readonly dashboardDir?: string;
   readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
   readonly accept: typeof acceptTransactionalEmail;
   readonly handleSes: typeof handleSesNotification;
@@ -46,6 +58,7 @@ export const stubs = (overrides: Partial<Stubs> = {}) => {
     accepted,
     received,
     stubs: {
+      dashboardDir: DASHBOARD_DIR,
       defaultDomain: null,
       ownerUserId: "user_1",
       ...overrides,
@@ -117,6 +130,7 @@ export const serve = (stubs: Stubs) =>
       apiServer({
         accept: stubs.accept,
         dashboard: { appOrigin: "http://app.test", billing: false, githubSignIn: false },
+        dashboardDir: stubs.dashboardDir,
         handleSes: stubs.handleSes,
         hostname: "127.0.0.1",
         port: 0,

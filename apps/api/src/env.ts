@@ -26,6 +26,9 @@ export const apiConfig = Effect.gen(function* () {
     // tell a visitor is signed in. Unset, the cookie is host-only.
     authCookieDomain: Config.String("AUTH_COOKIE_DOMAIN").pipe(Config.option),
     betterAuthSecrets: Config.Redacted("BETTER_AUTH_SECRETS"),
+    // The dashboard's build to serve; the image sets it. Unset, as in development, where
+    // Vite serves the dashboard, the api serves only its own routes.
+    dashboardDir: Config.String("DASHBOARD_DIR").pipe(Config.option),
     databaseUrl: Config.Redacted("DATABASE_URL"),
     emailBackend: Config.Literals(["ses", "fake"], "EMAIL_BACKEND").pipe(Config.option),
     github: Config.all({

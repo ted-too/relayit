@@ -1,13 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { proxyToApi } from "@/lib/api-proxy";
 
+// The page a person lands on from an unsubscribe link. A mailbox provider's one-click POST
+// to the same URL is the api's (`apps/api/src/routes/unsubscribe.ts`).
 export const Route = createFileRoute("/unsubscribe/$orgSlug/$contactId")({
-  server: {
-    handlers: {
-      // One-click unsubscribe from a mailbox provider; the api records it.
-      POST: ({ request }) => proxyToApi(request),
-    },
-  },
   component: RouteComponent,
 });
 
