@@ -1,35 +1,30 @@
-import { makeObjectStorageLive } from "@repo/object-storage";
+import { makeObjectStorageLayer } from "@repo/object-storage";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { makeRedisLive } from "@repo/redis";
 import { makeBuilderAuthServerLayer, TemplatingBuilderHandlersLive } from "@repo/templating";
 import { Layer, Logger, Redacted, References } from "effect";
 import type { TemplateBuilderConfig } from "./env";
 
-export const loggingLive = (config: TemplateBuilderConfig) =>
+export const loggingLive = (logLevel: TemplateBuilderConfig["logLevel"]) =>
   Layer.mergeAll(
     Logger.layer([
       Bun.env.NODE_ENV === "production" ? Logger.consoleJson : Logger.consolePretty(),
       Logger.tracerLogger,
     ]),
-    Layer.succeed(References.MinimumLogLevel, config.logLevel),
+    Layer.succeed(References.MinimumLogLevel, logLevel),
   );
 
 export const makeAppLayers = (config: TemplateBuilderConfig) => {
-  const logging = loggingLive(config);
+  const logging = loggingLive(config.logLevel);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
   });
   // Redis logs reconnects from the layer itself; give it the app logger.
   const redisLive = makeRedisLive({
+    keyPrefix: config.redisKeyPrefix,
     url: Redacted.value(config.redisUrl),
   }).pipe(Layer.provide(logging));
-  const objectStorageLive = makeObjectStorageLive({
-    accessKeyId: Redacted.value(config.s3AccessKeyId),
-    bucket: config.s3Bucket,
-    endpoint: config.s3Endpoint,
-    region: config.s3Region,
-    secretAccessKey: Redacted.value(config.s3SecretAccessKey),
-  });
+  const objectStorageLive = makeObjectStorageLayer(config.objectStorage);
   const authLive = makeBuilderAuthServerLayer(config.templatingBuilderSecret);
   const infraLive = Layer.mergeAll(dbLive, redisLive, objectStorageLive);
 

@@ -3,7 +3,7 @@ import { DB } from "@repo/persistence/db/effect";
 import { customDomain } from "@repo/persistence/db/schema";
 import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
-import { detectDnsProvider } from "../custom-domain/provider-detection";
+import { DnsLookups } from "../dns-lookups";
 import { sweepIfSandboxAllocatable } from "../sandbox/allocate";
 import { nextDomainVerifyAt } from "./cadence";
 import { verifyCustomDomainOwnership, verifyCustomDomainProviderIdentity } from "./custom-identity";
@@ -459,6 +459,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
         return;
       }
 
+      const dnsLookups = yield* DnsLookups;
       const detectedProvider = yield* Effect.tryPromise({
         catch: (cause) =>
           new VerifyCustomDomainHandlerError({
@@ -467,7 +468,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
             message: "Failed to detect custom domain DNS host.",
             operation: "persist",
           }),
-        try: () => detectDnsProvider(domain.fqdn),
+        try: () => dnsLookups.detectProvider(domain.fqdn),
       });
 
       if (detectedProvider !== domain.provider) {

@@ -17,7 +17,7 @@ import { ownershipChallengeHost, ownershipChallengeValue } from "../custom-domai
 import { completeDomainClaimTransfer } from "../custom-domain/lifecycle";
 import { EmailProviderRegistry } from "../provider-registry";
 import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
-import { evaluateLiveDnsRecord, lookupTxtRecords, txtRecordsIncludeValue } from "./live-dns";
+import { DnsLookups } from "../dns-lookups";
 
 export class VerifyCustomDomainError extends Data.TaggedError("VerifyCustomDomainError")<{
   readonly cause?: unknown;
@@ -69,6 +69,7 @@ const rollupDomainVerificationStatus = (
 
 const verifyCustomDomainDnsRecords = (db: DatabaseExecutor, customDomainId: string) =>
   Effect.gen(function* () {
+    const dnsLookups = yield* DnsLookups;
     const now = new Date();
     let activeRecords = 0;
     let missingRecords = 0;
@@ -98,7 +99,7 @@ const verifyCustomDomainDnsRecords = (db: DatabaseExecutor, customDomainId: stri
             message: "Live DNS lookup failed.",
             operation: "dns",
           }),
-        try: () => evaluateLiveDnsRecord(record),
+        try: () => dnsLookups.evaluate(record),
       });
 
       if (evaluation.matches) {
@@ -358,6 +359,7 @@ export const verifyCustomDomainOwnership = (input: {
       });
     }
 
+    const dnsLookups = yield* DnsLookups;
     const ownershipVerified = yield* Effect.tryPromise({
       catch: (cause) =>
         new VerifyCustomDomainError({
@@ -368,8 +370,12 @@ export const verifyCustomDomainOwnership = (input: {
           organizationId: input.organizationId,
         }),
       try: async () => {
-        const records = await lookupTxtRecords(ownershipChallengeHost(input.customDomain.fqdn));
-        return txtRecordsIncludeValue(records, ownershipChallengeValue(link.ownershipToken));
+        const evaluation = await dnsLookups.evaluate({
+          name: ownershipChallengeHost(input.customDomain.fqdn),
+          recordType: "TXT",
+          value: ownershipChallengeValue(link.ownershipToken),
+        });
+        return evaluation.matches;
       },
     });
 

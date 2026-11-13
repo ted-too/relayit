@@ -8,6 +8,10 @@ export const env = createEnv({
     BETTER_AUTH_SECRETS: z.string().min(1),
     DATABASE_URL: z.string().min(1),
     REDIS_URL: z.string().min(1),
+    /** Prepended to every Redis key; a worktree sets its own. Empty in production. */
+    REDIS_KEY_PREFIX: z.string().default(""),
+    /** `ses` or `fake`; unset, fake under NODE_ENV development or test, else SES. */
+    EMAIL_BACKEND: z.enum(["ses", "fake"]).optional(),
 
     /** Stripe — enables Plans / Billing. Absent ⇒ unlimited entitlements. */
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
@@ -55,6 +59,8 @@ export const env = createEnv({
     BETTER_AUTH_SECRETS: process.env.BETTER_AUTH_SECRETS,
     DATABASE_URL: process.env.DATABASE_URL,
     REDIS_URL: process.env.REDIS_URL,
+    REDIS_KEY_PREFIX: process.env.REDIS_KEY_PREFIX,
+    EMAIL_BACKEND: process.env.EMAIL_BACKEND,
 
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,

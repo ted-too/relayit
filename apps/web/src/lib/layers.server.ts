@@ -1,11 +1,10 @@
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
-import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
 import { JobsLive } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
+import { emailBackendLayer, selectEmailBackend } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
 import { Effect, Layer, Logger, Redacted, References } from "effect";
@@ -27,14 +26,22 @@ const dbLive = makeDbLive({
 });
 
 // Redis logs reconnects from the layer itself; give it the app logger.
-const redisLive = makeRedisLive({ url: env.REDIS_URL }).pipe(Layer.provide(loggingLive));
+const redisLive = makeRedisLive({ keyPrefix: env.REDIS_KEY_PREFIX, url: env.REDIS_URL }).pipe(
+  Layer.provide(loggingLive),
+);
 
 const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
 
 const credentialsVaultLive = ProviderCredentialsVault.live(secrets);
 const symmetricCryptoLive = SymmetricCrypto.live(secrets);
 
-const emailProviderRegistryLive = EmailProviderRegistry.live(awsSesProviderFactory);
+// Throws at startup for EMAIL_BACKEND=fake under NODE_ENV=production.
+const emailBackend = Effect.runSync(
+  selectEmailBackend({ configured: env.EMAIL_BACKEND, nodeEnv: process.env.NODE_ENV }),
+);
+const emailBackendLive = emailBackendLayer(emailBackend).pipe(
+  Layer.provide(Layer.mergeAll(dbLive, jobsLive, loggingLive)),
+);
 
 const cloudflareConfigured =
   env.CF_API_TOKEN && env.CF_ROOT_DOMAIN && env.CF_ZONE_ID
@@ -68,7 +75,7 @@ export const AppLive = Layer.mergeAll(
   jobsLive,
   credentialsVaultLive,
   symmetricCryptoLive,
-  emailProviderRegistryLive,
+  emailBackendLive,
   managedDnsLive,
   templatingBuilderLive,
   loggingLive,

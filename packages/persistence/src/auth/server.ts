@@ -57,6 +57,8 @@ export interface AuthConfig {
     };
   };
   redis: AuthRedis;
+  /** `REDIS_KEY_PREFIX`: the session store bypasses `@repo/redis`, so it applies it here. */
+  redisKeyPrefix: string;
   socialProviders?: SocialProviders;
 }
 
@@ -65,6 +67,7 @@ export const createAuth = ({
   cookieDomain,
   db,
   redis,
+  redisKeyPrefix,
   socialProviders,
   hooks,
   plugins,
@@ -83,11 +86,11 @@ export const createAuth = ({
     },
     secondaryStorage: {
       get: async (key) => {
-        const value = await redis.send("GET", [`${COOKIE_PREFIX}:auth:${key}`]);
+        const value = await redis.send("GET", [`${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`]);
         return typeof value === "string" ? value : null;
       },
       set: async (key, value, ttl) => {
-        const redisKey = `${COOKIE_PREFIX}:auth:${key}`;
+        const redisKey = `${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`;
         if (ttl) {
           await redis.send("SETEX", [redisKey, String(ttl), value]);
         } else {
@@ -95,7 +98,7 @@ export const createAuth = ({
         }
       },
       delete: async (key) => {
-        await redis.send("DEL", [`${COOKIE_PREFIX}:auth:${key}`]);
+        await redis.send("DEL", [`${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`]);
       },
     },
     emailAndPassword: {
