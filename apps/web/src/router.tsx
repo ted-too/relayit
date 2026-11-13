@@ -1,4 +1,5 @@
 import { PageLoader } from "@repo/ui/components/ui/custom/page-loader";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { DefaultCatchBoundary } from "@/components/default-catch";
 import { NotFound } from "@/components/not-found";
@@ -16,5 +17,8 @@ export const getRouter = () => {
     defaultNotFoundComponent: NotFound,
     defaultErrorComponent: DefaultCatchBoundary,
     scrollRestoration: true,
+    Wrap: ({ children }) => (
+      <QueryClientProvider client={context.queryClient}>{children}</QueryClientProvider>
+    ),
   });
 };
