@@ -18,7 +18,7 @@ export interface BucketSendLimits {
 /**
  * One purpose's caps. Still keyed `managed`, from when sends were also split by BYO
  * Provider: every `user_channel.limits` row already has that shape, and dropping the key
- * means rewriting those rows first (#ISSUE_LIMITS).
+ * means rewriting those rows first (#34).
  */
 export interface PurposeLimits {
   managed: BucketSendLimits;
