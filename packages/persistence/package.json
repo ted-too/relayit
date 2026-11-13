@@ -5,10 +5,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:studio": "bunx --bun drizzle-kit studio",
-    "db:generate": "bunx --bun drizzle-kit generate",
-    "db:migrate": "bunx --bun drizzle-kit migrate",
-    "test": "bun test"
+    "db:studio": "bun --no-env-file ../../tooling/scripts/src/with-env.ts bunx --bun drizzle-kit studio",
+    "db:generate": "bun --no-env-file ../../tooling/scripts/src/with-env.ts bunx --bun drizzle-kit generate",
+    "test": "bun --no-env-file test"
   },
   "dependencies": {
     "@better-auth/api-key": "^1.6.25",

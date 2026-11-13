@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless",
-    "dev:app": "bun run --watch ./src/index.ts",
+    "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app api bun --no-env-file run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun --no-env-file test"
   },
   "dependencies": {
     "@elysia/openapi": "^1.4.15",
@@ -26,9 +25,5 @@
   },
   "devDependencies": {
     "typeid-js": "catalog:"
-  },
-  "portless": {
-    "name": "api.relayit",
-    "script": "dev:app"
   }
 }

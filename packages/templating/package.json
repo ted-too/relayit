@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun --no-env-file test"
   },
   "dependencies": {
     "@repo/object-storage": "workspace:*",

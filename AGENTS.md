@@ -40,10 +40,12 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 ## Ways to hurt yourself
 
 1. **Production data and real cloud accounts.** Production's database holds customers' Projects, credentials and send history; AWS and Cloudflare hold live sending infrastructure. Never point a dev server, script, migration or test at them, or call their APIs, without Ted's permission for that task.
-2. **Starting an app.** `apps/api`, `apps/web` and `apps/template-builder` each apply pending migrations to their `DATABASE_URL` as they start. The api then, for every email Provider in that database, decrypts its stored AWS credentials and creates or updates the SES configuration set, SNS topic and subscription that point at its `API_URL`, reconciles Cloudflare DNS with `CF_*`, and starts the job worker, which sends any queued email through SES. The dashboard creates real SES identities and DNS records when you add a Domain. So never start the api, or `bun run dev` (which starts all four apps), against the `.env` files in this checkout or any other real credentials, unless Ted asks for that run.
-3. **Killing by pattern.** Never `pkill -f`, `killall`, `portless prune`, or kill a PID found by matching a name or path; other dev servers and agents run on this machine. Kill only a PID you started.
-4. **Migrations.** Never hand-write or edit anything under `packages/persistence/drizzle/`. Change the schema (`packages/persistence/src/db/schema/`, plus the jobs tables in `packages/jobs/src/*-schema.ts`), then run `vp run --filter @repo/persistence db:generate` and read the SQL. If generate asks a question (rename or create) or fails for want of a TTY, stop and ask Ted to run it; never feed it keypresses or write the files yourself.
-5. **Secrets.** Each app's `.env` (and `packages/*/.env`) holds real credentials. Never commit, print, paste or edit them; name the variable instead.
+2. **Starting an app.** Every app migrates its `DATABASE_URL` as it starts, and the api's job worker sends whatever is queued. What else it reaches depends on the root `.env`:
+   - **Safe:** a `.env` written by `bun run worktree:setup`, or copied from `.env.example`. `EMAIL_BACKEND=fake` sends nothing and makes nothing in AWS, Domains verify without AWS or public DNS, objects stay in `temp/`, Redis keys carry the worktree's prefix, and with no `CF_*`, `STRIPE_*` or `GITHUB_*` nothing calls Cloudflare, Stripe or GitHub.
+   - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the api decrypts every email Provider's AWS credentials, points SES and SNS at its `API_URL` and sends queued mail for real, and adding a Domain creates real SES identities. Don't start an app or `bun run dev` against one unless Ted asks for that run.
+3. **Killing by pattern.** Never `pkill -f`, `killall`, or kill a PID found by matching a name or path; other dev servers and agents run on this machine. Kill only a PID you started. Killing only the PID of a background `bun run dev` leaves its apps running, so kill every PID in its process tree.
+4. **Migrations.** Never hand-write or edit anything under `packages/persistence/drizzle/`. Change the schema (`packages/persistence/src/db/schema/`, plus the jobs tables in `packages/jobs/src/*-schema.ts`), then run `bun run db:generate` and read the SQL. If generate asks a question (rename or create) or fails for want of a TTY, stop and ask Ted to run it; never feed it keypresses or write the files yourself.
+5. **Secrets.** The main checkout's `.env` files hold real credentials. Never commit, print, paste, copy or edit them; name the variable instead. A worktree's `.env` holds only generated local secrets.
 
 ## How it works
 
@@ -69,6 +71,7 @@ packages/templating/      Email Workspaces: Git in S3, publish, the builder's Rp
 packages/template-render/ rendering primitive and sealed React Email templates
 packages/redis/, object-storage/, logging/, ui/   infrastructure and shared UI
 tooling/oxlint-plugin/    our lint rules, each with a test
+tooling/scripts/          dev env, worktree setup and prune, seed, the test runner
 docs/internals/           decisions and constraints that span components
 docs/operations/          procedures: development, deploys
 temp/                     scratch (gitignored)
@@ -81,14 +84,27 @@ Apps never import another app's source; shared behaviour belongs in a package.
 Bun installs and runs the apps; Vite+ (`vp`) runs lint, format and the workspace's scripts. Lint and format config is in the root `vite.config.ts`.
 
 - `bun install`: also patches `tsc` with the Effect language service and installs the commit hook.
-- `bun run dev`: all four apps through portless, at `https://app.relayit.localhost`, `api.relayit.localhost`, `builder.relayit.localhost` and `relayit.localhost`. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
-- `vp run --filter @repo/persistence db:generate`: a migration from the schema. Apps apply migrations when they start.
+- `bun run dev`: all four apps, reading the root `.env`: dashboard on `WEB_PORT`, site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout). Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
+- `bun run db:migrate`, `bun run db:seed`: migrate and seed the root `.env`'s local database; the seed prints how to sign in and an API key.
+- `bun run db:generate`: a migration from the schema. Apps apply migrations when they start.
+- `bun run worktree:setup` (`--reset`), `bun run worktree:prune` (`--dry-run`): see Worktrees.
 - `vp lint <files>`, `vp run --filter <pkg> test`, `vp run --filter <pkg> typecheck`, `bun test <file>` inside a package: targeted checks.
 - `vp check` (format + lint, `--fix` to fix), `bun run typecheck`, `bun run test`, `bun run build`, `bun run knip`: repo-wide.
 
-Tests run on `bun test`, except `packages/template-render` and `tooling/oxlint-plugin` (Vitest). Integration tests run only when `TEST_DATABASE_URL` or `TEST_REDIS_URL` is set and skip otherwise; CI sets neither. `bun run test` stops at the first package that fails.
+Tests run on `bun test`, except `packages/template-render` and `tooling/oxlint-plugin` (Vitest). `bun run test` needs Docker and no `.env`: it starts a throwaway Postgres and Redis, runs every package's tests with the integration tests on, and reports every failing package; CI runs it the same way. Run alone, an integration test skips unless `TEST_DATABASE_URL` and `TEST_REDIS_URL` are set; point them at a database and Redis you can throw away.
 
 The commit hook formats and lints staged files and blocks the commit on a lint error. Lint as you go rather than finding out at commit.
+
+## Worktrees
+
+Each task gets its own git worktree: T3 Code makes it under `~/.t3/worktrees/` and runs `bun run worktree:setup` in it. That writes the worktree's root `.env` from `.env.example` with fresh secrets, its own database (`relayit_wt_<worktree>`, on the worktrees' Postgres at `localhost:5433`), its own block of ports and its own Redis key prefix (`wt:<worktree>:`), then installs, migrates and seeds. Run it yourself if the worktree has no `.env`. If that Postgres isn't running, setup says so: ask Ted to start it rather than pointing the worktree at another.
+
+- **Your database, ports, prefix and `temp/` are yours alone**; `db:*` and `bun run dev` use them. `bun run test` starts its own Postgres and Redis.
+- **Never copy the main checkout's `.env`** into a worktree, or add a cloud key to one. Ask Ted if a task needs a real account.
+- **Branch names.** T3 names a new branch `t3code/…`. Rename it to `<type>/<slug>` (`git branch -m`) before the first push.
+- **A branch is checked out in one worktree at a time.** A stack's layers live in the worktree that made it; `gh stack` moves between them there.
+- **Migrations made in parallel.** If `main` gains a migration while yours is unmerged, rebase, delete your migration folder, run `bun run db:generate` again, then `bun run worktree:setup --reset`.
+- Removed worktrees leave their databases and Redis keys behind; `bun run worktree:prune` drops those, and only those.
 
 ## Code
 
@@ -106,17 +122,19 @@ The commit hook formats and lints staged files and blocks the commit on a lint e
 
 - **Checks.** Run lint, typecheck and tests for what you changed. CI runs everything; the push is how it runs.
 - **Tests.** Logic and observable behaviour get tests: accept and delivery outcomes, suppression, Usage, webhook signing and delivery. Use a real Postgres or Redis for integration tests, with fakes only at true boundaries (SES, Cloudflare, the clock). Don't mock the logic under test.
-- **UI.** Dashboard changes need screenshots in the PR. Take them against a local database and fake data, never a running instance with real Projects.
+- **UI.** Screenshots of a changed screen are optional; a PR is not held back for them. Any you show come from a local database with fake data, never a running instance with real Projects.
 - **Done** is a PR open on GitHub with CI green.
 
 ## Git and PRs
 
-- Branch per change, `<type>/<slug>`, from and targeting `main`. Ted merges; PRs are squash-merged, so once a branch's PR has merged, new work goes on a new branch from `main`, opened as a new PR.
-- Conventional commits scoped by area: `feat(send):`, `fix(domains):`, `chore(tooling):`, `docs(internals):`, `ci:`. The PR title becomes the squash commit, and semantic-release reads it on `main`: `feat`, `fix`, `perf`, `refactor` and `revert` cut the next `1.0.0-alpha.N` and publish images; `docs`, `chore`, `test`, `build`, `ci` and `style` release nothing. Pick the type for what the change does to a running deployment.
-- PR body: the problem in a sentence or two, then `## Changes`, `## Verified` (the tests and runs that prove it), `## Decided without Ted` (judgment calls you made, so he can overrule them) and `Closes #N` for each issue it settles.
-- Never commit plans, scratch files or screenshots for PRs; upload evidence to the PR. `gh pr create`, `gh pr edit` and `gh pr comment` take `--attach <file>`: reference each image in the body by the exact path given to `--attach`, written out in full, and `gh` rewrites it to the uploaded URL. Read the body back with `gh pr view <n> --json body` and check every image became a `user-attachments` URL.
+- Branch per change as `<type>/<slug>`, from and targeting `main`. Work that depends on an unmerged PR branches off it. Ted squash-merges, so once a branch's PR has merged, new work goes on a new branch from `main`, opened as a new PR.
+- **Title.** The PR title becomes the squash commit: a conventional `type: summary`, no scope, under 72 characters. semantic-release reads it on `main`: `feat`, `fix`, `perf`, `refactor` and `revert` cut the next `1.0.0-alpha.N` and publish images; `docs`, `chore`, `test`, `build`, `ci` and `style` release nothing. Pick the type for what the change does to a running deployment.
+- **Scope.** A feature is one PR, schema to screen. Unrelated changes go apart.
+- **Body**, one line per paragraph (GitHub renders newlines, so don't hard-wrap): `## Problem`, `## Fix`, `## Deploy` when something a deployment depends on changes (a Dockerfile, a workflow, an environment variable an app reads, the Bun or runtime version, or a migration), `## Verification` (the tests and runs that prove it), `Closes #N` for each issue it settles, and a `Model:` line naming the model and harness that did the work. Judgment calls Ted should check go at the end of Fix as "Worth a look:". Screenshots are optional.
+- Never commit plans, scratch files or screenshots for PRs.
+- **Review.** Run `/code-review` against the base before asking for review on a feature-sized change. Draft while CI is red. Resolve every thread.
 - **Stack dependent work.** When a change lands in layers that each make sense to review alone, make it a stack with `gh stack`: `gh stack init --base main <branch>`, `gh stack add <branch>` for each layer, `gh stack submit` to push and open the PRs as a linked stack, `gh stack sync` after changing a lower layer. Each layer targets the one below and is merged from the bottom. Work that doesn't depend on another open PR is its own PR off `main`.
-- **Review fixes on a stack** go in a new layer on top, one commit per fix, so the reviewed layers below stay as they were.
+- **Fixes to a stack** go on its top branch, so the reviewed layers below stay as they were.
 
 ## Issues
 

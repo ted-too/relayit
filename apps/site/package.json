@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless",
-    "dev:app": "bun --bun vp dev",
+    "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app site bun --no-env-file --bun vp dev",
     "build": "bun --bun vp build",
     "preview": "bun --bun vp preview",
     "typecheck": "tsc --noEmit"
@@ -30,11 +29,6 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
-    "dotenv": "catalog:",
     "vite": "catalog:"
-  },
-  "portless": {
-    "name": "relayit",
-    "script": "dev:app"
   }
 }

@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless",
-    "dev:app": "bun run --watch ./src/index.ts",
+    "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app builder bun --no-env-file run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun --no-env-file test",
     "start": "bun ./src/index.ts"
   },
   "dependencies": {
@@ -17,9 +16,5 @@
     "@repo/redis": "workspace:*",
     "@repo/templating": "workspace:*",
     "effect": "catalog:"
-  },
-  "portless": {
-    "name": "builder.relayit",
-    "script": "dev:app"
   }
 }
