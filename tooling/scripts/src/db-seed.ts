@@ -27,7 +27,7 @@ const SEED = {
   domain: "local.relayit.test",
   email: "dev@relayit.test",
   name: "Local Developer",
-  password: "relayit-dev-password",
+  password: "password",
   projectName: "Local Project",
   projectSlug: "local",
 };
