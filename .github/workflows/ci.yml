@@ -72,6 +72,13 @@ jobs:
       # TEST_DATABASE_URL / TEST_REDIS_URL are set and skip themselves otherwise. CI sets
       # neither, so this job runs the unit tests alone.
       - run: vp run test
+        env:
+          # apps/web's tests import its env module, which validates these at load. Nothing
+          # connects: the URLs point at a closed port and the secret signs nothing real.
+          BETTER_AUTH_SECRETS: "1:ci-placeholder-not-a-secret"
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:1/ci
+          REDIS_URL: redis://127.0.0.1:1
+          VITE_BASE_URL: http://localhost:3000
 
   check:
     name: Check
