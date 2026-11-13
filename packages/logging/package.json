@@ -1,0 +1,13 @@
+{
+  "name": "@repo/logging",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun --no-env-file test"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  }
+}

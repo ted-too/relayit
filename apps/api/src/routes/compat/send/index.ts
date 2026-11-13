@@ -3,7 +3,7 @@ import { Cause, Effect } from "effect";
 import { Elysia, status } from "elysia";
 import type { ApiAuth } from "../../../lib/auth";
 import type { RunApiEffect } from "../../../lib/effect";
-import { logEffectFailure } from "../../../lib/log-failure";
+import { logEffectFailure } from "@repo/logging";
 import {
   mapAcceptResultToLegacyResponse,
   mapLegacyRawToAccept,

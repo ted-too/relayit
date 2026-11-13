@@ -32,6 +32,9 @@
     "apps/web": {
       "entry": ["src/router.tsx", "src/server.ts", "src/routes/**/*.{ts,tsx}"],
     },
+    "apps/worker": {
+      "entry": ["src/index.ts"],
+    },
     // A package's index.ts barrels are its public API: what they re-export stays exported
     // whether or not an app imports it yet.
     "packages/*": {

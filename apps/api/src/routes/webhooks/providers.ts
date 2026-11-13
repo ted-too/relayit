@@ -2,7 +2,7 @@ import { handleProviderWebhook } from "@repo/channels/email/deliverability";
 import { Cause, Effect } from "effect";
 import { Elysia, status, t } from "elysia";
 import type { RunApiEffect } from "../../lib/effect";
-import { logEffectFailure } from "../../lib/log-failure";
+import { logEffectFailure } from "@repo/logging";
 
 const providerWebhookParamsSchema = t.Object({
   productId: t.String({ minLength: 1 }),

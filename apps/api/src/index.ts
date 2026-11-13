@@ -1,33 +1,15 @@
-import type * as NodeCluster from "node:cluster";
-// oxlint-disable-next-line relayit/namespace-node-imports -- cluster is an EventEmitter instance: `on`, `off`, `worker` and `workers` live on the default export, not as named exports
-import cluster from "node:cluster";
-import * as NodeOS from "node:os";
-import * as NodeTimers from "node:timers";
 import openapi from "@elysia/openapi";
-import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
-import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
-import {
-  emailVerifyCustomDomainHandler,
-  emailVerifyOwnershipHandler,
-  emailVerifyProviderIdentityHandler,
-  emailVerifySandboxDomainHandler,
-} from "@repo/channels/email/verification";
-import { registerJobHandler, runJobWorker } from "@repo/jobs";
-import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
+import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
-import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
-import { type ApiConfig, apiConfig } from "./env";
-import { LoggingLive, makeRuntime } from "./layers";
+import { apiConfig } from "./env";
+import { makeRuntime } from "./layers";
 import { type ApiAuth, createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
-import { logEffectFailure } from "./lib/log-failure";
 import { createLegacySendRoutes } from "./routes/compat/send";
 import { createEmailRoutes } from "./routes/messages/email";
 import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
-
-const TRAILING_SLASH = /\/$/;
 
 export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
   return new Elysia()
@@ -69,112 +51,46 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
     .group("/webhooks", (group) => group.use(createProviderWebhookRoutes(runEffect)));
 }
 
-const jobWorkerOptions = {
-  blockMs: 5000,
-  concurrency: 10,
-  consumer: `${NodeOS.hostname()}:${process.pid}`,
-  count: 100,
-  promotion: {
-    intervalMs: 1000,
-    limit: 100,
-  },
-  reclaim: {
-    count: 100,
-    intervalMs: 30_000,
-    minIdleMs: 60_000,
-  },
-  restart: {
-    baseDelayMs: 1000,
-    maxDelayMs: 30_000,
-  },
-} as const;
-
-// The fake backend has no infrastructure: nothing to point at this api.
-const ensureEmailProvidersOnStartup = (
-  runtime: ReturnType<typeof makeRuntime>,
-  config: ApiConfig,
-) =>
-  config.emailBackend === "fake"
-    ? Effect.logInfo("Email backend is fake: sends are simulated and never leave this machine")
-    : Effect.promise(() =>
-        runtime.runPromise(
-          ensureAllEmailProviderInfrastructure(config.apiUrl.toString()).pipe(
-            Effect.catchCause(logEffectFailure("Failed to ensure email Provider infrastructure")),
-          ),
-        ),
+const apiProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const config = yield* apiConfig;
+    yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
+    yield* Effect.logInfo("Database migrations up to date");
+    const services = yield* Effect.context<never>();
+    const auth = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        createAuth({
+          apiUrl: config.apiUrl.toString(),
+          databaseUrl: Redacted.value(config.databaseUrl),
+          redisKeyPrefix: config.redisKeyPrefix,
+          redisUrl: Redacted.value(config.redisUrl),
+          runLog: Effect.runForkWith(services),
+        }),
+      ),
+      (apiAuth) => Effect.promise(apiAuth.close),
+    );
+    const runtime = yield* Effect.acquireRelease(
+      Effect.sync(() => makeRuntime(config)),
+      (apiRuntime) => apiRuntime.disposeEffect,
+    );
+    yield* Effect.promise(runtime.context);
+    const runEffect: RunApiEffect = (effect, options) =>
+      runtime.runPromise(
+        effect.pipe(Effect.tapCause(logEffectFailure("API request failed"))),
+        options,
       );
 
-const makeJobWorkerProgram = (listUnsubscribe: {
-  readonly secret: string;
-  readonly webOrigin: string;
-}) =>
-  runJobWorker(
-    [
-      registerJobHandler(makeEmailDeliverHandler(listUnsubscribe)),
-      registerJobHandler(webhookDeliverHandler),
-      registerJobHandler(emailVerifyProviderIdentityHandler),
-      registerJobHandler(emailVerifySandboxDomainHandler),
-      registerJobHandler(emailVerifyCustomDomainHandler),
-      registerJobHandler(emailVerifyOwnershipHandler),
-    ],
-    jobWorkerOptions,
-  );
+    const app = createHttpApp(auth, runEffect);
 
-const apiProgram = (startWorker: boolean) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const config = yield* apiConfig;
-      yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
-      yield* Effect.logInfo("Database migrations up to date");
-      const services = yield* Effect.context<never>();
-      const auth = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          createAuth({
-            apiUrl: config.apiUrl.toString(),
-            databaseUrl: Redacted.value(config.databaseUrl),
-            redisKeyPrefix: config.redisKeyPrefix,
-            redisUrl: Redacted.value(config.redisUrl),
-            runLog: Effect.runForkWith(services),
-          }),
-        ),
-        (apiAuth) => Effect.promise(apiAuth.close),
-      );
-      const runtime = yield* Effect.acquireRelease(
-        Effect.sync(() => makeRuntime(config)),
-        (apiRuntime) => apiRuntime.disposeEffect,
-      );
-      yield* Effect.promise(runtime.context);
-      if (startWorker) {
-        yield* ensureEmailProvidersOnStartup(runtime, config);
-        const jobWorkerProgram = makeJobWorkerProgram({
-          secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
-          webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
-        });
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            runtime.runFork(jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))),
-          ),
-          Fiber.interrupt,
-        );
-        yield* Effect.logInfo("Relayit Job worker started");
-      }
-      const runEffect: RunApiEffect = (effect, options) =>
-        runtime.runPromise(
-          effect.pipe(Effect.tapCause(logEffectFailure("API request failed"))),
-          options,
-        );
+    yield* Effect.acquireRelease(
+      Effect.sync(() => app.listen({ hostname: config.hostname, port: config.port })),
+      () => Effect.promise(() => app.stop()),
+    );
+    yield* Effect.logInfo(`Relayit API listening on ${config.hostname}:${config.port}`);
 
-      const app = createHttpApp(auth, runEffect);
-
-      yield* Effect.acquireRelease(
-        Effect.sync(() => app.listen({ hostname: config.hostname, port: config.port })),
-        () => Effect.promise(() => app.stop()),
-      );
-      yield* Effect.logInfo(`Relayit API listening on ${config.hostname}:${config.port}`);
-
-      return yield* Effect.never;
-    }),
-  );
+    return yield* Effect.never;
+  }),
+);
 
 const reportFailure = Effect.catchCause((cause) => {
   if (cause.reasons.every(Cause.isInterruptReason)) {
@@ -190,147 +106,23 @@ const reportFailure = Effect.catchCause((cause) => {
   );
 });
 
-const runApi = (startWorker: boolean) => {
-  const fiber = Effect.runFork(
-    apiProgram(startWorker).pipe(reportFailure, Effect.provide(LoggingLive)),
-  );
-  let shuttingDown = false;
+const fiber = Effect.runFork(apiProgram.pipe(reportFailure, Effect.provide(LoggingLive)));
+let shuttingDown = false;
 
-  const shutdown = (signal: NodeJS.Signals) => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
-
-    void Effect.runPromise(Fiber.interrupt(fiber)).finally(() => {
-      cluster.worker?.disconnect();
-      process.off("SIGINT", onSigint);
-      process.off("SIGTERM", onSigterm);
-      process.kill(process.pid, signal);
-    });
-  };
-  const onSigint = () => shutdown("SIGINT");
-  const onSigterm = () => shutdown("SIGTERM");
-
-  process.once("SIGINT", onSigint);
-  process.once("SIGTERM", onSigterm);
-};
-
-const webConcurrency = () => {
-  const configured = Bun.env.WEB_CONCURRENCY;
-  if (configured === undefined) {
-    return NodeOS.availableParallelism();
+const shutdown = (signal: NodeJS.Signals) => {
+  if (shuttingDown) {
+    return;
   }
+  shuttingDown = true;
 
-  const concurrency = Number(configured);
-  if (!(Number.isInteger(concurrency) && concurrency > 0)) {
-    throw new Error("WEB_CONCURRENCY must be a positive integer");
-  }
-
-  return concurrency;
-};
-
-const clusterProgram = Effect.callback<void>((resume) => {
-  let completed = false;
-  let shuttingDown = false;
-  let shutdownTimeout: ReturnType<typeof NodeTimers.setTimeout> | undefined;
-  const clusterEvents = cluster as typeof cluster & {
-    off(
-      event: "exit",
-      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
-    ): void;
-    on(
-      event: "exit",
-      listener: (worker: NodeCluster.Worker, code: number, signal: string) => void,
-    ): void;
-  };
-  const fork = () => cluster.fork();
-  const finish = () => {
-    if (completed) {
-      return;
-    }
-    completed = true;
-    if (shutdownTimeout) {
-      clearTimeout(shutdownTimeout);
-    }
-    resume(Effect.void);
-  };
-  const onExit = (_worker: NodeCluster.Worker, _code: number, _signal: string) => {
-    if (!shuttingDown) {
-      NodeTimers.setTimeout(() => {
-        if (!shuttingDown) {
-          fork();
-        }
-      }, 1000);
-    }
-  };
-  const shutdown = (signal: NodeJS.Signals) => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
-
-    for (const worker of Object.values(cluster.workers ?? {})) {
-      worker?.process.kill(signal);
-    }
-
-    shutdownTimeout = NodeTimers.setTimeout(() => {
-      process.exitCode = 1;
-      finish();
-    }, 8000);
-    cluster.disconnect(finish);
-  };
-  const onSigint = () => shutdown("SIGINT");
-  const onSigterm = () => shutdown("SIGTERM");
-
-  for (let worker = 0; worker < webConcurrency(); worker += 1) {
-    fork();
-  }
-  clusterEvents.on("exit", onExit);
-  process.once("SIGINT", onSigint);
-  process.once("SIGTERM", onSigterm);
-
-  return Effect.sync(() => {
-    shuttingDown = true;
-    clusterEvents.off("exit", onExit);
+  void Effect.runPromise(Fiber.interrupt(fiber)).finally(() => {
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
-    if (shutdownTimeout) {
-      clearTimeout(shutdownTimeout);
-    }
+    process.kill(process.pid, signal);
   });
-});
+};
+const onSigint = () => shutdown("SIGINT");
+const onSigterm = () => shutdown("SIGTERM");
 
-const primaryProgram = Effect.scoped(
-  Effect.gen(function* () {
-    const config = yield* apiConfig;
-    yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
-    yield* Effect.logInfo("Database migrations up to date");
-    const runtime = yield* Effect.acquireRelease(
-      Effect.sync(() => makeRuntime(config)),
-      (apiRuntime) => apiRuntime.disposeEffect,
-    );
-    yield* Effect.promise(runtime.context);
-    yield* ensureEmailProvidersOnStartup(runtime, config);
-    const jobWorkerProgram = makeJobWorkerProgram({
-      secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
-      webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
-    });
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        runtime.runFork(jobWorkerProgram.pipe(Effect.annotateLogs({ role: "worker" }))),
-      ),
-      Fiber.interrupt,
-    );
-    yield* Effect.logInfo("Relayit Job worker started in cluster primary");
-
-    yield* clusterProgram;
-  }),
-);
-
-if (cluster.isPrimary && Bun.env.NODE_ENV === "production" && process.platform === "linux") {
-  Effect.runFork(primaryProgram.pipe(reportFailure, Effect.provide(LoggingLive)));
-} else {
-  const isClusterChild = cluster.isWorker;
-  runApi(!isClusterChild);
-}
+process.once("SIGINT", onSigint);
+process.once("SIGTERM", onSigterm);
