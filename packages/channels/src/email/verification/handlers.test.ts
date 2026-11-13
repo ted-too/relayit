@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
@@ -10,11 +10,11 @@ const unsupported = () => Effect.die("unused");
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 describe("emailVerifyCustomDomainHandler", () => {
-  test("updates the stored DNS host when nameservers have changed", () => {
+  it.effect("updates the stored DNS host when nameservers have changed", () => {
     stubResolverNs({ "acme.test": ["ns-1234.awsdns-12.com"] });
 
     const providerUpdates: unknown[] = [];
@@ -40,31 +40,29 @@ describe("emailVerifyCustomDomainHandler", () => {
       }),
     };
 
-    return Effect.runPromise(
-      emailVerifyCustomDomainHandler.handle({ customDomainId: "dom_1" }, execution).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(DB, db),
-            Layer.succeed(Jobs, {
-              cancel: () => Effect.void,
-              enqueue: unsupported,
-              schedule: unsupported,
-            } satisfies JobsService),
-            Layer.succeed(EmailBackend, {
-              createIdentity: unsupported,
-              defaultRegion: "eu-central-1",
-              deleteIdentity: unsupported,
-              ensureInfrastructure: unsupported,
-              getIdentityStatus: unsupported,
-              send: unsupported,
-            } satisfies EmailBackendService),
-          ),
+    return emailVerifyCustomDomainHandler.handle({ customDomainId: "dom_1" }, execution).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(DB, db),
+          Layer.succeed(Jobs, {
+            cancel: () => Effect.void,
+            enqueue: unsupported,
+            schedule: unsupported,
+          } satisfies JobsService),
+          Layer.succeed(EmailBackend, {
+            createIdentity: unsupported,
+            defaultRegion: "eu-central-1",
+            deleteIdentity: unsupported,
+            ensureInfrastructure: unsupported,
+            getIdentityStatus: unsupported,
+            send: unsupported,
+          } satisfies EmailBackendService),
         ),
-        Effect.map(() => {
-          expect(providerUpdates).toEqual([{ provider: "route53" }]);
-          return true;
-        }),
       ),
+      Effect.map(() => {
+        expect(providerUpdates).toEqual([{ provider: "route53" }]);
+        return true;
+      }),
     );
   });
 });

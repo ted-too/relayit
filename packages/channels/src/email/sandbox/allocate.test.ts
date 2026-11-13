@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import { allocateSandboxDomain, sweepIfSandboxAllocatable } from "./allocate";
@@ -80,64 +80,60 @@ const makeDb = (input: {
 };
 
 describe("allocateSandboxDomain", () => {
-  test("returns null when no allocatable sandbox root is available", () =>
-    Effect.runPromise(
-      allocateSandboxDomain("org_1").pipe(
-        Effect.provide(Layer.succeed(DB, makeDb({ allocatable: null }).db)),
-        Effect.map((result) => {
-          expect(result).toBeNull();
-          return result;
-        }),
-      ),
-    ));
+  it.effect("returns null when no allocatable sandbox root is available", () =>
+    allocateSandboxDomain("org_1").pipe(
+      Effect.provide(Layer.succeed(DB, makeDb({ allocatable: null }).db)),
+      Effect.map((result) => {
+        expect(result).toBeNull();
+        return result;
+      }),
+    ),
+  );
 
-  test("requires a usable managed identity join before assigning a root", () => {
+  it.effect("requires a usable managed identity join before assigning a root", () => {
     const { db, updates } = makeDb({
       allocatable: { id: "snd_ready" },
     });
 
-    return Effect.runPromise(
-      allocateSandboxDomain("org_1").pipe(
-        Effect.provide(Layer.succeed(DB, db)),
-        Effect.map((result) => {
-          expect(result).toBe("snd_ready");
-          expect(updates).toEqual([
-            {
-              organizationId: "captured-via-allocate",
-              sandboxDomainId: "snd_ready",
-            },
-          ]);
-          return result;
-        }),
-      ),
+    return allocateSandboxDomain("org_1").pipe(
+      Effect.provide(Layer.succeed(DB, db)),
+      Effect.map((result) => {
+        expect(result).toBe("snd_ready");
+        expect(updates).toEqual([
+          {
+            organizationId: "captured-via-allocate",
+            sandboxDomainId: "snd_ready",
+          },
+        ]);
+        return result;
+      }),
     );
   });
 });
 
 describe("sweepIfSandboxAllocatable", () => {
-  test("returns 0 when the sandbox is not allocatable", () =>
-    Effect.runPromise(
-      sweepIfSandboxAllocatable("snd_1").pipe(
-        Effect.provide(
-          Layer.succeed(
-            DB,
-            makeDb({
-              sandboxRow: {
-                isActive: true,
-                isPaused: false,
-                verificationStatus: "not_verified",
-              },
-            }).db,
-          ),
+  it.effect("returns 0 when the sandbox is not allocatable", () =>
+    sweepIfSandboxAllocatable("snd_1").pipe(
+      Effect.provide(
+        Layer.succeed(
+          DB,
+          makeDb({
+            sandboxRow: {
+              isActive: true,
+              isPaused: false,
+              verificationStatus: "not_verified",
+            },
+          }).db,
         ),
-        Effect.map((assigned) => {
-          expect(assigned).toBe(0);
-          return assigned;
-        }),
       ),
-    ));
+      Effect.map((assigned) => {
+        expect(assigned).toBe(0);
+        return assigned;
+      }),
+    ),
+  );
 
-  test("assigns unassigned organizations while roots remain allocatable", () => {
+  it.effect("assigns unassigned organizations while roots remain allocatable", () => {
     const { db, updates } = makeDb({
       allocatable: { id: "snd_ready" },
       sandboxRow: {
@@ -148,16 +144,14 @@ describe("sweepIfSandboxAllocatable", () => {
       unassignedOrgIds: ["org_a", "org_b"],
     });
 
-    return Effect.runPromise(
-      sweepIfSandboxAllocatable("snd_ready").pipe(
-        Effect.provide(Layer.succeed(DB, db)),
-        Effect.map((assigned) => {
-          expect(assigned).toBe(2);
-          expect(updates).toHaveLength(2);
-          expect(updates.every((u) => u.sandboxDomainId === "snd_ready")).toBe(true);
-          return assigned;
-        }),
-      ),
+    return sweepIfSandboxAllocatable("snd_ready").pipe(
+      Effect.provide(Layer.succeed(DB, db)),
+      Effect.map((assigned) => {
+        expect(assigned).toBe(2);
+        expect(updates).toHaveLength(2);
+        expect(updates.every((u) => u.sandboxDomainId === "snd_ready")).toBe(true);
+        return assigned;
+      }),
     );
   });
 });

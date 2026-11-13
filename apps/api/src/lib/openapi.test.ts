@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test, vi } from "@effect/vitest";
 import openapi from "@elysia/openapi";
 import { Elysia } from "elysia";
 import {
@@ -11,7 +11,7 @@ const RESEND_COPY = /resend/i;
 
 describe("OpenAPI send-email schemas", () => {
   test("documents Recipient as a named component union", async () => {
-    const warn = spyOn(console, "warn");
+    const warn = vi.spyOn(console, "warn");
     const app = new Elysia()
       .use(openapi({ path: "/docs" }))
       .model(sendEmailOpenApiModels)

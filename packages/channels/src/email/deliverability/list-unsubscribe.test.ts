@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import {
@@ -62,7 +62,7 @@ describe("list-unsubscribe tokens", () => {
       webOrigin: "https://app.example.com",
     });
 
-    expect(url).toStartWith("https://app.example.com/unsubscribe/acme/cont_1?");
+    expect(url.startsWith("https://app.example.com/unsubscribe/acme/cont_1?")).toBe(true);
     expect(url).toContain("msg=msg_1");
     expect(url).toContain("topic=topc_1");
     expect(url).toContain("sig=");
@@ -117,144 +117,144 @@ describe("list-unsubscribe tokens", () => {
 });
 
 describe("handleListUnsubscribeOneClick", () => {
-  test("inserts a per-topic unsubscribe for a marketing message", async () => {
-    const inserts: unknown[] = [];
-    const db: any = {
-      insert: () => ({
-        values: (values: unknown) => ({
-          onConflictDoNothing: () => {
-            inserts.push(values);
-            return Effect.void;
-          },
+  it.effect("inserts a per-topic unsubscribe for a marketing message", () =>
+    Effect.gen(function* () {
+      const inserts: unknown[] = [];
+      const db: any = {
+        insert: () => ({
+          values: (values: unknown) => ({
+            onConflictDoNothing: () => {
+              inserts.push(values);
+              return Effect.void;
+            },
+          }),
         }),
-      }),
-      query: {
-        contact: {
-          findFirst: () =>
-            Effect.succeed({
-              appEnvironment: { organizationId: "org_1" },
-              deletedAt: null,
-              id: "cont_1",
-            }),
+        query: {
+          contact: {
+            findFirst: () =>
+              Effect.succeed({
+                appEnvironment: { organizationId: "org_1" },
+                deletedAt: null,
+                id: "cont_1",
+              }),
+          },
+          message: {
+            findFirst: () =>
+              Effect.succeed({
+                appEnvironment: { organizationId: "org_1" },
+                id: "msg_1",
+                purpose: "marketing",
+              }),
+          },
+          organization: {
+            findFirst: () => Effect.succeed({ id: "org_1", slug: "acme" }),
+          },
+          topic: {
+            findFirst: () =>
+              Effect.succeed({
+                id: "topc_1",
+                organizationId: "org_1",
+              }),
+          },
         },
-        message: {
-          findFirst: () =>
-            Effect.succeed({
-              appEnvironment: { organizationId: "org_1" },
-              id: "msg_1",
-              purpose: "marketing",
-            }),
-        },
-        organization: {
-          findFirst: () => Effect.succeed({ id: "org_1", slug: "acme" }),
-        },
-        topic: {
-          findFirst: () =>
-            Effect.succeed({
-              id: "topc_1",
-              organizationId: "org_1",
-            }),
-        },
-      },
-    };
+      };
 
-    const signature = signListUnsubscribe({
-      contactId: "cont_1",
-      messageId: "msg_1",
-      secret: SECRET,
-      topicId: "topc_1",
-    });
+      const signature = signListUnsubscribe({
+        contactId: "cont_1",
+        messageId: "msg_1",
+        secret: SECRET,
+        topicId: "topc_1",
+      });
 
-    const result = await Effect.runPromise(
-      handleListUnsubscribeOneClick({
+      const result = yield* handleListUnsubscribeOneClick({
         contactId: "cont_1",
         messageId: "msg_1",
         orgSlug: "acme",
         secret: SECRET,
         signature,
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, db))),
-    );
+      }).pipe(Effect.provide(Layer.succeed(DB, db)));
 
-    expect(result).toEqual({
-      contactId: "cont_1",
-      ok: true,
-      topicId: "topc_1",
-    });
-    expect(inserts).toEqual([
-      {
+      expect(result).toEqual({
         contactId: "cont_1",
+        ok: true,
         topicId: "topc_1",
-      },
-    ]);
-  });
+      });
+      expect(inserts).toEqual([
+        {
+          contactId: "cont_1",
+          topicId: "topc_1",
+        },
+      ]);
+    }),
+  );
 
-  test("rejects an invalid signature", async () => {
-    const error = await Effect.runPromise(
-      handleListUnsubscribeOneClick({
+  it.effect("rejects an invalid signature", () =>
+    Effect.gen(function* () {
+      const error = yield* handleListUnsubscribeOneClick({
         contactId: "cont_1",
         messageId: "msg_1",
         orgSlug: "acme",
         secret: SECRET,
         signature: "bad",
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, {} as never)), Effect.flip),
-    );
+      }).pipe(Effect.provide(Layer.succeed(DB, {} as never)), Effect.flip);
 
-    expect(error).toBeInstanceOf(ListUnsubscribeError);
-    expect(error.code).toBe("invalid_signature");
-  });
+      expect(error).toBeInstanceOf(ListUnsubscribeError);
+      expect(error.code).toBe("invalid_signature");
+    }),
+  );
 
-  test("rejects transactional messages", async () => {
-    const signature = signListUnsubscribe({
-      contactId: "cont_1",
-      messageId: "msg_1",
-      secret: SECRET,
-      topicId: "topc_1",
-    });
+  it.effect("rejects transactional messages", () =>
+    Effect.gen(function* () {
+      const signature = signListUnsubscribe({
+        contactId: "cont_1",
+        messageId: "msg_1",
+        secret: SECRET,
+        topicId: "topc_1",
+      });
 
-    const db: any = {
-      query: {
-        contact: {
-          findFirst: () =>
-            Effect.succeed({
-              appEnvironment: { organizationId: "org_1" },
-              deletedAt: null,
-              id: "cont_1",
-            }),
+      const db: any = {
+        query: {
+          contact: {
+            findFirst: () =>
+              Effect.succeed({
+                appEnvironment: { organizationId: "org_1" },
+                deletedAt: null,
+                id: "cont_1",
+              }),
+          },
+          message: {
+            findFirst: () =>
+              Effect.succeed({
+                appEnvironment: { organizationId: "org_1" },
+                id: "msg_1",
+                purpose: "transactional",
+              }),
+          },
+          organization: {
+            findFirst: () => Effect.succeed({ id: "org_1", slug: "acme" }),
+          },
+          topic: {
+            findFirst: () =>
+              Effect.succeed({
+                id: "topc_1",
+                organizationId: "org_1",
+              }),
+          },
         },
-        message: {
-          findFirst: () =>
-            Effect.succeed({
-              appEnvironment: { organizationId: "org_1" },
-              id: "msg_1",
-              purpose: "transactional",
-            }),
-        },
-        organization: {
-          findFirst: () => Effect.succeed({ id: "org_1", slug: "acme" }),
-        },
-        topic: {
-          findFirst: () =>
-            Effect.succeed({
-              id: "topc_1",
-              organizationId: "org_1",
-            }),
-        },
-      },
-    };
+      };
 
-    const error = await Effect.runPromise(
-      handleListUnsubscribeOneClick({
+      const error = yield* handleListUnsubscribeOneClick({
         contactId: "cont_1",
         messageId: "msg_1",
         orgSlug: "acme",
         secret: SECRET,
         signature,
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, db)), Effect.flip),
-    );
+      }).pipe(Effect.provide(Layer.succeed(DB, db)), Effect.flip);
 
-    expect(error.code).toBe("bad_request");
-  });
+      expect(error.code).toBe("bad_request");
+    }),
+  );
 });

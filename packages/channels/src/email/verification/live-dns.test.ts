@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "@effect/vitest";
 import * as NodeDns from "node:dns";
 import {
   evaluateLiveDnsRecord,
@@ -111,13 +111,14 @@ let resolverConfig: ConstructorParameters<typeof FakeResolver>[0] = {};
 
 const installFakeResolver = (config: ConstructorParameters<typeof FakeResolver>[0] = {}) => {
   resolverConfig = config;
-  spyOn(NodeDns.promises, "Resolver").mockImplementation(
-    (() => new FakeResolver(resolverConfig)) as never,
-  );
+  // A `function`, not an arrow: the code under test calls the stub with `new`.
+  vi.spyOn(NodeDns.promises, "Resolver").mockImplementation(function () {
+    return new FakeResolver(resolverConfig);
+  } as never);
 };
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
   resolverConfig = {};
 });
 

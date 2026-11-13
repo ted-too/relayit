@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun --no-env-file test"
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@distilled.cloud/cloudflare": "^1.0.0-rc.20",
@@ -19,5 +19,9 @@
     "effect": "catalog:",
     "typeid-js": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   }
 }

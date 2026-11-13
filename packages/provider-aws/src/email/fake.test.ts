@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { simulatedSesNotifications } from "./fake";
 
 const outcomes = (to: string[], cc: string[] | null = null) =>

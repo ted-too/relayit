@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun --no-env-file test"
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@repo/jobs": "workspace:*",
@@ -13,5 +13,9 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "typeid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   }
 }

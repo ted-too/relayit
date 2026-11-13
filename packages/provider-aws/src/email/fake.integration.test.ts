@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { EmailBackend } from "@repo/channels/email/backend";
@@ -35,7 +35,7 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
     return;
   }
 
-  test(testName, async () => {
+  it.live(testName, () => {
     const run = Bun.randomUUIDv7();
     const keyPrefix = `test:${run}:`;
     const secrets = parseBetterAuthSecrets("1:fake-backend-test-secret-0123456789");
@@ -134,9 +134,7 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
       expect(events.map((event) => event.type)).toEqual(["delivery.bounced"]);
     });
 
-    try {
-      await Effect.runPromise(program.pipe(Effect.provide(layer)));
-    } finally {
+    const cleanUp = Effect.promise(async () => {
       const client = makeRedisClient({ url: testRedisUrl });
       let cursor = "0";
       do {
@@ -153,6 +151,8 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
         }
       } while (cursor !== "0");
       client.close();
-    }
+    });
+
+    return program.pipe(Effect.provide(layer), Effect.ensuring(cleanUp));
   });
 });

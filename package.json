@@ -14,6 +14,7 @@
       "@effect-aws/client-s3": "2.0.0",
       "@effect/sql-pg": "4.1.4",
       "@effect/tsgo": "^0.68.1",
+      "@effect/vitest": "4.1.4",
       "@remixicon/react": "^4.9.0",
       "@rolldown/plugin-babel": "^0.2.3",
       "@tailwindcss/vite": "^4.3.3",
@@ -39,7 +40,7 @@
       "typescript": "^7.0.2",
       "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
       "vite-plus": "1.1.0",
-      "vitest": "^4.1.10",
+      "vitest": "5.0.3",
       "zod": "^4.4.3"
     }
   },

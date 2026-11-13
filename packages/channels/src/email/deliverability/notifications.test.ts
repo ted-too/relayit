@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import type { Database } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
@@ -79,11 +79,11 @@ const testLayer = () => {
 };
 
 describe("ingestDeliveryEvents", () => {
-  test("hard bounce records a Delivery Event and suppresses at severity all", async () => {
-    const { db, events, suppressions } = makeDb({});
+  it.effect("hard bounce records a Delivery Event and suppresses at severity all", () =>
+    Effect.gen(function* () {
+      const { db, events, suppressions } = makeDb({});
 
-    await Effect.runPromise(
-      ingestDeliveryEvents(db, {
+      yield* ingestDeliveryEvents(db, {
         events: [
           {
             kind: "bounced",
@@ -93,31 +93,31 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer())),
-    );
+      }).pipe(Effect.provide(testLayer()));
 
-    expect(events).toEqual([
-      {
-        customDomainId: "dom_test",
-        data: { bounceType: "Permanent" },
-        emailDeliveryId: "edlv_test",
-        kind: "bounced",
-        sandboxDomainId: null,
-      },
-    ]);
-    expect(suppressions).toEqual([
-      expect.objectContaining({
-        suppressionReason: "hard_bounce",
-        suppressionSeverity: "all",
-      }),
-    ]);
-  });
+      expect(events).toEqual([
+        {
+          customDomainId: "dom_test",
+          data: { bounceType: "Permanent" },
+          emailDeliveryId: "edlv_test",
+          kind: "bounced",
+          sandboxDomainId: null,
+        },
+      ]);
+      expect(suppressions).toEqual([
+        expect.objectContaining({
+          suppressionReason: "hard_bounce",
+          suppressionSeverity: "all",
+        }),
+      ]);
+    }),
+  );
 
-  test("complaint records a Delivery Event and suppresses at severity marketing", async () => {
-    const { db, events, suppressions } = makeDb({});
+  it.effect("complaint records a Delivery Event and suppresses at severity marketing", () =>
+    Effect.gen(function* () {
+      const { db, events, suppressions } = makeDb({});
 
-    await Effect.runPromise(
-      ingestDeliveryEvents(db, {
+      yield* ingestDeliveryEvents(db, {
         events: [
           {
             kind: "complained",
@@ -127,31 +127,31 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer())),
-    );
+      }).pipe(Effect.provide(testLayer()));
 
-    expect(events).toEqual([
-      {
-        customDomainId: "dom_test",
-        data: { complaintFeedbackType: "abuse" },
-        emailDeliveryId: "edlv_test",
-        kind: "complained",
-        sandboxDomainId: null,
-      },
-    ]);
-    expect(suppressions).toEqual([
-      expect.objectContaining({
-        suppressionReason: "complaint",
-        suppressionSeverity: "marketing",
-      }),
-    ]);
-  });
+      expect(events).toEqual([
+        {
+          customDomainId: "dom_test",
+          data: { complaintFeedbackType: "abuse" },
+          emailDeliveryId: "edlv_test",
+          kind: "complained",
+          sandboxDomainId: null,
+        },
+      ]);
+      expect(suppressions).toEqual([
+        expect.objectContaining({
+          suppressionReason: "complaint",
+          suppressionSeverity: "marketing",
+        }),
+      ]);
+    }),
+  );
 
-  test("soft bounce records a Delivery Event without Suppression", async () => {
-    const { db, events, suppressions } = makeDb({});
+  it.effect("soft bounce records a Delivery Event without Suppression", () =>
+    Effect.gen(function* () {
+      const { db, events, suppressions } = makeDb({});
 
-    await Effect.runPromise(
-      ingestDeliveryEvents(db, {
+      yield* ingestDeliveryEvents(db, {
         events: [
           {
             kind: "bounced",
@@ -161,23 +161,23 @@ describe("ingestDeliveryEvents", () => {
             suppress: false,
           },
         ],
-      }).pipe(Effect.provide(testLayer())),
-    );
+      }).pipe(Effect.provide(testLayer()));
 
-    expect(events).toHaveLength(1);
-    expect(events[0]).toEqual(
-      expect.objectContaining({
-        kind: "bounced",
-      }),
-    );
-    expect(suppressions).toEqual([]);
-  });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual(
+        expect.objectContaining({
+          kind: "bounced",
+        }),
+      );
+      expect(suppressions).toEqual([]);
+    }),
+  );
 
-  test("unknown provider message id is a no-op", async () => {
-    const { db, events, suppressions } = makeDb({ delivery: null });
+  it.effect("unknown provider message id is a no-op", () =>
+    Effect.gen(function* () {
+      const { db, events, suppressions } = makeDb({ delivery: null });
 
-    await Effect.runPromise(
-      ingestDeliveryEvents(db, {
+      yield* ingestDeliveryEvents(db, {
         events: [
           {
             kind: "bounced",
@@ -187,10 +187,10 @@ describe("ingestDeliveryEvents", () => {
             suppress: true,
           },
         ],
-      }).pipe(Effect.provide(testLayer())),
-    );
+      }).pipe(Effect.provide(testLayer()));
 
-    expect(events).toEqual([]);
-    expect(suppressions).toEqual([]);
-  });
+      expect(events).toEqual([]);
+      expect(suppressions).toEqual([]);
+    }),
+  );
 });

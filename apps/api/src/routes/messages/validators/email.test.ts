@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { getSchemaValidator, t } from "elysia";
 import {
   parseEmailFrom,

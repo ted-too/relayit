@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "@effect/vitest";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import { customDomain, organization, organizationDomain } from "@repo/persistence/db/schema";
 import { typeid } from "typeid-js";
