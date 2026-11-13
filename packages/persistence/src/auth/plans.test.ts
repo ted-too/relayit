@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import type { PromiseDb } from "../db/promise";
 import {
   BROADCAST_LIMITS,

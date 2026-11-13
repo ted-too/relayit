@@ -1,5 +1,5 @@
-import { spyOn } from "bun:test";
 import * as NodeDns from "node:dns";
+import { vi } from "@effect/vitest";
 
 const TRAILING_DOT_REGEX = /\.$/;
 
@@ -10,22 +10,22 @@ const normalizeHost = (host: string) => host.replace(TRAILING_DOT_REGEX, "").toL
 
 /** Stub `NodeDns.promises.Resolver` so tests don't hit the ambient resolver. */
 export const stubResolverNs = (nsByHost: Record<string, string[]>) => {
-  spyOn(NodeDns.promises, "Resolver").mockImplementation(
-    (() =>
-      ({
-        resolve4: () => Promise.resolve(["192.0.2.53"]),
-        resolve6: () => Promise.resolve([]),
-        resolveCname: () => Promise.reject(notFound("cname", "ENODATA")),
-        resolveMx: () => Promise.resolve([]),
-        resolveNs: (host: string) => {
-          const records = nsByHost[normalizeHost(host)];
-          if (records && records.length > 0) {
-            return Promise.resolve(records);
-          }
-          return Promise.reject(notFound(host, "ENODATA"));
-        },
-        resolveTxt: () => Promise.resolve([]),
-        setServers: () => undefined,
-      }) as unknown as NodeDns.promises.Resolver) as never,
-  );
+  // A `function`, not an arrow: the code under test calls the stub with `new`.
+  vi.spyOn(NodeDns.promises, "Resolver").mockImplementation(function () {
+    return {
+      resolve4: () => Promise.resolve(["192.0.2.53"]),
+      resolve6: () => Promise.resolve([]),
+      resolveCname: () => Promise.reject(notFound("cname", "ENODATA")),
+      resolveMx: () => Promise.resolve([]),
+      resolveNs: (host: string) => {
+        const records = nsByHost[normalizeHost(host)];
+        if (records && records.length > 0) {
+          return Promise.resolve(records);
+        }
+        return Promise.reject(notFound(host, "ENODATA"));
+      },
+      resolveTxt: () => Promise.resolve([]),
+      setServers: () => undefined,
+    } as unknown as NodeDns.promises.Resolver;
+  } as never);
 };

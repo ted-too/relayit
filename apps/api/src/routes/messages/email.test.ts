@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import {
   type AcceptTransactionalEmailInput,
   type acceptTransactionalEmail,
@@ -10,11 +10,11 @@ import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import type { Database } from "@repo/persistence/db/effect";
 import { DB } from "@repo/persistence/db/effect";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, FiberSet, Layer } from "effect";
 import { HttpClient } from "effect/http";
 import { Elysia } from "elysia";
 import type { ApiAuth } from "../../lib/auth";
-import type { RunApiEffect } from "../../lib/effect";
+import type { ApiServices, RunApiEffect } from "../../lib/effect";
 import { createEmailRoutes } from "./email";
 
 const MESSAGE_ID_PATTERN = /^msg_/;
@@ -80,14 +80,13 @@ const makeTestAuth = (): ApiAuth => ({
   } as ApiAuth["db"],
 });
 
-const makeApp = (accept: typeof acceptTransactionalEmail) => {
-  const runtime = ManagedRuntime.make(makeTestLayer());
-  const runEffect: RunApiEffect = runtime.runPromise;
-  const app = new Elysia().group("/messages", (group) =>
-    group.use(createEmailRoutes(makeTestAuth(), runEffect, accept)),
-  );
-  return { app, runtime };
-};
+const makeApp = (accept: typeof acceptTransactionalEmail) =>
+  Effect.gen(function* () {
+    const runEffect: RunApiEffect = yield* FiberSet.makeRuntimePromise<ApiServices>();
+    return new Elysia().group("/messages", (group) =>
+      group.use(createEmailRoutes(makeTestAuth(), runEffect, accept)),
+    );
+  }).pipe(Effect.provide(makeTestLayer()));
 
 const postEmail = async (
   app: { handle: (request: Request) => Response | Promise<Response> },
@@ -107,287 +106,268 @@ const postEmail = async (
   );
 
 describe("POST /messages/email", () => {
-  test("maps a valid request to accept input and returns an accepted message id", () => {
+  it.live("maps a valid request to accept input and returns an accepted message id", () => {
     let captured: AcceptTransactionalEmailInput | undefined;
-    const { app, runtime } = makeApp((input) => {
-      captured = input;
-      return Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
+
+    return Effect.gen(function* () {
+      const app = yield* makeApp((input) => {
+        captured = input;
+        return Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
+        });
+      });
+      const response = yield* Effect.promise(() =>
+        postEmail(app, {
+          from: "sender@example.com",
+          html: "<p>Hello</p>",
+          subject: "Hello",
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(201);
+      expect(body).toEqual({ id: expect.stringMatching(MESSAGE_ID_PATTERN) });
+      expect(captured).toMatchObject({
+        attribution: { kind: "project" },
+        email: {
+          attachments: [],
+          bcc: [],
+          cc: [],
+          content: {
+            html: "<p>Hello</p>",
+            kind: "inline",
+            subject: "Hello",
+          },
+          from: {
+            address: "sender@example.com",
+            normalized: "sender@example.com",
+          },
+          headers: {},
+          replyTo: [],
+          to: [{ email: "recipient@example.com" }],
+        },
+        organizationId: "org_test",
       });
     });
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(app, {
-            from: "sender@example.com",
-            html: "<p>Hello</p>",
-            subject: "Hello",
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(201);
-        expect(body).toEqual({ id: expect.stringMatching(MESSAGE_ID_PATTERN) });
-        expect(captured).toMatchObject({
-          attribution: { kind: "project" },
-          email: {
-            attachments: [],
-            bcc: [],
-            cc: [],
-            content: {
-              html: "<p>Hello</p>",
-              kind: "inline",
-              subject: "Hello",
-            },
-            from: {
-              address: "sender@example.com",
-              normalized: "sender@example.com",
-            },
-            headers: {},
-            replyTo: [],
-            to: [{ email: "recipient@example.com" }],
-          },
-          organizationId: "org_test",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
   });
 
-  test("maps template wire fields and App / Environment headers into accept input", () => {
+  it.live("maps template wire fields and App / Environment headers into accept input", () => {
     let captured: AcceptTransactionalEmailInput | undefined;
-    const { app, runtime } = makeApp((input) => {
-      captured = input;
-      return Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
+
+    return Effect.gen(function* () {
+      const app = yield* makeApp((input) => {
+        captured = input;
+        return Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
+        });
       });
-    });
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(
-            app,
-            {
-              from: "sender@example.com",
-              reply_to: ["support@example.com"],
-              subject: "Welcome",
-              template: {
-                id: "welcome",
-                variables: { name: "Ada" },
-              },
-              to: {
-                email: "recipient@example.com",
-                first_name: "Ada",
-                properties: { plan: "pro" },
-              },
+      const response = yield* Effect.promise(() =>
+        postEmail(
+          app,
+          {
+            from: "sender@example.com",
+            reply_to: ["support@example.com"],
+            subject: "Welcome",
+            template: {
+              id: "welcome",
+              variables: { name: "Ada" },
             },
-            {
-              app: "web",
-              environment: "production",
-              "idempotency-key": "idem_test",
+            to: {
+              email: "recipient@example.com",
+              first_name: "Ada",
+              properties: { plan: "pro" },
             },
-          ),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(201);
-        expect(body).toEqual({ id: "msg_test" });
-        expect(captured).toMatchObject({
-          attribution: {
+          },
+          {
             app: "web",
             environment: "production",
-            kind: "appEnvironment",
+            "idempotency-key": "idem_test",
           },
-          email: {
-            content: {
-              idOrSlug: "welcome",
-              kind: "template",
-              subjectOverride: "Welcome",
-              values: { name: "Ada" },
-            },
-            replyTo: ["support@example.com"],
-            to: [
-              {
-                email: "recipient@example.com",
-                firstName: "Ada",
-                properties: { plan: "pro" },
-              },
-            ],
+        ),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(201);
+      expect(body).toEqual({ id: "msg_test" });
+      expect(captured).toMatchObject({
+        attribution: {
+          app: "web",
+          environment: "production",
+          kind: "appEnvironment",
+        },
+        email: {
+          content: {
+            idOrSlug: "welcome",
+            kind: "template",
+            subjectOverride: "Welcome",
+            values: { name: "Ada" },
           },
-          idempotencyKey: "idem_test",
-          organizationId: "org_test",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("rejects unpaired App / Environment headers", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
-      }),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(
-            app,
+          replyTo: ["support@example.com"],
+          to: [
             {
-              from: "sender@example.com",
-              html: "<p>Hello</p>",
-              subject: "Hello",
-              to: "recipient@example.com",
+              email: "recipient@example.com",
+              firstName: "Ada",
+              properties: { plan: "pro" },
             },
-            { app: "web" },
-          ),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(400);
-        expect(body).toMatchObject({ code: "invalid_app_environment" });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
+          ],
+        },
+        idempotencyKey: "idem_test",
+        organizationId: "org_test",
+      });
+    });
   });
 
-  test("includes stripped recipients in the response", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
-      }),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(app, {
-            from: "sender@example.com",
-            html: "<p>Hello</p>",
-            subject: "Hello",
-            to: ["ok@example.com", "suppressed@example.com"],
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(201);
-        expect(body).toEqual({
-          id: "msg_test",
-          stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("maps EmailAcceptRejected to 422", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.fail(
-        new EmailAcceptRejected({
-          code: "invalid_from_address",
-          message: "bad from",
-        }),
-      ),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(app, {
-            from: "sender@example.com",
-            html: "<p>Hello</p>",
-            subject: "Hello",
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(422);
-        expect(body).toEqual({
-          code: "invalid_from_address",
-          message: "bad from",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("maps UsageLimitExceeded to 429", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.fail(
-        new UsageLimitExceeded({
+  it.live("rejects unpaired App / Environment headers", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.succeed({
           deliveryId: "edlv_test",
-          retryAt: new Date(Date.now() + 60_000),
-          window: "daily",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
         }),
-      ),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(app, {
+      );
+      const response = yield* Effect.promise(() =>
+        postEmail(
+          app,
+          {
             from: "sender@example.com",
             html: "<p>Hello</p>",
             subject: "Hello",
             to: "recipient@example.com",
-          }),
-        );
-        const body = (yield* Effect.promise(() => response.json())) as {
-          code?: string;
-          retry_after_seconds?: number;
-        };
+          },
+          { app: "web" },
+        ),
+      );
+      const body = yield* Effect.promise(() => response.json());
 
-        expect(response.status).toBe(429);
-        expect(body).toMatchObject({
-          code: "daily_limit_exceeded",
-        });
-        expect(body.retry_after_seconds).toBeGreaterThan(0);
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
+      expect(response.status).toBe(400);
+      expect(body).toMatchObject({ code: "invalid_app_environment" });
+    });
   });
 
-  test("maps unexpected failures to a generic 500 without leaking internals", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.fail(
-        new EmailAcceptInfrastructureError({
-          cause: new Error("boom"),
-          operation: "content",
-          organizationId: "org_test",
+  it.live("includes stripped recipients in the response", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
         }),
-      ),
-    );
+      );
+      const response = yield* Effect.promise(() =>
+        postEmail(app, {
+          from: "sender@example.com",
+          html: "<p>Hello</p>",
+          subject: "Hello",
+          to: ["ok@example.com", "suppressed@example.com"],
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postEmail(app, {
-            from: "sender@example.com",
-            html: "<p>Hello</p>",
-            subject: "Hello",
-            to: "recipient@example.com",
+      expect(response.status).toBe(201);
+      expect(body).toEqual({
+        id: "msg_test",
+        stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
+      });
+    });
+  });
+
+  it.live("maps EmailAcceptRejected to 422", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.fail(
+          new EmailAcceptRejected({
+            code: "invalid_from_address",
+            message: "bad from",
           }),
-        );
-        const body = yield* Effect.promise(() => response.json());
+        ),
+      );
+      const response = yield* Effect.promise(() =>
+        postEmail(app, {
+          from: "sender@example.com",
+          html: "<p>Hello</p>",
+          subject: "Hello",
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
 
-        expect(response.status).toBe(500);
-        expect(body).toEqual({
-          code: "internal_server_error",
-          message: "Failed to accept email message.",
-        });
-        expect(JSON.stringify(body)).not.toContain("boom");
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
+      expect(response.status).toBe(422);
+      expect(body).toEqual({
+        code: "invalid_from_address",
+        message: "bad from",
+      });
+    });
+  });
+
+  it.live("maps UsageLimitExceeded to 429", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.fail(
+          new UsageLimitExceeded({
+            deliveryId: "edlv_test",
+            retryAt: new Date(Date.now() + 60_000),
+            window: "daily",
+          }),
+        ),
+      );
+      const response = yield* Effect.promise(() =>
+        postEmail(app, {
+          from: "sender@example.com",
+          html: "<p>Hello</p>",
+          subject: "Hello",
+          to: "recipient@example.com",
+        }),
+      );
+      const body = (yield* Effect.promise(() => response.json())) as {
+        code?: string;
+        retry_after_seconds?: number;
+      };
+
+      expect(response.status).toBe(429);
+      expect(body).toMatchObject({
+        code: "daily_limit_exceeded",
+      });
+      expect(body.retry_after_seconds).toBeGreaterThan(0);
+    });
+  });
+
+  it.live("maps unexpected failures to a generic 500 without leaking internals", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.fail(
+          new EmailAcceptInfrastructureError({
+            cause: new Error("boom"),
+            operation: "content",
+            organizationId: "org_test",
+          }),
+        ),
+      );
+      const response = yield* Effect.promise(() =>
+        postEmail(app, {
+          from: "sender@example.com",
+          html: "<p>Hello</p>",
+          subject: "Hello",
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(500);
+      expect(body).toEqual({
+        code: "internal_server_error",
+        message: "Failed to accept email message.",
+      });
+      expect(JSON.stringify(body)).not.toContain("boom");
+    });
   });
 });

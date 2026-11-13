@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { getCurrentBetterAuthSecret, parseBetterAuthSecrets } from "./auth-secrets";
 
 describe("parseBetterAuthSecrets", () => {

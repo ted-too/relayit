@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import { type DeadLetterInput, DeadLetterStore, DeadLetterStoreLive } from "./dead-letter";
@@ -28,18 +28,16 @@ describe("dead-letter persistence", () => {
     wireVersion: 1,
   };
 
-  test(testName, () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const store = yield* DeadLetterStore;
-        const first = yield* store.record(deadLetter);
-        const second = yield* store.record(deadLetter);
+  it.live(testName, () =>
+    Effect.gen(function* () {
+      const store = yield* DeadLetterStore;
+      const first = yield* store.record(deadLetter);
+      const second = yield* store.record(deadLetter);
 
-        expect(second.id).toBe(first.id);
-      }).pipe(
-        Effect.provide(
-          DeadLetterStoreLive.pipe(Layer.provide(makeDbLive({ databaseUrl: testDatabaseUrl }))),
-        ),
+      expect(second.id).toBe(first.id);
+    }).pipe(
+      Effect.provide(
+        DeadLetterStoreLive.pipe(Layer.provide(makeDbLive({ databaseUrl: testDatabaseUrl }))),
       ),
     ),
   );

@@ -7,7 +7,7 @@
     "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app builder bun --no-env-file run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun --no-env-file test",
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir .",
     "start": "bun ./src/index.ts"
   },
   "dependencies": {
@@ -16,5 +16,9 @@
     "@repo/redis": "workspace:*",
     "@repo/templating": "workspace:*",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   }
 }

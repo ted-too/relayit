@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
@@ -40,7 +40,7 @@ const unusedCreateServices = Layer.mergeAll(
 );
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 const stubCloudflareNs = () => {
@@ -48,7 +48,7 @@ const stubCloudflareNs = () => {
 };
 
 describe("pauseCustomDomain / unpauseCustomDomain", () => {
-  test("rejects pause when the Project is not linked to the domain", () => {
+  it.effect("rejects pause when the Project is not linked to the domain", () => {
     const db: any = {
       query: {
         organizationDomain: {
@@ -57,26 +57,24 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
       },
     };
 
-    return Effect.runPromise(
-      pauseCustomDomain({
-        customDomainId: "dom_1",
-        organizationId: "org_1",
-        reason: "manual_admin_pause",
-      }).pipe(
-        Effect.provide(Layer.succeed(DB, db)),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "CustomDomainError",
-            message: "Domain is not linked to this Project.",
-          });
-          return error;
-        }),
-      ),
+    return pauseCustomDomain({
+      customDomainId: "dom_1",
+      organizationId: "org_1",
+      reason: "manual_admin_pause",
+    }).pipe(
+      Effect.provide(Layer.succeed(DB, db)),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "CustomDomainError",
+          message: "Domain is not linked to this Project.",
+        });
+        return error;
+      }),
     );
   });
 
-  test("pauses and unpauses a linked custom domain", () => {
+  it.effect("pauses and unpauses a linked custom domain", () => {
     const updates: unknown[] = [];
     const db: any = {
       query: {
@@ -98,31 +96,29 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
       }),
     };
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const paused = yield* pauseCustomDomain({
-          customDomainId: "dom_1",
-          organizationId: "org_1",
-          reason: "bad_reputation",
-        });
-        expect(paused).toEqual({ customDomainId: "dom_1", isPaused: true });
+    return Effect.gen(function* () {
+      const paused = yield* pauseCustomDomain({
+        customDomainId: "dom_1",
+        organizationId: "org_1",
+        reason: "bad_reputation",
+      });
+      expect(paused).toEqual({ customDomainId: "dom_1", isPaused: true });
 
-        const unpaused = yield* unpauseCustomDomain({
-          customDomainId: "dom_1",
-          organizationId: "org_1",
-        });
-        expect(unpaused).toEqual({ customDomainId: "dom_1", isPaused: false });
-        expect(updates).toEqual([
-          { isPaused: true, pausedReason: "bad_reputation" },
-          { isPaused: false, pausedReason: null },
-        ]);
-      }).pipe(Effect.provide(Layer.succeed(DB, db))),
-    );
+      const unpaused = yield* unpauseCustomDomain({
+        customDomainId: "dom_1",
+        organizationId: "org_1",
+      });
+      expect(unpaused).toEqual({ customDomainId: "dom_1", isPaused: false });
+      expect(updates).toEqual([
+        { isPaused: true, pausedReason: "bad_reputation" },
+        { isPaused: false, pausedReason: null },
+      ]);
+    }).pipe(Effect.provide(Layer.succeed(DB, db)));
   });
 });
 
 describe("createCustomDomain claim guard", () => {
-  test("rejects a second pending claim on a held FQDN", () => {
+  it.effect("rejects a second pending claim on a held FQDN", () => {
     const db: any = {
       query: {
         customDomain: {
@@ -146,25 +142,23 @@ describe("createCustomDomain claim guard", () => {
       },
     };
 
-    return Effect.runPromise(
-      createCustomDomain({
-        fqdn: "acme.test",
-        organizationId: "org_claimant",
-      }).pipe(
-        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            message: "Another Project already has a pending claim on this domain.",
-            operation: "claim",
-          });
-          return error;
-        }),
-      ),
+    return createCustomDomain({
+      fqdn: "acme.test",
+      organizationId: "org_claimant",
+    }).pipe(
+      Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          message: "Another Project already has a pending claim on this domain.",
+          operation: "claim",
+        });
+        return error;
+      }),
     );
   });
 
-  test("returns existing when the Project is already linked", () => {
+  it.effect("returns existing when the Project is already linked", () => {
     const db: any = {
       query: {
         customDomain: {
@@ -184,24 +178,22 @@ describe("createCustomDomain claim guard", () => {
       },
     };
 
-    return Effect.runPromise(
-      createCustomDomain({
-        fqdn: "acme.test",
-        organizationId: "org_1",
-      }).pipe(
-        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
-        Effect.map((result) => {
-          expect(result).toEqual({
-            customDomainId: "dom_1",
-            kind: "existing",
-          });
-          return result;
-        }),
-      ),
+    return createCustomDomain({
+      fqdn: "acme.test",
+      organizationId: "org_1",
+    }).pipe(
+      Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
+      Effect.map((result) => {
+        expect(result).toEqual({
+          customDomainId: "dom_1",
+          kind: "existing",
+        });
+        return result;
+      }),
     );
   });
 
-  test("detects the DNS host when reclaiming an unknown domain", () => {
+  it.effect("detects the DNS host when reclaiming an unknown domain", () => {
     stubCloudflareNs();
     const providerUpdates: unknown[] = [];
     const db: any = {
@@ -230,25 +222,23 @@ describe("createCustomDomain claim guard", () => {
       }),
     };
 
-    return Effect.runPromise(
-      createCustomDomain({
-        fqdn: "acme.test",
-        organizationId: "org_1",
-      }).pipe(
-        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
-        Effect.map((result) => {
-          expect(result).toEqual({
-            customDomainId: "dom_1",
-            kind: "existing",
-          });
-          expect(providerUpdates).toEqual([{ provider: "cloudflare" }]);
-          return result;
-        }),
-      ),
+    return createCustomDomain({
+      fqdn: "acme.test",
+      organizationId: "org_1",
+    }).pipe(
+      Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
+      Effect.map((result) => {
+        expect(result).toEqual({
+          customDomainId: "dom_1",
+          kind: "existing",
+        });
+        expect(providerUpdates).toEqual([{ provider: "cloudflare" }]);
+        return result;
+      }),
     );
   });
 
-  test("persists the detected DNS host on a new custom domain", () => {
+  it.effect("persists the detected DNS host on a new custom domain", () => {
     stubCloudflareNs();
     const domainInserts: Array<{ provider?: string }> = [];
     const registrationInserts: Array<{ region?: string }> = [];
@@ -306,22 +296,20 @@ describe("createCustomDomain claim guard", () => {
       } as never),
     );
 
-    return Effect.runPromise(
-      createCustomDomain({
-        fqdn: "acme.test",
-        organizationId: "org_1",
-      }).pipe(
-        Effect.provide(Layer.merge(Layer.succeed(DB, db), createServices)),
-        Effect.map((result) => {
-          expect(result).toEqual({
-            customDomainId: "dom_new",
-            kind: "created",
-          });
-          expect(domainInserts[0]?.provider).toBe("cloudflare");
-          expect(registrationInserts).toMatchObject([{ region: "eu-central-1" }]);
-          return result;
-        }),
-      ),
+    return createCustomDomain({
+      fqdn: "acme.test",
+      organizationId: "org_1",
+    }).pipe(
+      Effect.provide(Layer.merge(Layer.succeed(DB, db), createServices)),
+      Effect.map((result) => {
+        expect(result).toEqual({
+          customDomainId: "dom_new",
+          kind: "created",
+        });
+        expect(domainInserts[0]?.provider).toBe("cloudflare");
+        expect(registrationInserts).toMatchObject([{ region: "eu-central-1" }]);
+        return result;
+      }),
     );
   });
 });
