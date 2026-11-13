@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "portless",
-    "dev:app": "bun --bun vite dev",
-    "build": "bun --bun vite build",
-    "preview": "bun --bun vite preview",
+    "dev:app": "bun --bun vp dev",
+    "build": "bun --bun vp build",
+    "preview": "bun --bun vp preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
