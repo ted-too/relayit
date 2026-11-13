@@ -5,7 +5,7 @@ description: "How Projects, Domains, Providers, Templates, Contacts, Messages, a
 
 ## Projects
 
-A Project is the main tenant boundary in Relayit. Everything you send with belongs to a Project: Domains, API keys, Templates, Contacts, Messages, and BYO Providers.
+A Project is the main tenant boundary in Relayit. Everything you send with belongs to a Project: Domains, API keys, Templates, Contacts, and Messages.
 
 - A user can belong to several Projects. Each Project has an owner and members with roles.
 - Each Project has a name and a slug. You can edit both under **Settings > Project details**. The slug is used in the [legacy send endpoints](/docs/legacy-send).
@@ -42,10 +42,7 @@ See [Domains](/docs/domains) for the setup flow.
 
 ## Providers
 
-A Provider is the upstream email vendor that delivers your mail (for example Amazon SES).
-
-- **Managed Providers** are run by Relayit. Every Domain uses the default managed Provider unless you pick another one when you add the Domain. You never handle vendor credentials.
-- **BYO (bring your own) Providers** use your own vendor account and belong to your Project. Sends through a BYO Provider count against much higher limits on every Plan. BYO Providers require a Plan that allows them (Broadcast on Relayit Cloud). Self-hosted installs always allow them. The dashboard does not have a screen for connecting a BYO Provider yet. When a Project has one, it appears in the **Email provider** list when you add a Domain.
+A Provider is the upstream email vendor that delivers your mail (for example Amazon SES). Relayit runs its Providers; you never handle vendor credentials. Every Domain uses the default Provider unless you pick another one when you add the Domain.
 
 Each Domain has one active Provider. Relayit sets up the DNS records needed for that Provider pairing, so the records you see depend on which Provider the Domain uses.
 
@@ -85,10 +82,7 @@ Delivery happens in the background. A `201` means the Message was accepted and q
 
 ## Usage and Plans
 
-On Relayit Cloud, a Plan sets your limits. Usage is counted per Delivery (one per accepted send, regardless of recipient count) and is split into buckets by:
-
-- **Purpose:** transactional or marketing.
-- **Provider kind:** managed or BYO.
+On Relayit Cloud, a Plan sets your limits. Usage is counted per Delivery (one per accepted send, regardless of recipient count), separately for transactional and marketing sends.
 
 Plan limits belong to a user, the Project's **Billing User**. By default that is the Project owner. Every Project that user is Billing User for draws from the same limits. Monthly limits reset with the user's billing period. Daily limits reset at midnight UTC.
 

@@ -21,7 +21,6 @@ const makeTestLayer = () => {
   const usage = {
     confirm: () => Effect.void,
     release: () => Effect.void,
-    remeter: () => Effect.void,
     reserve: () =>
       Effect.succeed({
         billingUserId: "billing_test",

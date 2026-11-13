@@ -35,7 +35,7 @@ Self-hosting is covered in [Self-hosting](/docs/self-hosting).
 
 **Sandbox Domain.** A Relayit-owned sending domain that a new Project is allocated to, so you can try sending before you verify your own Domain. Sandbox sends can only go to members of your Project.
 
-**Provider.** The upstream email vendor that actually delivers your mail. Managed Providers are run by Relayit. Bring-your-own (BYO) Providers use your own vendor account.
+**Provider.** The upstream email vendor that actually delivers your mail, run by Relayit.
 
 **Template.** A reusable email, addressed by id (`tmpl_...`) or slug, that you fill with variables at send time.
 

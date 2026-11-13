@@ -13,7 +13,6 @@ Every email you send needs a sending identity. Relayit offers two.
 | Setup        | None. New Projects are allocated to it when it is available. | Add it and publish DNS records. |
 | From address | `sandbox@` the Sandbox Domain, only                          | Any address on the domain       |
 | Recipients   | Project members only                                         | Anyone                          |
-| Provider     | Managed                                                      | Managed or BYO                  |
 | Use it for   | Testing your integration                                     | Production mail                 |
 
 The Project keeps the Sandbox Domain after your own Domains verify, so you can keep using it for tests.
@@ -25,7 +24,7 @@ The Project keeps the Sandbox Domain after your own Domains verify, so you can k
 1. In the dashboard, open **Settings > Domains**.
 2. Select **Add Custom Domain**.
 3. Enter the domain you want to send from, for example `example.com`. You can add a subdomain such as `mail.example.com` if you want to keep transactional mail separate from your main domain.
-4. Pick an **Email provider**. The current default managed provider is preselected and labeled `default`. BYO Providers your Project owns are labeled `BYO`.
+4. If Relayit runs more than one Provider, pick an **Email provider**. The current default is preselected and labeled `default`.
 5. Select **Add Domain**.
 
 Relayit generates a DKIM key for the domain, registers it with the Provider, and shows you the DNS records to publish.
@@ -99,9 +98,7 @@ Pausing and unpausing are not available as dashboard actions yet. Contact suppor
 
 ## Providers per Domain
 
-Each Domain has one active Provider, chosen when you add it. Omitting a choice uses the current default managed Provider. The DNS records you publish belong to that Domain and Provider pairing, which is why the Domain page lists the Provider at the top.
-
-Sends through a managed Provider count against your managed limits. Sends through a BYO Provider count against the higher BYO limits. See [Errors and limits](/docs/errors-and-limits#plan-limits).
+Each Domain has one active Provider, chosen when you add it. Omitting a choice uses the current default Provider. The DNS records you publish belong to that Domain and Provider pairing, which is why the Domain page lists the Provider at the top.
 
 ## Claiming a domain from another Project
 

@@ -25,7 +25,7 @@ const pauseBodySchema = customDomainIdInputSchema.extend({
   reason: z.enum(["bad_reputation", "manual_admin_pause"]),
 });
 
-const assertIntegrationPermission = async (input: {
+const assertDomainPermission = async (input: {
   readonly organizationId: string;
   readonly permission: "create" | "read" | "update" | "delete";
 }) => {
@@ -33,7 +33,7 @@ const assertIntegrationPermission = async (input: {
   const allowed = await auth.api.hasPermission({
     body: {
       organizationId: input.organizationId,
-      permissions: { integration: [input.permission] },
+      permissions: { domain: [input.permission] },
     },
     headers,
   });
@@ -48,7 +48,7 @@ export const listCustomDomainsFn = createServerFn({ method: "GET" })
   .validator(listCustomDomainsInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "read",
     });
@@ -60,11 +60,11 @@ export const listProjectProvidersFn = createServerFn({ method: "GET" })
   .validator(listProjectProvidersInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "read",
     });
-    return runApp(listProvidersForProject(org.id));
+    return runApp(listProvidersForProject());
   });
 
 /** Project member: create or claim a Custom Domain; returns list projection. */
@@ -73,7 +73,7 @@ export const createCustomDomainFn = createServerFn({ method: "POST" })
   .validator(createCustomDomainInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "create",
     });
@@ -91,7 +91,7 @@ export const refreshCustomDomainFn = createServerFn({ method: "POST" })
   .validator(customDomainIdInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "create",
     });
@@ -108,7 +108,7 @@ export const deleteCustomDomainFn = createServerFn({ method: "POST" })
   .validator(customDomainIdInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "delete",
     });
@@ -126,7 +126,7 @@ export const pauseCustomDomainFn = createServerFn({ method: "POST" })
   .validator(pauseBodySchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "update",
     });
@@ -145,7 +145,7 @@ export const unpauseCustomDomainFn = createServerFn({ method: "POST" })
   .validator(customDomainIdInputSchema)
   .handler(async ({ data }) => {
     const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertIntegrationPermission({
+    await assertDomainPermission({
       organizationId: org.id,
       permission: "update",
     });
