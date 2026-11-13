@@ -23,18 +23,9 @@ export interface ProjectDomainListItem {
   readonly isPaused: boolean;
   readonly lastCheckedAt: Date | null;
   readonly ownership: {
-    readonly pendingProviderId: string | null;
     readonly status: "active" | "missing" | "pending";
   };
   readonly pausedReason: "bad_reputation" | "manual_admin_pause" | null;
   readonly provider: DomainProvider;
-  readonly providerIdentities: readonly {
-    readonly failoverEligible: boolean;
-    readonly failoverPriority: number;
-    readonly id: string;
-    readonly isActive: boolean;
-    readonly providerId: string;
-    readonly verificationStatus: string;
-  }[];
   readonly verificationStatus: "not_verified" | "partially_verified" | "verified";
 }

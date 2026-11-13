@@ -1,47 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
-import {
-  type OpenedProviderCredentials,
-  ProviderCredentialsVault,
-} from "@repo/persistence/crypto/provider-credentials";
 import { type Database, DB } from "@repo/persistence/db/effect";
-import { Redis, type RedisService } from "@repo/redis";
 import { Effect, Layer } from "effect";
-import { MessageDeliveryTerminalError } from "../../messages/delivery";
-import { ProviderRejected } from "../../provider-errors";
+import {
+  MessageDeliveryRetryableError,
+  MessageDeliveryTerminalError,
+} from "../../messages/delivery";
 import { Usage, type UsageService } from "../../usage";
-import type { EmailProviderAdapter, EmailProviderFactory } from "../provider-adapter";
-import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
+import {
+  EmailBackend,
+  EmailBackendRejected,
+  type EmailBackendService,
+  EmailBackendUnavailable,
+} from "../backend";
 import { makeEmailDeliverHandler } from "./handler";
 
 const unsupported = () => Effect.die("unused");
-const openedCredentials = {
-  encrypted: {},
-  unencrypted: {},
-} as OpenedProviderCredentials;
 
-const makeProvider = (input: { readonly id: string }) => ({
-  credentials: { ciphertext: "sealed", keyVersion: 1, nonce: "n" },
-  id: input.id,
-  productId: "ses",
-  vendorId: "aws",
-});
-
-const makeIdentity = (input: {
-  readonly failoverEligible?: boolean;
-  readonly failoverPriority?: number;
-  readonly id: string;
-  readonly isActive?: boolean;
-  readonly provider: ReturnType<typeof makeProvider>;
-}) => ({
-  failoverEligible: input.failoverEligible ?? false,
-  failoverPriority: input.failoverPriority ?? 0,
-  id: input.id,
-  isActive: input.isActive ?? false,
-  provider: input.provider,
-  verificationStatus: "verified",
-});
+const verifiedRegistration = {
+  id: "epid_test",
+  region: "eu-central-1" as string | null,
+  verificationStatus: "verified" as "not_verified" | "partially_verified" | "verified",
+};
 
 const baseDelivery = {
   bcc: null as string[] | null,
@@ -51,7 +32,13 @@ const baseDelivery = {
     fqdn: "example.com",
     id: "dom_test",
     isPaused: false,
-  } as { fqdn: string; id: string; isPaused: boolean } | null,
+    registration: verifiedRegistration as typeof verifiedRegistration | null,
+  } as {
+    fqdn: string;
+    id: string;
+    isPaused: boolean;
+    registration: typeof verifiedRegistration | null;
+  } | null,
   customDomainId: "dom_test",
   error: null,
   from: {
@@ -67,10 +54,12 @@ const baseDelivery = {
     tags: null as Record<string, string> | null,
   },
   messageId: "msg_test",
-  providerId: null,
   providerMessageId: null,
   replyTo: null as string[] | null,
-  sandboxDomain: null as { rootDomain: string } | null,
+  sandboxDomain: null as {
+    registration: typeof verifiedRegistration | null;
+    rootDomain: string;
+  } | null,
   sandboxDomainId: null as string | null,
   startedAt: null,
   status: "queued" as "canceled" | "failed" | "queued" | "sending" | "sent" | "skipped",
@@ -82,18 +71,23 @@ const baseDelivery = {
 const makeDb = (overrides: {
   readonly contactId?: string;
   readonly delivery?: typeof baseDelivery | null;
-  readonly identities?: readonly ReturnType<typeof makeIdentity>[];
-  readonly organizationId?: string;
+  /** What a conditional update matches: the dead-letter path only fails an unfinished one. */
+  readonly failedOnDeadLetter?: boolean;
   readonly orgSlug?: string;
   readonly suppressedEmails?: readonly string[];
-  readonly updates?: unknown[];
 }) => {
-  const updates = overrides.updates ?? [];
+  const updates: unknown[] = [];
   const delivery = overrides.delivery === undefined ? baseDelivery : overrides.delivery;
   const suppressed = new Set(overrides.suppressedEmails ?? []);
-  const identities = overrides.identities ?? [];
+  const inserts: unknown[] = [];
 
   const db: any = {
+    insert: () => ({
+      values: (values: unknown) => {
+        inserts.push(values);
+        return Effect.void;
+      },
+    }),
     query: {
       contact: {
         findFirst: () => Effect.succeed(overrides.contactId ? { id: overrides.contactId } : null),
@@ -104,6 +98,10 @@ const makeDb = (overrides: {
       emailDelivery: {
         findFirst: () => Effect.succeed(delivery),
       },
+      message: {
+        findFirst: () =>
+          Effect.succeed({ appEnvironment: { organizationId: "org_test" }, tags: null }),
+      },
       organization: {
         findFirst: () =>
           Effect.succeed({
@@ -111,17 +109,11 @@ const makeDb = (overrides: {
           }),
       },
       organizationAppEnvironment: {
-        findFirst: () =>
-          Effect.succeed({
-            organizationId: overrides.organizationId ?? "org_test",
-          }),
+        findFirst: () => Effect.succeed({ organizationId: "org_test" }),
       },
     },
     select: () => ({
       from: () => ({
-        innerJoin: () => ({
-          where: () => Effect.succeed(identities),
-        }),
         where: () => Effect.succeed([...suppressed].map((email) => ({ email }))),
       }),
     }),
@@ -130,101 +122,26 @@ const makeDb = (overrides: {
       set: (values: unknown) => ({
         where: () => {
           updates.push(values);
-          return Effect.void;
+          return Object.assign(Effect.void, {
+            returning: () =>
+              Effect.succeed(overrides.failedOnDeadLetter ? [{ messageId: "msg_test" }] : []),
+          });
         },
       }),
     }),
   };
 
-  return { db: db as unknown as Database, updates };
+  return { db: db as unknown as Database, inserts, updates };
 };
-
-const adapterDefinition = {
-  channel: "email" as const,
-  credentialsSchema: {} as never,
-  label: "test",
-  productId: "ses",
-  typeId: "aws.ses" as const,
-  vendorId: "aws",
-};
-
-const makeSendFactory = (
-  send: (
-    message?: Parameters<EmailProviderAdapter["send"]>[0],
-  ) => Effect.Effect<{ readonly providerMessageId: string }, unknown>,
-  createInput?: (input: { providerId: string }) => void,
-) =>
-  ({
-    create: (input) => {
-      createInput?.(input);
-      return Effect.succeed({
-        checkConnection: Effect.succeed(true),
-        createIdentity: unsupported,
-        definition: adapterDefinition,
-        deleteIdentity: unsupported,
-        getIdentityStatus: unsupported,
-        send: (message) => send(message) as ReturnType<EmailProviderAdapter["send"]>,
-      } as EmailProviderAdapter);
-    },
-    definition: adapterDefinition,
-  }) satisfies EmailProviderFactory;
 
 const testLayer = (
   db: Database,
   options: {
-    readonly allowByProvider?: ReadonlyMap<string, boolean>;
-    /** Provider ids whose circuit recorded a failure, in order. */
-    readonly circuitFailures?: string[];
-    /** After recordFailure, these providers report open (allow=0) so failover proceeds. */
-    readonly openCircuitAfterFailure?: ReadonlySet<string>;
-    readonly registry?: {
-      get: EmailProviderRegistryService["get"];
-    };
+    readonly send?: EmailBackendService["send"];
     readonly usage?: Partial<UsageService>;
-    readonly vaultOpen?: () => Effect.Effect<OpenedProviderCredentials>;
   } = {},
-) => {
-  const allowByProvider = options.allowByProvider;
-  const openAfterFailure = new Set(options.openCircuitAfterFailure ?? []);
-  const opened = new Set<string>();
-  const redisStub = {
-    acknowledge: unsupported,
-    append: unsupported,
-    autoClaim: unsupported,
-    createConsumerGroup: unsupported,
-    evaluateNumber: ({ args, keys }: { args: readonly string[]; keys: readonly string[] }) => {
-      const key = keys[0] ?? "";
-      const providerId = key.replace("relayit:breaker:provider:", "");
-      if (args.length === 3) {
-        // RECORD_FAILURE
-        options.circuitFailures?.push(providerId);
-        if (openAfterFailure.has(providerId)) {
-          opened.add(providerId);
-        }
-        return Effect.succeed(1);
-      }
-      if (args.length === 2) {
-        // ALLOW
-        if (opened.has(providerId)) {
-          return Effect.succeed(0);
-        }
-        if (allowByProvider) {
-          return Effect.succeed((allowByProvider.get(providerId) ?? true) ? 1 : 0);
-        }
-        return Effect.succeed(1);
-      }
-      // RECORD_SUCCESS
-      opened.delete(providerId);
-      return Effect.succeed(1);
-    },
-    evaluateString: unsupported,
-    ping: Effect.void,
-    readGroup: unsupported,
-    sortedSetAdd: unsupported,
-    sortedSetRemove: unsupported,
-  } satisfies RedisService;
-
-  return Layer.mergeAll(
+) =>
+  Layer.mergeAll(
     Layer.succeed(DB, db),
     Layer.succeed(Usage, {
       confirm: () => Effect.void,
@@ -245,19 +162,15 @@ const testLayer = (
       signedUploadUrl: unsupported,
       upload: unsupported,
     } satisfies ObjectStorageService),
-    Layer.succeed(ProviderCredentialsVault, {
-      open: options.vaultOpen ?? (() => Effect.succeed(openedCredentials)),
-      seal: unsupported,
-    }),
-    Layer.succeed(
-      EmailProviderRegistry,
-      options.registry ?? {
-        get: unsupported,
-      },
-    ),
-    Layer.succeed(Redis, redisStub),
+    Layer.succeed(EmailBackend, {
+      createIdentity: unsupported,
+      defaultRegion: "eu-central-1",
+      deleteIdentity: unsupported,
+      ensureInfrastructure: unsupported,
+      getIdentityStatus: unsupported,
+      send: options.send ?? unsupported,
+    } satisfies EmailBackendService),
   );
-};
 
 const emailDeliverHandler = makeEmailDeliverHandler({
   secret: "",
@@ -272,20 +185,6 @@ const payload = {
 };
 
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
-
-const primaryProvider = makeProvider({ id: "prov_primary" });
-const standbyProvider = makeProvider({ id: "prov_standby" });
-const primaryIdentity = makeIdentity({
-  id: "ident_primary",
-  isActive: true,
-  provider: primaryProvider,
-});
-const standbyIdentity = makeIdentity({
-  failoverEligible: true,
-  failoverPriority: 1,
-  id: "ident_standby",
-  provider: standbyProvider,
-});
 
 describe("emailDeliverHandler", () => {
   test("no-ops when the Delivery is already sent", () => {
@@ -307,7 +206,12 @@ describe("emailDeliverHandler", () => {
     const { db, updates } = makeDb({
       delivery: {
         ...baseDelivery,
-        customDomain: { fqdn: "example.com", id: "dom_test", isPaused: true },
+        customDomain: {
+          fqdn: "example.com",
+          id: "dom_test",
+          isPaused: true,
+          registration: verifiedRegistration,
+        },
       },
     });
     return Effect.runPromise(
@@ -348,19 +252,45 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  test("confirms Usage and marks sent on provider success", () => {
-    const { db, updates } = makeDb({
-      identities: [primaryIdentity],
+  test("stops when the sending domain is not verified with SES", () => {
+    const { db } = makeDb({
+      delivery: {
+        ...baseDelivery,
+        customDomain: {
+          fqdn: "example.com",
+          id: "dom_test",
+          isPaused: false,
+          registration: { ...verifiedRegistration, verificationStatus: "not_verified" },
+        },
+      },
     });
+    return Effect.runPromise(
+      emailDeliverHandler.handle(payload, execution).pipe(
+        Effect.provide(testLayer(db)),
+        Effect.flip,
+        Effect.map((error) => {
+          expect(error).toMatchObject({
+            _tag: "MessageDeliveryTerminalError",
+            stage: "registration",
+          });
+          return error;
+        }),
+      ),
+    );
+  });
+
+  test("sends through the region the domain is registered in, as the sending Project", () => {
+    const { db, updates } = makeDb({});
     let confirmed = false;
-    const factory = makeSendFactory(() => Effect.succeed({ providerMessageId: "ses_msg_1" }));
+    let sentWith: Parameters<EmailBackendService["send"]>[0] | undefined;
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
         Effect.provide(
           testLayer(db, {
-            registry: {
-              get: () => Effect.succeed(factory),
+            send: (input) => {
+              sentWith = input;
+              return Effect.succeed({ providerMessageId: "ses_msg_1" });
             },
             usage: {
               confirm: () => {
@@ -371,49 +301,14 @@ describe("emailDeliverHandler", () => {
           }),
         ),
         Effect.map(() => {
+          expect(sentWith?.region).toBe("eu-central-1");
+          expect(sentWith?.message.sender).toEqual({
+            identityFqdn: "example.com",
+            projectId: "org_test",
+          });
           expect(confirmed).toBe(true);
-          expect(
-            updates.some(
-              (update) =>
-                (update as { status?: string; providerMessageId?: string }).status === "sent" &&
-                (update as { providerMessageId?: string }).providerMessageId === "ses_msg_1",
-            ),
-          ).toBe(true);
-          return true;
-        }),
-      ),
-    );
-  });
-
-  test("fails over when the primary provider circuit is open", () => {
-    const { db, updates } = makeDb({
-      identities: [primaryIdentity, standbyIdentity],
-    });
-    let sentVia: string | undefined;
-    const factory = makeSendFactory(
-      () => Effect.succeed({ providerMessageId: "ses_standby" }),
-      (input) => {
-        sentVia = input.providerId;
-      },
-    );
-
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            allowByProvider: new Map([
-              ["prov_primary", false],
-              ["prov_standby", true],
-            ]),
-            registry: {
-              get: () => Effect.succeed(factory),
-            },
-          }),
-        ),
-        Effect.map(() => {
-          expect(sentVia).toBe("prov_standby");
-          expect(updates.some((update) => (update as { status?: string }).status === "sent")).toBe(
-            true,
+          expect(updates).toContainEqual(
+            expect.objectContaining({ providerMessageId: "ses_msg_1", status: "sent" }),
           );
           return true;
         }),
@@ -421,51 +316,53 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  test("passes the sending Project for reputation isolation", () => {
-    const { db } = makeDb({ identities: [primaryIdentity] });
-    let sender: unknown;
-    const factory = makeSendFactory((message) => {
-      sender = message?.sender;
-      return Effect.succeed({ providerMessageId: "ses_msg_1" });
+  test("sends a domain registered before regions were recorded in the default region", () => {
+    const { db } = makeDb({
+      delivery: {
+        ...baseDelivery,
+        customDomain: {
+          fqdn: "example.com",
+          id: "dom_test",
+          isPaused: false,
+          registration: { ...verifiedRegistration, region: null },
+        },
+      },
     });
+    let region: string | null | undefined;
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(testLayer(db, { registry: { get: () => Effect.succeed(factory) } })),
+        Effect.provide(
+          testLayer(db, {
+            send: (input) => {
+              region = input.region;
+              return Effect.succeed({ providerMessageId: "ses_msg_1" });
+            },
+          }),
+        ),
         Effect.map(() => {
-          expect(sender).toEqual({ identityFqdn: "example.com", projectId: "org_test" });
+          // The backend reads a null region as its default one.
+          expect(region).toBeNull();
           return true;
         }),
       ),
     );
   });
 
-  test("Project-level provider pause pauses the Domain and fails terminally without failover or tripping the circuit", () => {
-    const { db, updates } = makeDb({
-      identities: [primaryIdentity, standbyIdentity],
-    });
-    const circuitFailures: string[] = [];
-    const attempted: string[] = [];
-    const factory = makeSendFactory(
-      () =>
-        Effect.fail(
-          new ProviderRejected({
-            providerId: "prov_primary",
-            reason: "project_sending_paused",
-            typeId: "aws.ses",
-          }),
-        ),
-      (input) => {
-        attempted.push(input.providerId);
-      },
-    );
+  test("a Project Sending Pause pauses the Domain and fails terminally", () => {
+    const { db, updates } = makeDb({});
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
         Effect.provide(
           testLayer(db, {
-            circuitFailures,
-            registry: { get: () => Effect.succeed(factory) },
+            send: ({ region }) =>
+              Effect.fail(
+                new EmailBackendRejected({
+                  reason: "project_sending_paused",
+                  region: region ?? "eu-central-1",
+                }),
+              ),
           }),
         ),
         Effect.flip,
@@ -475,8 +372,6 @@ describe("emailDeliverHandler", () => {
             stage: "send",
           });
           expect(emailDeliverHandler.classifyFailure(error)).toBe("terminal");
-          expect(attempted).toEqual(["prov_primary"]);
-          expect(circuitFailures).toEqual([]);
           expect(updates).toContainEqual({
             isPaused: true,
             pausedReason: "bad_reputation",
@@ -493,21 +388,14 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  test("marks failed and returns retryable when every provider fails", () => {
-    const { db, updates } = makeDb({
-      identities: [primaryIdentity],
-    });
-    const factory = makeSendFactory(() => Effect.fail(new Error("ses unavailable")));
+  test("retries any other SES failure, leaving the Delivery sending", () => {
+    const { db, updates } = makeDb({});
 
     return Effect.runPromise(
       emailDeliverHandler.handle(payload, execution).pipe(
         Effect.provide(
           testLayer(db, {
-            // Circuit stays closed so leaveActive=false → retryable on active.
-            allowByProvider: new Map([["prov_primary", true]]),
-            registry: {
-              get: () => Effect.succeed(factory),
-            },
+            send: () => Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" })),
           }),
         ),
         Effect.flip,
@@ -516,23 +404,62 @@ describe("emailDeliverHandler", () => {
             _tag: "MessageDeliveryRetryableError",
             stage: "send",
           });
-          // Either failed-after-all-standby or early retryable on active.
-          expect(
-            updates.some(
-              (update) =>
-                (update as { status?: string }).status === "failed" ||
-                (update as { status?: string }).status === "sending",
-            ),
-          ).toBe(true);
+          expect(emailDeliverHandler.classifyFailure(error)).toBe("retryable");
+          expect(updates.map((update) => (update as { status?: string }).status)).toEqual([
+            "sending",
+          ]);
           return error;
         }),
       ),
     );
   });
 
-  test("releases Usage on dead letter", () => {
+  test("on dead letter, fails an unfinished Delivery with its reason and releases Usage", () => {
     let released = false;
-    const { db } = makeDb({});
+    const { db, inserts, updates } = makeDb({ failedOnDeadLetter: true });
+    const onDeadLetter = emailDeliverHandler.onDeadLetter;
+    if (!onDeadLetter) {
+      throw new Error("expected onDeadLetter");
+    }
+    return Effect.runPromise(
+      onDeadLetter(
+        payload,
+        execution,
+        new MessageDeliveryRetryableError({
+          deliveryId: "edlv_test",
+          message: "SES send failed",
+          stage: "send",
+        }),
+      ).pipe(
+        Effect.provide(
+          testLayer(db, {
+            usage: {
+              release: () => {
+                released = true;
+                return Effect.void;
+              },
+            },
+          }),
+        ),
+        Effect.map(() => {
+          expect(updates).toEqual([
+            expect.objectContaining({
+              error: { message: "SES send failed", retryable: false },
+              status: "failed",
+            }),
+          ]);
+          // No subscribed Webhook Endpoint, so no event row; the emit was attempted.
+          expect(inserts).toEqual([]);
+          expect(released).toBe(true);
+          return true;
+        }),
+      ),
+    );
+  });
+
+  test("on dead letter, leaves a finished Delivery as it is", () => {
+    let released = false;
+    const { db } = makeDb({ failedOnDeadLetter: false });
     const onDeadLetter = emailDeliverHandler.onDeadLetter;
     if (!onDeadLetter) {
       throw new Error("expected onDeadLetter");
@@ -543,8 +470,8 @@ describe("emailDeliverHandler", () => {
         execution,
         new MessageDeliveryTerminalError({
           deliveryId: "edlv_test",
-          message: "done",
-          stage: "test",
+          message: "No deliverable recipients after suppression",
+          stage: "suppressions",
         }),
       ).pipe(
         Effect.provide(
@@ -569,12 +496,7 @@ describe("emailDeliverHandler", () => {
     let sentHeaders: Record<string, string> | null | undefined;
     const { db } = makeDb({
       contactId: "cont_test",
-      identities: [primaryIdentity],
       orgSlug: "acme",
-    });
-    const factory = makeSendFactory((message) => {
-      sentHeaders = message?.headers;
-      return Effect.succeed({ providerMessageId: "pm_unsub" });
     });
     const handler = makeEmailDeliverHandler({
       secret: "test-secret",
@@ -594,7 +516,10 @@ describe("emailDeliverHandler", () => {
         .pipe(
           Effect.provide(
             testLayer(db, {
-              registry: { get: () => Effect.succeed(factory) },
+              send: ({ message }) => {
+                sentHeaders = message.headers;
+                return Effect.succeed({ providerMessageId: "pm_unsub" });
+              },
             }),
           ),
           Effect.map(() => {

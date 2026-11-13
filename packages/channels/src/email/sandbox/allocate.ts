@@ -1,9 +1,5 @@
 import { DB } from "@repo/persistence/db/effect";
-import {
-  emailDomainProviderIdentity,
-  organization,
-  sandboxDomain,
-} from "@repo/persistence/db/schema";
+import { emailDomainRegistration, organization, sandboxDomain } from "@repo/persistence/db/schema";
 import { and, count, eq, isNull } from "drizzle-orm";
 import { Data, Effect } from "effect";
 
@@ -18,8 +14,7 @@ export class SandboxAllocateError extends Data.TaggedError("SandboxAllocateError
 
 /**
  * Assign an organization to the least-loaded active verified sandbox root that
- * has ≥1 verified Provider identity. Returns null when none
- * are allocatable.
+ * SES has verified. Returns null when none are allocatable.
  */
 export const allocateSandboxDomain = (organizationId: string) =>
   Effect.gen(function* () {
@@ -29,10 +24,10 @@ export const allocateSandboxDomain = (organizationId: string) =>
       .select({ id: sandboxDomain.id })
       .from(sandboxDomain)
       .innerJoin(
-        emailDomainProviderIdentity,
+        emailDomainRegistration,
         and(
-          eq(emailDomainProviderIdentity.sandboxDomainId, sandboxDomain.id),
-          eq(emailDomainProviderIdentity.verificationStatus, "verified"),
+          eq(emailDomainRegistration.sandboxDomainId, sandboxDomain.id),
+          eq(emailDomainRegistration.verificationStatus, "verified"),
         ),
       )
       .leftJoin(organization, eq(organization.sandboxDomainId, sandboxDomain.id))

@@ -2,6 +2,7 @@ import type { Database, DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type ContactSuppressionSeverity,
   contact,
+  type EmailDeliveryEventKind,
   emailDeliveryEvent,
 } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
@@ -18,7 +19,15 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
-import type { NormalizedDeliveryEvent } from "../provider-webhook";
+
+/** One outcome SES reported for a sent message, read from its notification. */
+export interface NormalizedDeliveryEvent {
+  readonly kind: EmailDeliveryEventKind;
+  readonly providerMessageId: string;
+  readonly raw: unknown;
+  readonly recipients: readonly string[];
+  readonly suppress: boolean;
+}
 
 const deliveryOutcomeEvent = (
   event: NormalizedDeliveryEvent,
@@ -202,7 +211,6 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
         data: event.raw as Record<string, unknown>,
         emailDeliveryId: delivery.id,
         kind: event.kind,
-        providerId: delivery.providerId,
         sandboxDomainId: delivery.sandboxDomainId,
       })
       .pipe(

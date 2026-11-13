@@ -1,4 +1,3 @@
-export { handleProviderWebhook, ProviderWebhookHandlerError } from "./handle-provider-webhook";
 export {
   buildListUnsubscribeHeaders,
   buildListUnsubscribeUrl,
@@ -8,4 +7,8 @@ export {
   signListUnsubscribe,
   verifyListUnsubscribe,
 } from "./list-unsubscribe";
-export { DeliveryEventIngestError, ingestDeliveryEvents } from "./notifications";
+export {
+  DeliveryEventIngestError,
+  ingestDeliveryEvents,
+  type NormalizedDeliveryEvent,
+} from "./notifications";

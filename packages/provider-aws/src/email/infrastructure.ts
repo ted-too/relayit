@@ -1,8 +1,6 @@
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
-import type { EmailProviderInfrastructureAdapter } from "@repo/channels/email/provider-infrastructure";
-import type { ProviderInstanceErrorContext } from "@repo/channels/provider-errors";
-import { ProviderConfigurationError } from "@repo/channels/provider-errors";
+import { EmailBackendConfigurationError } from "@repo/channels/email/backend";
 import { Effect } from "effect";
 import { type AwsErrorMapper, AwsUnexpectedResponseError } from "../errors";
 
@@ -37,13 +35,13 @@ const namesFor = (deliveryWebhookUrl: string) => {
   };
 };
 
-const validateWebhookUrl = (value: string, context: ProviderInstanceErrorContext) =>
+const validateWebhookUrl = (value: string, region: string) =>
   Effect.try({
     catch: (cause) =>
-      new ProviderConfigurationError({
-        ...context,
+      new EmailBackendConfigurationError({
         cause,
         code: "invalid_webhook_url",
+        region,
       }),
     try: () => new URL(value),
   }).pipe(
@@ -51,9 +49,9 @@ const validateWebhookUrl = (value: string, context: ProviderInstanceErrorContext
       url.protocol === "https:"
         ? Effect.succeed(url.toString())
         : Effect.fail(
-            new ProviderConfigurationError({
-              ...context,
+            new EmailBackendConfigurationError({
               code: "invalid_webhook_url",
+              region,
             }),
           ),
     ),
@@ -89,26 +87,6 @@ const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl
     return topicArn;
   });
 
-const findTopicArn = (sns: SNS.Type, topicName: string) =>
-  Effect.gen(function* () {
-    let nextToken: string | undefined;
-
-    do {
-      const page = yield* sns.listTopics({ NextToken: nextToken });
-      const topicArn = page.Topics?.find((topic) =>
-        topic.TopicArn?.endsWith(`:${topicName}`),
-      )?.TopicArn;
-
-      if (topicArn) {
-        return topicArn;
-      }
-
-      nextToken = page.NextToken;
-    } while (nextToken);
-
-    return;
-  });
-
 const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicArn: string) =>
   Effect.gen(function* () {
     yield* ses
@@ -141,56 +119,27 @@ const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicA
       );
   });
 
-export const createAwsSesInfrastructure = ({
-  context,
+/**
+ * The configuration set every send names, publishing every event to an SNS topic that is
+ * subscribed to the api. Named after the webhook URL, so a deployment that keeps its URL
+ * finds what it made before and changes nothing.
+ */
+export const ensureSesInfrastructure = ({
+  deliveryWebhookUrl,
   mapAwsError,
+  region,
   ses,
   sns,
 }: {
-  context: ProviderInstanceErrorContext;
+  deliveryWebhookUrl: string;
   mapAwsError: AwsErrorMapper;
+  region: string;
   ses: SESv2.Type;
   sns: SNS.Type;
 }) =>
-  ({
-    ensure: ({ deliveryWebhookUrl }) =>
-      Effect.gen(function* () {
-        const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, context);
-        const { destinationName, topicName } = namesFor(webhookUrl);
-        const topicArn = yield* ensureTopicAndSubscription(sns, topicName, webhookUrl);
-        yield* ensureEventDestination(ses, destinationName, topicArn);
-        return { managedDnsRecords: [] };
-      }).pipe(Effect.mapError(mapAwsError)),
-    teardown: ({ deliveryWebhookUrl }) =>
-      Effect.gen(function* () {
-        const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, context);
-        const { destinationName, topicName } = namesFor(webhookUrl);
-
-        yield* ses
-          .deleteConfigurationSetEventDestination({
-            ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
-            EventDestinationName: destinationName,
-          })
-          .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
-
-        const topicArn = yield* findTopicArn(sns, topicName);
-        if (!topicArn) {
-          return;
-        }
-        const subscriptions = yield* sns.listSubscriptionsByTopic({
-          TopicArn: topicArn,
-        });
-        for (const subscription of subscriptions.Subscriptions ?? []) {
-          if (
-            subscription.Endpoint === webhookUrl &&
-            subscription.SubscriptionArn &&
-            subscription.SubscriptionArn !== "PendingConfirmation"
-          ) {
-            yield* sns.unsubscribe({
-              SubscriptionArn: subscription.SubscriptionArn,
-            });
-          }
-        }
-        yield* sns.deleteTopic({ TopicArn: topicArn });
-      }).pipe(Effect.mapError(mapAwsError)),
-  }) satisfies EmailProviderInfrastructureAdapter;
+  Effect.gen(function* () {
+    const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, region);
+    const { destinationName, topicName } = namesFor(webhookUrl);
+    const topicArn = yield* ensureTopicAndSubscription(sns, topicName, webhookUrl);
+    yield* ensureEventDestination(ses, destinationName, topicArn);
+  }).pipe(Effect.mapError(mapAwsError));

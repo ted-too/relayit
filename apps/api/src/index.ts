@@ -1,6 +1,7 @@
 import openapi from "@elysia/openapi";
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
 import { apiConfig } from "./env";
@@ -9,7 +10,7 @@ import { type ApiAuth, createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
 import { createLegacySendRoutes } from "./routes/compat/send";
 import { createEmailRoutes } from "./routes/messages/email";
-import { createProviderWebhookRoutes } from "./routes/webhooks/providers";
+import { createSesNotificationRoutes } from "./routes/webhooks/ses";
 
 export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
   return new Elysia()
@@ -34,7 +35,7 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
           ],
         },
         exclude: {
-          paths: ["/health", "/webhooks/providers/:vendorId/:productId"],
+          paths: ["/health", SES_NOTIFICATIONS_PATH],
         },
         path: "/docs",
         specPath: "/openapi.json",
@@ -48,7 +49,7 @@ export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
     })
     .use(createLegacySendRoutes(auth, runEffect))
     .group("/messages", (group) => group.use(createEmailRoutes(auth, runEffect)))
-    .group("/webhooks", (group) => group.use(createProviderWebhookRoutes(runEffect)));
+    .use(createSesNotificationRoutes(runEffect));
 }
 
 const apiProgram = Effect.scoped(

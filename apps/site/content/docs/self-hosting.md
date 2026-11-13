@@ -11,14 +11,14 @@ A self-hosted install has three Relayit services plus Postgres, Redis, and S3-co
 
 | Service          | Image                                            | Role                                                                                                                                    |
 | ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, provider webhooks).                                                           |
+| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications).                                                           |
 | worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out. |
 | web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard and authentication.                                                                                                       |
 | template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                                   |
 | postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                                         |
 | redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                                      |
 
-You also need an S3-compatible bucket (for example Cloudflare R2, AWS S3, or a Bunny Storage zone) for attachments and template artifacts.
+You also need an S3-compatible bucket (for example Cloudflare R2, AWS S3, or a Bunny Storage zone) for attachments and template artifacts, and an Amazon SES account that all email goes through.
 
 ## Run with Docker Compose
 
@@ -46,6 +46,10 @@ S3_REGION=auto
 S3_BUCKET=relayit
 S3_ACCESS_KEY_ID=your-access-key-id
 S3_SECRET_ACCESS_KEY=your-secret-access-key
+
+SES_REGIONS=us-east-1
+SES_ACCESS_KEY_ID=your-ses-access-key-id
+SES_SECRET_ACCESS_KEY=your-ses-secret-access-key
 ```
 
 Generate the auth secret with:
@@ -75,25 +79,27 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 
 ### api (required)
 
-| Variable                                                                            | Description                                                                                                                                               |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                                               |
-| `REDIS_URL`                                                                         | Redis connection string.                                                                                                                                  |
-| `API_URL`                                                                           | Public URL of the API.                                                                                                                                    |
-| `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing provider credentials and DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                                             |
+| Variable                                                                            | Description                                                                                                                      |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                      |
+| `REDIS_URL`                                                                         | Redis connection string.                                                                                                         |
+| `API_URL`                                                                           | Public URL of the API.                                                                                                           |
+| `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
 Optional: `LOG_LEVEL`. The api applies database migrations when it starts.
 
 ### worker (required)
 
-| Variable                    | Description                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`, `REDIS_URL` | The same as the api.                                                                              |
-| `API_URL`                   | Public URL of the API. The worker points Provider delivery notifications (SES through SNS) at it. |
-| `APP_URL`                   | Public URL of the dashboard. Used in unsubscribe links.                                           |
-| `BETTER_AUTH_SECRETS`       | The same value as the api.                                                                        |
-| `S3_*`                      | The same as the api.                                                                              |
+| Variable                                     | Description                                                                                                                                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `REDIS_URL`                  | The same as the api.                                                                                                                            |
+| `API_URL`                                    | Public URL of the API. The worker points SES's notifications (through SNS) at it.                                                               |
+| `APP_URL`                                    | Public URL of the dashboard. Used in unsubscribe links.                                                                                         |
+| `BETTER_AUTH_SECRETS`                        | The same value as the api.                                                                                                                      |
+| `S3_*`                                       | The same as the api.                                                                                                                            |
+| `SES_REGIONS`                                | The SES regions to send through, comma-separated, for example `us-east-1` or `eu-central-1,us-east-1`. New Domains are registered in the first. |
+| `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM credentials for the SES account.                                                                                                            |
 
 Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone. The worker does not migrate the database; start it after the api, as the Compose file does.
 
@@ -105,7 +111,7 @@ Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a 
 | `DATABASE_URL`        | Postgres connection string.                                                   |
 | `REDIS_URL`           | Redis connection string.                                                      |
 | `BETTER_AUTH_SECRETS` | The same value as the api.                                                    |
-| `API_URL`             | Public URL of the API. Used to set up Provider delivery webhooks.             |
+| `SES_*`               | The same as the worker. The dashboard registers new Domains with SES.         |
 
 Optional: `VITE_DEBUG`. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
 
@@ -123,14 +129,15 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `WEB_URL` to those URLs.
 - The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
-- If the dashboard points at the wrong origin, restart web with the corrected `VITE_BASE_URL` and `API_URL`. No rebuild is needed.
+- If the dashboard points at the wrong origin, restart web with the corrected `VITE_BASE_URL`. No rebuild is needed.
 - Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
 
 ## How self-hosted differs from Cloud
 
 - **No Plans, unlimited entitlements.** Without Stripe keys, every user gets unlimited Projects, Domains, retention, and sends.
 - **Email and password sign-in.** Social sign-in is not set up by default.
-- **No managed Provider or Sandbox Domain by default.** On Cloud, Relayit provides these. On your own install, an administrator adds email Providers in the dashboard's admin area, and the Sandbox Domain only exists if you configure Cloudflare for it. Until a Provider exists you cannot add a Domain.
+- **Your own SES account.** Email goes through the SES account in `SES_*`. When the worker starts it creates the SES configuration set and SNS topic each region needs and subscribes `API_URL` to it, so the IAM user needs SES and SNS permissions.
+- **No Sandbox Domain by default.** It exists only if you give the worker a Cloudflare zone for it (`CF_*`).
 - **Template workspace is optional.** Without a template-builder service, sending with existing Templates works, but editing the React Email workspace does not.
 
 Everything else, including the API, Domains, Templates, and suppression, works the same as on Cloud.

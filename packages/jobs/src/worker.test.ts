@@ -38,7 +38,7 @@ const verifyDomain = defineJob({
 class TestJobFailure extends Data.TaggedError("TestJobFailure")<{
   readonly code?: string;
   readonly message: string;
-  readonly providerId?: string;
+  readonly region?: string;
   readonly retryAfterMs?: number;
 }> {}
 
@@ -199,7 +199,7 @@ describe("job execution", () => {
     const handler = defineJobHandler({
       classifyFailure: () => "retryable",
       contract: deliverEmail,
-      handle: () => Effect.fail(new TestJobFailure({ message: "Provider unavailable" })),
+      handle: () => Effect.fail(new TestJobFailure({ message: "SES unavailable" })),
     });
 
     return Effect.runPromise(
@@ -323,9 +323,9 @@ describe("job execution", () => {
       handle: () =>
         Effect.fail(
           new TestJobFailure({
-            code: "provider_unavailable",
-            message: "Provider unavailable",
-            providerId: "provider_1",
+            code: "ses_unavailable",
+            message: "SES unavailable",
+            region: "eu-central-1",
             retryAfterMs: 5000,
           }),
         ),
@@ -356,12 +356,12 @@ describe("job execution", () => {
             attempts: 3,
             failedAt: 5000,
             failure: {
-              code: "provider_unavailable",
+              code: "ses_unavailable",
               details: {
-                providerId: "provider_1",
+                region: "eu-central-1",
                 retryAfterMs: 5000,
               },
-              message: "Provider unavailable",
+              message: "SES unavailable",
               name: "TestJobFailure",
             },
             firstEnqueuedAt: 1000,

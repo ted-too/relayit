@@ -14,8 +14,7 @@
     "@repo/jobs": "workspace:*",
     "@repo/persistence": "workspace:*",
     "effect": "catalog:",
-    "sns-validator": "^0.3.5",
-    "zod": "catalog:"
+    "sns-validator": "^0.3.5"
   },
   "devDependencies": {
     "@types/sns-validator": "^0.3.3",

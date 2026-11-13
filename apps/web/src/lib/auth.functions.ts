@@ -1,4 +1,3 @@
-import { ROLES } from "@repo/persistence/auth/constants";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -21,16 +20,6 @@ export const sessionMiddleware = createMiddleware({ type: "function" }).server(a
   }
   return next({ context: { session } });
 });
-
-/** Requires an Admin role (composes sessionMiddleware). */
-export const adminMiddleware = createMiddleware({ type: "function" })
-  .middleware([sessionMiddleware])
-  .server(({ next, context }) => {
-    if (context.session.user.role !== ROLES.admin) {
-      throw new Error("Unauthorized");
-    }
-    return next();
-  });
 
 export const listOrganizations = createServerFn({ method: "GET" })
   .middleware([sessionMiddleware])

@@ -9,17 +9,6 @@ const verifyRetry = {
   maxAttempts: 5,
 } as const;
 
-export const emailVerifyProviderIdentityJob = defineJob({
-  name: "email.verify-provider-identity",
-  payload: Schema.Struct({
-    identityId: Schema.String,
-  }),
-  recurrence: {
-    identity: ({ identityId }) => identityId,
-  },
-  retry: verifyRetry,
-});
-
 export const emailVerifySandboxDomainJob = defineJob({
   name: "email.verify-sandbox-domain",
   payload: Schema.Struct({
@@ -54,7 +43,6 @@ export const emailVerifyOwnershipJob = defineJob({
   retry: verifyRetry,
 });
 
-export type EmailVerifyProviderIdentityPayload = JobPayload<typeof emailVerifyProviderIdentityJob>;
 export type EmailVerifySandboxDomainPayload = JobPayload<typeof emailVerifySandboxDomainJob>;
 export type EmailVerifyCustomDomainPayload = JobPayload<typeof emailVerifyCustomDomainJob>;
 export type EmailVerifyOwnershipPayload = JobPayload<typeof emailVerifyOwnershipJob>;

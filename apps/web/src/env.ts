@@ -12,6 +12,13 @@ export const env = createEnv({
     REDIS_KEY_PREFIX: z.string().default(""),
     /** `ses` or `fake`; unset, fake under NODE_ENV development or test, else SES. */
     EMAIL_BACKEND: z.enum(["ses", "fake"]).optional(),
+    /**
+     * The deployment's SES account, needed by EMAIL_BACKEND=ses: Domains are registered
+     * in the first of SES_REGIONS (comma-separated).
+     */
+    SES_ACCESS_KEY_ID: z.string().min(1).optional(),
+    SES_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    SES_REGIONS: z.string().min(1).optional(),
 
     /** Stripe — enables Plans / Billing. Absent ⇒ unlimited entitlements. */
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
@@ -23,10 +30,6 @@ export const env = createEnv({
     /** GitHub OAuth — enables social sign-in. */
     GITHUB_CLIENT_ID: z.string().min(1).optional(),
     GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
-    /** Cloudflare — enables Sandbox Domains (ops inventory + auto DNS). */
-    CF_API_TOKEN: z.string().min(1).optional(),
-    CF_ROOT_DOMAIN: z.string().min(1).optional(),
-    CF_ZONE_ID: z.string().min(1).optional(),
     /**
      * Template builder (Effect Rpc). Required for workspace Git ops;
      * catalog list/create works without it.
@@ -38,8 +41,6 @@ export const env = createEnv({
      * marketing site can tell a visitor is signed in. Omit for host-only.
      */
     AUTH_COOKIE_DOMAIN: z.string().min(1).optional(),
-    /** Public API origin — used to scaffold Provider delivery webhooks. */
-    API_URL: z.url().optional(),
     LOG_LEVEL: z
       .enum(["All", "Fatal", "Error", "Warn", "Info", "Debug", "Trace", "None"])
       .optional(),
@@ -61,6 +62,9 @@ export const env = createEnv({
     REDIS_URL: process.env.REDIS_URL,
     REDIS_KEY_PREFIX: process.env.REDIS_KEY_PREFIX,
     EMAIL_BACKEND: process.env.EMAIL_BACKEND,
+    SES_ACCESS_KEY_ID: process.env.SES_ACCESS_KEY_ID,
+    SES_SECRET_ACCESS_KEY: process.env.SES_SECRET_ACCESS_KEY,
+    SES_REGIONS: process.env.SES_REGIONS,
 
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
@@ -70,13 +74,9 @@ export const env = createEnv({
     STRIPE_PRICE_BROADCAST_ANNUAL: process.env.STRIPE_PRICE_BROADCAST_ANNUAL,
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
-    CF_API_TOKEN: process.env.CF_API_TOKEN,
-    CF_ROOT_DOMAIN: process.env.CF_ROOT_DOMAIN,
-    CF_ZONE_ID: process.env.CF_ZONE_ID,
     TEMPLATING_BUILDER_URL: process.env.TEMPLATING_BUILDER_URL,
     TEMPLATING_BUILDER_SECRET: process.env.TEMPLATING_BUILDER_SECRET,
     AUTH_COOKIE_DOMAIN: process.env.AUTH_COOKIE_DOMAIN,
-    API_URL: process.env.API_URL,
     LOG_LEVEL: process.env.LOG_LEVEL,
     VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
     VITE_DEBUG: import.meta.env.VITE_DEBUG,

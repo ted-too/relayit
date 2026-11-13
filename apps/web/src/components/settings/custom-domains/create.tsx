@@ -13,9 +13,9 @@ import {
 } from "@repo/ui/components/ui/coss/dialog";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
 import { FieldGroup } from "@repo/ui/components/ui/shad/field";
-import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { createCustomDomainFn } from "@/lib/domains/custom-domain.functions";
 import {
@@ -41,26 +41,6 @@ export function CreateDomain({
   const [_open, _setOpen] = useState(false);
   const open = _openProp ?? _open;
   const setOpen = _setOpenProp ?? _setOpen;
-
-  const {
-    data: { managed, defaultManagedProviderId },
-  } = useSuspenseQuery(queries.organizations.bySlug(orgSlug).listProviders);
-
-  const showProviderPicker = managed.length > 1;
-
-  const providerItems = useMemo(
-    () =>
-      managed.map((provider) => ({
-        label: `${provider.name ?? `${provider.vendorId}.${provider.productId}`}${provider.isDefault ? " · default" : ""}`,
-        value: provider.id,
-      })),
-    [managed],
-  );
-
-  const defaultProviderId =
-    defaultManagedProviderId ??
-    managed.find((provider) => provider.isDefault)?.id ??
-    managed[0]?.id;
 
   const { mutateAsync: createDomain } = useMutation({
     mutationFn: async (body: CreateCustomDomainFormValues) =>
@@ -99,25 +79,12 @@ export function CreateDomain({
   const form = useAppForm({
     defaultValues: {
       fqdn: "",
-      providerId: defaultProviderId,
     } as CreateCustomDomainFormValues,
     validators: {
       // Transform on fqdn makes Zod input/output diverge from form values.
       onSubmit: createCustomDomainFormSchema as any,
     },
     onSubmit: async ({ value }) => {
-      if (showProviderPicker) {
-        if (!value.providerId) {
-          toast.error("Select an email provider");
-          return;
-        }
-        await createDomain({
-          fqdn: value.fqdn,
-          providerId: value.providerId,
-        });
-        return;
-      }
-
       await createDomain({ fqdn: value.fqdn });
     },
   });
@@ -162,11 +129,6 @@ export function CreateDomain({
                 />
               )}
             </form.AppField>
-            {showProviderPicker && (
-              <form.AppField name="providerId">
-                {(field) => <field.SelectField items={providerItems} label="Email provider" />}
-              </form.AppField>
-            )}
           </FieldGroup>
         </DialogPanel>
         <DialogFooter>

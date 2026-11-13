@@ -81,7 +81,7 @@ export const emailDnsRecord = pgTable(
     priority: integer("priority"),
     /**
      * Logical grouping key for managed DNS reconcile/remove (e.g.
-     * `provider:…:infrastructure`, `sandbox:…`, `shared`). Null for
+     * `custom:…:root`, `sandbox:…:identity`, `shared`). Null for
      * customer-published rows that are not Cloudflare-managed sets.
      */
     owner: text("owner"),

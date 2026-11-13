@@ -1,10 +1,13 @@
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { JobsLive } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { emailBackendLayer, selectEmailBackend } from "@repo/provider-aws/email/backend";
+import {
+  emailBackendConfig,
+  emailBackendLayer,
+  selectEmailBackend,
+} from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
 import { Effect, Layer, Logger, Redacted, References } from "effect";
@@ -32,29 +35,30 @@ const redisLive = makeRedisLive({ keyPrefix: env.REDIS_KEY_PREFIX, url: env.REDI
 
 const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
 
-const credentialsVaultLive = ProviderCredentialsVault.live(secrets);
 const symmetricCryptoLive = SymmetricCrypto.live(secrets);
 
-// Throws at startup for EMAIL_BACKEND=fake under NODE_ENV=production.
+// Throws at startup for EMAIL_BACKEND=fake under NODE_ENV=production, or SES without its
+// variables.
 const emailBackend = Effect.runSync(
-  selectEmailBackend({ configured: env.EMAIL_BACKEND, nodeEnv: process.env.NODE_ENV }),
+  Effect.gen(function* () {
+    return yield* emailBackendConfig({
+      accessKeyId: env.SES_ACCESS_KEY_ID,
+      kind: yield* selectEmailBackend({
+        configured: env.EMAIL_BACKEND,
+        nodeEnv: process.env.NODE_ENV,
+      }),
+      regions: env.SES_REGIONS,
+      secretAccessKey: env.SES_SECRET_ACCESS_KEY,
+    });
+  }),
 );
 const emailBackendLive = emailBackendLayer(emailBackend).pipe(
   Layer.provide(Layer.mergeAll(dbLive, jobsLive, loggingLive)),
 );
 
-const cloudflareConfigured =
-  env.CF_API_TOKEN && env.CF_ROOT_DOMAIN && env.CF_ZONE_ID
-    ? {
-        apiToken: env.CF_API_TOKEN,
-        rootDomain: env.CF_ROOT_DOMAIN,
-        zoneId: env.CF_ZONE_ID,
-      }
-    : null;
-
-const managedDnsLive = cloudflareConfigured
-  ? EmailManagedDns.live(cloudflareConfigured).pipe(Layer.provide(dbLive))
-  : EmailManagedDns.noop().pipe(Layer.provide(dbLive));
+// Web edits only customer-published Domain records, which live in the database alone; the
+// worker publishes the Sandbox Domain's on Cloudflare.
+const managedDnsLive = EmailManagedDns.noop().pipe(Layer.provide(dbLive));
 
 const templatingBuilderLive =
   env.TEMPLATING_BUILDER_URL && env.TEMPLATING_BUILDER_SECRET
@@ -65,32 +69,20 @@ const templatingBuilderLive =
     : Layer.empty;
 
 /**
- * App-edge Effect layer for management server fns (Spezshop-style).
- * Includes sandbox provision deps (Jobs, ManagedDns, vault, provider registry).
- * Templating builder client is present when URL + secret are configured.
+ * App-edge Effect layer for management server fns (Spezshop-style): the database, Jobs,
+ * the email backend and managed DNS for Domain setup, and the templating builder client
+ * when its URL and secret are configured.
  */
 export const AppLive = Layer.mergeAll(
   dbLive,
   redisLive,
   jobsLive,
-  credentialsVaultLive,
   symmetricCryptoLive,
   emailBackendLive,
   managedDnsLive,
   templatingBuilderLive,
   loggingLive,
 );
-
-/** Cloudflare zone when sandbox capability is configured; else null. */
-export const sandboxCloudflare = cloudflareConfigured
-  ? {
-      rootDomain: cloudflareConfigured.rootDomain,
-      zoneId: cloudflareConfigured.zoneId,
-    }
-  : null;
-
-/** Public API origin for Provider delivery-webhook scaffolding. */
-export const apiOrigin = env.API_URL ?? null;
 
 /** Runs a log effect with only the logging layer, so it works while infra is down. */
 export const runLog = (effect: Effect.Effect<void>) =>

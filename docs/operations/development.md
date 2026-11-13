@@ -20,16 +20,17 @@ Development reads one file, the root `.env`, made from `.env.example`. The apps'
 
 What the apps reach, and what `.env.example` sets so that none of it is real:
 
-| Variable                       | `.env.example`                        | Unset                                                                                         |
-| ------------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `EMAIL_BACKEND`                | `fake`                                | fake under `NODE_ENV` development or test; otherwise SES, with the Providers' AWS credentials |
-| `OBJECT_STORAGE`               | `local`: files under `temp/`          | local under `NODE_ENV` development or test; otherwise the bucket in `S3_*`                    |
-| `REDIS_KEY_PREFIX`             | empty; `wt:<worktree>:` in a worktree | no prefix                                                                                     |
-| `CF_*`, `STRIPE_*`, `GITHUB_*` | unset                                 | no Cloudflare DNS, every Plan limit unlimited, no GitHub sign-in                              |
+| Variable                       | `.env.example`                        | Unset                                                                                 |
+| ------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| `EMAIL_BACKEND`                | `fake`                                | fake under `NODE_ENV` development or test; otherwise SES, through the `SES_*` account |
+| `OBJECT_STORAGE`               | `local`: files under `temp/`          | local under `NODE_ENV` development or test; otherwise the bucket in `S3_*`            |
+| `REDIS_KEY_PREFIX`             | empty; `wt:<worktree>:` in a worktree | no prefix                                                                             |
+| `SES_*`                        | unset                                 | needed only by SES; the fake reads none                                               |
+| `CF_*`, `STRIPE_*`, `GITHUB_*` | unset                                 | no Cloudflare DNS, every Plan limit unlimited, no GitHub sign-in                      |
 
 `bun run dev` sets `NODE_ENV=development`, so the fake and local storage are the defaults there even without the first two lines. Both refuse to start under `NODE_ENV=production`.
 
-`TEMPLATING_BUILDER_SECRET` connects web to the builder; without it the Template catalog works but Email Workspaces don't. `BETTER_AUTH_SECRETS` signs sessions and seals Provider credentials and DKIM keys.
+`TEMPLATING_BUILDER_SECRET` connects web to the builder; without it the Template catalog works but Email Workspaces don't. `BETTER_AUTH_SECRETS` signs sessions and seals DKIM keys.
 
 ## The fake email backend
 

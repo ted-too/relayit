@@ -67,6 +67,6 @@ describe("custom domain DNS specs", () => {
     expect(ownershipChallengeHost("acme.test")).toBe("_relayit-challenge.acme.test");
     expect(ownershipChallengeValue("tok_abc")).toBe('"relayit-domain-verification=tok_abc"');
     expect(customDomainRootDnsOwner("dom_1")).toBe("custom:dom_1:root");
-    expect(customDomainIdentityDnsOwner("dom_1", "prov_1")).toBe("custom:dom_1:identity:prov_1");
+    expect(customDomainIdentityDnsOwner("dom_1")).toBe("custom:dom_1:identity");
   });
 });
