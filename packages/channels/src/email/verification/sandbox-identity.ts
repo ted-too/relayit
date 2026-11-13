@@ -13,7 +13,7 @@ import { Data, Effect } from "effect";
 import { makeProviderTypeId } from "../../provider-type";
 import { EmailProviderRegistry } from "../provider-registry";
 import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
-import { evaluateLiveDnsRecord } from "./live-dns";
+import { DnsLookups } from "../dns-lookups";
 
 export class VerifyIdentityError extends Data.TaggedError("VerifyIdentityError")<{
   readonly cause?: unknown;
@@ -64,6 +64,7 @@ const rollupDomainVerificationStatus = (
 
 const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) =>
   Effect.gen(function* () {
+    const dnsLookups = yield* DnsLookups;
     const now = new Date();
     let activeRecords = 0;
     let missingRecords = 0;
@@ -93,7 +94,7 @@ const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) 
             operation: "dns",
             sandboxDomainId,
           }),
-        try: () => evaluateLiveDnsRecord(record),
+        try: () => dnsLookups.evaluate(record),
       });
 
       if (evaluation.matches) {

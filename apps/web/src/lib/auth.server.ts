@@ -70,6 +70,7 @@ export const auth = createAuth({
   cookieDomain: env.AUTH_COOKIE_DOMAIN,
   db,
   redis,
+  redisKeyPrefix: env.REDIS_KEY_PREFIX,
   socialProviders:
     env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
       ? {

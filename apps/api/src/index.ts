@@ -18,7 +18,7 @@ import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { Elysia } from "elysia";
-import { apiConfig } from "./env";
+import { type ApiConfig, apiConfig } from "./env";
 import { LoggingLive, makeRuntime } from "./layers";
 import { type ApiAuth, createAuth } from "./lib/auth";
 import type { RunApiEffect } from "./lib/effect";
@@ -89,17 +89,20 @@ const jobWorkerOptions = {
   },
 } as const;
 
+// The fake backend has no infrastructure: nothing to point at this api.
 const ensureEmailProvidersOnStartup = (
   runtime: ReturnType<typeof makeRuntime>,
-  apiOrigin: string,
+  config: ApiConfig,
 ) =>
-  Effect.promise(() =>
-    runtime.runPromise(
-      ensureAllEmailProviderInfrastructure(apiOrigin).pipe(
-        Effect.catchCause(logEffectFailure("Failed to ensure email Provider infrastructure")),
-      ),
-    ),
-  );
+  config.emailBackend === "fake"
+    ? Effect.logInfo("Email backend is fake: sends are simulated and never leave this machine")
+    : Effect.promise(() =>
+        runtime.runPromise(
+          ensureAllEmailProviderInfrastructure(config.apiUrl.toString()).pipe(
+            Effect.catchCause(logEffectFailure("Failed to ensure email Provider infrastructure")),
+          ),
+        ),
+      );
 
 const makeJobWorkerProgram = (listUnsubscribe: {
   readonly secret: string;
@@ -129,6 +132,7 @@ const apiProgram = (startWorker: boolean) =>
           createAuth({
             apiUrl: config.apiUrl.toString(),
             databaseUrl: Redacted.value(config.databaseUrl),
+            redisKeyPrefix: config.redisKeyPrefix,
             redisUrl: Redacted.value(config.redisUrl),
             runLog: Effect.runForkWith(services),
           }),
@@ -141,7 +145,7 @@ const apiProgram = (startWorker: boolean) =>
       );
       yield* Effect.promise(runtime.context);
       if (startWorker) {
-        yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
+        yield* ensureEmailProvidersOnStartup(runtime, config);
         const jobWorkerProgram = makeJobWorkerProgram({
           secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
           webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
@@ -307,7 +311,7 @@ const primaryProgram = Effect.scoped(
       (apiRuntime) => apiRuntime.disposeEffect,
     );
     yield* Effect.promise(runtime.context);
-    yield* ensureEmailProvidersOnStartup(runtime, config.apiUrl.toString());
+    yield* ensureEmailProvidersOnStartup(runtime, config);
     const jobWorkerProgram = makeJobWorkerProgram({
       secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
       webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),

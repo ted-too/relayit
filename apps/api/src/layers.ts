@@ -1,44 +1,40 @@
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
-import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
 import { UsageLive, UsagePolicyLive } from "@repo/channels/usage";
 import { DeadLetterStoreLive, JobsLive } from "@repo/jobs";
-import { makeObjectStorageLive } from "@repo/object-storage";
+import { makeObjectStorageLayer } from "@repo/object-storage";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
+import { emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
-import { Effect, Layer, Logger, ManagedRuntime, type Option, Redacted, References } from "effect";
+import {
+  Config,
+  Effect,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  type Option,
+  Redacted,
+  References,
+} from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
-import { type ApiConfig, apiConfig } from "./env";
+import type { ApiConfig } from "./env";
 
-export const loggingLive = (config: ApiConfig) =>
+const loggingLive = (logLevel: ApiConfig["logLevel"]) =>
   Layer.mergeAll(
     Logger.layer([
       Bun.env.NODE_ENV === "production" ? Logger.consoleJson : Logger.consolePretty(),
       Logger.tracerLogger,
     ]),
-    Layer.succeed(References.MinimumLogLevel, config.logLevel),
+    Layer.succeed(References.MinimumLogLevel, logLevel),
   );
 
-export const LoggingLive = Layer.unwrap(Effect.map(apiConfig, loggingLive));
-
-export interface ApiLayerConfig {
-  readonly betterAuthSecrets: string;
-  readonly cloudflare?: {
-    readonly apiToken: string;
-    readonly rootDomain: string;
-    readonly zoneId: string;
-  };
-  readonly databaseUrl: string;
-  readonly redisUrl: string;
-  readonly s3AccessKeyId: string;
-  readonly s3Bucket: string;
-  readonly s3Endpoint: string;
-  readonly s3Region: string;
-  readonly s3SecretAccessKey: string;
-}
+// Reads only LOG_LEVEL, so the rest of the config fails inside the program, where it is
+// logged and exits non-zero, rather than while the logger is built, silently.
+export const LoggingLive = Layer.unwrap(
+  Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
+);
 
 const optionValue = <A>(option: Option.Option<A>): A | undefined =>
   option._tag === "Some" ? option.value : undefined;
@@ -47,7 +43,7 @@ const cloudflareFromConfig = (config: {
   readonly cfApiToken: Option.Option<Redacted.Redacted<string>>;
   readonly cfRootDomain: Option.Option<string>;
   readonly cfZoneId: Option.Option<string>;
-}): ApiLayerConfig["cloudflare"] => {
+}) => {
   const apiToken = optionValue(config.cfApiToken);
   const rootDomain = optionValue(config.cfRootDomain);
   const zoneId = optionValue(config.cfZoneId);
@@ -63,21 +59,16 @@ const cloudflareFromConfig = (config: {
 
 export const makeRuntime = (config: ApiConfig) => {
   const secrets = parseBetterAuthSecrets(Redacted.value(config.betterAuthSecrets));
-  const logging = loggingLive(config);
+  const logging = loggingLive(config.logLevel);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
   });
   // Redis logs reconnects from the layer itself; give it the app logger.
   const redisLive = makeRedisLive({
+    keyPrefix: config.redisKeyPrefix,
     url: Redacted.value(config.redisUrl),
   }).pipe(Layer.provide(logging));
-  const objectStorageLive = makeObjectStorageLive({
-    accessKeyId: Redacted.value(config.s3AccessKeyId),
-    bucket: config.s3Bucket,
-    endpoint: config.s3Endpoint,
-    region: config.s3Region,
-    secretAccessKey: Redacted.value(config.s3SecretAccessKey),
-  });
+  const objectStorageLive = makeObjectStorageLayer(config.objectStorage);
   const usagePolicyLive = UsagePolicyLive.pipe(Layer.provide(dbLive));
   const usageLive = UsageLive.pipe(Layer.provide(Layer.merge(redisLive, usagePolicyLive)));
   const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
@@ -91,7 +82,9 @@ export const makeRuntime = (config: ApiConfig) => {
   );
   const credentialsVaultLive = ProviderCredentialsVault.live(secrets);
   const symmetricCryptoLive = SymmetricCrypto.live(secrets);
-  const emailProviderRegistryLive = EmailProviderRegistry.live(awsSesProviderFactory);
+  const emailBackendLive = emailBackendLayer(config.emailBackend).pipe(
+    Layer.provide(Layer.mergeAll(dbLive, jobsLive, logging)),
+  );
   const cloudflareConfig = cloudflareFromConfig(config);
   const managedDnsLive = cloudflareConfig
     ? EmailManagedDns.live(cloudflareConfig).pipe(Layer.provide(dbLive))
@@ -108,7 +101,7 @@ export const makeRuntime = (config: ApiConfig) => {
       httpLive,
       credentialsVaultLive,
       symmetricCryptoLive,
-      emailProviderRegistryLive,
+      emailBackendLive,
       managedDnsLive,
       logging,
     ),
