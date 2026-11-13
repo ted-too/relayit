@@ -1,13 +1,7 @@
 # syntax=docker/dockerfile:1.4
-# https://turborepo.dev/docs/guides/tools/docker
 
 FROM oven/bun:1 AS base
 WORKDIR /app
-
-FROM base AS prepare
-RUN bun add -g turbo@2.10.6
-COPY . .
-RUN turbo prune @repo/web --docker
 
 FROM base AS builder
 # Placeholders replaced at container start by scripts/entrypoint-vite.sh from
@@ -15,17 +9,11 @@ FROM base AS builder
 ENV VITE_API_URL=BAKED_VITE_API_URL \
     VITE_BASE_URL=BAKED_VITE_BASE_URL
 
-# Install pruned deps first (changes less often than source).
-COPY --from=prepare /app/out/json/ .
-RUN bun install --frozen-lockfile
-COPY --from=prepare /app/out/full/ .
-# prune --docker omits the root tsconfig that apps/web extends.
-COPY --from=prepare /app/tsconfig.json ./tsconfig.json
-RUN --mount=type=secret,id=turbo_token \
-    --mount=type=secret,id=turbo_team \
-    TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
-    TURBO_TEAM=$(cat /run/secrets/turbo_team 2>/dev/null || echo "") \
-    NODE_ENV=production bun run turbo build --filter=@repo/web
+# Installs skip dependencies' own install scripts, as CI's do, and the root `prepare`
+# (it patches tsc and installs the git hook, neither of which a build uses).
+COPY . .
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN cd apps/web && NODE_ENV=production bun run build
 
 FROM oven/bun:1 AS runner
 WORKDIR /app
