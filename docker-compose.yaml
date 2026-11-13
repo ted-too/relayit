@@ -9,6 +9,42 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - API_URL=${API_URL:-http://localhost:3005}
+      - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
+      - S3_ENDPOINT=${S3_ENDPOINT:?set S3_ENDPOINT in .env}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in .env}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+      - S3_BUCKET=${S3_BUCKET:-relayit}
+    # The api migrates before it listens, so a healthy api means a current schema.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3005/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - relayit-network
+
+  # Background work: delivery, retries, Domain verification, outbound webhooks. Without it
+  # sends are accepted and queue, but nothing goes out.
+  worker:
+    image: ghcr.io/ted-too/relayit-worker:${IMAGE_TAG:-alpha}
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - API_URL=${API_URL:-http://localhost:3005}
       - APP_URL=${WEB_URL:-http://localhost:3000}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - S3_ENDPOINT=${S3_ENDPOINT:?set S3_ENDPOINT in .env}
@@ -17,10 +53,8 @@ services:
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
       - S3_BUCKET=${S3_BUCKET:-relayit}
     depends_on:
-      postgres:
+      api:
         condition: service_healthy
-      redis:
-        condition: service_started
     networks:
       - relayit-network
 

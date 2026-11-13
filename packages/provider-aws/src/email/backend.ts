@@ -13,7 +13,7 @@ export class FakeEmailBackendInProduction extends Data.TaggedError("FakeEmailBac
 
 /**
  * `EMAIL_BACKEND` when set. Otherwise fake only when NODE_ENV says development or test:
- * the api and builder images don't set NODE_ENV, so an unset one must keep meaning SES.
+ * the api, worker and builder images don't set NODE_ENV, so an unset one must keep meaning SES.
  */
 export const selectEmailBackend = (input: {
   readonly configured: EmailBackend | undefined;

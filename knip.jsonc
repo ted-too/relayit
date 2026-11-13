@@ -32,6 +32,9 @@
     "apps/web": {
       "entry": ["src/router.tsx", "src/server.ts", "src/routes/**/*.{ts,tsx}"],
     },
+    "apps/worker": {
+      "entry": ["src/index.ts"],
+    },
     // A package's index.ts barrels are its public API: what they re-export stays exported
     // whether or not an app imports it yet.
     "packages/*": {
@@ -49,7 +52,7 @@
       "entry": ["src/**/index.ts", "drizzle.config.ts"],
     },
     "packages/template-render": {
-      // Spawned by path from render.ts and copied into the api and template-builder images.
+      // Spawned by path from render.ts and copied into the api, worker and template-builder images.
       "entry": ["src/**/index.ts", "src/react-email/isolate-runner.ts"],
     },
     "packages/ui": {

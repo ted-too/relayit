@@ -38,7 +38,7 @@ Self-hosted usage is unlimited (no send metering / Stripe). Sign-in is email/pas
 
 ### 2. Deploy with Docker Compose
 
-Compose runs **api** (HTTP + job worker in one process) + **web** + Postgres 18 + Redis.
+Compose runs **api** (HTTP) + **worker** (background jobs) + **web** + Postgres 18 + Redis.
 
 ```bash
 docker compose pull
@@ -57,7 +57,8 @@ docker compose logs -f
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, provider webhooks) and the job worker
+- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, provider webhooks); applies migrations on start
+- `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port, never migrates
 - `ghcr.io/ted-too/relayit-web:<tag>` — dashboard and Better Auth
 - `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)
 
@@ -70,8 +71,22 @@ docker run -d \
   --env-file .env \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
-  -e APP_URL="http://localhost:3000" \
   ghcr.io/ted-too/relayit-api:alpha
+```
+
+### Worker
+
+Runs every background job. Without it, sends are accepted and queue but never go out. Start it once the api has migrated the database.
+
+```bash
+docker run -d \
+  --name relayit-worker \
+  --env-file .env \
+  -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
+  -e REDIS_URL="redis://redis:6379" \
+  -e API_URL="http://localhost:3005" \
+  -e APP_URL="http://localhost:3000" \
+  ghcr.io/ted-too/relayit-worker:alpha
 ```
 
 ### Web dashboard
@@ -94,18 +109,31 @@ docker run -d \
 
 ### Required environment (api)
 
-Validated at process start (`apps/api` env packs). Compose maps `WEB_URL` → `APP_URL`.
+Validated at process start (`apps/api/src/env.ts`).
 
 | Variable                                                                                | Description                                                                   |
 | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                                          | Postgres connection string                                                    |
 | `REDIS_URL`                                                                             | Redis connection string                                                       |
 | `API_URL`                                                                               | Public API URL                                                                |
-| `APP_URL`                                                                               | Public web URL (trusted origin / cookies)                                     |
 | `BETTER_AUTH_SECRETS`                                                                   | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`)                     |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
 
-Optional: `LOG_LEVEL`, `WEB_CONCURRENCY` (Linux production: HTTP child processes; the job worker stays on the primary).
+Optional: `LOG_LEVEL`.
+
+### Required environment (worker)
+
+Validated at process start (`apps/worker/src/env.ts`). Compose maps `WEB_URL` → `APP_URL`.
+
+| Variable                    | Description                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| `DATABASE_URL`, `REDIS_URL` | Same as api                                                    |
+| `API_URL`                   | Public API URL; Provider delivery notifications are sent to it |
+| `APP_URL`                   | Public web URL; used in unsubscribe links                      |
+| `BETTER_AUTH_SECRETS`       | Same versioned secrets as api                                  |
+| `S3_*`                      | Same as api                                                    |
+
+Optional: `LOG_LEVEL`; `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on Cloudflare.
 
 ### Required environment (web)
 
@@ -172,12 +200,13 @@ Plus S3 (and other required) values from [env.example](env.example).
 
 ### Scaling
 
-The api process serves HTTP and runs the job worker together. Scale by running more api replicas; HTTP and worker capacity move as one.
+The api serves HTTP and the worker runs jobs; scale each with replicas. Several workers share the queue safely.
 
 ## Monitoring & Logs
 
 ```bash
 docker compose logs api
+docker compose logs worker
 docker compose logs web
 docker compose logs -f --tail=100
 ```
@@ -196,7 +225,7 @@ docker pull ghcr.io/ted-too/relayit-api:alpha
 
 ## Contributing
 
-- Open a PR against `main`. PR CI builds `relayit-api`, `relayit-web`, and `relayit-template-builder`.
+- Open a PR against `main`. PR CI builds `relayit-api`, `relayit-worker`, `relayit-web`, and `relayit-template-builder`.
 - After merge, semantic-release cuts the next `v1.0.0-alpha.N` and publishes GHCR images (including `:alpha`).
 - Use [Conventional Commits](https://conventionalcommits.org/) (`feat:`, `fix:`, etc.).
 
