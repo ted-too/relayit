@@ -17,7 +17,8 @@ import { makeWorkerLayer } from "./layers";
 
 const TRAILING_SLASH = /\/$/;
 
-// The schema is the api's to migrate: this process assumes a current one and never migrates.
+// Never migrates: the api, web and builder apply migrations as they start, and this assumes
+// a current schema.
 const workerProgram = Effect.gen(function* () {
   const config = yield* workerConfig;
 
