@@ -46,7 +46,7 @@
   },
   "scripts": {
     "prepare": "effect-tsgo patch && vp config --no-agent",
-    "dev": "vp run -r dev",
+    "dev": "vp run -r --parallel dev",
     "build": "vp run --filter './apps/*' build",
     "typecheck": "vp run -r typecheck",
     "test": "vp run -r test",
