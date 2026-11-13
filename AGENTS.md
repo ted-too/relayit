@@ -122,17 +122,19 @@ Each task gets its own git worktree: T3 Code makes it under `~/.t3/worktrees/` a
 
 - **Checks.** Run lint, typecheck and tests for what you changed. CI runs everything; the push is how it runs.
 - **Tests.** Logic and observable behaviour get tests: accept and delivery outcomes, suppression, Usage, webhook signing and delivery. Use a real Postgres or Redis for integration tests, with fakes only at true boundaries (SES, Cloudflare, the clock). Don't mock the logic under test.
-- **UI.** Dashboard changes need screenshots in the PR. Take them against a local database and fake data, never a running instance with real Projects.
+- **UI.** Screenshots of a changed screen are optional; a PR is not held back for them. Any you show come from a local database with fake data, never a running instance with real Projects.
 - **Done** is a PR open on GitHub with CI green.
 
 ## Git and PRs
 
-- Branch per change, `<type>/<slug>`, from and targeting `main`. Ted merges; PRs are squash-merged, so once a branch's PR has merged, new work goes on a new branch from `main`, opened as a new PR.
-- Conventional commits scoped by area: `feat(send):`, `fix(domains):`, `chore(tooling):`, `docs(internals):`, `ci:`. The PR title becomes the squash commit, and semantic-release reads it on `main`: `feat`, `fix`, `perf`, `refactor` and `revert` cut the next `1.0.0-alpha.N` and publish images; `docs`, `chore`, `test`, `build`, `ci` and `style` release nothing. Pick the type for what the change does to a running deployment.
-- PR body: the problem in a sentence or two, then `## Changes`, `## Verified` (the tests and runs that prove it), `## Decided without Ted` (judgment calls you made, so he can overrule them) and `Closes #N` for each issue it settles.
-- Never commit plans, scratch files or screenshots for PRs; upload evidence to the PR. `gh pr create`, `gh pr edit` and `gh pr comment` take `--attach <file>`: reference each image in the body by the exact path given to `--attach`, written out in full, and `gh` rewrites it to the uploaded URL. Read the body back with `gh pr view <n> --json body` and check every image became a `user-attachments` URL.
+- Branch per change as `<type>/<slug>`, from and targeting `main`. Work that depends on an unmerged PR branches off it. Ted squash-merges, so once a branch's PR has merged, new work goes on a new branch from `main`, opened as a new PR.
+- **Title.** The PR title becomes the squash commit: a conventional `type: summary`, no scope, under 72 characters. semantic-release reads it on `main`: `feat`, `fix`, `perf`, `refactor` and `revert` cut the next `1.0.0-alpha.N` and publish images; `docs`, `chore`, `test`, `build`, `ci` and `style` release nothing. Pick the type for what the change does to a running deployment.
+- **Scope.** A feature is one PR, schema to screen. Unrelated changes go apart.
+- **Body**, one line per paragraph (GitHub renders newlines, so don't hard-wrap): `## Problem`, `## Fix`, `## Deploy` when something a deployment depends on changes (a Dockerfile, a workflow, an environment variable an app reads, the Bun or runtime version, or a migration), `## Verification` (the tests and runs that prove it), `Closes #N` for each issue it settles, and a `Model:` line naming the model and harness that did the work. Judgment calls Ted should check go at the end of Fix as "Worth a look:". Screenshots are optional.
+- Never commit plans, scratch files or screenshots for PRs.
+- **Review.** Run `/code-review` against the base before asking for review on a feature-sized change. Draft while CI is red. Resolve every thread.
 - **Stack dependent work.** When a change lands in layers that each make sense to review alone, make it a stack with `gh stack`: `gh stack init --base main <branch>`, `gh stack add <branch>` for each layer, `gh stack submit` to push and open the PRs as a linked stack, `gh stack sync` after changing a lower layer. Each layer targets the one below and is merged from the bottom. Work that doesn't depend on another open PR is its own PR off `main`.
-- **Review fixes on a stack** go in a new layer on top, one commit per fix, so the reviewed layers below stay as they were.
+- **Fixes to a stack** go on its top branch, so the reviewed layers below stay as they were.
 
 ## Issues
 
