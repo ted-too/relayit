@@ -4,7 +4,7 @@ Relayit ships as three images on GitHub Container Registry, `ghcr.io/ted-too/rel
 
 ## Releases
 
-- **A pull request into `main`** builds all three images and pushes them as `:pr-<number>` (`.github/workflows/build-images.yml`). A stacked PR whose base is another branch builds none.
+- **A pull request into `main`** builds all three images and pushes them as `:pr-<number>` (`.github/workflows/build-images.yml`).
 - **A push to `main`** runs semantic-release (`.github/workflows/semantic-release.yml`, `release.config.cjs`). `main` is a prerelease branch, so a release is the next `v1.0.0-alpha.N`: a GitHub Release and tag, no changelog commit. `feat`, `fix`, `perf`, `refactor` and `revert` commits release; `docs`, `chore`, `test`, `build`, `ci` and `style` don't. PRs are squash-merged, so the PR title is the commit it reads.
 - **A release** builds the three images in the same workflow and pushes them as `:<version>` and `:alpha`. The `stable` branch exists only because semantic-release requires a non-prerelease branch; nothing is pushed to it, and the `:main` tag it would produce is unused.
 
