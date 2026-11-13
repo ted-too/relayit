@@ -120,6 +120,7 @@ export const deleteCustomDomainFn = createServerFn({ method: "POST" })
     );
   });
 
+/** @public Pausing is built and tested server-side; the dashboard does not call it yet. */
 export const pauseCustomDomainFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(pauseBodySchema)
@@ -138,6 +139,7 @@ export const pauseCustomDomainFn = createServerFn({ method: "POST" })
     );
   });
 
+/** @public Pausing is built and tested server-side; the dashboard does not call it yet. */
 export const unpauseCustomDomainFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
   .validator(customDomainIdInputSchema)

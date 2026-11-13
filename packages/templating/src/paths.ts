@@ -15,19 +15,3 @@ export function normalizeWorkspacePath(raw: string): string | null {
   }
   return trimmed;
 }
-
-export function contentTypeForWorkspacePath(path: string): string {
-  if (path.endsWith(".tsx") || path.endsWith(".ts")) {
-    return "text/typescript";
-  }
-  if (path.endsWith(".json")) {
-    return "application/json";
-  }
-  if (path.endsWith(".lock") || path.endsWith(".lockb")) {
-    return "application/octet-stream";
-  }
-  if (path.endsWith(".css")) {
-    return "text/css";
-  }
-  return "text/plain";
-}

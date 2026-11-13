@@ -24,6 +24,9 @@
     "effect": "catalog:",
     "elysia": "^1.4.29"
   },
+  "devDependencies": {
+    "typeid-js": "catalog:"
+  },
   "portless": {
     "name": "api.relayit",
     "script": "dev:app"

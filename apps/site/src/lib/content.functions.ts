@@ -18,6 +18,7 @@ export const getPage = createServerFn({ method: "GET" })
     return page;
   });
 
+/** @public A server function: an endpoint with no caller in the site yet, kept for the docs and legal indexes. */
 export const getPageList = createServerFn({ method: "GET" })
   .validator((collection: Collection) => collection)
   .handler(({ data }) => listPages(data));

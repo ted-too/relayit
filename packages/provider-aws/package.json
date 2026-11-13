@@ -8,7 +8,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@effect-aws/client-s3": "catalog:",
     "@effect-aws/client-sesv2": "2.0.0-beta.6",
     "@effect-aws/client-sns": "2.0.0-beta.4",
     "@repo/channels": "workspace:*",

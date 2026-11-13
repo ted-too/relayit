@@ -18,6 +18,7 @@ export const getTemplateInputSchema = z.object({
   templateId: z.string().min(1),
 });
 
+/** @alias Named for the archive call; same input as reading a Template. */
 export const archiveTemplateInputSchema = getTemplateInputSchema;
 
 export const updateTemplateSlugFormSchema = z.object({
@@ -41,8 +42,10 @@ export const listWorkspaceEntriesInputSchema = z.object({
   orgSlug: z.string().min(1),
 });
 
+/** @alias Named for its call; same input as listing Workspace Entries. */
 export const getWorkspaceInputSchema = listWorkspaceEntriesInputSchema;
 
+/** @alias Named for its call; same input as listing Workspace Entries. */
 export const listWorkspaceFilesInputSchema = listWorkspaceEntriesInputSchema;
 
 export const readWorkspaceFileInputSchema = z.object({
