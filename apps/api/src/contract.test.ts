@@ -1,163 +1,18 @@
 /**
  * The api's HTTP contract: requests in, exact status, content type and body out, over a
- * real Bun server. `/messages/email` and the legacy `/send/*` are customer contracts, and
- * SNS posts SES notifications to a URL production is subscribed with; what these tests
- * pin must not change without saying so in the PR. The boundaries behind the routes (API
- * key verification, the Project lookups, accept and the SES ingest) are stubs, so every
- * outcome a route maps is reachable without a database.
+ * real Bun server with the boundaries stubbed (`testing.ts`). `/messages/email` and the
+ * legacy `/send/*` are customer contracts, and SNS posts SES notifications to a URL
+ * production is subscribed with; what these tests pin must not change without saying so in
+ * the PR. They were written against the Elysia server and pass unchanged against this one,
+ * except where a comment says what differs.
  */
-import openapi from "@elysia/openapi";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  type AcceptTransactionalEmailInput,
-  type acceptTransactionalEmail,
-  EmailAcceptInfrastructureError,
-  EmailAcceptRejected,
-} from "@repo/channels/email/accept";
-import { Usage, UsageLimitExceeded, type UsageService } from "@repo/channels/usage";
-import { Jobs, type JobsService } from "@repo/jobs";
-import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
-import { DB, type Database } from "@repo/persistence/db/effect";
+import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
+import { UsageLimitExceeded } from "@repo/channels/usage";
 import { AwsSnsValidationError } from "@repo/provider-aws/errors";
-import {
-  type handleSesNotification,
-  SES_NOTIFICATIONS_PATH,
-} from "@repo/provider-aws/email/webhooks";
-import { Effect, FiberSet, Layer } from "effect";
-import { HttpClient } from "effect/http";
-import { Elysia } from "elysia";
-import type { ApiAuth } from "./lib/auth";
-import type { ApiServices, RunApiEffect } from "./lib/effect";
-import { createLegacySendRoutes } from "./routes/compat/send";
-import { createEmailRoutes } from "./routes/messages/email";
-import { createSesNotificationRoutes } from "./routes/webhooks/ses";
-
-const GOOD_KEY = "rel_good";
-
-interface Stubs {
-  readonly accept: typeof acceptTransactionalEmail;
-  readonly handleSes: typeof handleSesNotification;
-  /** The verified custom Domain a legacy send without `from` falls back to. */
-  readonly defaultDomain: string | null;
-  readonly ownerUserId: string | null;
-}
-
-const stubs = (overrides: Partial<Stubs> = {}) => {
-  const accepted: AcceptTransactionalEmailInput[] = [];
-  const accept =
-    overrides.accept ??
-    (() =>
-      Effect.succeed({ deliveryId: "edlv_1", messageId: "msg_1", replayed: false, stripped: [] }));
-  const received: string[] = [];
-  const handleSes = overrides.handleSes ?? (() => Effect.succeed({ type: "noop" as const }));
-  return {
-    accepted,
-    received,
-    stubs: {
-      defaultDomain: null,
-      ownerUserId: "user_1",
-      ...overrides,
-      accept: ((input) => {
-        accepted.push(input);
-        return accept(input);
-      }) satisfies typeof acceptTransactionalEmail,
-      handleSes: ((rawBody) => {
-        received.push(rawBody);
-        return handleSes(rawBody);
-      }) satisfies typeof handleSesNotification,
-    } satisfies Stubs,
-  };
-};
-
-const makeAuth = (stubs: Stubs): ApiAuth => ({
-  auth: {
-    api: {
-      verifyApiKey: ({ body }: { body: { key: string } }) =>
-        Promise.resolve(
-          body.key === GOOD_KEY
-            ? { error: null, key: { id: "key_1", referenceId: "org_1" }, valid: true }
-            : {
-                error: { code: "INVALID_API_KEY", message: "Invalid API key" },
-                key: null,
-                valid: false,
-              },
-        ),
-    },
-  } as unknown as ApiAuth["auth"],
-  close: () => Promise.resolve(),
-  db: {
-    query: {
-      member: {
-        findFirst: () =>
-          Promise.resolve(stubs.ownerUserId === null ? undefined : { userId: stubs.ownerUserId }),
-      },
-      organization: {
-        findFirst: () => Promise.resolve({ id: "org_1", sandboxDomain: null, slug: "acme" }),
-      },
-      organizationDomain: {
-        findFirst: () =>
-          Promise.resolve(
-            stubs.defaultDomain === null
-              ? undefined
-              : { customDomain: { fqdn: stubs.defaultDomain }, customDomainId: "dom_1" },
-          ),
-      },
-    },
-  } as unknown as ApiAuth["db"],
-});
-
-// The routes reach these only through accept and the SES ingest, which are stubbed.
-const unusedServices = Layer.mergeAll(
-  Layer.succeed(DB, {} as Database),
-  Layer.succeed(Jobs, {} as JobsService),
-  Layer.succeed(HttpClient.HttpClient, {} as HttpClient.HttpClient),
-  Layer.succeed(ObjectStorage, {} as ObjectStorageService),
-  Layer.succeed(Usage, {} as UsageService),
-);
-
-/** The api as it serves, on a free port of 127.0.0.1, for the length of the test. */
-const serve = (stubs: Stubs) =>
-  Effect.gen(function* () {
-    const auth = makeAuth(stubs);
-    const runEffect: RunApiEffect = yield* FiberSet.makeRuntimePromise<ApiServices>();
-    const app = new Elysia()
-      .use(
-        openapi({
-          exclude: { paths: ["/health", SES_NOTIFICATIONS_PATH] },
-          path: "/docs",
-          provider: "scalar",
-          specPath: "/openapi.json",
-        }),
-      )
-      .get("/health", () => ({ status: "ok" as const }), { detail: { hide: true } })
-      .use(createLegacySendRoutes(auth, runEffect, stubs.accept))
-      .group("/messages", (group) => group.use(createEmailRoutes(auth, runEffect, stubs.accept)))
-      .use(createSesNotificationRoutes(runEffect, stubs.handleSes));
-    yield* Effect.acquireRelease(
-      Effect.sync(() => app.listen({ hostname: "127.0.0.1", port: 0 })),
-      () => Effect.promise(() => app.stop()),
-    );
-    return `http://127.0.0.1:${app.server?.port}`;
-  }).pipe(Effect.provide(unusedServices));
-
-const request = (
-  origin: string,
-  method: string,
-  path: string,
-  options: { readonly body?: string; readonly headers?: Record<string, string> } = {},
-) =>
-  Effect.promise(async () => {
-    const response = await fetch(`${origin}${path}`, {
-      body: options.body,
-      headers: options.headers,
-      method,
-    });
-    return {
-      body: await response.text(),
-      contentType: response.headers.get("content-type"),
-      status: response.status,
-    };
-  });
+import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
+import { Effect } from "effect";
+import { GOOD_KEY, request, serve, stubs } from "./testing";
 
 const JSON_TYPE = "application/json;charset=utf-8";
 const TEXT_TYPE = "text/plain;charset=utf-8";
@@ -235,6 +90,12 @@ describe("the api's HTTP contract", () => {
         yield* request(origin, "POST", "/send//raw/email", { body: legacyRaw(), headers: keyed }),
       ).toEqual(notFound);
       expect(yield* request(origin, "GET", SES_NOTIFICATIONS_PATH)).toEqual(notFound);
+      expect(
+        yield* request(origin, "POST", "/Messages/email", { body: email(), headers: keyed }),
+      ).toEqual(notFound);
+      expect(
+        yield* request(origin, "POST", "/messages//email", { body: email(), headers: keyed }),
+      ).toEqual(notFound);
     }),
   );
 });
@@ -357,6 +218,15 @@ describe("POST /messages/email", () => {
         "headers",
         "/x-api-key",
       );
+      // Headers are checked before the body.
+      expectSchemaFailure(
+        yield* request(origin, "POST", "/messages/email", {
+          body: email({ to: undefined }),
+          headers: asJson,
+        }),
+        "headers",
+        "/x-api-key",
+      );
     }),
   );
 
@@ -439,9 +309,20 @@ describe("POST /messages/email", () => {
         "/template/id",
       );
       expectSchemaFailure(yield* send(email({ from: "" })), "body", "/from");
+      expectSchemaFailure(
+        yield* send(
+          email({
+            attachments: [{ content: "SGk=", filename: "a.pdf", path: "https://files.test/a.pdf" }],
+          }),
+        ),
+        "body",
+        "/attachments/0",
+      );
       expectSchemaFailure(yield* send("null"), "body", "root");
       expectSchemaFailure(yield* send(""), "body", "root");
-      expectSchemaFailure(yield* send("[]"), "body", "/from");
+      // A body that is not an object fails at the root. Elysia reported a JSON array, or a
+      // body sent as text, at its first missing property (`/from`).
+      expectSchemaFailure(yield* send("[]"), "body", "root");
       expectSchemaFailure(
         yield* send(email(), { ...keyed, "idempotency-key": "x".repeat(257) }),
         "headers",
@@ -451,7 +332,7 @@ describe("POST /messages/email", () => {
       expectSchemaFailure(
         yield* send(email(), { "content-type": "text/plain", "x-api-key": GOOD_KEY }),
         "body",
-        "/from",
+        "root",
       );
       expectSchemaFailure(yield* send(email(), { "x-api-key": GOOD_KEY }), "body", "root");
       // The schema is checked before the API key.
@@ -691,6 +572,10 @@ describe("POST /send/:project/raw/email and /template/email", () => {
         }),
       ).toEqual(queued);
       expect(accepted).toHaveLength(3);
+      expect(accepted[0]).toMatchObject({
+        attribution: { kind: "project" },
+        organizationId: "org_1",
+      });
       expect(accepted[2]).toMatchObject({
         email: { content: { idOrSlug: "welcome", kind: "template", values: { name: "Ada" } } },
       });

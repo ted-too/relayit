@@ -1,10 +1,5 @@
-import type {
-  AcceptedTransactionalEmail,
-  AcceptTransactionalEmailInput,
-  EmailAcceptRejected,
-} from "@repo/channels/email/accept";
+import type { AcceptTransactionalEmailInput } from "@repo/channels/email/accept";
 import { SANDBOX_FROM_LOCAL_PART } from "@repo/channels/email/sender";
-import type { UsageLimitExceeded } from "@repo/channels/usage";
 import type { PromiseDb } from "@repo/persistence/db/promise";
 import { tryParseEmailFrom } from "../../messages/validators/email";
 import type { LegacySendRawBody, LegacySendTemplateBody } from "./validators";
@@ -221,36 +216,4 @@ export const resolveLegacyDefaultFromAddress = async (input: {
   }
 
   return `${SANDBOX_FROM_LOCAL_PART}@${sandbox.rootDomain}`;
-};
-
-export const mapAcceptResultToLegacyResponse = (
-  result: AcceptedTransactionalEmail | EmailAcceptRejected | UsageLimitExceeded,
-) => {
-  if ("messageId" in result) {
-    return {
-      body: { id: result.messageId, status: "queued" as const },
-      status: 201 as const,
-    };
-  }
-
-  switch (result._tag) {
-    case "EmailAcceptRejected":
-      return {
-        body: { details: [result.code], message: result.message },
-        status: 400 as const,
-      };
-    case "UsageLimitExceeded":
-      return {
-        body: {
-          details: [result.window === "daily" ? "daily_limit_exceeded" : "monthly_limit_exceeded"],
-          message: `${result.window === "daily" ? "Daily" : "Monthly"} email send limit exceeded`,
-        },
-        status: 429 as const,
-      };
-    default:
-      return {
-        body: { details: [], message: "Something went wrong" },
-        status: 500 as const,
-      };
-  }
 };

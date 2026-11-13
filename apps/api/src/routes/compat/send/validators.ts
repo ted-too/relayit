@@ -1,94 +1,70 @@
-import { type Static, t } from "elysia";
+import { Schema } from "effect";
+import { EmailAddressString, UriString } from "../../messages/validators/email";
 
-const stringMap = t.Object({}, { additionalProperties: t.String() });
+const stringMap = Schema.Record(Schema.String, Schema.String);
+const nonEmpty = Schema.String.check(Schema.isMinLength(1));
 
-const legacyAttachmentSchema = t.Union([
-  t.Object(
-    {
-      content: t.String(),
-      contentId: t.Optional(t.String()),
-      contentType: t.Optional(t.String()),
-      filename: t.String({ minLength: 1 }),
-    },
-    { additionalProperties: false, title: "Base64 attachment" },
-  ),
-  t.Object(
-    {
-      contentId: t.Optional(t.String()),
-      contentType: t.Optional(t.String()),
-      filename: t.String({ minLength: 1 }),
-      path: t.String({ format: "uri" }),
-    },
-    { additionalProperties: false, title: "Hosted attachment" },
-  ),
+const LegacyAttachment = Schema.Union([
+  Schema.Struct({
+    content: Schema.String,
+    contentId: Schema.optionalKey(Schema.String),
+    contentType: Schema.optionalKey(Schema.String),
+    filename: nonEmpty,
+  }).annotate({ title: "Base64 attachment" }),
+  Schema.Struct({
+    contentId: Schema.optionalKey(Schema.String),
+    contentType: Schema.optionalKey(Schema.String),
+    filename: nonEmpty,
+    path: UriString,
+  }).annotate({ title: "Hosted attachment" }),
 ]);
-
-const legacyContactSchema = t.Object(
-  {
-    externalIdentifiers: t.Optional(stringMap),
-    name: t.Optional(t.String()),
-  },
-  { additionalProperties: false },
-);
 
 const legacyBase = {
-  app: t.Optional(t.String()),
-  appEnvironment: t.Optional(t.String()),
-  attachments: t.Optional(t.Array(legacyAttachmentSchema, { maxItems: 20 })),
-  contact: t.Optional(legacyContactSchema),
-  from: t.Optional(t.String({ format: "email" })),
-  to: t.String({ format: "email" }),
+  app: Schema.optionalKey(Schema.String),
+  appEnvironment: Schema.optionalKey(Schema.String),
+  attachments: Schema.optionalKey(Schema.Array(LegacyAttachment).check(Schema.isMaxLength(20))),
+  contact: Schema.optionalKey(
+    Schema.Struct({
+      externalIdentifiers: Schema.optionalKey(stringMap),
+      name: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  from: Schema.optionalKey(EmailAddressString),
+  to: EmailAddressString,
 };
 
-const legacyInlinePayloadSchema = t.Union([
-  t.Object(
-    {
-      html: t.String(),
-      subject: t.String({ minLength: 1 }),
-      text: t.Optional(t.String()),
-    },
-    { additionalProperties: false },
-  ),
-  t.Object(
-    {
-      html: t.Optional(t.String()),
-      subject: t.String({ minLength: 1 }),
-      text: t.String(),
-    },
-    { additionalProperties: false },
-  ),
-]);
-
-export const legacySendRawBodySchema = t.Object(
-  {
-    ...legacyBase,
-    payload: legacyInlinePayloadSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const legacySendTemplateBodySchema = t.Object(
-  {
-    ...legacyBase,
-    template: t.Object(
-      {
-        props: t.Optional(t.Object({}, { additionalProperties: t.Any() })),
-        slug: t.String({ minLength: 1 }),
-      },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const legacySendProjectParamsSchema = t.Object({
-  project: t.String({ minLength: 1 }),
+export const LegacySendRawBody = Schema.Struct({
+  ...legacyBase,
+  payload: Schema.Union([
+    Schema.Struct({
+      html: Schema.String,
+      subject: nonEmpty,
+      text: Schema.optionalKey(Schema.String),
+    }),
+    Schema.Struct({
+      html: Schema.optionalKey(Schema.String),
+      subject: nonEmpty,
+      text: Schema.String,
+    }),
+  ]),
 });
 
-export const legacyApiKeyHeadersSchema = t.Object({
-  "X-API-Key": t.Optional(t.String()),
-  "x-api-key": t.Optional(t.String()),
+export const LegacySendTemplateBody = Schema.Struct({
+  ...legacyBase,
+  template: Schema.Struct({
+    props: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+    slug: nonEmpty,
+  }),
 });
 
-export type LegacySendRawBody = Static<typeof legacySendRawBodySchema>;
-export type LegacySendTemplateBody = Static<typeof legacySendTemplateBodySchema>;
+export const LegacySendParams = Schema.Struct({ project: nonEmpty });
+
+/** Both spellings are the same header; the docs have always named `X-API-Key` too. */
+export const LegacySendHeaders = Schema.Struct({
+  "x-api-key": Schema.optionalKey(
+    Schema.String.annotate({ description: "The API key; `X-API-Key` works too." }),
+  ),
+});
+
+export type LegacySendRawBody = typeof LegacySendRawBody.Type;
+export type LegacySendTemplateBody = typeof LegacySendTemplateBody.Type;
