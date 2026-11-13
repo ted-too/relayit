@@ -72,7 +72,7 @@ describe("SendEmailBody", () => {
   });
 
   // Resend's topic_id has no meaning here (Topics belong to Campaigns). The route has always
-  // dropped it with any other unknown field rather than refused it; see #ISSUE.
+  // dropped it with any other unknown field rather than refused it; see #38.
   it("drops topic_id, as it drops any field it does not know", () => {
     const body = parsed({
       from: "noreply@example.com",
