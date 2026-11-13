@@ -5,7 +5,7 @@ import { makeObjectStorageLayer } from "@repo/object-storage";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { makeRedisLive } from "@repo/redis";
 import { Layer, ManagedRuntime, Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import type { ApiConfig } from "./env";
 
 export const makeRuntime = (config: ApiConfig) => {

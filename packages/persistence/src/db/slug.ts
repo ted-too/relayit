@@ -37,7 +37,6 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
 
     const existingRows = yield* db
       .select({ count: count() })
-      // @ts-expect-error - drizzle orm bug see - https://github.com/drizzle-team/drizzle-orm/issues/4069
       .from(table)
       .where(scope ? and(eq(table.slug, baseSlug), scope) : eq(table.slug, baseSlug));
 
@@ -48,7 +47,6 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
     const pattern = `${baseSlug}-%`;
     const existingSlugs = yield* db
       .select({ slug: table.slug })
-      // @ts-expect-error - drizzle orm bug see - https://github.com/drizzle-team/drizzle-orm/issues/4069
       .from(table)
       .where(scope ? and(like(table.slug, pattern), scope) : like(table.slug, pattern));
 
