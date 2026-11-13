@@ -30,9 +30,10 @@ const message = (name: string) =>
   `Construct ${name} where it is raised, with its named fields, rather than through a factory function.`;
 
 /**
- * Reports a named function whose only job is `new SomeError({ ... })`, curried or not
- * (docs/agents/nitpicks.md, "Construct tagged errors at the call site"). An inline callback such as
- * `Effect.mapError((cause) => new SomeError({ cause }))` is the call site, so it is not reported.
+ * Reports a named function whose only job is `new SomeError({ ... })`, curried or not: the
+ * constructor is the API, and a factory hides its fields behind positional arguments. An inline
+ * callback such as `Effect.mapError((cause) => new SomeError({ cause }))` is the call site, so it is
+ * not reported.
  */
 export default defineRule({
   meta: {

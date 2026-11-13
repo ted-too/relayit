@@ -16,8 +16,8 @@ const isRunJobWorkerCall = (node: unknown): node is ESTree.CallExpression => {
 };
 
 /**
- * Reports a type assertion on `runJobWorker(...)` or on one of its arguments
- * (docs/agents/nitpicks.md, "Don't erase Effect Requirements at composition sites").
+ * Reports a type assertion on `runJobWorker(...)` or on one of its arguments. A cast there hides a
+ * Layer the worker runtime fails to provide; if mixed handlers don't type-check, fix the jobs package.
  */
 export default defineRule({
   meta: {

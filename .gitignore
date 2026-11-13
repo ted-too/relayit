@@ -15,9 +15,6 @@ node_modules
 # Testing
 coverage
 
-# Turbo caches left in checkouts from before Vite+
-.turbo
-
 # Vercel
 .vercel
 

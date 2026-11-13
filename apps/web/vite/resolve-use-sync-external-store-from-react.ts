@@ -1,8 +1,11 @@
 import type { Plugin } from "vite";
 
 /**
- * See ADR-0008 — temporary until Nitro `experimental.cjsRequireRewrite` (or
- * equivalent) lands: https://github.com/nitrojs/nitro/pull/4365
+ * Nitro's self-contained `.output` can keep a runtime `require("react")` inside the CJS it inlines
+ * from `use-sync-external-store/shim` (pulled in by `@base-ui/utils`). With no `node_modules` that
+ * require fails; with one it loads a second React and SSR breaks on invalid hook calls. Resolving
+ * the shim to ESM that imports `react` makes it share the bundled React. Delete this plugin once
+ * our Nitro has `experimental.cjsRequireRewrite` (https://github.com/nitrojs/nitro/pull/4365).
  */
 export function resolveUseSyncExternalStoreFromReact(): Plugin {
   const shim = "\0base-ui-use-sync-external-store/shim";
