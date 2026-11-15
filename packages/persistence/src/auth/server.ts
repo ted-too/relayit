@@ -11,7 +11,7 @@ import {
 import { emailHarmony } from "better-auth-harmony";
 import type { PromiseDb } from "../db/promise";
 import * as schema from "../db/schema";
-import { COOKIE_PREFIX } from "./constants";
+import { AUTH_BASE_PATH, COOKIE_PREFIX } from "./constants";
 import {
   ac as organizationAc,
   admin as organizationAdminRole,
@@ -34,17 +34,18 @@ export interface AuthRedis {
 }
 
 export interface AuthConfig {
+  /** The api's public origin (`API_URL`); better-auth is at `/auth` on it. */
   baseUrl?: string;
   /**
    * Parent domain for the session cookie (e.g. `relayit.io`), so sibling
    * subdomains like the marketing site can see that a user is signed in.
-   * Omit to keep cookies host-only.
+   * Omit to keep cookies host-only (the api's host).
    */
   cookieDomain?: string;
   db: PromiseDb;
   hooks?: BetterAuthOptions["hooks"];
   /**
-   * Limits requests to `/api/auth/*` per client IP, in Redis. better-auth would decide by
+   * Limits requests to `/auth/*` per client IP, in Redis. better-auth would decide by
    * `NODE_ENV`, which the images leave unset; the app decides instead.
    */
   rateLimit: boolean;
@@ -62,6 +63,11 @@ export interface AuthConfig {
     };
   };
   redis: AuthRedis;
+  /**
+   * Origins besides the api's own that may call better-auth with the session cookie and be
+   * redirected to after sign-in: the dashboard's (`APP_URL`).
+   */
+  trustedOrigins?: string[];
   /** `REDIS_KEY_PREFIX`: the session store bypasses `@repo/redis`, so it applies it here. */
   redisKeyPrefix: string;
   socialProviders?: SocialProviders;
@@ -77,9 +83,12 @@ export const createAuth = ({
   hooks,
   plugins,
   rateLimit,
+  trustedOrigins,
 }: AuthConfig) =>
   betterAuth({
     baseURL: baseUrl,
+    basePath: AUTH_BASE_PATH,
+    trustedOrigins,
     database: drizzleAdapter(db, {
       provider: "pg",
       schema,
@@ -118,6 +127,9 @@ export const createAuth = ({
         generateId: false,
       },
       cookiePrefix: COOKIE_PREFIX,
+      // better-auth skips its origin and callback URL checks under NODE_ENV=test; the
+      // integration tests must see the trusted origins production enforces.
+      disableOriginCheck: false,
       ...(cookieDomain ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } } : {}),
     },
     user: {

@@ -32,7 +32,7 @@ RUN echo '{"dependencies":{"react": "^19.0.0", "react-dom": "^19.0.0", "@react-e
     bun install --production && \
     chown -R relayit:relayit /app /home/relayit
 
-# No migrations: the worker assumes the schema the api (or web, or the builder) migrated.
+# No migrations: the worker assumes the schema the api (or the builder) migrated.
 COPY --from=builder --chown=relayit:relayit /app/apps/worker/build ./
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
 

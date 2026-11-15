@@ -1,18 +1,24 @@
 import { DashboardApi } from "@repo/contracts/dashboard";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
+import { API_ORIGIN } from "@/lib/api-origin";
 
 type DashboardClient = HttpApiClient.ForApi<typeof DashboardApi>;
 
+// The api is another origin of the same site: the session cookie goes only if asked for.
+const http = FetchHttpClient.layer.pipe(
+  Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" })),
+);
+
 /**
- * Runs one of the api's dashboard operations from the browser, on the page's own origin
- * so the session cookie goes with it. It rejects with the contract's error, whose message
- * a toast can show; a session that has ended sends the person to sign in.
+ * Runs one of the api's dashboard operations from the browser, with the session cookie. It
+ * rejects with the contract's error, whose message a toast can show; a session that has
+ * ended sends the person to sign in.
  */
 export const dashboard = <A, E>(operation: (client: DashboardClient) => Effect.Effect<A, E>) =>
   Effect.runPromise(
-    HttpApiClient.make(DashboardApi, { baseUrl: window.location.origin }).pipe(
+    HttpApiClient.make(DashboardApi, { baseUrl: API_ORIGIN }).pipe(
       Effect.flatMap(operation),
       Effect.tapError((error) =>
         Effect.sync(() => {
@@ -28,6 +34,6 @@ export const dashboard = <A, E>(operation: (client: DashboardClient) => Effect.E
           }
         }),
       ),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(http),
     ),
   );

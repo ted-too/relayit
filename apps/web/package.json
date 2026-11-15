@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app web bun --no-env-file --bun vp dev",
-    "build": "bun --bun vp build",
+    "build": "bun --bun vp build && bun build ./server/index.ts --outdir ./build --target bun",
     "preview": "bun --bun vp preview",
     "typecheck": "tsc --noEmit",
     "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@effect/platform-bun": "catalog:",
     "@monaco-editor/react": "^4.7.0",
     "@remixicon/react": "catalog:",
     "@repo/contracts": "workspace:*",

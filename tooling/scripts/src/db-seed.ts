@@ -42,7 +42,7 @@ const secrets = parseBetterAuthSecrets(env.BETTER_AUTH_SECRETS);
 
 const db = createPromiseDb({ databaseUrl });
 const redis = makeRedisClient({ url: redisUrl });
-const auth = createAuth({ baseUrl: env.APP_URL, db, rateLimit: false, redis, redisKeyPrefix });
+const auth = createAuth({ baseUrl: env.API_URL, db, rateLimit: false, redis, redisKeyPrefix });
 
 try {
   const existingUser = await db.query.user.findFirst({ where: { email: SEED.email } });

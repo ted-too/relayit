@@ -1,8 +1,10 @@
 /**
  * The dashboard's operations: what a signed-in user does to their Projects, as an
- * `HttpApi` the api serves under `/api/dashboard` and the dashboard calls with the client
- * derived from it. Separate from the api's public `Api`, so none of it is in `/docs`.
- * better-auth's own endpoints (`/api/auth/*`: sign-in, the session, organizations,
+ * `HttpApi` the api serves under `/dashboard` and the dashboard calls with the client
+ * derived from it, from its own origin. Separate from the api's public `Api`, so none of it
+ * is in `/docs`; under one prefix, so no public path the api adds later (`/projects` for a
+ * user's API key, say) can collide with it, and CORS for the dashboard's origin covers
+ * exactly it. better-auth's own endpoints (`/auth/*`: sign-in, the session, organizations,
  * members, deleting an API key, billing) are called with its client, not through this.
  */
 import { Schema } from "effect";
@@ -223,4 +225,4 @@ export class DashboardApi extends HttpApi.make("dashboard")
   .add(DomainsApi)
   .add(TemplatesApi)
   .add(WorkspacesApi)
-  .prefix("/api/dashboard") {}
+  .prefix("/dashboard") {}

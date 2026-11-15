@@ -1,5 +1,5 @@
 services:
-  # The public API, sign-in and the dashboard, on one origin.
+  # The public API, sign-in, and every operation the dashboard calls.
   api:
     image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
     ports:
@@ -9,7 +9,9 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - APP_URL=${WEB_URL:-${API_URL:-http://localhost:3005}}
+      - API_URL=${API_URL:-http://localhost:3005}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      - AUTH_COOKIE_DOMAIN=${AUTH_COOKIE_DOMAIN:-}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - SES_REGIONS=${SES_REGIONS:?set SES_REGIONS in .env}
       - SES_ACCESS_KEY_ID=${SES_ACCESS_KEY_ID:?set SES_ACCESS_KEY_ID in .env}
@@ -49,7 +51,6 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - API_URL=${API_URL:-http://localhost:3005}
-      - APP_URL=${WEB_URL:-${API_URL:-http://localhost:3005}}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - SES_REGIONS=${SES_REGIONS:?set SES_REGIONS in .env}
       - SES_ACCESS_KEY_ID=${SES_ACCESS_KEY_ID:?set SES_ACCESS_KEY_ID in .env}
@@ -62,6 +63,29 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - relayit-network
+
+  # The dashboard: static files, and /config.js telling the browser where the api is. The
+  # browser calls the api itself, so API_URL is the api's public URL, not a Compose name.
+  web:
+    image: ghcr.io/ted-too/relayit-web:${IMAGE_TAG:-alpha}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - API_URL=${API_URL:-http://localhost:3005}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3000/config.js').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     networks:
       - relayit-network
 

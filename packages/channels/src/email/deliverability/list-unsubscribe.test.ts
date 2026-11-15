@@ -59,10 +59,10 @@ describe("list-unsubscribe tokens", () => {
       orgSlug: "acme",
       secret: SECRET,
       topicId: "topc_1",
-      webOrigin: "https://app.example.com",
+      apiOrigin: "https://api.example.com",
     });
 
-    expect(url.startsWith("https://app.example.com/unsubscribe/acme/cont_1?")).toBe(true);
+    expect(url.startsWith("https://api.example.com/unsubscribe/acme/cont_1?")).toBe(true);
     expect(url).toContain("msg=msg_1");
     expect(url).toContain("topic=topc_1");
     expect(url).toContain("sig=");
@@ -85,7 +85,7 @@ describe("list-unsubscribe tokens", () => {
       secret: SECRET,
       toCount: 1,
       topicId: "topc_1",
-      webOrigin: "https://app.example.com",
+      apiOrigin: "https://api.example.com",
     });
 
     expect(merged).toEqual(
@@ -95,7 +95,7 @@ describe("list-unsubscribe tokens", () => {
       }),
     );
     expect(merged?.["List-Unsubscribe"]).toContain(
-      "https://app.example.com/unsubscribe/acme/cont_1?",
+      "https://api.example.com/unsubscribe/acme/cont_1?",
     );
 
     expect(
@@ -110,7 +110,7 @@ describe("list-unsubscribe tokens", () => {
         secret: SECRET,
         toCount: 1,
         topicId: "topc_1",
-        webOrigin: "https://app.example.com",
+        apiOrigin: "https://api.example.com",
       }),
     ).toEqual({ "X-Custom": "1" });
   });

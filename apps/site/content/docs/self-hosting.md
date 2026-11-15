@@ -7,12 +7,13 @@ description: "Run Relayit on your own infrastructure with Docker Compose: images
 
 Relayit is source-available under the Business Source License 1.1. You can run it on your own servers for your own use. You may not offer it as a competing hosted notification service. See the [LICENSE](https://github.com/ted-too/relayit/blob/main/LICENSE) for the full terms.
 
-A self-hosted install has two Relayit services, and optionally a third, plus Postgres, Redis, and S3-compatible storage:
+A self-hosted install has three Relayit services, and optionally a fourth, plus Postgres, Redis, and S3-compatible storage:
 
 | Service          | Image                                            | Role                                                                                                                                    |
 | ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), sign-in, and the dashboard.                               |
+| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), sign-in, and everything the dashboard does.               |
 | worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out. |
+| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard: static files that call the api from the browser.                                                                         |
 | template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                                   |
 | postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                                         |
 | redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                                      |
@@ -35,6 +36,7 @@ Fill in `.env`. At minimum:
 IMAGE_TAG=alpha
 
 API_URL=http://localhost:3005
+APP_URL=http://localhost:3000
 
 POSTGRES_PASSWORD=your-secure-password
 BETTER_AUTH_SECRETS=1:replace-with-output-of-openssl-rand-base64-32
@@ -66,14 +68,16 @@ docker compose ps
 
 Then open:
 
-- Dashboard: http://localhost:3005
-- API: http://localhost:3005 (the same server)
+- Dashboard: http://localhost:3000
+- API: http://localhost:3005
 
 Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/quickstart) using your own API URL instead of `https://api.relayit.io`.
 
 ## Environment variables
 
-`env.example` mirrors what the services validate at startup. Compose sets the api's and the worker's `APP_URL` from `WEB_URL` if you set it, else from `API_URL`, and builds `DATABASE_URL` from the `POSTGRES_*` values.
+`env.example` mirrors what the services validate at startup. Compose passes `API_URL` to the api, the worker and web, `APP_URL` to the api, and builds `DATABASE_URL` from the `POSTGRES_*` values.
+
+`API_URL` and `APP_URL` mean the same thing everywhere: the public URL of the api, and of the dashboard. The dashboard calls the api from the browser with its session cookie, so the two must be the same site: two subdomains of one domain, such as `api.your-domain.com` and `app.your-domain.com`, or `localhost` on two ports. Hostnames on unrelated domains are not supported, and neither are two subdomains of a shared hosting suffix such as `*.up.railway.app`, which browsers treat as different sites; give both services subdomains of your own domain.
 
 ### api (required)
 
@@ -81,26 +85,32 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                      |
 | `REDIS_URL`                                                                         | Redis connection string.                                                                                                         |
-| `APP_URL`                                                                           | Public URL of the dashboard: the api's own URL, or another hostname routed to it. Sign-in trusts requests from it alone.         |
+| `API_URL`                                                                           | Public URL of the api. Sign-in lives under it (`/auth/*`).                                                                       |
+| `APP_URL`                                                                           | Public URL of the dashboard: the only origin allowed to call the api with the session cookie, and where sign-in returns to.      |
 | `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                         | The same as the worker. The api registers new Domains with SES.                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
-Optional: `LOG_LEVEL`. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
+Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
 
 ### worker (required)
 
 | Variable                                     | Description                                                                                                                                     |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`, `REDIS_URL`                  | The same as the api.                                                                                                                            |
-| `API_URL`                                    | Public URL of the API. The worker points SES's notifications (through SNS) at it.                                                               |
-| `APP_URL`                                    | Public URL of the dashboard. Used in unsubscribe links.                                                                                         |
+| `API_URL`                                    | Public URL of the api. The worker points SES's notifications (through SNS) at it, and unsubscribe links go to it.                               |
 | `BETTER_AUTH_SECRETS`                        | The same value as the api.                                                                                                                      |
 | `S3_*`                                       | The same as the api.                                                                                                                            |
 | `SES_REGIONS`                                | The SES regions to send through, comma-separated, for example `us-east-1` or `eu-central-1,us-east-1`. New Domains are registered in the first. |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM credentials for the SES account.                                                                                                            |
 
 Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone. The worker does not migrate the database; start it after the api, as the Compose file does.
+
+### web (required)
+
+| Variable  | Description                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| `API_URL` | Public URL of the api, which the dashboard calls from the browser. Read when the container starts, not built in. |
 
 ## Image tags
 
@@ -114,10 +124,10 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 ## Production notes
 
-- Put the api behind a reverse proxy with TLS, for example `https://relayit.your-domain.com`, and set `API_URL` to it. To give the dashboard its own hostname, route it to the api as well and set `WEB_URL` to it. Forward `X-Forwarded-For`: sign-in is rate-limited per client address.
+- Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `APP_URL` to those URLs. Forward `X-Forwarded-For` to the api: sign-in is rate-limited per client address.
 - The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
-- If sign-in fails from the dashboard, check that the api's `APP_URL` is the URL you open the dashboard at.
-- Check logs with `docker compose logs -f api` and `docker compose logs -f worker`. If sends stay queued, check that the worker is running.
+- If sign-in fails from the dashboard, check that the api's `APP_URL` is the URL you open the dashboard at, that web's `API_URL` is the api's public URL, and that the two are subdomains of one domain.
+- Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
 
 ## How self-hosted differs from Cloud
 

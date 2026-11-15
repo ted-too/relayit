@@ -18,7 +18,7 @@ import { cloudflareFromConfig, makeWorkerLayer } from "./layers";
 
 const TRAILING_SLASH = /\/$/;
 
-// Never migrates: the api, web and builder apply migrations as they start, and this assumes
+// Never migrates: the api and builder apply migrations as they start, and this assumes
 // a current schema.
 const workerProgram = Effect.gen(function* () {
   const config = yield* workerConfig;
@@ -52,7 +52,7 @@ const workerProgram = Effect.gen(function* () {
         registerJobHandler(
           makeEmailDeliverHandler({
             secret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
-            webOrigin: config.appUrl.toString().replace(TRAILING_SLASH, ""),
+            apiOrigin: config.apiUrl.origin,
           }),
         ),
         registerJobHandler(webhookDeliverHandler),

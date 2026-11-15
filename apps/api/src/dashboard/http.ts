@@ -9,7 +9,7 @@ import { templateHandlers } from "./templates";
 import { workspaceHandlers } from "./workspaces";
 
 /**
- * The dashboard's operations under `/api/dashboard`. `appOrigin` is the only origin a
+ * The dashboard's operations under `/dashboard`. `appOrigin` is the only origin a
  * change is accepted from; `billing` and `githubSignIn` are what `/config` reports.
  */
 export const dashboardRoutes = (options: {

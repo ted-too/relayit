@@ -50,13 +50,17 @@ export const verifyListUnsubscribe = (input: {
   return NodeCrypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 };
 
+/**
+ * The `List-Unsubscribe` URL: the api's one-click endpoint (`apiOrigin` is `API_URL`), which
+ * a mailbox provider POSTs to and which sends a person who opens it to the dashboard's page.
+ */
 export const buildListUnsubscribeUrl = (input: {
   readonly contactId: string;
   readonly messageId: string;
   readonly orgSlug: string;
   readonly secret: string;
   readonly topicId: string;
-  readonly webOrigin: string;
+  readonly apiOrigin: string;
 }) => {
   const sig = signListUnsubscribe({
     contactId: input.contactId,
@@ -69,7 +73,7 @@ export const buildListUnsubscribeUrl = (input: {
     sig,
     topic: input.topicId,
   });
-  const origin = input.webOrigin.replace(TRAILING_SLASH, "");
+  const origin = input.apiOrigin.replace(TRAILING_SLASH, "");
   return `${origin}/unsubscribe/${encodeURIComponent(input.orgSlug)}/${encodeURIComponent(input.contactId)}?${params.toString()}`;
 };
 
@@ -98,7 +102,7 @@ export const mergeListUnsubscribeHeadersForSend = (input: {
   readonly secret: string;
   readonly toCount: number;
   readonly topicId: string | null;
-  readonly webOrigin: string;
+  readonly apiOrigin: string;
 }): Record<string, string> | null | undefined => {
   const existing = input.existing ?? undefined;
   if (
@@ -110,7 +114,7 @@ export const mergeListUnsubscribeHeadersForSend = (input: {
     !input.orgSlug ||
     !input.topicId ||
     input.secret.length === 0 ||
-    input.webOrigin.length === 0
+    input.apiOrigin.length === 0
   ) {
     return existing ?? input.existing;
   }
@@ -121,7 +125,7 @@ export const mergeListUnsubscribeHeadersForSend = (input: {
     orgSlug: input.orgSlug,
     secret: input.secret,
     topicId: input.topicId,
-    webOrigin: input.webOrigin,
+    apiOrigin: input.apiOrigin,
   });
 
   return {
