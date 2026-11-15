@@ -34,7 +34,7 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 - **paused Domain**: a Domain that may not send, for its reputation or by hand. New sends from it are rejected and queued ones fail; they are never held. **Project Sending Pause**: SES pausing one Project's tenant for its reputation. A send that hits one fails for good (no retry) and pauses the Domain; other Projects keep sending.
 - **Usage**: one Delivery counted against the Plan limits of the Project's **Billing User** (the owner unless reassigned), separately for each purpose. Reserved at accept, released if the accept fails. **Plan**: `free`, `signal` or `broadcast`, from Stripe; without Stripe keys every limit is unlimited.
 - **Webhook Endpoint**: a Project's URL that receives the **Webhook Events** it subscribes to (`message.sent`, `delivery.skipped`, `domain.updated`, …), signed, at least once. Not to be confused with **SES notifications**: SES's bounce, complaint and delivery reports, which SNS posts to the api at `/webhooks/providers/aws/ses`.
-- **job**: a typed unit of background work defined with `defineJob` in its domain package. Web and the api enqueue jobs; `apps/worker` runs every handler.
+- **job**: a typed unit of background work defined with `defineJob` in its domain package. The api enqueues jobs; `apps/worker` runs every handler.
 - **admin**: a platform operator (better-auth's admin role), with the `/admin` pages: users and Projects.
 
 ## Ways to hurt yourself
@@ -43,13 +43,14 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 2. **Starting an app.** The api and builder migrate their `DATABASE_URL` as they start, and the worker sends whatever is queued. What else it reaches depends on the root `.env`:
    - **Safe:** a `.env` written by `bun run worktree:setup`, or copied from `.env.example`. `EMAIL_BACKEND=fake` sends nothing and makes nothing in AWS, Domains verify without AWS or public DNS, objects stay in `temp/`, Redis keys carry the worktree's prefix, and with no `CF_*`, `STRIPE_*` or `GITHUB_*` nothing calls Cloudflare, Stripe or GitHub.
    - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the worker uses the `SES_*` account, points SES and SNS at the api's `API_URL` in every region and sends queued mail for real, and adding a Domain in the dashboard creates a real SES identity. Don't start an app or `bun run dev` against one unless Ted asks for that run.
+   - **The dashboard calls whatever `API_URL` names**, from the browser, with the session cookie: Vite and the web image alike. Point it only at an api you started.
 3. **Killing by pattern.** Never `pkill -f`, `killall`, or kill a PID found by matching a name or path; other dev servers and agents run on this machine. Kill only a PID you started. Killing only the PID of a background `bun run dev` leaves its apps running, so kill every PID in its process tree.
 4. **Migrations.** Never hand-write or edit anything under `packages/persistence/drizzle/`. Change the schema (`packages/persistence/src/db/schema/`, plus the jobs tables in `packages/jobs/src/*-schema.ts`), then run `bun run db:generate` and read the SQL. If generate asks a question (rename or create) or fails for want of a TTY, stop and ask Ted to run it; never feed it keypresses or write the files yourself.
 5. **Secrets.** The main checkout's `.env` files hold real credentials. Never commit, print, paste, copy or edit them; name the variable instead. A worktree's `.env` holds only generated local secrets.
 
 ## How it works
 
-Three deployables share one Postgres and one Redis. `apps/api` is an Effect `HttpApi` on Bun serving the public API (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`), declared with every response in `apps/api/src/api.ts`, from which the OpenAPI document is generated; and the dashboard: better-auth at `/api/auth/*`, one-click unsubscribe, every session-authenticated operation as the `DashboardApi` contract in `packages/contracts` under `/api/dashboard`, and the dashboard's static build for every other GET a browser makes. `apps/web` is that dashboard: a Vite + TanStack Router single-page app, a client of the api only; it is built into the api's image and has no server of its own. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only the api calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
+Four deployables; all but web share one Postgres and one Redis. `apps/api` (`API_URL`, e.g. api.relayit.io) is an Effect `HttpApi` on Bun serving, at the root, the public API (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`), declared with every response in `apps/api/src/api.ts`, from which the OpenAPI document is generated; and everything the dashboard calls: better-auth at `/auth/*`, every session-authenticated operation as the `DashboardApi` contract in `packages/contracts` under `/dashboard/*`, and unsubscribe at `/unsubscribe/*`. `apps/web` (`APP_URL`, e.g. app.relayit.io) is the dashboard: a Vite + TanStack Router single-page app, a client of the api only, which calls it cross-origin with the session cookie; its image serves the static build and `/config.js`, which tells the page `API_URL` at runtime. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only the api calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
 
 The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, the `EmailBackend` contract and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
 
@@ -58,9 +59,9 @@ Architecture, decisions and their reasons: [docs/internals/overview.md](docs/int
 ## Where code lives
 
 ```
-apps/api/                 HTTP: the public API, auth, the dashboard's API and its build
+apps/api/                 HTTP: the public API, auth and the dashboard's API
 apps/worker/              the job worker: every job handler, no HTTP
-apps/web/                 the dashboard: a Vite + TanStack Router SPA, built into the api
+apps/web/                 the dashboard: a Vite + TanStack Router SPA; server/ is its image's static server
 apps/template-builder/    Email Workspace build and publish, Effect Rpc
 apps/site/                marketing site; public docs in content/
 packages/channels/        accept, delivery, Domains, the EmailBackend contract, Usage
@@ -86,7 +87,7 @@ Apps never import another app's source; shared behaviour belongs in a package.
 Bun installs and runs the apps; Vite+ (`vp`) runs lint, format and the workspace's scripts. Lint and format config is in the root `vite.config.ts`.
 
 - `bun install`: also patches `tsc` with the Effect language service and installs the commit hook.
-- `bun run dev`: all five apps, reading the root `.env`: the dashboard on Vite at `WEB_PORT` (it forwards `/api/*` and the unsubscribe POST to the api, so open it there), site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout), and the worker, which has no port. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
+- `bun run dev`: all five apps, reading the root `.env`: the dashboard on Vite at `WEB_PORT` (it calls the api at `API_PORT` cross-origin, as when deployed), site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout), and the worker, which has no port. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
 - `bun run db:migrate`, `bun run db:seed`: migrate and seed the root `.env`'s local database; the seed prints how to sign in and an API key.
 - `bun run db:generate`: a migration from the schema. The api and builder apply migrations when they start; the worker doesn't.
 - `bun run worktree:setup` (`--reset`), `bun run worktree:prune` (`--dry-run`): see Worktrees.
