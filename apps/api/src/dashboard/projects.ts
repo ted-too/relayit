@@ -16,7 +16,7 @@ export const projectHandlers = HttpApiBuilder.group(DashboardApi, "projects", (h
         const user = yield* DashboardUser;
         const request = yield* HttpServerRequest.HttpServerRequest;
         const db = yield* DB;
-        // A slug the api or the dashboard already routes would make the Project
+        // A slug the dashboard already answers at its root would make the Project
         // unreachable: such a name gets the `-project` suffix's slug instead.
         const slug = yield* generateDbSlug(db, organization, payload.name).pipe(
           Effect.flatMap((slug) =>

@@ -16,7 +16,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { queries } from "@/lib/queries";
 
-// better-auth sets the slug, and refuses one the api or the dashboard routes itself.
+// better-auth sets the slug, and refuses one the dashboard answers at its root itself.
 const SlugInput = Schema.Struct({ slug: SafeName });
 
 type FormSchema = typeof SlugInput.Type;
