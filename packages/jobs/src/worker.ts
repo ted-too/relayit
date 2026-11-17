@@ -21,7 +21,7 @@ const retryDelay = (
   backoff: {
     readonly baseDelayMs: number;
     readonly maxDelayMs: number;
-  }
+  },
 ) => Math.min(backoff.baseDelayMs * 2 ** (attempt - 1), backoff.maxDelayMs);
 
 const SAFE_FAILURE_CONTEXT = [
@@ -38,8 +38,7 @@ const describeFailure = (failure: unknown): DeadLetterFailure => {
       ? (failure as Readonly<Record<string, unknown>>)
       : undefined;
   const taggedName = typeof record?._tag === "string" ? record._tag : undefined;
-  const name =
-    taggedName ?? (failure instanceof Error ? failure.name : "JobFailure");
+  const name = taggedName ?? (failure instanceof Error ? failure.name : "JobFailure");
   const message =
     failure instanceof Error && failure.message
       ? failure.message
@@ -49,8 +48,8 @@ const describeFailure = (failure: unknown): DeadLetterFailure => {
   const code = typeof record?.code === "string" ? record.code : undefined;
   const context = Object.fromEntries(
     SAFE_FAILURE_CONTEXT.flatMap((key) =>
-      record?.[key] === undefined ? [] : [[key, record[key]]]
-    )
+      record?.[key] === undefined ? [] : [[key, record[key]]],
+    ),
   );
 
   return {
@@ -118,15 +117,10 @@ const DEFAULT_OUTBOX_OPTIONS = {
  * Covariant in Failure / Requirements so a mixed handler list widens to the
  * union of each registration’s channels (no caller-side casts).
  */
-export interface JobRegistration<
-  out Failure = unknown,
-  out Requirements = unknown,
-> {
+export interface JobRegistration<out Failure = unknown, out Requirements = unknown> {
   readonly delayedStream: string;
   readonly payloadsKey?: string;
-  readonly process: (
-    entry: StreamReadEntry
-  ) => Effect.Effect<void, Failure, Requirements>;
+  readonly process: (entry: StreamReadEntry) => Effect.Effect<void, Failure, Requirements>;
   readonly reconcile?: Effect.Effect<void, Failure, Requirements>;
   readonly scheduledKey?: string;
   readonly stream: string;
@@ -138,14 +132,10 @@ type JobRegistrations = readonly [
 ];
 
 type JobRegistrationFailure<Registration> =
-  Registration extends JobRegistration<infer Failure, infer _Requirements>
-    ? Failure
-    : never;
+  Registration extends JobRegistration<infer Failure, infer _Requirements> ? Failure : never;
 
 type JobRegistrationRequirements<Registration> =
-  Registration extends JobRegistration<infer _Failure, infer Requirements>
-    ? Requirements
-    : never;
+  Registration extends JobRegistration<infer _Failure, infer Requirements> ? Requirements : never;
 
 export const processJob = <
   Contract extends {
@@ -165,35 +155,15 @@ export const processJob = <
   entry: {
     readonly fields: readonly string[];
     readonly id: string;
-  }
-): Effect.Effect<
-  void,
-  Failure | JobProcessingError,
-  Requirements | Redis | DeadLetterStore
-> =>
+  },
+): Effect.Effect<void, Failure | JobProcessingError, Requirements | Redis | DeadLetterStore> =>
   Effect.gen(function* () {
     const redis = yield* Redis;
     const encoded = readField(entry.fields, REDIS_PAYLOAD_FIELD) ?? "";
     const keys = jobKeys(handler.contract.name);
-    const processingError =
-      (
-        stage:
-          | "acknowledge"
-          | "dead-letter"
-          | "dead-letter-cleanup"
-          | "encode-retry"
-          | "schedule-retry"
-      ) =>
-      (cause: unknown) =>
-        new JobProcessingError({
-          cause,
-          entryId: entry.id,
-          jobName: handler.contract.name,
-          stage,
-        });
     const decodedEnvelope = yield* jobEnvelopeCodec.decode(encoded).pipe(
       Effect.map((envelope) => ({ _tag: "Success", envelope }) as const),
-      Effect.orElseSucceed(() => ({ _tag: "Failure" }) as const)
+      Effect.orElseSucceed(() => ({ _tag: "Failure" }) as const),
     );
 
     if (decodedEnvelope._tag === "Failure") {
@@ -214,9 +184,19 @@ export const processJob = <
           payload: encoded,
           wireVersion: 0,
         })
-        .pipe(Effect.mapError(processingError("dead-letter")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "dead-letter",
+              }),
+          ),
+        );
       yield* Effect.logError("Job envelope could not be decoded").pipe(
-        Effect.annotateLogs({ code: "JOB_ENVELOPE_INVALID" })
+        Effect.annotateLogs({ code: "JOB_ENVELOPE_INVALID" }),
       );
       yield* redis
         .acknowledge({
@@ -224,7 +204,17 @@ export const processJob = <
           id: entry.id,
           stream: keys.ready,
         })
-        .pipe(Effect.mapError(processingError("acknowledge")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "acknowledge",
+              }),
+          ),
+        );
       return;
     }
 
@@ -233,7 +223,7 @@ export const processJob = <
       .decode(envelope.data)
       .pipe(
         Effect.map((payload) => ({ _tag: "Success", payload }) as const),
-        Effect.orElseSucceed(() => ({ _tag: "Failure" }) as const)
+        Effect.orElseSucceed(() => ({ _tag: "Failure" }) as const),
       );
     if (decodedPayload._tag === "Failure") {
       const deadLetters = yield* DeadLetterStore;
@@ -253,9 +243,19 @@ export const processJob = <
           payload: envelope.data,
           wireVersion: envelope.wireVersion,
         })
-        .pipe(Effect.mapError(processingError("dead-letter")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "dead-letter",
+              }),
+          ),
+        );
       yield* Effect.logError("Job payload could not be decoded").pipe(
-        Effect.annotateLogs({ code: "JOB_PAYLOAD_INVALID" })
+        Effect.annotateLogs({ code: "JOB_PAYLOAD_INVALID" }),
       );
       yield* redis
         .acknowledge({
@@ -263,7 +263,17 @@ export const processJob = <
           id: entry.id,
           stream: keys.ready,
         })
-        .pipe(Effect.mapError(processingError("acknowledge")));
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new JobProcessingError({
+                cause,
+                entryId: entry.id,
+                jobName: handler.contract.name,
+                stage: "acknowledge",
+              }),
+          ),
+        );
       return;
     }
 
@@ -273,47 +283,70 @@ export const processJob = <
       enqueuedAt: envelope.firstEnqueuedAt,
       id: entry.id,
     };
-    const outcome = yield* handler
-      .handle(decodedPayload.payload, execution)
-      .pipe(
-        Effect.match({
-          onFailure: (error) => ({ _tag: "Failure", error }) as const,
-          onSuccess: () => ({ _tag: "Success" }) as const,
-        })
-      );
+    const outcome = yield* handler.handle(decodedPayload.payload, execution).pipe(
+      Effect.match({
+        onFailure: (error) => ({ _tag: "Failure", error }) as const,
+        onSuccess: () => ({ _tag: "Success" }) as const,
+      }),
+    );
 
     if (outcome._tag === "Failure") {
       const disposition = handler.classifyFailure(outcome.error);
 
-      if (
-        disposition === "retryable" &&
-        attempt < handler.contract.retry.maxAttempts
-      ) {
+      if (disposition === "retryable" && attempt < handler.contract.retry.maxAttempts) {
         const now = yield* Clock.currentTimeMillis;
         const retry = yield* jobEnvelopeCodec
           .encode({
             ...envelope,
             attempts: attempt,
           })
-          .pipe(Effect.mapError(processingError("encode-retry")));
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "encode-retry",
+                }),
+            ),
+          );
         yield* redis
           .sortedSetAdd({
             key: keys.delayed,
             member: retry,
             score: now + retryDelay(attempt, handler.contract.retry.backoff),
           })
-          .pipe(Effect.mapError(processingError("schedule-retry")));
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "schedule-retry",
+                }),
+            ),
+          );
         yield* Effect.logDebug("Job scheduled for retry").pipe(
           Effect.annotateLogs({
             attempt,
             disposition: "retryable",
-          })
+          }),
         );
       } else {
         if (handler.onDeadLetter) {
-          yield* handler
-            .onDeadLetter(decodedPayload.payload, execution, outcome.error)
-            .pipe(Effect.mapError(processingError("dead-letter-cleanup")));
+          yield* handler.onDeadLetter(decodedPayload.payload, execution, outcome.error).pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "dead-letter-cleanup",
+                }),
+            ),
+          );
         }
         const deadLetters = yield* DeadLetterStore;
         const failedAt = yield* Clock.currentTimeMillis;
@@ -328,15 +361,22 @@ export const processJob = <
             payload: envelope.data,
             wireVersion: envelope.wireVersion,
           })
-          .pipe(Effect.mapError(processingError("dead-letter")));
-        yield* Effect.logError(
-          "Job moved to dead letter",
-          Cause.fail(outcome.error)
-        ).pipe(
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new JobProcessingError({
+                  cause,
+                  entryId: entry.id,
+                  jobName: handler.contract.name,
+                  stage: "dead-letter",
+                }),
+            ),
+          );
+        yield* Effect.logError("Job moved to dead letter", Cause.fail(outcome.error)).pipe(
           Effect.annotateLogs({
             attempt,
             disposition: "terminal",
-          })
+          }),
         );
       }
     }
@@ -347,17 +387,23 @@ export const processJob = <
         id: entry.id,
         stream: keys.ready,
       })
-      .pipe(Effect.mapError(processingError("acknowledge")));
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new JobProcessingError({
+              cause,
+              entryId: entry.id,
+              jobName: handler.contract.name,
+              stage: "acknowledge",
+            }),
+        ),
+      );
   }).pipe(
     Effect.annotateLogs({
       entryId: entry.id,
       jobName: handler.contract.name,
-    })
-  ) as Effect.Effect<
-    void,
-    Failure | JobProcessingError,
-    Requirements | Redis | DeadLetterStore
-  >;
+    }),
+  ) as Effect.Effect<void, Failure | JobProcessingError, Requirements | Redis | DeadLetterStore>;
 
 export const registerJobHandler = <
   Contract extends {
@@ -373,7 +419,7 @@ export const registerJobHandler = <
   Requirements,
   DeadLetterFailure,
 >(
-  handler: JobHandler<Contract, Failure, Requirements, DeadLetterFailure>
+  handler: JobHandler<Contract, Failure, Requirements, DeadLetterFailure>,
 ) => {
   const keys = jobKeys(handler.contract.name);
   const recurring = handler.contract.recurrence !== undefined;
@@ -394,7 +440,7 @@ export const registerJobHandler = <
 
 export const promoteDelayedJobs = <T extends JobRegistrations>(
   registrations: [...T],
-  options: DelayedPromotionOptions
+  options: DelayedPromotionOptions,
 ) =>
   Effect.gen(function* () {
     const redis = yield* Redis;
@@ -416,29 +462,27 @@ export const promoteDelayedJobs = <T extends JobRegistrations>(
                   cause,
                   stage: "promote",
                   stream,
-                })
-            )
+                }),
+            ),
           ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     );
   });
 
 export const promoteScheduledJobs = <T extends JobRegistrations>(
   registrations: [...T],
-  options: DelayedPromotionOptions
+  options: DelayedPromotionOptions,
 ) =>
   Effect.gen(function* () {
     const redis = yield* Redis;
     const now = yield* Clock.currentTimeMillis;
     const recurring = registrations.filter(
       (
-        registration
+        registration,
       ): registration is T[number] & {
         readonly payloadsKey: string;
         readonly scheduledKey: string;
-      } =>
-        registration.scheduledKey !== undefined &&
-        registration.payloadsKey !== undefined
+      } => registration.scheduledKey !== undefined && registration.payloadsKey !== undefined,
     );
 
     yield* Effect.forEach(
@@ -457,16 +501,16 @@ export const promoteScheduledJobs = <T extends JobRegistrations>(
                   cause,
                   stage: "promote",
                   stream,
-                })
-            )
+                }),
+            ),
           ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     );
   });
 
 export const reclaimStaleJobs = <T extends JobRegistrations>(
   registrations: [...T],
-  options: StaleReclaimOptions
+  options: StaleReclaimOptions,
 ): Effect.Effect<
   void,
   JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
@@ -478,7 +522,7 @@ export const reclaimStaleJobs = <T extends JobRegistrations>(
 
     const reclaim = (
       registration: T[number],
-      start: string
+      start: string,
     ): Effect.Effect<
       void,
       JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
@@ -500,7 +544,7 @@ export const reclaimStaleJobs = <T extends JobRegistrations>(
                 cause,
                 stage: "reclaim",
                 stream: registration.stream,
-              })
+              }),
           ),
           Effect.flatMap(({ entries, nextStart }) =>
             Effect.forEach(
@@ -510,7 +554,7 @@ export const reclaimStaleJobs = <T extends JobRegistrations>(
                   ...entry,
                   stream: registration.stream,
                 }),
-              { concurrency: options.concurrency }
+              { concurrency: options.concurrency },
             ).pipe(
               Effect.flatMap(() => {
                 if (nextStart === "0-0") {
@@ -518,26 +562,22 @@ export const reclaimStaleJobs = <T extends JobRegistrations>(
                 }
                 if (nextStart === start) {
                   return Effect.die(
-                    new Error(
-                      `Redis auto-claim cursor did not advance for ${registration.stream}`
-                    )
+                    new Error(`Redis auto-claim cursor did not advance for ${registration.stream}`),
                   );
                 }
                 return reclaim(registration, nextStart);
-              })
-            )
-          )
+              }),
+            ),
+          ),
         ) as Effect.Effect<
         void,
         JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
         JobRegistrationRequirements<T[number]> | Redis
       >;
 
-    yield* Effect.forEach(
-      registrations,
-      (registration) => reclaim(registration, "0-0"),
-      { concurrency: "unbounded" }
-    );
+    yield* Effect.forEach(registrations, (registration) => reclaim(registration, "0-0"), {
+      concurrency: "unbounded",
+    });
   }) as Effect.Effect<
     void,
     JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
@@ -546,7 +586,7 @@ export const reclaimStaleJobs = <T extends JobRegistrations>(
 
 export const processJobBatch = <T extends JobRegistrations>(
   registrations: [...T],
-  options: JobBatchOptions
+  options: JobBatchOptions,
 ): Effect.Effect<
   void,
   JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
@@ -555,7 +595,7 @@ export const processJobBatch = <T extends JobRegistrations>(
   Effect.gen(function* () {
     const redis = yield* Redis;
     const byStream = new Map(
-      registrations.map((registration) => [registration.stream, registration])
+      registrations.map((registration) => [registration.stream, registration]),
     );
     const entries = yield* redis
       .readGroup({
@@ -571,8 +611,8 @@ export const processJobBatch = <T extends JobRegistrations>(
             new JobWorkerRuntimeError({
               cause,
               stage: "consume",
-            })
-        )
+            }),
+        ),
       );
 
     yield* Effect.forEach(
@@ -581,11 +621,9 @@ export const processJobBatch = <T extends JobRegistrations>(
         const registration = byStream.get(entry.stream);
         return registration
           ? registration.process(entry)
-          : Effect.die(
-              new Error(`No job handler registered for ${entry.stream}`)
-            );
+          : Effect.die(new Error(`No job handler registered for ${entry.stream}`));
       },
-      { concurrency: options.concurrency }
+      { concurrency: options.concurrency },
     );
   }) as Effect.Effect<
     void,
@@ -595,7 +633,7 @@ export const processJobBatch = <T extends JobRegistrations>(
 
 export const runJobWorker = <T extends JobRegistrations>(
   registrations: [...T],
-  options: JobWorkerOptions
+  options: JobWorkerOptions,
 ): Effect.Effect<
   void,
   JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,
@@ -616,10 +654,10 @@ export const runJobWorker = <T extends JobRegistrations>(
                 cause,
                 stage: "create-group",
                 stream,
-              })
-          )
+              }),
+          ),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     );
 
     yield* Effect.forEach(
@@ -632,10 +670,10 @@ export const runJobWorker = <T extends JobRegistrations>(
                 cause,
                 stage: "reconcile",
                 stream: registration.stream,
-              })
-          )
+              }),
+          ),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     );
 
     return yield* Effect.all(
@@ -643,45 +681,36 @@ export const runJobWorker = <T extends JobRegistrations>(
         processJobBatch(registrations, options).pipe(Effect.forever),
         promoteDelayedJobs(registrations, options.promotion).pipe(
           Effect.andThen(Effect.sleep(options.promotion.intervalMs)),
-          Effect.forever
+          Effect.forever,
         ),
         promoteScheduledJobs(registrations, options.promotion).pipe(
           Effect.andThen(Effect.sleep(options.promotion.intervalMs)),
-          Effect.forever
+          Effect.forever,
         ),
         reclaimStaleJobs(registrations, {
           concurrency: options.concurrency,
           consumer: options.consumer,
           count: options.reclaim.count,
           minIdleMs: options.reclaim.minIdleMs,
-        }).pipe(
-          Effect.andThen(Effect.sleep(options.reclaim.intervalMs)),
-          Effect.forever
-        ),
+        }).pipe(Effect.andThen(Effect.sleep(options.reclaim.intervalMs)), Effect.forever),
         publishOutboxBatch(outboxOptions).pipe(
           Effect.andThen(Effect.sleep(outboxOptions.intervalMs)),
-          Effect.forever
+          Effect.forever,
         ),
       ],
-      { concurrency: "unbounded", discard: true }
+      { concurrency: "unbounded", discard: true },
     );
   });
 
-  const restartSchedule = Schedule.exponential(
-    Duration.millis(options.restart.baseDelayMs)
-  ).pipe(
+  const restartSchedule = Schedule.exponential(Duration.millis(options.restart.baseDelayMs)).pipe(
     Schedule.modifyDelay(({ duration }) =>
-      Effect.succeed(
-        Duration.min(duration, Duration.millis(options.restart.maxDelayMs))
-      )
-    )
+      Effect.succeed(Duration.min(duration, Duration.millis(options.restart.maxDelayMs))),
+    ),
   );
 
   return run.pipe(
-    Effect.tapError((error) =>
-      Effect.logError("Job worker failed; restarting", error)
-    ),
-    Effect.retry(restartSchedule)
+    Effect.tapError((error) => Effect.logError("Job worker failed; restarting", error)),
+    Effect.retry(restartSchedule),
   ) as Effect.Effect<
     void,
     JobRegistrationFailure<T[number]> | JobWorkerRuntimeError,

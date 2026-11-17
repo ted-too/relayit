@@ -1,17 +1,8 @@
 import { RiDeleteBin6Line, RiEditLine, RiMoreFill } from "@remixicon/react";
 import { Badge } from "@repo/ui/components/reui/badge";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@repo/ui/components/ui/coss/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/ui/coss/avatar";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@repo/ui/components/ui/coss/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@repo/ui/components/ui/coss/menu";
 import {
   Item,
   ItemActions,
@@ -50,8 +41,7 @@ export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
     onSuccess: (_, __, ___, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-        (old: HydratedApiKey[] | undefined) =>
-          (old ?? []).filter((key) => key.id !== apiKey.id)
+        (old: HydratedApiKey[] | undefined) => (old ?? []).filter((key) => key.id !== apiKey.id),
       );
       client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
@@ -91,9 +81,7 @@ export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
             alt={apiKey.createdBy?.name ?? ""}
             src={apiKey.createdBy?.image ?? undefined}
           />
-          <AvatarFallback>
-            {getInitials(apiKey.createdBy?.name ?? "")}
-          </AvatarFallback>
+          <AvatarFallback>{getInitials(apiKey.createdBy?.name ?? "")}</AvatarFallback>
         </Avatar>
         <Menu>
           <MenuTrigger render={<Button size="icon" variant="ghost" />}>
@@ -112,11 +100,7 @@ export function ApiKeyItem({ apiKey }: { apiKey: HydratedApiKey }) {
             </MenuItem>
           </MenuPopup>
         </Menu>
-        <UpsertApiKey
-          initialData={apiKey}
-          open={editOpen}
-          setOpen={setEditOpen}
-        />
+        <UpsertApiKey initialData={apiKey} open={editOpen} setOpen={setEditOpen} />
         <ConfirmAction
           execute={() => deleteApiKey()}
           isLoading={isDeletingApiKey}

@@ -15,8 +15,7 @@ import {
 import type { EmailAttachmentInput } from "./contracts";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "./errors";
 
-const BASE64_PATTERN =
-  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export const emailAttachmentsBucket = subBucket({
   key: ({ attachmentId, deliveryId }) => [deliveryId, attachmentId],
@@ -39,22 +38,20 @@ export interface StagedEmailAttachment {
   readonly deliveryId: string;
 }
 
-const assertAttachmentFilename = (
-  filename: string
-): Effect.Effect<void, EmailAcceptRejected> =>
+const assertAttachmentFilename = (filename: string): Effect.Effect<void, EmailAcceptRejected> =>
   isBlockedAttachmentFilename(filename)
     ? Effect.fail(
         new EmailAcceptRejected({
           code: "invalid_attachment",
           details: { filename, reason: "blocked_extension" },
           message: "This file type isn't allowed for security reasons.",
-        })
+        }),
       )
     : Effect.void;
 
 const assertAttachmentSize = (
   bytes: Uint8Array,
-  filename: string
+  filename: string,
 ): Effect.Effect<Uint8Array, EmailAcceptRejected> =>
   bytes.byteLength <= MAX_ATTACHMENT_BYTES
     ? Effect.succeed(bytes)
@@ -67,23 +64,16 @@ const assertAttachmentSize = (
             reason: "exceeds_size_limit",
           },
           message: "Attachment exceeds the size limit.",
-        })
+        }),
       );
 
-const resolveEmailAttachment = (
-  attachment: EmailAttachmentInput,
-  organizationId: string
-) =>
+const resolveEmailAttachment = (attachment: EmailAttachmentInput, organizationId: string) =>
   Effect.gen(function* () {
     yield* assertAttachmentFilename(attachment.filename);
-    const fallbackType =
-      attachment.contentType ?? contentTypeFromFilename(attachment.filename);
+    const fallbackType = attachment.contentType ?? contentTypeFromFilename(attachment.filename);
     if (attachment.source.kind === "base64") {
       const content = attachment.source.content.replace(/\s/g, "");
-      if (
-        content.length % 4 !== 0 ||
-        (content.length > 0 && !BASE64_PATTERN.test(content))
-      ) {
+      if (content.length % 4 !== 0 || (content.length > 0 && !BASE64_PATTERN.test(content))) {
         return yield* new EmailAcceptRejected({
           code: "invalid_attachment",
           details: {
@@ -95,7 +85,7 @@ const resolveEmailAttachment = (
       }
       const bytes = yield* assertAttachmentSize(
         Uint8Array.from(Buffer.from(content, "base64")),
-        attachment.filename
+        attachment.filename,
       );
       return {
         bytes,
@@ -114,8 +104,8 @@ const resolveEmailAttachment = (
             cause,
             operation: "attachments",
             organizationId,
-          })
-      )
+          }),
+      ),
     );
     if (response.status < 200 || response.status >= 300) {
       return yield* new EmailAcceptRejected({
@@ -129,14 +119,8 @@ const resolveEmailAttachment = (
       });
     }
 
-    const contentLength = Number.parseInt(
-      response.headers["content-length"] ?? "",
-      10
-    );
-    if (
-      Number.isFinite(contentLength) &&
-      contentLength > MAX_ATTACHMENT_BYTES
-    ) {
+    const contentLength = Number.parseInt(response.headers["content-length"] ?? "", 10);
+    if (Number.isFinite(contentLength) && contentLength > MAX_ATTACHMENT_BYTES) {
       return yield* new EmailAcceptRejected({
         code: "invalid_attachment",
         details: {
@@ -158,8 +142,8 @@ const resolveEmailAttachment = (
               cause,
               operation: "attachments",
               organizationId,
-            })
-      )
+            }),
+      ),
     );
     return {
       bytes,
@@ -171,22 +155,17 @@ const resolveEmailAttachment = (
 
 export const resolveEmailAttachments = (
   attachments: readonly EmailAttachmentInput[],
-  organizationId: string
+  organizationId: string,
 ) =>
-  Effect.forEach(
-    attachments,
-    (attachment) => resolveEmailAttachment(attachment, organizationId),
-    { concurrency: "unbounded" }
-  );
+  Effect.forEach(attachments, (attachment) => resolveEmailAttachment(attachment, organizationId), {
+    concurrency: "unbounded",
+  });
 
-export const deleteStagedEmailAttachments = (
-  attachments: readonly StagedEmailAttachment[]
-) =>
-  Effect.forEach(
-    attachments,
-    (attachment) => emailAttachmentsBucket.delete(attachment),
-    { concurrency: "unbounded", discard: true }
-  );
+export const deleteStagedEmailAttachments = (attachments: readonly StagedEmailAttachment[]) =>
+  Effect.forEach(attachments, (attachment) => emailAttachmentsBucket.delete(attachment), {
+    concurrency: "unbounded",
+    discard: true,
+  });
 
 export const stageEmailAttachments = (
   db: DatabaseExecutor,
@@ -196,17 +175,14 @@ export const stageEmailAttachments = (
     readonly now: DateTime.Utc;
     readonly organizationId: string;
     readonly scheduledAt?: DateTime.Utc;
-  }
+  },
 ) => {
   const staged: StagedEmailAttachment[] = [];
-  const scheduledMillis = input.scheduledAt
-    ? DateTime.toEpochMillis(input.scheduledAt)
-    : 0;
+  const scheduledMillis = input.scheduledAt ? DateTime.toEpochMillis(input.scheduledAt) : 0;
   const expiresAt = DateTime.toDate(
     DateTime.makeUnsafe(
-      Math.max(DateTime.toEpochMillis(input.now), scheduledMillis) +
-        ATTACHMENT_TTL_MS
-    )
+      Math.max(DateTime.toEpochMillis(input.now), scheduledMillis) + ATTACHMENT_TTL_MS,
+    ),
   );
 
   return Effect.forEach(
@@ -218,11 +194,9 @@ export const stageEmailAttachments = (
           attachmentId,
           deliveryId: input.deliveryId,
         };
-        const upload = yield* emailAttachmentsBucket.upload(
-          stagedAttachment,
-          attachment.bytes,
-          { contentType: attachment.contentType }
-        );
+        const upload = yield* emailAttachmentsBucket.upload(stagedAttachment, attachment.bytes, {
+          contentType: attachment.contentType,
+        });
         staged.push(stagedAttachment);
         yield* db
           .insert(emailAttachment)
@@ -244,18 +218,15 @@ export const stageEmailAttachments = (
                   cause,
                   operation: "attachments",
                   organizationId: input.organizationId,
-                })
-            )
+                }),
+            ),
           );
         return stagedAttachment;
       }),
-    { concurrency: 1 }
+    { concurrency: 1 },
   ).pipe(
     Effect.catch((error) =>
-      deleteStagedEmailAttachments(staged).pipe(
-        Effect.ignore,
-        Effect.andThen(Effect.fail(error))
-      )
-    )
+      deleteStagedEmailAttachments(staged).pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
+    ),
   );
 };

@@ -16,39 +16,34 @@ import { queries } from "@/lib/queries";
 export function ProjectDangerZone() {
   const navigate = useNavigate();
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
-  const { data: organization } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug)
-  );
-  const { mutateAsync: deleteProject, isPending: isDeletingProject } =
-    useMutation({
-      mutationFn: async () => {
-        const { error } = await authClient.organization.delete({
-          organizationId: organization.id,
-        });
+  const { data: organization } = useSuspenseQuery(queries.organizations.bySlug(orgSlug));
+  const { mutateAsync: deleteProject, isPending: isDeletingProject } = useMutation({
+    mutationFn: async () => {
+      const { error } = await authClient.organization.delete({
+        organizationId: organization.id,
+      });
 
-        if (error) {
-          return Promise.reject(error);
-        }
-      },
-      onSuccess: (_, __, ___, { client }) => {
-        client.invalidateQueries({
-          queryKey: queries.organizations.queryKey,
-        });
-        navigate({ to: "/", reloadDocument: true });
-      },
-      onError: (error) => {
-        toast.error("Failed to delete project", {
-          description: error.message,
-        });
-      },
-    });
+      if (error) {
+        return Promise.reject(error);
+      }
+    },
+    onSuccess: (_, __, ___, { client }) => {
+      client.invalidateQueries({
+        queryKey: queries.organizations.queryKey,
+      });
+      navigate({ to: "/", reloadDocument: true });
+    },
+    onError: (error) => {
+      toast.error("Failed to delete project", {
+        description: error.message,
+      });
+    },
+  });
 
   return (
     <SettingsCard className="bg-[color-mix(in_oklab,var(--destructive)_5%,var(--color-white))] ring-destructive-foreground">
       <SettingsCardHeader>
-        <SettingsCardTitle className="text-destructive-foreground">
-          Danger Zone
-        </SettingsCardTitle>
+        <SettingsCardTitle className="text-destructive-foreground">Danger Zone</SettingsCardTitle>
       </SettingsCardHeader>
       <SettingsCardContent className="flex flex-col gap-6">
         {/* TODO: Any more actions to add? */}
@@ -56,8 +51,7 @@ export function ProjectDangerZone() {
           <div className="flex flex-col">
             <span className="font-medium">Delete Project</span>
             <p className="text-muted-foreground text-sm">
-              Once you delete your project there is no going back. Please be
-              certain.
+              Once you delete your project there is no going back. Please be certain.
             </p>
           </div>
           <ConfirmAction

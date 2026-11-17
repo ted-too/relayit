@@ -14,12 +14,12 @@ export class TemplatingBuilderError extends Schema.TaggedError<TemplatingBuilder
     ]),
     /** Static human-readable summary — do not interpolate identifiers into this. */
     message: Schema.String,
-  }
+  },
 ) {}
 
 export class BuilderUnauthorized extends Schema.TaggedError<BuilderUnauthorized>()(
   "BuilderUnauthorized",
   {
     message: Schema.String,
-  }
+  },
 ) {}

@@ -1,7 +1,6 @@
 import type { WorkspaceEntryPropsShape } from "@repo/persistence/db/schema";
 
-const PROPS_BLOCK_RE =
-  /(?:export\s+)?(?:type|interface)\s+Props\s*(?:=\s*)?\{([^}]*)\}/m;
+const PROPS_BLOCK_RE = /(?:export\s+)?(?:type|interface)\s+Props\s*(?:=\s*)?\{([^}]*)\}/m;
 const PROP_LINE_SPLIT_RE = /[;\n]/;
 const PROP_NAME_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(\?)?\s*:/;
 
@@ -9,9 +8,7 @@ const PROP_NAME_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(\?)?\s*:/;
  * Best-effort props inference from a React Email entry source file.
  * Looks for `export type Props = { … }` / `interface Props { … }` property names.
  */
-export function inferReactEmailPropsFromSource(
-  source: string
-): WorkspaceEntryPropsShape {
+export function inferReactEmailPropsFromSource(source: string): WorkspaceEntryPropsShape {
   const blockMatch = PROPS_BLOCK_RE.exec(source);
 
   if (!blockMatch?.[1]) {

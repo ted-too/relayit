@@ -6,8 +6,7 @@ import { BuilderAuthMiddleware } from "./group";
 
 const AUTHORIZATION = "authorization";
 
-const bearerMatches = (header: string | undefined, secret: string) =>
-  header === `Bearer ${secret}`;
+const bearerMatches = (header: string | undefined, secret: string) => header === `Bearer ${secret}`;
 
 /** Server: reject Rpc calls without a matching Bearer secret. */
 export const makeBuilderAuthServerLayer = (secret: Redacted.Redacted<string>) =>
@@ -19,14 +18,11 @@ export const makeBuilderAuthServerLayer = (secret: Redacted.Redacted<string>) =>
     return Effect.fail(
       new BuilderUnauthorized({
         message: "Invalid builder credentials.",
-      })
+      }),
     );
   });
 
-const withAuthorization = (
-  request: Request<never>,
-  secret: string
-): Request<never> => ({
+const withAuthorization = (request: Request<never>, secret: string): Request<never> => ({
   ...request,
   headers: {
     ...request.headers,
@@ -37,5 +33,5 @@ const withAuthorization = (
 /** Client: attach Bearer secret to every outgoing Rpc request. */
 export const makeBuilderAuthClientLayer = (secret: Redacted.Redacted<string>) =>
   RpcMiddleware.layerClient(BuilderAuthMiddleware, ({ next, request }) =>
-    next(withAuthorization(request, Redacted.value(secret)))
+    next(withAuthorization(request, Redacted.value(secret))),
   );

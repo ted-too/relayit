@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { formatTxtRecordContent } from "./managed-dns";
 
 const PEM_HEADER_REGEX = /-----BEGIN [^-]+-----/;
@@ -19,9 +19,9 @@ export interface DomainKeyMaterial {
 
 /** Generate a BYODKIM RSA-2048 keypair and DNS-ready public key fragment. */
 export const generateDkimKeypair = (): DkimKeypair => {
-  const selector = `relayit${randomBytes(4).toString("hex")}`;
+  const selector = `relayit${NodeCrypto.randomBytes(4).toString("hex")}`;
 
-  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+  const { publicKey, privateKey } = NodeCrypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
     privateKeyEncoding: { type: "pkcs8", format: "der" },
     publicKeyEncoding: { type: "spki", format: "pem" },

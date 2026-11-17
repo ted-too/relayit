@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createDomainKeyMaterial,
-  dkimRecordName,
-  formatDkimTxtRecord,
-} from "./dkim";
+import { createDomainKeyMaterial, dkimRecordName, formatDkimTxtRecord } from "./dkim";
 
 describe("dkim helpers", () => {
   test("createDomainKeyMaterial returns selector and keys", () => {
@@ -14,11 +10,7 @@ describe("dkim helpers", () => {
   });
 
   test("dkimRecordName and formatDkimTxtRecord", () => {
-    expect(dkimRecordName("relayitabc", "example.com")).toBe(
-      "relayitabc._domainkey.example.com"
-    );
-    expect(formatDkimTxtRecord("v=DKIM1; k=rsa; p=abc")).toBe(
-      '"v=DKIM1; k=rsa; p=abc"'
-    );
+    expect(dkimRecordName("relayitabc", "example.com")).toBe("relayitabc._domainkey.example.com");
+    expect(formatDkimTxtRecord("v=DKIM1; k=rsa; p=abc")).toBe('"v=DKIM1; k=rsa; p=abc"');
   });
 });

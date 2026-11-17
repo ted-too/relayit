@@ -149,7 +149,4 @@ export const DOMAIN_PROVIDER_ICONS = {
   ),
   hostgator: Hostgator,
   unknown: UnknownIcon,
-} as const satisfies Record<
-  Domain["provider"],
-  React.ComponentType<React.SVGProps<SVGSVGElement>>
->;
+} as const satisfies Record<Domain["provider"], React.ComponentType<React.SVGProps<SVGSVGElement>>>;

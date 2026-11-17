@@ -21,9 +21,7 @@ describe("OpenAPI send-email schemas", () => {
       });
 
     try {
-      const response = await app.handle(
-        new Request("http://localhost/docs/json")
-      );
+      const response = await app.handle(new Request("http://localhost/docs/json"));
       expect(response.status).toBe(200);
       expect(warn.mock.calls).toEqual([]);
 
@@ -49,11 +47,9 @@ describe("OpenAPI send-email schemas", () => {
         >;
       };
 
-      const path =
-        spec.paths?.["/messages/email"] ?? spec.paths?.["/messages/email/"];
+      const path = spec.paths?.["/messages/email"] ?? spec.paths?.["/messages/email/"];
       expect(
-        path?.post?.requestBody?.content?.["application/json"]?.schema
-          ?.properties?.to
+        path?.post?.requestBody?.content?.["application/json"]?.schema?.properties?.to,
       ).toEqual({ $ref: "#/components/schemas/Recipient" });
       expect(spec.components?.schemas?.Recipient?.anyOf).toEqual([
         expect.objectContaining({ title: "Email address", type: "string" }),

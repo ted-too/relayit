@@ -1,25 +1,14 @@
 # syntax=docker/dockerfile:1.4
-# https://turborepo.dev/docs/guides/tools/docker
 
 FROM oven/bun:1 AS base
 WORKDIR /app
 
-FROM base AS prepare
-RUN bun add -g turbo@2.10.6
-COPY . .
-RUN turbo prune @repo/template-builder --docker
-
 FROM base AS builder
-# Install pruned deps first (changes less often than source).
-COPY --from=prepare /app/out/json/ .
-RUN bun install --frozen-lockfile
-COPY --from=prepare /app/out/full/ .
-COPY --from=prepare /app/tsconfig.json ./tsconfig.json
-RUN --mount=type=secret,id=turbo_token \
-    --mount=type=secret,id=turbo_team \
-    TURBO_TOKEN=$(cat /run/secrets/turbo_token 2>/dev/null || echo "") \
-    TURBO_TEAM=$(cat /run/secrets/turbo_team 2>/dev/null || echo "") \
-    NODE_ENV=production bun run turbo build --filter=@repo/template-builder
+# Installs skip dependencies' own install scripts, as CI's do, and the root `prepare`
+# (it patches tsc and installs the git hook, neither of which a build uses).
+COPY . .
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN cd apps/template-builder && NODE_ENV=production bun run build
 
 FROM base AS runner
 WORKDIR /app

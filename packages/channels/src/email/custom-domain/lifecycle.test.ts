@@ -5,16 +5,9 @@ import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import {
-  EmailProviderRegistry,
-  type EmailProviderRegistryService,
-} from "../provider-registry";
+import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
 import { stubResolverNs } from "../verification/resolver-test-stub";
-import {
-  createCustomDomain,
-  pauseCustomDomain,
-  unpauseCustomDomain,
-} from "./lifecycle";
+import { createCustomDomain, pauseCustomDomain, unpauseCustomDomain } from "./lifecycle";
 
 const unsupported = () => Effect.die("unused");
 
@@ -39,7 +32,7 @@ const unusedCreateServices = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {
     decrypt: unsupported,
     encrypt: unsupported,
-  } as never)
+  } as never),
 );
 
 afterEach(() => {
@@ -83,8 +76,8 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
             message: "Domain is not linked to this Project.",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -128,7 +121,7 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
           { isPaused: true, pausedReason: "bad_reputation" },
           { isPaused: false, pausedReason: null },
         ]);
-      }).pipe(Effect.provide(Layer.succeed(DB, db)))
+      }).pipe(Effect.provide(Layer.succeed(DB, db))),
     );
   });
 });
@@ -171,19 +164,16 @@ describe("createCustomDomain claim guard", () => {
           vendorId: "aws",
         } as never,
       }).pipe(
-        Effect.provide(
-          Layer.merge(Layer.succeed(DB, db), unusedCreateServices)
-        ),
+        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.flip,
         Effect.map((error) => {
           expect(error).toMatchObject({
-            message:
-              "Another Project already has a pending claim on this domain.",
+            message: "Another Project already has a pending claim on this domain.",
             operation: "claim",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -218,17 +208,15 @@ describe("createCustomDomain claim guard", () => {
           vendorId: "aws",
         } as never,
       }).pipe(
-        Effect.provide(
-          Layer.merge(Layer.succeed(DB, db), unusedCreateServices)
-        ),
+        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.map((result) => {
           expect(result).toEqual({
             customDomainId: "dom_1",
             kind: "existing",
           });
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -267,9 +255,7 @@ describe("createCustomDomain claim guard", () => {
         organizationId: "org_1",
         provider: testEmailProvider,
       }).pipe(
-        Effect.provide(
-          Layer.merge(Layer.succeed(DB, db), unusedCreateServices)
-        ),
+        Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.map((result) => {
           expect(result).toEqual({
             customDomainId: "dom_1",
@@ -277,8 +263,8 @@ describe("createCustomDomain claim guard", () => {
           });
           expect(providerUpdates).toEqual([{ provider: "cloudflare" }]);
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -347,7 +333,7 @@ describe("createCustomDomain claim guard", () => {
       Layer.succeed(SymmetricCrypto, {
         decrypt: unsupported,
         encrypt: () => Effect.succeed("encrypted"),
-      } as never)
+      } as never),
     );
 
     return Effect.runPromise(
@@ -364,8 +350,8 @@ describe("createCustomDomain claim guard", () => {
           });
           expect(domainInserts[0]?.provider).toBe("cloudflare");
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 });

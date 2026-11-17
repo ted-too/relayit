@@ -29,7 +29,7 @@ describe("list-unsubscribe tokens", () => {
         secret: SECRET,
         signature,
         topicId: "topc_1",
-      })
+      }),
     ).toBe(true);
   });
 
@@ -48,7 +48,7 @@ describe("list-unsubscribe tokens", () => {
         secret: SECRET,
         signature,
         topicId: "topc_other",
-      })
+      }),
     ).toBe(false);
   });
 
@@ -92,10 +92,10 @@ describe("list-unsubscribe tokens", () => {
       expect.objectContaining({
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         "X-Custom": "1",
-      })
+      }),
     );
     expect(merged?.["List-Unsubscribe"]).toContain(
-      "https://app.example.com/unsubscribe/acme/cont_1?"
+      "https://app.example.com/unsubscribe/acme/cont_1?",
     );
 
     expect(
@@ -111,7 +111,7 @@ describe("list-unsubscribe tokens", () => {
         toCount: 1,
         topicId: "topc_1",
         webOrigin: "https://app.example.com",
-      })
+      }),
     ).toEqual({ "X-Custom": "1" });
   });
 });
@@ -173,7 +173,7 @@ describe("handleListUnsubscribeOneClick", () => {
         secret: SECRET,
         signature,
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, db)))
+      }).pipe(Effect.provide(Layer.succeed(DB, db))),
     );
 
     expect(result).toEqual({
@@ -198,7 +198,7 @@ describe("handleListUnsubscribeOneClick", () => {
         secret: SECRET,
         signature: "bad",
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, {} as never)), Effect.flip)
+      }).pipe(Effect.provide(Layer.succeed(DB, {} as never)), Effect.flip),
     );
 
     expect(error).toBeInstanceOf(ListUnsubscribeError);
@@ -252,7 +252,7 @@ describe("handleListUnsubscribeOneClick", () => {
         secret: SECRET,
         signature,
         topicId: "topc_1",
-      }).pipe(Effect.provide(Layer.succeed(DB, db)), Effect.flip)
+      }).pipe(Effect.provide(Layer.succeed(DB, db)), Effect.flip),
     );
 
     expect(error.code).toBe("bad_request");

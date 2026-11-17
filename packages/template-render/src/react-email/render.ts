@@ -1,7 +1,7 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import type { ReactEmailRenderProps, ReactEmailRenderResult } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -22,33 +22,26 @@ export async function renderSealedReactEmailArtifact(input: {
   mergePreviewProps?: boolean;
   timeoutMs?: number;
 }): Promise<ReactEmailRenderResult> {
-  const tempDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "relayit-react-email-")
-  );
-  const artifactPath = path.join(tempDir, "artifact.mjs");
+  const tempDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-react-email-"));
+  const artifactPath = NodePath.join(tempDir, "artifact.mjs");
 
   try {
     const bytes =
       typeof input.artifact === "string"
         ? new TextEncoder().encode(input.artifact)
         : input.artifact;
-    await fs.writeFile(artifactPath, bytes);
+    await NodeFSP.writeFile(artifactPath, bytes);
 
-    const runner = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "isolate-runner.ts"
+    const runner = NodePath.join(
+      NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
+      "isolate-runner.ts",
     );
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const subject = input.subject ?? input.subjectOverride ?? "";
-    const args = [
-      runner,
-      artifactPath,
-      JSON.stringify(input.props ?? {}),
-      subject,
-    ];
+    const args = [runner, artifactPath, JSON.stringify(input.props ?? {}), subject];
 
     const proc = Bun.spawn(["bun", ...args], {
-      cwd: path.dirname(runner),
+      cwd: NodePath.dirname(runner),
       stdout: "pipe",
       stderr: "pipe",
       env: {
@@ -74,7 +67,7 @@ export async function renderSealedReactEmailArtifact(input: {
     }
 
     const stdout = await new Response(proc.stdout).text();
-    const line = stdout.trim().split("\n").filter(Boolean).at(-1);
+    const line = stdout.trim().split("\n").findLast(Boolean);
 
     if (!line) {
       const stderr = await new Response(proc.stderr).text();
@@ -82,8 +75,7 @@ export async function renderSealedReactEmailArtifact(input: {
         ok: false,
         error: {
           code: "render_failed",
-          message:
-            stderr.trim() || "Sealed artifact isolate produced no output",
+          message: stderr.trim() || "Sealed artifact isolate produced no output",
         },
       };
     }
@@ -100,6 +92,6 @@ export async function renderSealedReactEmailArtifact(input: {
       };
     }
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await NodeFSP.rm(tempDir, { recursive: true, force: true });
   }
 }

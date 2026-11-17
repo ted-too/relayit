@@ -69,13 +69,7 @@ const DNS_PROVIDER_PATTERNS = [
   },
   {
     provider: "ionos",
-    suffixes: [
-      ".ui-dns.com",
-      ".ui-dns.de",
-      ".ui-dns.biz",
-      ".ui-dns.org",
-      ".ui-dns.net",
-    ],
+    suffixes: [".ui-dns.com", ".ui-dns.de", ".ui-dns.biz", ".ui-dns.org", ".ui-dns.net"],
   },
   {
     provider: "ovh",
@@ -120,7 +114,7 @@ const DNS_PROVIDER_PATTERNS = [
 
 const nameserverMatches = (
   nameserver: string,
-  pattern: (typeof DNS_PROVIDER_PATTERNS)[number]
+  pattern: (typeof DNS_PROVIDER_PATTERNS)[number],
 ): boolean => {
   if (pattern.provider === "route53") {
     return pattern.suffixes.some((fragment) => {
@@ -137,17 +131,13 @@ const nameserverMatches = (
   return pattern.suffixes.some((suffix) => nameserver.endsWith(suffix));
 };
 
-export const providerFromNameservers = (
-  nameservers: readonly string[]
-): DomainProvider => {
+export const providerFromNameservers = (nameservers: readonly string[]): DomainProvider => {
   const normalized = nameservers.map((hostname) =>
-    hostname.toLowerCase().replace(TRAILING_DOT_REGEX, "")
+    hostname.toLowerCase().replace(TRAILING_DOT_REGEX, ""),
   );
 
   for (const pattern of DNS_PROVIDER_PATTERNS) {
-    if (
-      normalized.some((nameserver) => nameserverMatches(nameserver, pattern))
-    ) {
+    if (normalized.some((nameserver) => nameserverMatches(nameserver, pattern))) {
       return pattern.provider;
     }
   }
@@ -155,9 +145,7 @@ export const providerFromNameservers = (
   return "unknown";
 };
 
-export const detectDnsProvider = async (
-  fqdn: string
-): Promise<DomainProvider> => {
+export const detectDnsProvider = async (fqdn: string): Promise<DomainProvider> => {
   const nameservers = await lookupAuthoritativeNameservers(fqdn);
   return providerFromNameservers(nameservers);
 };

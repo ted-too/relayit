@@ -1,7 +1,4 @@
-export {
-  type ResolveAppEnvironmentInput,
-  resolveAppEnvironment,
-} from "./app-environment";
+export { type ResolveAppEnvironmentInput, resolveAppEnvironment } from "./app-environment";
 export {
   type MessageContactInput,
   mergeMessageContacts,
@@ -17,8 +14,4 @@ export {
   type RecordMessageIdempotencyResult,
   recordMessageIdempotency,
 } from "./idempotency";
-export type {
-  AcceptedMessage,
-  MessageAttribution,
-  TransactionalMessageIntent,
-} from "./types";
+export type { AcceptedMessage, MessageAttribution, TransactionalMessageIntent } from "./types";

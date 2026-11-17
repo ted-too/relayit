@@ -6,9 +6,7 @@ import { RiArrowRightSLine, RiMoreLine } from "@remixicon/react";
 import { cn } from "@repo/ui/lib/utils";
 import type * as React from "react";
 
-export function Breadcrumb({
-  ...props
-}: React.ComponentProps<"nav">): React.ReactElement {
+export function Breadcrumb({ ...props }: React.ComponentProps<"nav">): React.ReactElement {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />;
 }
 
@@ -20,7 +18,7 @@ export function BreadcrumbList({
     <ol
       className={cn(
         "wrap-break-word flex flex-wrap items-center gap-1.5 text-muted-foreground text-sm sm:gap-2.5",
-        className
+        className,
       )}
       data-slot="breadcrumb-list"
       {...props}

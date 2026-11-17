@@ -1,10 +1,6 @@
 import { S3, S3Service } from "@effect-aws/client-s3";
 import { Context, DateTime, Effect, Layer } from "effect";
-import {
-  ObjectBodyEmpty,
-  ObjectSignedUrlExpiryError,
-  ObjectStorageError,
-} from "./errors";
+import { ObjectBodyEmpty, ObjectSignedUrlExpiryError, ObjectStorageError } from "./errors";
 import {
   DEFAULT_SIGNED_URL_EXPIRES_SECONDS,
   type ObjectDownloadResult,
@@ -21,13 +17,12 @@ const MINIMUM_SIGNED_URL_EXPIRY_SECONDS = 1;
 const MAXIMUM_SIGNED_URL_EXPIRY_SECONDS = 604_800;
 
 const hasTransformToByteArray = (
-  body: unknown
+  body: unknown,
 ): body is { transformToByteArray: () => Promise<Uint8Array> } =>
   typeof body === "object" &&
   body !== null &&
   "transformToByteArray" in body &&
-  typeof (body as { transformToByteArray: unknown }).transformToByteArray ===
-    "function";
+  typeof (body as { transformToByteArray: unknown }).transformToByteArray === "function";
 
 const readObjectBody = (key: string, body: unknown) => {
   if (body === undefined || body === null) {
@@ -38,8 +33,7 @@ const readObjectBody = (key: string, body: unknown) => {
   }
   if (hasTransformToByteArray(body)) {
     return Effect.tryPromise({
-      catch: (cause) =>
-        new ObjectStorageError({ cause, key, operation: "download" }),
+      catch: (cause) => new ObjectStorageError({ cause, key, operation: "download" }),
       try: () => body.transformToByteArray(),
     });
   }
@@ -49,37 +43,30 @@ const readObjectBody = (key: string, body: unknown) => {
 export interface ObjectStorageService {
   readonly delete: (key: string) => Effect.Effect<void, ObjectStorageError>;
   readonly download: (
-    key: string
-  ) => Effect.Effect<
-    ObjectDownloadResult,
-    ObjectBodyEmpty | ObjectStorageError
-  >;
+    key: string,
+  ) => Effect.Effect<ObjectDownloadResult, ObjectBodyEmpty | ObjectStorageError>;
   readonly exists: (key: string) => Effect.Effect<boolean, ObjectStorageError>;
   readonly signedDownloadUrl: (
     key: string,
-    options?: ObjectSignedDownloadUrlOptions
+    options?: ObjectSignedDownloadUrlOptions,
   ) => Effect.Effect<
     ObjectSignedDownloadUrlResult,
     ObjectSignedUrlExpiryError | ObjectStorageError
   >;
   readonly signedUploadUrl: (
     key: string,
-    options?: ObjectSignedUploadUrlOptions
-  ) => Effect.Effect<
-    ObjectSignedUploadUrlResult,
-    ObjectSignedUrlExpiryError | ObjectStorageError
-  >;
+    options?: ObjectSignedUploadUrlOptions,
+  ) => Effect.Effect<ObjectSignedUploadUrlResult, ObjectSignedUrlExpiryError | ObjectStorageError>;
   readonly upload: (
     key: string,
     body: Uint8Array,
-    options?: ObjectUploadOptions
+    options?: ObjectUploadOptions,
   ) => Effect.Effect<ObjectUploadResult, ObjectStorageError>;
 }
 
-export class ObjectStorage extends Context.Service<
-  ObjectStorage,
-  ObjectStorageService
->()("ObjectStorage") {}
+export class ObjectStorage extends Context.Service<ObjectStorage, ObjectStorageService>()(
+  "ObjectStorage",
+) {}
 
 export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
   const s3Live = S3.layer({
@@ -102,13 +89,11 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
 
       const expiresAt = (expiresInSeconds: number) =>
         DateTime.now.pipe(
-          Effect.map((now) =>
-            DateTime.addDuration(now, `${expiresInSeconds} seconds`)
-          )
+          Effect.map((now) => DateTime.addDuration(now, `${expiresInSeconds} seconds`)),
         );
       const signedUrlExpiry = (
         operation: "signedDownloadUrl" | "signedUploadUrl",
-        expiresInSeconds: number | undefined
+        expiresInSeconds: number | undefined,
       ) => {
         const value = expiresInSeconds ?? DEFAULT_SIGNED_URL_EXPIRES_SECONDS;
         return Number.isInteger(value) &&
@@ -121,7 +106,7 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
                 maximumSeconds: MAXIMUM_SIGNED_URL_EXPIRY_SECONDS,
                 minimumSeconds: MINIMUM_SIGNED_URL_EXPIRY_SECONDS,
                 operation,
-              })
+              }),
             );
       };
 
@@ -129,25 +114,20 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
         delete: (key) =>
           s3.deleteObject({ Bucket: config.bucket, Key: key }).pipe(
             Effect.asVoid,
-            Effect.mapError(
-              (cause) =>
-                new ObjectStorageError({ cause, key, operation: "delete" })
-            )
+            Effect.mapError((cause) => new ObjectStorageError({ cause, key, operation: "delete" })),
           ),
         download: (key) =>
           Effect.gen(function* () {
-            const response = yield* s3
-              .getObject({ Bucket: config.bucket, Key: key })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new ObjectStorageError({
-                      cause,
-                      key,
-                      operation: "download",
-                    })
-                )
-              );
+            const response = yield* s3.getObject({ Bucket: config.bucket, Key: key }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ObjectStorageError({
+                    cause,
+                    key,
+                    operation: "download",
+                  }),
+              ),
+            );
             const body = yield* readObjectBody(key, response.Body);
             return {
               body,
@@ -157,23 +137,17 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
         exists: (key) =>
           s3.headObject({ Bucket: config.bucket, Key: key }).pipe(
             Effect.as(true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.mapError(
-              (cause) =>
-                new ObjectStorageError({ cause, key, operation: "exists" })
-            )
+            Effect.catchTags({ NotFound: () => Effect.succeed(false) }),
+            Effect.mapError((cause) => new ObjectStorageError({ cause, key, operation: "exists" })),
           ),
         signedDownloadUrl: (key, options) =>
           Effect.gen(function* () {
             const expiresIn = yield* signedUrlExpiry(
               "signedDownloadUrl",
-              options?.expiresInSeconds
+              options?.expiresInSeconds,
             );
             const url = yield* s3
-              .getObject(
-                { Bucket: config.bucket, Key: key },
-                { expiresIn, presigned: true }
-              )
+              .getObject({ Bucket: config.bucket, Key: key }, { expiresIn, presigned: true })
               .pipe(
                 Effect.mapError(
                   (cause) =>
@@ -181,8 +155,8 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
                       cause,
                       key,
                       operation: "signedDownloadUrl",
-                    })
-                )
+                    }),
+                ),
               );
             return {
               expiresAt: yield* expiresAt(expiresIn),
@@ -191,10 +165,7 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
           }),
         signedUploadUrl: (key, options) =>
           Effect.gen(function* () {
-            const expiresIn = yield* signedUrlExpiry(
-              "signedUploadUrl",
-              options?.expiresInSeconds
-            );
+            const expiresIn = yield* signedUrlExpiry("signedUploadUrl", options?.expiresInSeconds);
             const url = yield* s3
               .putObject(
                 {
@@ -202,7 +173,7 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
                   ContentType: options?.contentType,
                   Key: key,
                 },
-                { expiresIn, presigned: true }
+                { expiresIn, presigned: true },
               )
               .pipe(
                 Effect.mapError(
@@ -211,8 +182,8 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
                       cause,
                       key,
                       operation: "signedUploadUrl",
-                    })
-                )
+                    }),
+                ),
               );
             return {
               expiresAt: yield* expiresAt(expiresIn),
@@ -231,11 +202,10 @@ export const makeObjectStorageLive = (config: ObjectStorageConfig) => {
             .pipe(
               Effect.as({ key } satisfies ObjectUploadResult),
               Effect.mapError(
-                (cause) =>
-                  new ObjectStorageError({ cause, key, operation: "upload" })
-              )
+                (cause) => new ObjectStorageError({ cause, key, operation: "upload" }),
+              ),
             ),
       } satisfies ObjectStorageService;
-    })
+    }),
   ).pipe(Layer.provide(s3Live));
 };

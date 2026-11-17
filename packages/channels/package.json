@@ -1,10 +1,11 @@
 {
   "name": "@repo/channels",
   "version": "0.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@distilled.cloud/cloudflare": "^1.0.0-rc.4",
@@ -14,9 +15,9 @@
     "@repo/redis": "workspace:*",
     "@repo/template-render": "workspace:*",
     "@repo/webhooks": "workspace:*",
-    "drizzle-orm": "1.0.0-rc.5-ab785fc",
-    "effect": "4.0.0-rc.108",
-    "typeid-js": "^1.2.0",
-    "zod": "^4.3.6"
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "typeid-js": "catalog:",
+    "zod": "catalog:"
   }
 }

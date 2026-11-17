@@ -7,14 +7,13 @@ import {
   sesTenantNameFor,
 } from "./tenant";
 
-class AlreadyExistsException extends Data.TaggedError(
-  "AlreadyExistsException"
-)<{ readonly message: string }> {}
+class AlreadyExistsException extends Data.TaggedError("AlreadyExistsException")<{
+  readonly message: string;
+}> {}
 
 const ACCOUNT = "123456789012";
 const REGION = "eu-central-1";
-const tenantArn = (name: string) =>
-  `arn:aws:ses:${REGION}:${ACCOUNT}:tenant/${name}/tid-${name}`;
+const tenantArn = (name: string) => `arn:aws:ses:${REGION}:${ACCOUNT}:tenant/${name}/tid-${name}`;
 
 /** Stateful SES fake: tenants and (tenant, resourceArn) associations. */
 const makeSes = () => {
@@ -71,8 +70,7 @@ const makeSes = () => {
   return { associations, ses, tenants };
 };
 
-const identity = (fqdn: string) =>
-  `arn:aws:ses:${REGION}:${ACCOUNT}:identity/${fqdn}`;
+const identity = (fqdn: string) => `arn:aws:ses:${REGION}:${ACCOUNT}:identity/${fqdn}`;
 const configurationSet = `arn:aws:ses:${REGION}:${ACCOUNT}:configuration-set/relayit-delivery-events`;
 
 describe("ensureSesTenant", () => {
@@ -91,10 +89,7 @@ describe("ensureSesTenant", () => {
     expect(tenantName.length).toBeLessThanOrEqual(64);
     expect([...fake.tenants]).toEqual([tenantName]);
     expect(new Set(fake.associations)).toEqual(
-      new Set([
-        `${tenantName}|${identity("tsavaro.com")}`,
-        `${tenantName}|${configurationSet}`,
-      ])
+      new Set([`${tenantName}|${identity("tsavaro.com")}`, `${tenantName}|${configurationSet}`]),
     );
   });
 });
@@ -108,7 +103,7 @@ describe("detachSesIdentityFromTenants", () => {
           identityFqdn: "sandbox.relayit.io",
           region: REGION,
           tenantName: sesTenantNameFor(project),
-        })
+        }),
       );
     }
 
@@ -116,14 +111,14 @@ describe("detachSesIdentityFromTenants", () => {
       detachSesIdentityFromTenants(fake.ses, {
         fqdn: "sandbox.relayit.io",
         region: REGION,
-      })
+      }),
     );
 
     expect(new Set(fake.associations)).toEqual(
       new Set([
         `${sesTenantNameFor("orgn_a")}|${configurationSet}`,
         `${sesTenantNameFor("orgn_b")}|${configurationSet}`,
-      ])
+      ]),
     );
   });
 });

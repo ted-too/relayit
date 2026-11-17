@@ -1,13 +1,6 @@
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
-import {
-  getBlob,
-  getCommit,
-  getTree,
-  putBlob,
-  putCommit,
-  putTree,
-} from "./objects";
+import { getBlob, getCommit, getTree, putBlob, putCommit, putTree } from "./objects";
 import { getRef, updateRef } from "./refs";
 import type { GitTree } from "./types";
 
@@ -18,11 +11,7 @@ export const readTreeAtCommit = (workspaceId: string, commitSha: string) =>
     return tree.files;
   });
 
-export const readFileAtRef = (input: {
-  path: string;
-  ref: string;
-  workspaceId: string;
-}) =>
+export const readFileAtRef = (input: { path: string; ref: string; workspaceId: string }) =>
   Effect.gen(function* () {
     const tip = yield* getRef(input.workspaceId, input.ref);
     if (!tip) {

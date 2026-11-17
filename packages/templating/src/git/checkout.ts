@@ -1,5 +1,5 @@
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { readTreeAtCommit } from "./commit";
@@ -29,12 +29,12 @@ export const checkoutRefToDirectory = (input: {
           code: "failed",
           message: "Failed to create checkout directory.",
         }),
-      try: () => fs.mkdir(input.destDir, { recursive: true }),
+      try: () => NodeFSP.mkdir(input.destDir, { recursive: true }),
     });
 
     for (const [filePath, blobId] of Object.entries(tree)) {
       const blob = yield* getBlob(input.workspaceId, blobId);
-      const abs = path.join(input.destDir, filePath);
+      const abs = NodePath.join(input.destDir, filePath);
       yield* Effect.tryPromise({
         catch: () =>
           new TemplatingBuilderError({
@@ -42,8 +42,8 @@ export const checkoutRefToDirectory = (input: {
             message: "Failed to write checkout file.",
           }),
         try: async () => {
-          await fs.mkdir(path.dirname(abs), { recursive: true });
-          await fs.writeFile(abs, blob);
+          await NodeFSP.mkdir(NodePath.dirname(abs), { recursive: true });
+          await NodeFSP.writeFile(abs, blob);
         },
       });
     }

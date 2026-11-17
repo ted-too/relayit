@@ -45,7 +45,7 @@ export const emailContactSchema = t.Object(
     $id: componentId.Contact,
     additionalProperties: false,
     title: "Contact",
-  }
+  },
 );
 
 export type EmailContact = Static<typeof emailContactSchema>;
@@ -59,7 +59,7 @@ export const emailAddressListSchema = t.Union(
       title: "Email addresses",
     }),
   ],
-  { $id: componentId.EmailAddressList, title: "Email address list" }
+  { $id: componentId.EmailAddressList, title: "Email address list" },
 );
 
 export type EmailAddressListWire = Static<typeof emailAddressListSchema>;
@@ -82,14 +82,10 @@ export const emailRecipientSchema = t.Union(
     $id: componentId.Recipient,
     description: "Address, address list, or contact objects.",
     title: "Recipient",
-  }
+  },
 );
 
-export type EmailContactRecipient =
-  | string
-  | string[]
-  | EmailContact
-  | EmailContact[];
+export type EmailContactRecipient = string | string[] | EmailContact | EmailContact[];
 
 export function parseEmailFrom(value: string): EmailFrom {
   const trimmed = value.trim();
@@ -126,12 +122,12 @@ const attachmentMeta = {
   content_id: t.Optional(
     t.String({
       description: 'Inline image id for HTML, e.g. <img src="cid:your-id">.',
-    })
+    }),
   ),
   content_type: t.Optional(
     t.String({
       description: "MIME type; derived from filename when omitted.",
-    })
+    }),
   ),
   filename: filenameSchema,
 };
@@ -146,7 +142,7 @@ export const emailAttachmentSchema = t.Union(
           description: "Base64-encoded file contents.",
         }),
       },
-      { additionalProperties: false, title: "Base64 attachment" }
+      { additionalProperties: false, title: "Base64 attachment" },
     ),
     t.Object(
       {
@@ -156,10 +152,10 @@ export const emailAttachmentSchema = t.Union(
           format: "uri",
         }),
       },
-      { additionalProperties: false, title: "Hosted attachment" }
+      { additionalProperties: false, title: "Hosted attachment" },
     ),
   ],
-  { $id: componentId.Attachment, title: "Attachment" }
+  { $id: componentId.Attachment, title: "Attachment" },
 );
 
 export type SendEmailAttachmentBody = Static<typeof emailAttachmentSchema>;
@@ -181,11 +177,11 @@ export const emailTemplateRefSchema = t.Object(
           additionalProperties: t.Any(),
           description:
             "Primitive Template variable values (string|number) or reactEmail props (structured JSON).",
-        }
-      )
+        },
+      ),
     ),
   },
-  { additionalProperties: false }
+  { additionalProperties: false },
 );
 
 export type EmailTemplateRef = Static<typeof emailTemplateRefSchema>;
@@ -203,7 +199,7 @@ const emailTagItemSchema = t.Object(
       pattern: TAG_TOKEN,
     }),
   },
-  { additionalProperties: false, title: "Tag" }
+  { additionalProperties: false, title: "Tag" },
 );
 
 export const emailTagsSchema = t.Array(emailTagItemSchema);
@@ -236,7 +232,7 @@ export const sendEmailBodySchema = t.Object(
       t.String({
         description:
           "Email subject line. Required for inline html/text; optional with template (overrides template subject when set).",
-      })
+      }),
     ),
     bcc: t.Optional(t.Ref(componentId.Recipient)),
     cc: t.Optional(t.Ref(componentId.Recipient)),
@@ -244,7 +240,7 @@ export const sendEmailBodySchema = t.Object(
       t.String({
         description: "When to send. ISO 8601 preferred.",
         minLength: 1,
-      })
+      }),
     ),
     reply_to: t.Optional(t.Ref(componentId.EmailAddressList)),
     html: t.Optional(t.String()),
@@ -255,18 +251,18 @@ export const sendEmailBodySchema = t.Object(
         {
           additionalProperties: t.String(),
           description: "Custom headers to add to the email.",
-        }
-      )
+        },
+      ),
     ),
     attachments: t.Optional(t.Array(t.Ref(componentId.Attachment))),
     tags: t.Optional(
       t.Array(emailTagItemSchema, {
         description: "Tags as { name, value } pairs.",
-      })
+      }),
     ),
     template: t.Optional(emailTemplateRefSchema),
   },
-  { additionalProperties: false }
+  { additionalProperties: false },
 );
 
 export interface SendEmailBody {
@@ -319,18 +315,18 @@ export const sendEmailHeadersSchema = t.Object({
   app: t.Optional(
     t.String({
       description: "App attribution (must pair with environment).",
-    })
+    }),
   ),
   environment: t.Optional(
     t.String({
       description: "App Environment attribution (must pair with app).",
-    })
+    }),
   ),
   "idempotency-key": t.Optional(
     t.String({
       description: "Idempotency Key — same key returns the original Message.",
       maxLength: 256,
-    })
+    }),
   ),
   "x-api-key": t.String({
     description: "The API key to use for the request.",

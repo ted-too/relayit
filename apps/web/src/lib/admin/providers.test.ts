@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  EmailManagedDns,
-  type EmailManagedDnsService,
-} from "@repo/channels/email/managed-dns";
+import { EmailManagedDns, type EmailManagedDnsService } from "@repo/channels/email/managed-dns";
 import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
@@ -78,7 +75,7 @@ const unusedProvisionServices = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {
     decrypt: unsupported,
     encrypt: unsupported,
-  } as never)
+  } as never),
 );
 
 const provisionLive = Layer.mergeAll(
@@ -96,7 +93,7 @@ const provisionLive = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {
     decrypt: unsupported,
     encrypt: () => Effect.fail(new Error("encrypt failed")) as never,
-  } as never)
+  } as never),
 );
 
 describe("createPlatformProvider", () => {
@@ -132,17 +129,13 @@ describe("createPlatformProvider", () => {
         vendorId: "aws",
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(DB, db as never),
-            vaultLive,
-            unusedProvisionServices
-          )
+          Layer.mergeAll(Layer.succeed(DB, db as never), vaultLive, unusedProvisionServices),
         ),
         Effect.map((result) => {
           expect(result.id).toBe("prov_1");
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -178,13 +171,7 @@ describe("createPlatformProvider", () => {
         },
         vendorId: "aws",
       }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(DB, db as never),
-            vaultLive,
-            provisionLive
-          )
-        ),
+        Effect.provide(Layer.mergeAll(Layer.succeed(DB, db as never), vaultLive, provisionLive)),
         Effect.flip,
         Effect.map((error) => {
           expect(error).toMatchObject({
@@ -192,8 +179,8 @@ describe("createPlatformProvider", () => {
             message: "Failed to encrypt sandbox DKIM private key.",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -246,16 +233,14 @@ describe("createPlatformProvider", () => {
             Layer.succeed(SymmetricCrypto, {
               decrypt: unsupported,
               encrypt: unsupported,
-            } as never)
-          )
+            } as never),
+          ),
         ),
         Effect.map(() => {
-          expect(ensureUrls).toEqual([
-            "https://api.relayit.fyi/webhooks/providers/aws/ses",
-          ]);
+          expect(ensureUrls).toEqual(["https://api.relayit.fyi/webhooks/providers/aws/ses"]);
           return ensureUrls;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -276,11 +261,7 @@ describe("deletePlatformProvider", () => {
     return Effect.runPromise(
       deletePlatformProvider("prov_1", "https://api.relayit.fyi").pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(DB, db as never),
-            vaultLive,
-            unusedProvisionServices
-          )
+          Layer.mergeAll(Layer.succeed(DB, db as never), vaultLive, unusedProvisionServices),
         ),
         Effect.flip,
         Effect.map((error) => {
@@ -290,8 +271,8 @@ describe("deletePlatformProvider", () => {
             message: "Managed backend is still referenced by a Domain pairing.",
           });
           return error;
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -339,17 +320,15 @@ describe("deletePlatformProvider", () => {
             Layer.succeed(SymmetricCrypto, {
               decrypt: unsupported,
               encrypt: unsupported,
-            } as never)
-          )
+            } as never),
+          ),
         ),
         Effect.map(() => {
-          expect(teardownUrls).toEqual([
-            "https://api.relayit.fyi/webhooks/providers/aws/ses",
-          ]);
+          expect(teardownUrls).toEqual(["https://api.relayit.fyi/webhooks/providers/aws/ses"]);
           expect(deleted).toEqual(["prov_1"]);
           return teardownUrls;
-        })
-      )
+        }),
+      ),
     );
   });
 });

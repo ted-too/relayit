@@ -24,7 +24,7 @@ const mapUnsubscribeResult = <A, E extends { readonly code: string }, R>(
       readonly message: string;
     },
     R
-  >
+  >,
 ) =>
   effect.pipe(
     Effect.match({
@@ -37,7 +37,7 @@ const mapUnsubscribeResult = <A, E extends { readonly code: string }, R>(
                 code: error.code,
                 message: error.message,
               },
-              { status: 400 }
+              { status: 400 },
             );
           case "not_found":
             return Response.json(
@@ -45,7 +45,7 @@ const mapUnsubscribeResult = <A, E extends { readonly code: string }, R>(
                 code: error.code,
                 message: error.message,
               },
-              { status: 404 }
+              { status: 404 },
             );
           default: {
             const _exhaustive: never = error.code;
@@ -54,7 +54,7 @@ const mapUnsubscribeResult = <A, E extends { readonly code: string }, R>(
         }
       },
       onSuccess: (payload) => Response.json(payload),
-    })
+    }),
   );
 
 export const createUnsubscribePostHandler = (
@@ -62,10 +62,9 @@ export const createUnsubscribePostHandler = (
   options?: {
     readonly runEffect?: (effect: Effect.Effect<Response>) => Promise<Response>;
     readonly secret?: string;
-  }
+  },
 ) => {
-  const resolvedSecret =
-    options?.secret ?? getCurrentBetterAuthSecret(env.BETTER_AUTH_SECRETS);
+  const resolvedSecret = options?.secret ?? getCurrentBetterAuthSecret(env.BETTER_AUTH_SECRETS);
 
   return ({
     params,
@@ -83,8 +82,8 @@ export const createUnsubscribePostHandler = (
             code: "bad_request",
             message: "msg, topic, and sig query params are required",
           },
-          { status: 400 }
-        )
+          { status: 400 },
+        ),
       );
     }
 
@@ -96,7 +95,7 @@ export const createUnsubscribePostHandler = (
         secret: resolvedSecret,
         signature: query.signature,
         topicId: query.topicId,
-      })
+      }),
     );
 
     if (options?.runEffect) {
@@ -107,6 +106,4 @@ export const createUnsubscribePostHandler = (
   };
 };
 
-export const postUnsubscribe = createUnsubscribePostHandler(
-  handleListUnsubscribeOneClick
-);
+export const postUnsubscribe = createUnsubscribePostHandler(handleListUnsubscribeOneClick);

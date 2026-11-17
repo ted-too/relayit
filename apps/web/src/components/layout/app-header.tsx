@@ -8,43 +8,25 @@ import {
   BreadcrumbSeparator,
 } from "@repo/ui/components/ui/coss/breadcrumb";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@repo/ui/components/ui/coss/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@repo/ui/components/ui/coss/menu";
 import { useSidebar } from "@repo/ui/components/ui/shad/sidebar";
 import { Link } from "@tanstack/react-router";
 import { Fragment, type ReactNode } from "react";
 import { findActiveNavItem, type NavItemGroup } from "./app-sidebar";
 
-function getBreadcrumbSegments({
-  items,
-  pathname,
-}: {
-  items: NavItemGroup[];
-  pathname: string;
-}) {
+function getBreadcrumbSegments({ items, pathname }: { items: NavItemGroup[]; pathname: string }) {
   const active = findActiveNavItem({ items, pathname });
   if (!active) {
     return [];
   }
 
-  const activeGroup = items.find((group) =>
-    group.items.some((item) => item.to === active.item.to)
-  );
+  const activeGroup = items.find((group) => group.items.some((item) => item.to === active.item.to));
 
   const segments: { title: string; to?: string }[] = [];
 
   const includeGroup = active.item.breadcrumb?.includeGroup;
 
-  if (
-    includeGroup &&
-    activeGroup &&
-    "headerTitle" in activeGroup &&
-    activeGroup.headerTitle
-  ) {
+  if (includeGroup && activeGroup && "headerTitle" in activeGroup && activeGroup.headerTitle) {
     segments.push({ title: activeGroup.headerTitle });
   }
 
@@ -73,7 +55,7 @@ export function AppHeader({
   const breadcrumbs = getBreadcrumbSegments({ items, pathname });
 
   return (
-    <div className="@container sticky top-0 z-50 flex h-14 flex-row items-center justify-between gap-2 bg-background-100 before:absolute before:inset-x-0 before:top-full before:h-px before:bg-gray-alpha-300 before:content-[&quot;&quot;] md:border-gray-100 md:border-b md:border-solid md:bg-background-200 md:before:content-[unset]">
+    <div className='@container sticky top-0 z-50 flex h-14 flex-row items-center justify-between gap-2 bg-background-100 before:absolute before:inset-x-0 before:top-full before:h-px before:bg-gray-alpha-300 before:content-[""] md:border-gray-100 md:border-b md:border-solid md:bg-background-200 md:before:content-[unset]'>
       <div className="z-10 flex shrink-0 items-center pl-3">
         <Button onClick={toggleSidebar} size="icon" variant="ghost">
           <RiLayoutLeftLine aria-hidden="true" />
@@ -93,20 +75,14 @@ export function AppHeader({
                   label = (
                     <BreadcrumbLink
                       render={
-                        <Link
-                          className="hover:underline"
-                          params={linkParams}
-                          to={crumb.to}
-                        />
+                        <Link className="hover:underline" params={linkParams} to={crumb.to} />
                       }
                     >
                       {crumb.title}
                     </BreadcrumbLink>
                   );
                 } else {
-                  label = (
-                    <span className="text-muted-foreground">{crumb.title}</span>
-                  );
+                  label = <span className="text-muted-foreground">{crumb.title}</span>;
                 }
 
                 return (
@@ -125,15 +101,8 @@ export function AppHeader({
           <MenuTrigger render={<Button size="icon" variant="ghost" />}>
             <RiMoreLine aria-hidden="true" />
           </MenuTrigger>
-          <MenuPopup
-            align="end"
-            className="w-(--anchor-width) min-w-56!"
-            sideOffset={4}
-          >
-            <MenuItem
-              className="justify-between p-2"
-              render={<Link to="/user/account" />}
-            >
+          <MenuPopup align="end" className="w-(--anchor-width) min-w-56!" sideOffset={4}>
+            <MenuItem className="justify-between p-2" render={<Link to="/user/account" />}>
               <span>Give feedback</span>
               <RiChatAi3Line aria-hidden="true" />
             </MenuItem>

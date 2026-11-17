@@ -36,7 +36,7 @@ export function DocsShell({ children, groups, to }: DocsShellProps) {
                       {item.title}
                       <RiArrowRightUpLine className="size-3.5" />
                     </a>
-                  )
+                  ),
                 )}
               </div>
             </div>

@@ -45,11 +45,7 @@ export interface NavItemGroup {
 export const navItemToPath = (to: string): string =>
   to.replace("/$orgSlug/", "/").replace("/$orgSlug", "/");
 
-export function isActiveRoute(
-  itemUrl: string,
-  pathname: string,
-  match = [] as string[]
-): boolean {
+export function isActiveRoute(itemUrl: string, pathname: string, match = [] as string[]): boolean {
   if (!pathname) {
     return false;
   }
@@ -114,17 +110,12 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         {items.map((item, idx) => (
-          <SidebarGroup
-            key={`${"headerTitle" in item ? item.headerTitle : "default"}-${idx}`}
-          >
-            {"headerTitle" in item && (
-              <SidebarGroupLabel>{item.headerTitle}</SidebarGroupLabel>
-            )}
+          <SidebarGroup key={`${"headerTitle" in item ? item.headerTitle : "default"}-${idx}`}>
+            {"headerTitle" in item && <SidebarGroupLabel>{item.headerTitle}</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu className="gap-2">
                 {item.items.map((item) => {
-                  const isAvailable =
-                    "comingSoon" in item ? !item.comingSoon : true;
+                  const isAvailable = "comingSoon" in item ? !item.comingSoon : true;
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
@@ -142,9 +133,7 @@ export function AppSidebar({
                         }
                         tooltip={item.title}
                       >
-                        {item.icon && (
-                          <item.icon aria-hidden="true" variant="Broken" />
-                        )}
+                        {item.icon && <item.icon aria-hidden="true" variant="Broken" />}
                         <span>{item.title}</span>
                         {!isAvailable && (
                           <Badge size="xs" variant="warning-light">

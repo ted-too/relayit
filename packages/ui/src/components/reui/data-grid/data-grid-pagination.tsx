@@ -67,12 +67,8 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
   const paginationMoreLimit = mergedProps.moreLimit || 5;
 
   // Determine the start and end of the pagination group
-  const currentGroupStart =
-    Math.floor(pageIndex / paginationMoreLimit) * paginationMoreLimit;
-  const currentGroupEnd = Math.min(
-    currentGroupStart + paginationMoreLimit,
-    pageCount
-  );
+  const currentGroupStart = Math.floor(pageIndex / paginationMoreLimit) * paginationMoreLimit;
+  const currentGroupEnd = Math.min(currentGroupStart + paginationMoreLimit, pageCount);
 
   // Render page buttons based on the current group
   const renderPageButtons = () => {
@@ -93,7 +89,7 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
           variant="ghost"
         >
           {i + 1}
-        </Button>
+        </Button>,
       );
     }
     return buttons;
@@ -137,7 +133,7 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
     <div
       className={cn(
         "flex grow flex-col flex-wrap items-center justify-between gap-2.5 py-2.5 sm:flex-row sm:py-0",
-        mergedProps.className
+        mergedProps.className,
       )}
       data-slot="data-grid-pagination"
     >
@@ -146,9 +142,7 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
           mergedProps.sizesSkeleton
         ) : (
           <>
-            <div className="text-muted-foreground text-sm">
-              {mergedProps.rowsPerPageLabel}
-            </div>
+            <div className="text-muted-foreground text-sm">{mergedProps.rowsPerPageLabel}</div>
             <Select
               onValueChange={(value) => {
                 const newPageSize = Number(value);
@@ -187,9 +181,7 @@ function DataGridPagination(props: DataGridPaginationProps): React.JSX.Element {
                   size="icon-sm"
                   variant="ghost"
                 >
-                  <span className="sr-only">
-                    {mergedProps.previousPageLabel}
-                  </span>
+                  <span className="sr-only">{mergedProps.previousPageLabel}</span>
                   <RiArrowLeftSLine className="size-4" />
                 </Button>
 

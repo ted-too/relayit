@@ -59,13 +59,10 @@ end
 return promoted
 `;
 
-export const encodeJob = <
-  const Name extends string,
-  PayloadSchema extends JobSchema,
->(
+export const encodeJob = <const Name extends string, PayloadSchema extends JobSchema>(
   contract: Job<Name, PayloadSchema>,
   payload: PayloadSchema["Type"],
-  firstEnqueuedAt: number
+  firstEnqueuedAt: number,
 ) =>
   Effect.gen(function* () {
     const data = yield* makeSchemaJsonCodec(contract.payload).encode(payload);

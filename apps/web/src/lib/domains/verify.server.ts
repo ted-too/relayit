@@ -10,9 +10,7 @@ import { listCustomDomainsForProject } from "./list.server";
 const isPendingClaim = (link: {
   ownershipVerificationStatus: string;
   pendingProviderId: string | null;
-}) =>
-  link.ownershipVerificationStatus !== "verified" ||
-  link.pendingProviderId != null;
+}) => link.ownershipVerificationStatus !== "verified" || link.pendingProviderId != null;
 
 /** Synchronously refresh provider + ownership verification for UI. */
 export const refreshCustomDomainForProject = (input: {
@@ -45,8 +43,8 @@ export const refreshCustomDomainForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to load Custom Domain for refresh.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!link?.customDomain) {
@@ -82,8 +80,8 @@ export const refreshCustomDomainForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to refresh Custom Domain verification.",
-            })
-        )
+            }),
+        ),
       );
     }
 
@@ -99,8 +97,8 @@ export const refreshCustomDomainForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to refresh ownership verification.",
-            })
-        )
+            }),
+        ),
       );
     }
 

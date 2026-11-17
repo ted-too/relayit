@@ -2,9 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Data } from "effect";
 import { failureAnnotations } from "./log-failure.server";
 
-class ProviderConfigurationError extends Data.TaggedError(
-  "ProviderConfigurationError"
-)<{
+class ProviderConfigurationError extends Data.TaggedError("ProviderConfigurationError")<{
   readonly code: "provider_configuration_rejected";
   readonly providerId: string;
   readonly typeId: string;

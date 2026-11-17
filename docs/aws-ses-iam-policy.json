@@ -22,10 +22,7 @@
     {
       "Sid": "RelayITSesConfigurationSets",
       "Effect": "Allow",
-      "Action": [
-        "ses:CreateConfigurationSet",
-        "ses:CreateConfigurationSetEventDestination"
-      ],
+      "Action": ["ses:CreateConfigurationSet", "ses:CreateConfigurationSetEventDestination"],
       "Resource": "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-default"
     },
     {

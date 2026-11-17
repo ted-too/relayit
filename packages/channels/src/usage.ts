@@ -1,16 +1,8 @@
-import type {
-  ChannelType,
-  MessagePurpose,
-  ProviderKind,
-} from "@repo/persistence/db/schema";
+import type { ChannelType, MessagePurpose, ProviderKind } from "@repo/persistence/db/schema";
 import { makeSchemaJsonCodec, Redis } from "@repo/redis";
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { makeUsageLedger, type UsageLedgerDimensions } from "./usage-ledger";
-import {
-  UsagePolicy,
-  type UsagePolicyError,
-  type UsagePolicyResult,
-} from "./usage-policy";
+import { UsagePolicy, type UsagePolicyError, type UsagePolicyResult } from "./usage-policy";
 
 export {
   UsagePolicy,
@@ -44,22 +36,16 @@ export class UsageLimitExceeded extends Data.TaggedError("UsageLimitExceeded")<{
   readonly window: "daily" | "monthly";
 }> {}
 
-export class UsageReservationConflict extends Data.TaggedError(
-  "UsageReservationConflict"
-)<{
+export class UsageReservationConflict extends Data.TaggedError("UsageReservationConflict")<{
   readonly deliveryId: string;
   readonly message: string;
 }> {}
 
-export class UsageReservationNotFound extends Data.TaggedError(
-  "UsageReservationNotFound"
-)<{
+export class UsageReservationNotFound extends Data.TaggedError("UsageReservationNotFound")<{
   readonly deliveryId: string;
 }> {}
 
-export class UsageInfrastructureError extends Data.TaggedError(
-  "UsageInfrastructureError"
-)<{
+export class UsageInfrastructureError extends Data.TaggedError("UsageInfrastructureError")<{
   readonly cause: unknown;
   readonly operation: "confirm" | "load" | "release" | "remeter" | "reserve";
 }> {}
@@ -72,23 +58,13 @@ export type UsageError =
   | UsageReservationNotFound;
 
 export interface UsageService {
-  readonly confirm: (
-    input: UsageReservationRef
-  ) => Effect.Effect<void, UsageError>;
-  readonly release: (
-    input: UsageReservationRef
-  ) => Effect.Effect<void, UsageError>;
-  readonly remeter: (
-    input: UsageRemeterInput
-  ) => Effect.Effect<void, UsageError>;
-  readonly reserve: (
-    input: UsageReservationInput
-  ) => Effect.Effect<UsagePolicyResult, UsageError>;
+  readonly confirm: (input: UsageReservationRef) => Effect.Effect<void, UsageError>;
+  readonly release: (input: UsageReservationRef) => Effect.Effect<void, UsageError>;
+  readonly remeter: (input: UsageRemeterInput) => Effect.Effect<void, UsageError>;
+  readonly reserve: (input: UsageReservationInput) => Effect.Effect<UsagePolicyResult, UsageError>;
 }
 
-export class Usage extends Context.Service<Usage, UsageService>()(
-  "Channels/Usage"
-) {}
+export class Usage extends Context.Service<Usage, UsageService>()("Channels/Usage") {}
 
 const reservationSnapshotCodec = makeSchemaJsonCodec(
   Schema.Struct({
@@ -101,12 +77,10 @@ const reservationSnapshotCodec = makeSchemaJsonCodec(
     providerKind: Schema.Literals(["managed", "byo"]),
     purpose: Schema.Literals(["transactional", "marketing"]),
     reservedAt: Schema.String,
-  })
+  }),
 );
 
-type ReservationSnapshot = Effect.Success<
-  ReturnType<typeof reservationSnapshotCodec.decode>
->;
+type ReservationSnapshot = Effect.Success<ReturnType<typeof reservationSnapshotCodec.decode>>;
 
 const reservationResult = (
   code: number,
@@ -115,7 +89,7 @@ const reservationResult = (
     readonly policy: UsagePolicyResult;
     readonly providerKind: ProviderKind;
     readonly reservedAt: string;
-  }
+  },
 ): Effect.Effect<UsagePolicyResult, UsageError> => {
   switch (code) {
     case 0:
@@ -130,11 +104,11 @@ const reservationResult = (
             Date.UTC(
               reservedAt.getUTCFullYear(),
               reservedAt.getUTCMonth(),
-              reservedAt.getUTCDate() + 1
-            )
+              reservedAt.getUTCDate() + 1,
+            ),
           ),
           window: "daily",
-        })
+        }),
       );
     }
     case 2:
@@ -144,25 +118,23 @@ const reservationResult = (
           providerKind: input.providerKind,
           retryAt: input.policy.periodEnd,
           window: "monthly",
-        })
+        }),
       );
     case 3:
       return Effect.fail(
         new UsageReservationConflict({
           deliveryId: input.deliveryId,
           message: "Delivery Usage was reserved with different dimensions",
-        })
+        }),
       );
     case 4:
-      return Effect.fail(
-        new UsageReservationNotFound({ deliveryId: input.deliveryId })
-      );
+      return Effect.fail(new UsageReservationNotFound({ deliveryId: input.deliveryId }));
     default:
       return Effect.fail(
         new UsageReservationConflict({
           deliveryId: input.deliveryId,
           message: "Delivery Usage is already finalized",
-        })
+        }),
       );
   }
 };
@@ -174,34 +146,26 @@ const remeterResult = (
     readonly policy: UsagePolicyResult;
     readonly providerKind: ProviderKind;
     readonly reservedAt: string;
-  }
-): Effect.Effect<void, UsageError> =>
-  reservationResult(code, input).pipe(Effect.asVoid);
+  },
+): Effect.Effect<void, UsageError> => reservationResult(code, input).pipe(Effect.asVoid);
 
 const parseSnapshot = (
   deliveryId: string,
-  encoded: string
-): Effect.Effect<
-  ReservationSnapshot,
-  UsageInfrastructureError | UsageReservationNotFound
-> => {
+  encoded: string,
+): Effect.Effect<ReservationSnapshot, UsageInfrastructureError | UsageReservationNotFound> => {
   if (encoded === "__missing__") {
     return Effect.fail(new UsageReservationNotFound({ deliveryId }));
   }
 
   return reservationSnapshotCodec
     .decode(encoded)
-    .pipe(
-      Effect.mapError(
-        (cause) => new UsageInfrastructureError({ cause, operation: "load" })
-      )
-    );
+    .pipe(Effect.mapError((cause) => new UsageInfrastructureError({ cause, operation: "load" })));
 };
 
 const finalizeResult = (
   code: number,
   deliveryId: string,
-  operation: "confirm" | "release"
+  operation: "confirm" | "release",
 ): Effect.Effect<void, UsageReservationConflict | UsageReservationNotFound> => {
   if (code === 0) {
     return Effect.void;
@@ -216,7 +180,7 @@ const finalizeResult = (
         operation === "confirm"
           ? "Released Usage cannot be confirmed"
           : "Usage could not be released",
-    })
+    }),
   );
 };
 
@@ -228,10 +192,8 @@ export const UsageLive = Layer.effect(
 
     const load = (deliveryId: string) =>
       ledger.load(deliveryId).pipe(
-        Effect.mapError(
-          (cause) => new UsageInfrastructureError({ cause, operation: "load" })
-        ),
-        Effect.flatMap((encoded) => parseSnapshot(deliveryId, encoded))
+        Effect.mapError((cause) => new UsageInfrastructureError({ cause, operation: "load" })),
+        Effect.flatMap((encoded) => parseSnapshot(deliveryId, encoded)),
       );
 
     const reserve = (input: UsageReservationInput) =>
@@ -241,9 +203,8 @@ export const UsageLive = Layer.effect(
           .reserve(input.deliveryId, input, policy)
           .pipe(
             Effect.mapError(
-              (cause) =>
-                new UsageInfrastructureError({ cause, operation: "reserve" })
-            )
+              (cause) => new UsageInfrastructureError({ cause, operation: "reserve" }),
+            ),
           );
         return yield* reservationResult(code, {
           deliveryId: input.deliveryId,
@@ -275,8 +236,8 @@ export const UsageLive = Layer.effect(
                 new UsageInfrastructureError({
                   cause,
                   operation: "remeter",
-                })
-            )
+                }),
+            ),
           );
         return yield* remeterResult(code, {
           deliveryId: input.deliveryId,
@@ -290,10 +251,8 @@ export const UsageLive = Layer.effect(
       (operation: "confirm" | "release") =>
       ({ deliveryId }: UsageReservationRef): Effect.Effect<void, UsageError> =>
         ledger[operation](deliveryId).pipe(
-          Effect.mapError(
-            (cause) => new UsageInfrastructureError({ cause, operation })
-          ),
-          Effect.flatMap((code) => finalizeResult(code, deliveryId, operation))
+          Effect.mapError((cause) => new UsageInfrastructureError({ cause, operation })),
+          Effect.flatMap((code) => finalizeResult(code, deliveryId, operation)),
         );
 
     return {
@@ -302,5 +261,5 @@ export const UsageLive = Layer.effect(
       remeter,
       reserve,
     } satisfies UsageService;
-  })
+  }),
 );

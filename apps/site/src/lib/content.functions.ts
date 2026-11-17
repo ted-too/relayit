@@ -1,11 +1,6 @@
 import { notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import {
-  type Collection,
-  highlight,
-  listPages,
-  loadPage,
-} from "@/lib/content.server";
+import { type Collection, highlight, listPages, loadPage } from "@/lib/content.server";
 import { landingSnippets } from "@/lib/snippets";
 
 interface PageRequest {
@@ -23,6 +18,7 @@ export const getPage = createServerFn({ method: "GET" })
     return page;
   });
 
+/** @public A server function: an endpoint with no caller in the site yet, kept for the docs and legal indexes. */
 export const getPageList = createServerFn({ method: "GET" })
   .validator((collection: Collection) => collection)
   .handler(({ data }) => listPages(data));
@@ -33,9 +29,8 @@ let landingCode: Promise<Record<string, string>> | undefined;
 export const getLandingCode = createServerFn({ method: "GET" }).handler(() => {
   landingCode ??= Promise.all(
     landingSnippets.map(
-      async (snippet) =>
-        [snippet.id, await highlight(snippet.code, snippet.lang)] as const
-    )
+      async (snippet) => [snippet.id, await highlight(snippet.code, snippet.lang)] as const,
+    ),
   ).then(Object.fromEntries);
   return landingCode;
 });

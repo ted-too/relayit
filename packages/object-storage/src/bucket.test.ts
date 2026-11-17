@@ -19,15 +19,13 @@ describe("subBucket", () => {
       Effect.gen(function* () {
         const key = yield* objects.key({ objectId: "obj_123", revision: 2 });
         expect(key).toBe("messages/attachments/obj_123/2");
-      })
+      }),
     ));
 
   test("rejects invalid key parameters", () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const exit = yield* Effect.exit(
-          objects.key({ objectId: "", revision: -1 })
-        );
+        const exit = yield* Effect.exit(objects.key({ objectId: "", revision: -1 }));
         expect(exit._tag).toBe("Failure");
         if (exit._tag === "Failure") {
           const reason = exit.cause.reasons[0];
@@ -39,7 +37,7 @@ describe("subBucket", () => {
             });
           }
         }
-      })
+      }),
     ));
 
   test("delegates operations to the object-storage service", () => {
@@ -62,11 +60,11 @@ describe("subBucket", () => {
       Effect.gen(function* () {
         const result = yield* objects.upload(
           { objectId: "obj_123", revision: 2 },
-          new Uint8Array([1, 2, 3])
+          new Uint8Array([1, 2, 3]),
         );
         expect(result).toEqual({ key: "messages/attachments/obj_123/2" });
         expect(uploads).toEqual(["messages/attachments/obj_123/2"]);
-      }).pipe(Effect.provide(Layer.succeed(ObjectStorage, service)))
+      }).pipe(Effect.provide(Layer.succeed(ObjectStorage, service))),
     );
   });
 });

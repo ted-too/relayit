@@ -1,8 +1,6 @@
 import { Data } from "effect";
 
-export class MessageDeliveryTerminalError extends Data.TaggedError(
-  "MessageDeliveryTerminalError"
-)<{
+export class MessageDeliveryTerminalError extends Data.TaggedError("MessageDeliveryTerminalError")<{
   readonly cause?: unknown;
   readonly deliveryId: string;
   readonly message: string;
@@ -10,7 +8,7 @@ export class MessageDeliveryTerminalError extends Data.TaggedError(
 }> {}
 
 export class MessageDeliveryRetryableError extends Data.TaggedError(
-  "MessageDeliveryRetryableError"
+  "MessageDeliveryRetryableError",
 )<{
   readonly cause?: unknown;
   readonly deliveryId: string;
@@ -19,7 +17,7 @@ export class MessageDeliveryRetryableError extends Data.TaggedError(
 }> {}
 
 export class MessageDeliveryInfrastructureError extends Data.TaggedError(
-  "MessageDeliveryInfrastructureError"
+  "MessageDeliveryInfrastructureError",
 )<{
   readonly cause: unknown;
   readonly deliveryId?: string;

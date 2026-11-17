@@ -12,16 +12,10 @@ import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { makeProviderTypeId } from "../../provider-type";
 import { EmailProviderRegistry } from "../provider-registry";
-import {
-  computeNextCheckAt,
-  defaultVerifyCadenceConfig,
-  mergeVerificationStatus,
-} from "./cadence";
+import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
 import { evaluateLiveDnsRecord } from "./live-dns";
 
-export class VerifyIdentityError extends Data.TaggedError(
-  "VerifyIdentityError"
-)<{
+export class VerifyIdentityError extends Data.TaggedError("VerifyIdentityError")<{
   readonly cause?: unknown;
   readonly identityId?: string;
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -41,18 +35,15 @@ export interface SandboxVerifyResult {
 }
 
 const rollupDomainVerificationStatus = (
-  identities: readonly Pick<
-    EmailDomainProviderIdentity,
-    "isActive" | "verificationStatus"
-  >[],
-  dns: { activeRecords: number; missingRecords: number }
+  identities: readonly Pick<EmailDomainProviderIdentity, "isActive" | "verificationStatus">[],
+  dns: { activeRecords: number; missingRecords: number },
 ): DomainVerificationStatus => {
   const activeIdentities = identities.filter((identity) => identity.isActive);
   const anyVerified = activeIdentities.some(
-    (identity) => identity.verificationStatus === "verified"
+    (identity) => identity.verificationStatus === "verified",
   );
   const anyPartial = activeIdentities.some(
-    (identity) => identity.verificationStatus === "partially_verified"
+    (identity) => identity.verificationStatus === "partially_verified",
   );
 
   let providerVerified = anyVerified;
@@ -71,10 +62,7 @@ const rollupDomainVerificationStatus = (
   });
 };
 
-const verifySandboxDnsRecords = (
-  db: DatabaseExecutor,
-  sandboxDomainId: string
-) =>
+const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) =>
   Effect.gen(function* () {
     const now = new Date();
     let activeRecords = 0;
@@ -92,8 +80,8 @@ const verifySandboxDnsRecords = (
               message: "Failed to list sandbox DNS records.",
               operation: "dns",
               sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     for (const record of records) {
@@ -139,8 +127,8 @@ const verifySandboxDnsRecords = (
                 message: "Failed to update DNS record status.",
                 operation: "persist",
                 sandboxDomainId,
-              })
-          )
+              }),
+          ),
         );
     }
 
@@ -159,9 +147,7 @@ export const verifySandboxProviderIdentity = (input: {
     const providers = yield* EmailProviderRegistry;
 
     const factory = yield* providers
-      .get(
-        makeProviderTypeId(input.provider.vendorId, input.provider.productId)
-      )
+      .get(makeProviderTypeId(input.provider.vendorId, input.provider.productId))
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -171,24 +157,22 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Email provider type is not registered.",
               operation: "provider",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
-    const credentials = yield* credentialsVault
-      .open(input.provider.credentials)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyIdentityError({
-              cause,
-              identityId: input.identity.id,
-              message: "Failed to open provider credentials.",
-              operation: "provider",
-              sandboxDomainId: input.sandboxDomainId,
-            })
-        )
-      );
+    const credentials = yield* credentialsVault.open(input.provider.credentials).pipe(
+      Effect.mapError(
+        (cause) =>
+          new VerifyIdentityError({
+            cause,
+            identityId: input.identity.id,
+            message: "Failed to open provider credentials.",
+            operation: "provider",
+            sandboxDomainId: input.sandboxDomainId,
+          }),
+      ),
+    );
 
     const adapter = yield* factory
       .create({
@@ -204,24 +188,22 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Failed to create email provider adapter.",
               operation: "provider",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
-    const identityStatus = yield* adapter
-      .getIdentityStatus({ fqdn: input.fqdn })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyIdentityError({
-              cause,
-              identityId: input.identity.id,
-              message: "Failed to read provider identity status.",
-              operation: "status",
-              sandboxDomainId: input.sandboxDomainId,
-            })
-        )
-      );
+    const identityStatus = yield* adapter.getIdentityStatus({ fqdn: input.fqdn }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new VerifyIdentityError({
+            cause,
+            identityId: input.identity.id,
+            message: "Failed to read provider identity status.",
+            operation: "status",
+            sandboxDomainId: input.sandboxDomainId,
+          }),
+      ),
+    );
 
     const identityVerificationStatus = mergeVerificationStatus({
       activeRecords: identityStatus.verified ? 1 : 0,
@@ -256,8 +238,8 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Failed to update identity verification state.",
               operation: "persist",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     const dns = yield* verifySandboxDnsRecords(input.db, input.sandboxDomainId);
@@ -274,8 +256,8 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Failed to list sandbox identities for rollup.",
               operation: "persist",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     const verificationStatus = rollupDomainVerificationStatus(identities, dns);
@@ -293,8 +275,8 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Failed to load sandbox domain backoff.",
               operation: "persist",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     const domainCadence = computeNextCheckAt({
@@ -306,9 +288,7 @@ export const verifySandboxProviderIdentity = (input: {
 
     const isActive =
       verificationStatus === "verified" &&
-      identities.some(
-        (row) => row.isActive && row.verificationStatus === "verified"
-      );
+      identities.some((row) => row.isActive && row.verificationStatus === "verified");
 
     yield* input.db
       .update(sandboxDomain)
@@ -328,8 +308,8 @@ export const verifySandboxProviderIdentity = (input: {
               message: "Failed to update sandbox verification state.",
               operation: "persist",
               sandboxDomainId: input.sandboxDomainId,
-            })
-        )
+            }),
+        ),
       );
 
     return {

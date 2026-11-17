@@ -1,7 +1,7 @@
 import type { DnsRecordWarning } from "@repo/persistence/db/schema";
 
 export const dnsRecordWarningCopy = (
-  warning: DnsRecordWarning
+  warning: DnsRecordWarning,
 ): { description: string; title: string } => {
   switch (warning.code) {
     case "multiple_dmarc_records":

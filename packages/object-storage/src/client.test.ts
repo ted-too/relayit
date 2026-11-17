@@ -12,7 +12,7 @@ const withTestServer = <Success, Error>(
   run: (context: {
     readonly endpoint: string;
     readonly requests: RecordedRequest[];
-  }) => Effect.Effect<Success, Error>
+  }) => Effect.Effect<Success, Error>,
 ) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
@@ -50,7 +50,7 @@ const withTestServer = <Success, Error>(
         endpoint: `http://${server.hostname}:${server.port}`,
         requests,
       }),
-    ({ server }) => Effect.promise(() => server.stop(true))
+    ({ server }) => Effect.promise(() => server.stop(true)),
   );
 
 const makeTestLive = (endpoint: string) =>
@@ -69,8 +69,8 @@ describe("ObjectStorage.exists", () => {
         Effect.gen(function* () {
           const storage = yield* ObjectStorage;
           expect(yield* storage.exists("missing")).toBe(false);
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("preserves non-missing S3 failures", () =>
@@ -92,8 +92,8 @@ describe("ObjectStorage.exists", () => {
               });
             }
           }
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 });
 
@@ -106,14 +106,14 @@ describe("ObjectStorage live operations", () => {
           expect(
             yield* storage.upload("upload", new Uint8Array([1, 2, 3]), {
               contentType: "application/octet-stream",
-            })
+            }),
           ).toEqual({ key: "upload" });
 
           const upload = requests.find((request) => request.method === "PUT");
           expect(upload?.path).toBe("/test-bucket/upload");
           expect(upload?.headers["x-amz-checksum-crc32"]).toBeUndefined();
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("downloads bytes and content type", () =>
@@ -125,8 +125,8 @@ describe("ObjectStorage live operations", () => {
 
           expect(Array.from(result.body)).toEqual([1, 2, 3]);
           expect(result.contentType).toBe("application/octet-stream");
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("downloads zero-byte objects", () =>
@@ -137,8 +137,8 @@ describe("ObjectStorage live operations", () => {
           const result = yield* storage.download("empty");
 
           expect(result.body.byteLength).toBe(0);
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("deletes objects", () =>
@@ -150,13 +150,11 @@ describe("ObjectStorage live operations", () => {
 
           expect(
             requests.some(
-              (request) =>
-                request.method === "DELETE" &&
-                request.path === "/test-bucket/delete"
-            )
+              (request) => request.method === "DELETE" && request.path === "/test-bucket/delete",
+            ),
           ).toBe(true);
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("creates namespaced presigned URLs", () =>
@@ -177,13 +175,11 @@ describe("ObjectStorage live operations", () => {
           expect(upload.key).toBe("signed-upload");
           expect(uploadUrl.pathname).toBe("/test-bucket/signed-upload");
           expect(uploadUrl.searchParams.get("X-Amz-Expires")).toBe("60");
-          expect(uploadUrl.searchParams.get("X-Amz-Credential")).toContain(
-            "/de/s3/aws4_request"
-          );
+          expect(uploadUrl.searchParams.get("X-Amz-Credential")).toContain("/de/s3/aws4_request");
           expect(downloadUrl.pathname).toBe("/test-bucket/signed-download");
           expect(downloadUrl.searchParams.get("X-Amz-Expires")).toBe("120");
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 
   test("rejects presigned URL expiries outside SigV4 limits", () =>
@@ -192,17 +188,17 @@ describe("ObjectStorage live operations", () => {
         Effect.gen(function* () {
           const storage = yield* ObjectStorage;
           const tooShort = yield* Effect.exit(
-            storage.signedUploadUrl("signed-upload", { expiresInSeconds: 0 })
+            storage.signedUploadUrl("signed-upload", { expiresInSeconds: 0 }),
           );
           const tooLong = yield* Effect.exit(
             storage.signedDownloadUrl("signed-download", {
               expiresInSeconds: 604_801,
-            })
+            }),
           );
 
           expect(tooShort._tag).toBe("Failure");
           expect(tooLong._tag).toBe("Failure");
-        }).pipe(Effect.provide(makeTestLive(endpoint)))
-      )
+        }).pipe(Effect.provide(makeTestLive(endpoint))),
+      ),
     ));
 });

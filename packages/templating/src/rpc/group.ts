@@ -60,5 +60,5 @@ export const TemplatingBuilderRpcs = RpcGroup.make(
     error: builderError,
     payload: WorkspacePreviewPayload,
     success: BuilderPreviewResult,
-  })
+  }),
 ).middleware(BuilderAuthMiddleware);

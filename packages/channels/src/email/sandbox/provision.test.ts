@@ -6,14 +6,8 @@ import { DB } from "@repo/persistence/db/effect";
 import type { Provider } from "@repo/persistence/db/schema";
 import { Effect, Layer } from "effect";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import {
-  EmailProviderRegistry,
-  type EmailProviderRegistryService,
-} from "../provider-registry";
-import {
-  ensureSandboxForProvider,
-  removeSandboxProviderIdentity,
-} from "./provision";
+import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
+import { ensureSandboxForProvider, removeSandboxProviderIdentity } from "./provision";
 
 const provider = {
   id: "prov_1",
@@ -43,7 +37,7 @@ const unusedServices = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {
     decrypt: unused,
     encrypt: unused,
-  } as never)
+  } as never),
 );
 
 describe("ensureSandboxForProvider", () => {
@@ -62,8 +56,8 @@ describe("ensureSandboxForProvider", () => {
             sandboxDomainId: null,
           });
           return result;
-        })
-      )
+        }),
+      ),
     ));
 
   test("sweeps unassigned Projects when the Provider already has an identity", () => {
@@ -91,9 +85,7 @@ describe("ensureSandboxForProvider", () => {
         provider,
         rootDomain: "relayit.fyi",
       }).pipe(
-        Effect.provide(
-          Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))
-        ),
+        Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
         Effect.map((result) => {
           expect(result).toEqual({
             allocated: 0,
@@ -101,8 +93,8 @@ describe("ensureSandboxForProvider", () => {
             sandboxDomainId: "snd_1",
           });
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -119,10 +111,8 @@ describe("removeSandboxProviderIdentity", () => {
 
     return Effect.runPromise(
       removeSandboxProviderIdentity(provider).pipe(
-        Effect.provide(
-          Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))
-        )
-      )
+        Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
+      ),
     );
   });
 
@@ -181,16 +171,16 @@ describe("removeSandboxProviderIdentity", () => {
               },
               enqueue: unused,
               schedule: unused,
-            } as never)
-          )
+            } as never),
+          ),
         ),
         Effect.map(() => {
           expect(deleted).toEqual(["epid_1"]);
           expect(cancelled).toEqual(["epid_1"]);
           expect(sandboxUpdates).toEqual([{ isActive: false }]);
           return null;
-        })
-      )
+        }),
+      ),
     );
   });
 });

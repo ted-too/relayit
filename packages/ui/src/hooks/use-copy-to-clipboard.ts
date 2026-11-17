@@ -3,11 +3,7 @@ import { toast } from "sonner";
 
 export function useCopyToClipboard(text?: string) {
   return useCallback(async () => {
-    if (
-      typeof window === "undefined" ||
-      !navigator.clipboard.writeText ||
-      !text
-    ) {
+    if (typeof window === "undefined" || !navigator.clipboard.writeText || !text) {
       return;
     }
 

@@ -5,7 +5,7 @@ import { Effect, Schema } from "effect";
 const deliveryCodec = makeSchemaJsonCodec(
   Schema.Struct({
     deliveryId: Schema.String,
-  })
+  }),
 );
 
 describe("Redis codecs", () => {
@@ -19,17 +19,15 @@ describe("Redis codecs", () => {
 
         expect(encoded).toBe('{"deliveryId":"delivery_1"}');
         expect(decoded).toEqual({ deliveryId: "delivery_1" });
-      })
+      }),
     ));
 
   test("fails invalid values in the typed error channel", () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const exit = yield* Effect.exit(
-          deliveryCodec.decode('{"deliveryId":1}')
-        );
+        const exit = yield* Effect.exit(deliveryCodec.decode('{"deliveryId":1}'));
 
         expect(exit._tag).toBe("Failure");
-      })
+      }),
     ));
 });

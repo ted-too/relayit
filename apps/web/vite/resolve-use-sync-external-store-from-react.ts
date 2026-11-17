@@ -12,10 +12,7 @@ export function resolveUseSyncExternalStoreFromReact(): Plugin {
     name: "resolve-use-sync-external-store-from-react",
     enforce: "pre",
     resolveId(id) {
-      if (
-        id === "use-sync-external-store/shim" ||
-        id === "use-sync-external-store/shim/index.js"
-      ) {
+      if (id === "use-sync-external-store/shim" || id === "use-sync-external-store/shim/index.js") {
         return shim;
       }
       if (

@@ -7,12 +7,7 @@ import { Effect } from "effect";
 import { CustomDomainAdminError } from "./custom-domain.server";
 import type { ProjectDomainDnsRecord, ProjectDomainListItem } from "./types";
 
-const DKIM_SPF_DNS_PURPOSES = new Set([
-  "dkim",
-  "spf",
-  "mail_from_mx",
-  "mail_from_spf",
-]);
+const DKIM_SPF_DNS_PURPOSES = new Set(["dkim", "spf", "mail_from_mx", "mail_from_spf"]);
 
 const ownershipStatusForLink = (link: {
   ownershipEverVerifiedAt: Date | null;
@@ -30,9 +25,7 @@ const ownershipStatusForLink = (link: {
 const isPendingClaim = (link: {
   ownershipVerificationStatus: string;
   pendingProviderId: string | null;
-}) =>
-  link.ownershipVerificationStatus !== "verified" ||
-  link.pendingProviderId != null;
+}) => link.ownershipVerificationStatus !== "verified" || link.pendingProviderId != null;
 
 export const listCustomDomainsForProject = (input: {
   readonly customDomainId?: string;
@@ -44,9 +37,7 @@ export const listCustomDomainsForProject = (input: {
       .findMany({
         where: {
           organizationId: input.organizationId,
-          ...(input.customDomainId
-            ? { customDomainId: input.customDomainId }
-            : {}),
+          ...(input.customDomainId ? { customDomainId: input.customDomainId } : {}),
         },
         with: {
           customDomain: {
@@ -97,8 +88,8 @@ export const listCustomDomainsForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to list Custom Domains.",
-            })
-        )
+            }),
+        ),
       );
 
     return links.flatMap(({ customDomain, ...link }) => {
@@ -122,11 +113,9 @@ export const listCustomDomainsForProject = (input: {
         : null;
 
       const dkimAndSpf = customDomain.dnsRecords.filter((record) =>
-        DKIM_SPF_DNS_PURPOSES.has(record.purpose)
+        DKIM_SPF_DNS_PURPOSES.has(record.purpose),
       );
-      const dmarc = customDomain.dnsRecords.filter(
-        (record) => record.purpose === "dmarc"
-      );
+      const dmarc = customDomain.dnsRecords.filter((record) => record.purpose === "dmarc");
 
       return [
         {

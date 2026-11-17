@@ -96,37 +96,37 @@ docker run -d \
 
 Validated at process start (`apps/api` env packs). Compose maps `WEB_URL` → `APP_URL`.
 
-| Variable | Description |
-| --- | --- |
-| `DATABASE_URL` | Postgres connection string |
-| `REDIS_URL` | Redis connection string |
-| `API_URL` | Public API URL |
-| `APP_URL` | Public web URL (trusted origin / cookies) |
-| `BETTER_AUTH_SECRETS` | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`) |
+| Variable                                                                                | Description                                                                   |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                          | Postgres connection string                                                    |
+| `REDIS_URL`                                                                             | Redis connection string                                                       |
+| `API_URL`                                                                               | Public API URL                                                                |
+| `APP_URL`                                                                               | Public web URL (trusted origin / cookies)                                     |
+| `BETTER_AUTH_SECRETS`                                                                   | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`)                     |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
 
 Optional: `LOG_LEVEL`, `WEB_CONCURRENCY` (Linux production: HTTP child processes; the job worker stays on the primary).
 
 ### Required environment (web)
 
-| Variable | Description |
-| --- | --- |
-| `VITE_BASE_URL` | Public web URL (compose: from `WEB_URL`) |
-| `DATABASE_URL` | Postgres connection string |
-| `REDIS_URL` | Redis connection string |
-| `BETTER_AUTH_SECRETS` | Same versioned secrets as api |
-| `API_URL` | Public API URL; used to scaffold Provider delivery webhooks |
+| Variable              | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| `VITE_BASE_URL`       | Public web URL (compose: from `WEB_URL`)                    |
+| `DATABASE_URL`        | Postgres connection string                                  |
+| `REDIS_URL`           | Redis connection string                                     |
+| `BETTER_AUTH_SECRETS` | Same versioned secrets as api                               |
+| `API_URL`             | Public API URL; used to scaffold Provider delivery webhooks |
 
 `VITE_DEBUG` is optional. Stripe keys are optional; when they are absent, entitlements are unlimited (self-hosted). Template workspace Git ops also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`.
 
 ### Image tags
 
-| Tag | Description |
-| --- | --- |
-| `alpha` | Floating — always the newest alpha (default for compose) |
-| `1.0.0-alpha.N` | Pin a specific alpha release |
-| `pr-<n>` | PR preview build (CI only) |
-| `main` | Latest **stable** release (not used while shipping alphas) |
+| Tag             | Description                                                |
+| --------------- | ---------------------------------------------------------- |
+| `alpha`         | Floating — always the newest alpha (default for compose)   |
+| `1.0.0-alpha.N` | Pin a specific alpha release                               |
+| `pr-<n>`        | PR preview build (CI only)                                 |
+| `main`          | Latest **stable** release (not used while shipping alphas) |
 
 Release notes: [GitHub Releases](https://github.com/ted-too/relayit/releases). Merge to `main` → next `v1.0.0-alpha.N` + GHCR `:alpha` after PR image CI is green.
 

@@ -13,10 +13,7 @@ export const Route = createFileRoute("/_authd")({
       });
     }
 
-    await context.queryClient.setQueryData(
-      queries.session.me.queryKey,
-      session
-    );
+    await context.queryClient.setQueryData(queries.session.me.queryKey, session);
   },
   component: RouteComponent,
 });

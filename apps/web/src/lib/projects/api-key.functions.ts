@@ -49,7 +49,7 @@ export const listApiKeysFn = createServerFn({ method: "GET" })
     return await runApp(
       Effect.forEach(listed.apiKeys, hydrateApiKey, {
         concurrency: "unbounded",
-      })
+      }),
     );
   });
 

@@ -9,12 +9,7 @@ const toggleTheme = () => {
 /** Both icons render; CSS picks one, so SSR and hydration always agree. */
 export function ThemeToggle() {
   return (
-    <Button
-      aria-label="Toggle colour theme"
-      onClick={toggleTheme}
-      size="icon"
-      variant="ghost"
-    >
+    <Button aria-label="Toggle colour theme" onClick={toggleTheme} size="icon" variant="ghost">
       <RiSunLine className="hidden dark:block" />
       <RiMoonLine className="dark:hidden" />
     </Button>

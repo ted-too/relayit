@@ -5,7 +5,5 @@ export const Route = createFileRoute("/_authd/$orgSlug/automations/workflows")({
 });
 
 function RouteComponent() {
-  return (
-    <div data-slot="balanced-outlet">Hello "/_authd/$orgSlug/workflows"!</div>
-  );
+  return <div data-slot="balanced-outlet">Hello "/_authd/$orgSlug/workflows"!</div>;
 }

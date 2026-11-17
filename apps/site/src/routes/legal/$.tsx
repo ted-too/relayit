@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DocsShell } from "@/components/docs-shell";
-import {
-  MarkdownArticle,
-  TableOfContents,
-} from "@/components/markdown-article";
+import { MarkdownArticle, TableOfContents } from "@/components/markdown-article";
 import { getPage } from "@/lib/content.functions";
 import { legalNav } from "@/lib/docs-nav";
 import { site } from "@/lib/site";
@@ -11,8 +8,7 @@ import { site } from "@/lib/site";
 const legalGroups = [{ items: legalNav, title: "Legal" }];
 
 export const Route = createFileRoute("/legal/$")({
-  loader: ({ params }) =>
-    getPage({ data: { collection: "legal", slug: params._splat ?? "" } }),
+  loader: ({ params }) => getPage({ data: { collection: "legal", slug: params._splat ?? "" } }),
   head: ({ loaderData }) => ({
     meta: loaderData
       ? [

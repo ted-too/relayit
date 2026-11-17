@@ -27,7 +27,7 @@ const lockKey = (workspaceId: string) => `templating:git-lock:${workspaceId}`;
  */
 export const withWorkspaceGitLock = <A, E, R>(
   workspaceId: string,
-  effect: Effect.Effect<A, E, R>
+  effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E | TemplatingBuilderError, R | Redis> =>
   Effect.gen(function* () {
     const redis = yield* Redis;
@@ -46,8 +46,8 @@ export const withWorkspaceGitLock = <A, E, R>(
             new TemplatingBuilderError({
               code: "failed",
               message: "Failed to acquire workspace lock.",
-            })
-        )
+            }),
+        ),
       );
 
     if (acquired !== 1) {
@@ -65,7 +65,7 @@ export const withWorkspaceGitLock = <A, E, R>(
             keys: [key],
             script: RELEASE_SCRIPT,
           })
-          .pipe(Effect.ignore)
-      )
+          .pipe(Effect.ignore),
+      ),
     );
   });

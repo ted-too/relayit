@@ -18,9 +18,7 @@ export class JobProcessingError extends Data.TaggedError("JobProcessingError")<{
     | "schedule-retry";
 }> {}
 
-export class JobWorkerRuntimeError extends Data.TaggedError(
-  "JobWorkerRuntimeError"
-)<{
+export class JobWorkerRuntimeError extends Data.TaggedError("JobWorkerRuntimeError")<{
   readonly cause: unknown;
   readonly stage:
     | "consume"

@@ -6,10 +6,7 @@ import { Data, Effect } from "effect";
 import { detectDnsProvider } from "../custom-domain/provider-detection";
 import { sweepIfSandboxAllocatable } from "../sandbox/allocate";
 import { nextDomainVerifyAt } from "./cadence";
-import {
-  verifyCustomDomainOwnership,
-  verifyCustomDomainProviderIdentity,
-} from "./custom-identity";
+import { verifyCustomDomainOwnership, verifyCustomDomainProviderIdentity } from "./custom-identity";
 import {
   emailVerifyCustomDomainJob,
   emailVerifyOwnershipJob,
@@ -19,7 +16,7 @@ import {
 import { verifySandboxProviderIdentity } from "./sandbox-identity";
 
 export class VerifyProviderIdentityHandlerError extends Data.TaggedError(
-  "VerifyProviderIdentityHandlerError"
+  "VerifyProviderIdentityHandlerError",
 )<{
   readonly cause?: unknown;
   readonly identityId?: string;
@@ -29,7 +26,7 @@ export class VerifyProviderIdentityHandlerError extends Data.TaggedError(
 }> {}
 
 export class VerifySandboxDomainHandlerError extends Data.TaggedError(
-  "VerifySandboxDomainHandlerError"
+  "VerifySandboxDomainHandlerError",
 )<{
   readonly cause?: unknown;
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -39,7 +36,7 @@ export class VerifySandboxDomainHandlerError extends Data.TaggedError(
 }> {}
 
 export class VerifyCustomDomainHandlerError extends Data.TaggedError(
-  "VerifyCustomDomainHandlerError"
+  "VerifyCustomDomainHandlerError",
 )<{
   readonly cause?: unknown;
   readonly customDomainId?: string;
@@ -48,9 +45,7 @@ export class VerifyCustomDomainHandlerError extends Data.TaggedError(
   readonly operation: "persist" | "schedule" | "verify";
 }> {}
 
-export class VerifyOwnershipHandlerError extends Data.TaggedError(
-  "VerifyOwnershipHandlerError"
-)<{
+export class VerifyOwnershipHandlerError extends Data.TaggedError("VerifyOwnershipHandlerError")<{
   readonly cause?: unknown;
   readonly customDomainId?: string;
   /** Static human-readable summary — do not interpolate identifiers into this. */
@@ -84,8 +79,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                 identityId: payload.identityId,
                 message: "Failed to load provider identity for verify.",
                 operation: "persist",
-              })
-          )
+              }),
+          ),
         );
 
       if (!identity?.provider) {
@@ -107,14 +102,14 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                 identityId: payload.identityId,
                 message: "Failed to verify sandbox provider identity.",
                 operation: "verify",
-              })
-          )
+              }),
+          ),
         );
         yield* jobs
           .schedule(
             emailVerifySandboxDomainJob,
             { sandboxDomainId: identity.sandboxDomain.id },
-            nextDomainVerifyAt(result).getTime()
+            nextDomainVerifyAt(result).getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -124,8 +119,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                   identityId: payload.identityId,
                   message: "Failed to schedule sandbox verify after identity.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       } else if (identity.customDomain) {
         const result = yield* verifyCustomDomainProviderIdentity({
@@ -142,14 +137,14 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                 identityId: payload.identityId,
                 message: "Failed to verify custom domain provider identity.",
                 operation: "verify",
-              })
-          )
+              }),
+          ),
         );
         yield* jobs
           .schedule(
             emailVerifyCustomDomainJob,
             { customDomainId: identity.customDomain.id },
-            nextDomainVerifyAt(result).getTime()
+            nextDomainVerifyAt(result).getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -159,8 +154,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                   identityId: payload.identityId,
                   message: "Failed to schedule domain verify after identity.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       } else {
         return;
@@ -179,8 +174,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                 identityId: payload.identityId,
                 message: "Failed to reload identity after verify.",
                 operation: "persist",
-              })
-          )
+              }),
+          ),
         );
 
       if (refreshed?.nextVerifyAt) {
@@ -188,7 +183,7 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
           .schedule(
             emailVerifyProviderIdentityJob,
             { identityId: payload.identityId },
-            new Date(refreshed.nextVerifyAt).getTime()
+            new Date(refreshed.nextVerifyAt).getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -198,8 +193,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                   identityId: payload.identityId,
                   message: "Failed to schedule next identity verify.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       } else {
         yield* jobs
@@ -214,8 +209,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
                   identityId: payload.identityId,
                   message: "Failed to cancel identity verify job.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       }
     }),
@@ -233,8 +228,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
               cause,
               message: "Failed to list identities for reconcile.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     yield* Effect.forEach(
@@ -243,9 +238,9 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
         jobs.schedule(
           emailVerifyProviderIdentityJob,
           { identityId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime()
+          new Date(row.nextVerifyAt as Date | string).getTime(),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     ).pipe(
       Effect.mapError(
         (cause) =>
@@ -253,8 +248,8 @@ export const emailVerifyProviderIdentityHandler = defineJobHandler({
             cause,
             message: "Failed to schedule identity verify reconcile.",
             operation: "schedule",
-          })
-      )
+          }),
+      ),
     );
   }),
 });
@@ -284,8 +279,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
                 message: "Failed to load sandbox domain for verify.",
                 operation: "persist",
                 sandboxDomainId: payload.sandboxDomainId,
-              })
-          )
+              }),
+          ),
         );
 
       if (!sandbox) {
@@ -313,8 +308,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
                 message: "Failed to verify sandbox provider identity.",
                 operation: "verify",
                 sandboxDomainId: sandbox.id,
-              })
-          )
+              }),
+          ),
         );
 
         const domainCheckAt = nextDomainVerifyAt(result);
@@ -328,7 +323,7 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
           .schedule(
             emailVerifyProviderIdentityJob,
             { identityId: identity.id },
-            result.identityNextCheckAt.getTime()
+            result.identityNextCheckAt.getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -338,8 +333,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
                   message: "Failed to schedule identity verify after sandbox.",
                   operation: "schedule",
                   sandboxDomainId: sandbox.id,
-                })
-            )
+                }),
+            ),
           );
       }
 
@@ -351,8 +346,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
               message: "Failed to sweep sandbox allocation after verify.",
               operation: "sweep",
               sandboxDomainId: sandbox.id,
-            })
-        )
+            }),
+        ),
       );
 
       if (earliestDomainCheckAt) {
@@ -360,7 +355,7 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
           .schedule(
             emailVerifySandboxDomainJob,
             { sandboxDomainId: sandbox.id },
-            earliestDomainCheckAt.getTime()
+            earliestDomainCheckAt.getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -370,8 +365,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
                   message: "Failed to schedule next sandbox verify.",
                   operation: "schedule",
                   sandboxDomainId: sandbox.id,
-                })
-            )
+                }),
+            ),
           );
       } else {
         yield* jobs
@@ -386,8 +381,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
                   message: "Failed to cancel sandbox verify job.",
                   operation: "schedule",
                   sandboxDomainId: sandbox.id,
-                })
-            )
+                }),
+            ),
           );
       }
     }),
@@ -405,8 +400,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
               cause,
               message: "Failed to list sandbox domains for reconcile.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     yield* Effect.forEach(
@@ -415,9 +410,9 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
         jobs.schedule(
           emailVerifySandboxDomainJob,
           { sandboxDomainId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime()
+          new Date(row.nextVerifyAt as Date | string).getTime(),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     ).pipe(
       Effect.mapError(
         (cause) =>
@@ -425,8 +420,8 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
             cause,
             message: "Failed to schedule sandbox verify reconcile.",
             operation: "schedule",
-          })
-      )
+          }),
+      ),
     );
   }),
 });
@@ -456,8 +451,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                 customDomainId: payload.customDomainId,
                 message: "Failed to load custom domain for verify.",
                 operation: "persist",
-              })
-          )
+              }),
+          ),
         );
 
       if (!domain) {
@@ -488,8 +483,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                   customDomainId: domain.id,
                   message: "Failed to persist detected DNS host.",
                   operation: "persist",
-                })
-            )
+                }),
+            ),
           );
       }
 
@@ -514,8 +509,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                 customDomainId: domain.id,
                 message: "Failed to verify custom domain provider identity.",
                 operation: "verify",
-              })
-          )
+              }),
+          ),
         );
 
         const domainCheckAt = nextDomainVerifyAt(result);
@@ -527,7 +522,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
           .schedule(
             emailVerifyProviderIdentityJob,
             { identityId: identity.id },
-            result.identityNextCheckAt.getTime()
+            result.identityNextCheckAt.getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -537,8 +532,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                   customDomainId: domain.id,
                   message: "Failed to schedule identity verify after domain.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       }
 
@@ -547,7 +542,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
           .schedule(
             emailVerifyCustomDomainJob,
             { customDomainId: domain.id },
-            earliestDomainCheckAt.getTime()
+            earliestDomainCheckAt.getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -557,8 +552,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                   customDomainId: domain.id,
                   message: "Failed to schedule next custom domain verify.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       } else {
         yield* jobs
@@ -573,8 +568,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
                   customDomainId: domain.id,
                   message: "Failed to cancel custom domain verify job.",
                   operation: "schedule",
-                })
-            )
+                }),
+            ),
           );
       }
     }),
@@ -592,8 +587,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
               cause,
               message: "Failed to list custom domains for reconcile.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     yield* Effect.forEach(
@@ -602,9 +597,9 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
         jobs.schedule(
           emailVerifyCustomDomainJob,
           { customDomainId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime()
+          new Date(row.nextVerifyAt as Date | string).getTime(),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     ).pipe(
       Effect.mapError(
         (cause) =>
@@ -612,8 +607,8 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
             cause,
             message: "Failed to schedule custom domain verify reconcile.",
             operation: "schedule",
-          })
-      )
+          }),
+      ),
     );
   }),
 });
@@ -639,8 +634,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
                 message: "Failed to load custom domain for ownership verify.",
                 operation: "persist",
                 organizationId: payload.organizationId,
-              })
-          )
+              }),
+          ),
         );
 
       if (!domain) {
@@ -660,8 +655,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
               message: "Failed to verify custom domain ownership.",
               operation: "verify",
               organizationId: payload.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
       if (result.ownershipVerificationStatus === "verified") {
@@ -679,8 +674,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
                   message: "Failed to cancel ownership verify job.",
                   operation: "schedule",
                   organizationId: payload.organizationId,
-                })
-            )
+                }),
+            ),
           );
         return;
       }
@@ -693,7 +688,7 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
               customDomainId: payload.customDomainId,
               organizationId: payload.organizationId,
             },
-            result.nextCheckAt.getTime()
+            result.nextCheckAt.getTime(),
           )
           .pipe(
             Effect.mapError(
@@ -704,8 +699,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
                   message: "Failed to schedule next ownership verify.",
                   operation: "schedule",
                   organizationId: payload.organizationId,
-                })
-            )
+                }),
+            ),
           );
       }
     }),
@@ -728,15 +723,14 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
               cause,
               message: "Failed to list ownership links for reconcile.",
               operation: "persist",
-            })
-        )
+            }),
+        ),
       );
 
     yield* Effect.forEach(
       rows.filter(
         (row) =>
-          row.ownershipVerificationStatus !== "verified" &&
-          row.ownershipNextVerifyAt !== null
+          row.ownershipVerificationStatus !== "verified" && row.ownershipNextVerifyAt !== null,
       ),
       (row) =>
         jobs.schedule(
@@ -745,9 +739,9 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
             customDomainId: row.customDomainId,
             organizationId: row.organizationId,
           },
-          new Date(row.ownershipNextVerifyAt as Date | string).getTime()
+          new Date(row.ownershipNextVerifyAt as Date | string).getTime(),
         ),
-      { concurrency: "unbounded" }
+      { concurrency: "unbounded" },
     ).pipe(
       Effect.mapError(
         (cause) =>
@@ -755,8 +749,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
             cause,
             message: "Failed to schedule ownership verify reconcile.",
             operation: "schedule",
-          })
-      )
+          }),
+      ),
     );
   }),
 });

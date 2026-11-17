@@ -1,9 +1,6 @@
 import * as q from "@ted-too/query-key-factory/query";
 import { getFullOrganization, listOrganizations } from "@/lib/auth.functions";
-import {
-  listCustomDomainsFn,
-  listProjectProvidersFn,
-} from "@/lib/domains/custom-domain.functions";
+import { listCustomDomainsFn, listProjectProvidersFn } from "@/lib/domains/custom-domain.functions";
 import { listApiKeysFn } from "@/lib/projects/api-key.functions";
 import {
   getTemplateFn,
@@ -34,12 +31,10 @@ export const organizations = q.createQueryKeys("organizations", {
       queryFn: async () => await listApiKeysFn({ data: { orgSlug: slug } }),
     }),
     listDomains: q.static({
-      queryFn: async () =>
-        await listCustomDomainsFn({ data: { orgSlug: slug } }),
+      queryFn: async () => await listCustomDomainsFn({ data: { orgSlug: slug } }),
     }),
     listProviders: q.static({
-      queryFn: async () =>
-        await listProjectProvidersFn({ data: { orgSlug: slug } }),
+      queryFn: async () => await listProjectProvidersFn({ data: { orgSlug: slug } }),
     }),
     listTemplates: q.static({
       queryFn: async () => await listTemplatesFn({ data: { orgSlug: slug } }),

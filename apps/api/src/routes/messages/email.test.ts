@@ -6,11 +6,7 @@ import {
   EmailAcceptRejected,
 } from "@repo/channels/email/accept";
 import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
-import {
-  Usage,
-  UsageLimitExceeded,
-  type UsageService,
-} from "@repo/channels/usage";
+import { Usage, UsageLimitExceeded, type UsageService } from "@repo/channels/usage";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import type { Database } from "@repo/persistence/db/effect";
@@ -58,13 +54,10 @@ const makeTestLayer = () => {
     Layer.succeed(Usage, usage),
     Layer.succeed(Jobs, jobs),
     Layer.succeed(ObjectStorage, storage),
-    Layer.succeed(
-      HttpClient.HttpClient,
-      {} as Effect.Success<typeof HttpClient.HttpClient>
-    ),
+    Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),
     Layer.succeed(EmailProviderRegistry, {
       get: () => Effect.die("unused"),
-    })
+    }),
   );
 };
 
@@ -96,7 +89,7 @@ const makeApp = (accept: typeof acceptTransactionalEmail) => {
   const runtime = ManagedRuntime.make(makeTestLayer());
   const runEffect: RunApiEffect = runtime.runPromise;
   const app = new Elysia().group("/messages", (group) =>
-    group.use(createEmailRoutes(makeTestAuth(), runEffect, accept))
+    group.use(createEmailRoutes(makeTestAuth(), runEffect, accept)),
   );
   return { app, runtime };
 };
@@ -104,7 +97,7 @@ const makeApp = (accept: typeof acceptTransactionalEmail) => {
 const postEmail = async (
   app: { handle: (request: Request) => Response | Promise<Response> },
   body: unknown,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ): Promise<Response> =>
   await app.handle(
     new Request("http://localhost/messages/email", {
@@ -115,7 +108,7 @@ const postEmail = async (
         ...headers,
       },
       method: "POST",
-    })
+    }),
   );
 
 describe("POST /messages/email", () => {
@@ -139,7 +132,7 @@ describe("POST /messages/email", () => {
             html: "<p>Hello</p>",
             subject: "Hello",
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -166,7 +159,7 @@ describe("POST /messages/email", () => {
           },
           organizationId: "org_test",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -205,8 +198,8 @@ describe("POST /messages/email", () => {
               app: "web",
               environment: "production",
               "idempotency-key": "idem_test",
-            }
-          )
+            },
+          ),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -237,7 +230,7 @@ describe("POST /messages/email", () => {
           idempotencyKey: "idem_test",
           organizationId: "org_test",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -248,7 +241,7 @@ describe("POST /messages/email", () => {
         messageId: "msg_test",
         replayed: false,
         stripped: [],
-      })
+      }),
     );
 
     return Effect.runPromise(
@@ -262,14 +255,14 @@ describe("POST /messages/email", () => {
               subject: "Hello",
               to: "recipient@example.com",
             },
-            { app: "web" }
-          )
+            { app: "web" },
+          ),
         );
         const body = yield* Effect.promise(() => response.json());
 
         expect(response.status).toBe(400);
         expect(body).toMatchObject({ code: "invalid_app_environment" });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -280,7 +273,7 @@ describe("POST /messages/email", () => {
         messageId: "msg_test",
         replayed: false,
         stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
-      })
+      }),
     );
 
     return Effect.runPromise(
@@ -291,18 +284,16 @@ describe("POST /messages/email", () => {
             html: "<p>Hello</p>",
             subject: "Hello",
             to: ["ok@example.com", "suppressed@example.com"],
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
         expect(response.status).toBe(201);
         expect(body).toEqual({
           id: "msg_test",
-          stripped: [
-            { email: "suppressed@example.com", reason: "suppression" },
-          ],
+          stripped: [{ email: "suppressed@example.com", reason: "suppression" }],
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -312,8 +303,8 @@ describe("POST /messages/email", () => {
         new EmailAcceptRejected({
           code: "invalid_from_address",
           message: "bad from",
-        })
-      )
+        }),
+      ),
     );
 
     return Effect.runPromise(
@@ -324,7 +315,7 @@ describe("POST /messages/email", () => {
             html: "<p>Hello</p>",
             subject: "Hello",
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -333,7 +324,7 @@ describe("POST /messages/email", () => {
           code: "invalid_from_address",
           message: "bad from",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -345,8 +336,8 @@ describe("POST /messages/email", () => {
           providerKind: "managed",
           retryAt: new Date(Date.now() + 60_000),
           window: "daily",
-        })
-      )
+        }),
+      ),
     );
 
     return Effect.runPromise(
@@ -357,7 +348,7 @@ describe("POST /messages/email", () => {
             html: "<p>Hello</p>",
             subject: "Hello",
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = (yield* Effect.promise(() => response.json())) as {
           code?: string;
@@ -369,7 +360,7 @@ describe("POST /messages/email", () => {
           code: "daily_limit_exceeded",
         });
         expect(body.retry_after_seconds).toBeGreaterThan(0);
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -380,8 +371,8 @@ describe("POST /messages/email", () => {
           cause: new Error("boom"),
           operation: "content",
           organizationId: "org_test",
-        })
-      )
+        }),
+      ),
     );
 
     return Effect.runPromise(
@@ -392,7 +383,7 @@ describe("POST /messages/email", () => {
             html: "<p>Hello</p>",
             subject: "Hello",
             to: "recipient@example.com",
-          })
+          }),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -402,7 +393,7 @@ describe("POST /messages/email", () => {
           message: "Failed to accept email message.",
         });
         expect(JSON.stringify(body)).not.toContain("boom");
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 });

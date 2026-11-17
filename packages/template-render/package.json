@@ -9,18 +9,18 @@
     "./react-email": "./src/react-email/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "check-types": "tsc --noEmit"
+    "test": "bun --bun vitest run",
+    "test:watch": "bun --bun vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@react-email/render": "^1.4.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "vitest": "^4.1.10"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "vitest": "catalog:"
   }
 }

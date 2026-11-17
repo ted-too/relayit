@@ -25,7 +25,7 @@ const deliveryOutcomeEvent = (
   input: {
     readonly deliveryId: string;
     readonly messageId: string;
-  }
+  },
 ): Extract<
   DeliveryWebhookEvent,
   {
@@ -88,9 +88,7 @@ const deliveryOutcomeEvent = (
   }
 };
 
-export class DeliveryEventIngestError extends Data.TaggedError(
-  "DeliveryEventIngestError"
-)<{
+export class DeliveryEventIngestError extends Data.TaggedError("DeliveryEventIngestError")<{
   readonly cause: unknown;
   readonly operation:
     | "emit_webhook"
@@ -116,8 +114,8 @@ const loadDelivery = (db: DatabaseExecutor, providerMessageId: string) =>
             cause,
             operation: "load_delivery",
             providerMessageId,
-          })
-      )
+          }),
+      ),
     );
 
 const loadOrganizationId = (
@@ -125,7 +123,7 @@ const loadOrganizationId = (
   input: {
     readonly organizationAppEnvironmentId: string;
     readonly providerMessageId: string;
-  }
+  },
 ) =>
   db.query.organizationAppEnvironment
     .findFirst({
@@ -139,9 +137,9 @@ const loadOrganizationId = (
             cause,
             operation: "load_organization",
             providerMessageId: input.providerMessageId,
-          })
+          }),
       ),
-      Effect.map((row) => row?.organizationId)
+      Effect.map((row) => row?.organizationId),
     );
 
 const suppressContacts = (
@@ -151,7 +149,7 @@ const suppressContacts = (
     readonly organizationAppEnvironmentId: string;
     readonly suppressionReason: "complaint" | "hard_bounce";
     readonly suppressionSeverity: ContactSuppressionSeverity;
-  }
+  },
 ) => {
   const suppressedAt = new Date();
 
@@ -159,17 +157,12 @@ const suppressContacts = (
     input.event.recipients,
     (recipient) => {
       const scope = and(
-        eq(
-          contact.organizationAppEnvironmentId,
-          input.organizationAppEnvironmentId
-        ),
-        sql`lower(${contact.email}) = ${normalizeContactEmail(recipient)}`
+        eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
+        sql`lower(${contact.email}) = ${normalizeContactEmail(recipient)}`,
       );
       // Hard bounce may upgrade marketing → all. Complaint must not downgrade all.
       const where =
-        input.suppressionSeverity === "all"
-          ? scope
-          : and(scope, isNull(contact.suppressionReason));
+        input.suppressionSeverity === "all" ? scope : and(scope, isNull(contact.suppressionReason));
 
       return db
         .update(contact)
@@ -186,11 +179,11 @@ const suppressContacts = (
                 cause,
                 operation: "suppress_contact",
                 providerMessageId: input.event.providerMessageId,
-              })
-          )
+              }),
+          ),
         );
     },
-    { concurrency: 1, discard: true }
+    { concurrency: 1, discard: true },
   );
 };
 
@@ -219,8 +212,8 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
               cause,
               operation: "insert_event",
               providerMessageId: event.providerMessageId,
-            })
-        )
+            }),
+        ),
       );
 
     const organizationId = yield* loadOrganizationId(db, {
@@ -238,7 +231,7 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
             }),
             messageTags: message.tags,
             organizationId,
-          })
+          }),
         )
         .pipe(
           Effect.mapError(
@@ -247,8 +240,8 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
                 cause,
                 operation: "emit_webhook",
                 providerMessageId: event.providerMessageId,
-              })
-          )
+              }),
+          ),
         );
     }
 
@@ -260,8 +253,7 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
       yield* suppressContacts(db, {
         event,
         organizationAppEnvironmentId: message.organizationAppEnvironmentId,
-        suppressionReason:
-          event.kind === "complained" ? "complaint" : "hard_bounce",
+        suppressionReason: event.kind === "complained" ? "complaint" : "hard_bounce",
         suppressionSeverity: event.kind === "complained" ? "marketing" : "all",
       });
     }
@@ -271,7 +263,7 @@ export const ingestDeliveryEvents = (
   db: Database,
   input: {
     readonly events: readonly NormalizedDeliveryEvent[];
-  }
+  },
 ) =>
   Effect.forEach(input.events, (event) => ingestOne(db, event), {
     concurrency: 1,

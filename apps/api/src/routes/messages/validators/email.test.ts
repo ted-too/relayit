@@ -13,12 +13,11 @@ const validator = getSchemaValidator(
     .Module({
       "#/components/schemas/Attachment": sendEmailOpenApiModels.Attachment,
       "#/components/schemas/Contact": sendEmailOpenApiModels.Contact,
-      "#/components/schemas/EmailAddressList":
-        sendEmailOpenApiModels.EmailAddressList,
+      "#/components/schemas/EmailAddressList": sendEmailOpenApiModels.EmailAddressList,
       "#/components/schemas/Recipient": sendEmailOpenApiModels.Recipient,
       SendEmailBody: sendEmailBodySchema,
     })
-    .Import("SendEmailBody")
+    .Import("SendEmailBody"),
 );
 
 if (!validator) {

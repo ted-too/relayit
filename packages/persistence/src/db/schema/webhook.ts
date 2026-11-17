@@ -20,12 +20,11 @@ export const AVAILABLE_WEBHOOK_DELIVERY_STATUSES = [
   "dead_letter",
 ] as const;
 
-export type WebhookDeliveryStatus =
-  (typeof AVAILABLE_WEBHOOK_DELIVERY_STATUSES)[number];
+export type WebhookDeliveryStatus = (typeof AVAILABLE_WEBHOOK_DELIVERY_STATUSES)[number];
 
 export const webhookDeliveryStatusEnum = pgEnum(
   "webhook_delivery_status",
-  AVAILABLE_WEBHOOK_DELIVERY_STATUSES
+  AVAILABLE_WEBHOOK_DELIVERY_STATUSES,
 );
 
 /**
@@ -57,11 +56,8 @@ export const webhookEndpoint = pgTable(
   },
   (t) => [
     index("webhook_endpoint_organization_idx").on(t.organizationId),
-    index("webhook_endpoint_organization_enabled_idx").on(
-      t.organizationId,
-      t.enabled
-    ),
-  ]
+    index("webhook_endpoint_organization_enabled_idx").on(t.organizationId, t.enabled),
+  ],
 );
 
 export type WebhookEndpoint = typeof webhookEndpoint.$inferSelect;
@@ -87,12 +83,9 @@ export const webhookEvent = pgTable(
   },
   (t) => [
     uniqueIndex("webhook_event_idempotency_uidx").on(t.idempotencyId),
-    index("webhook_event_organization_created_idx").on(
-      t.organizationId,
-      t.createdAt
-    ),
+    index("webhook_event_organization_created_idx").on(t.organizationId, t.createdAt),
     index("webhook_event_type_idx").on(t.type),
-  ]
+  ],
 );
 
 export type WebhookEvent = typeof webhookEvent.$inferSelect;
@@ -130,17 +123,13 @@ export const webhookEventDelivery = pgTable(
   (t) => [
     uniqueIndex("webhook_event_delivery_event_endpoint_uidx").on(
       t.webhookEventId,
-      t.webhookEndpointId
+      t.webhookEndpointId,
     ),
-    index("webhook_event_delivery_status_next_idx").on(
-      t.status,
-      t.nextAttemptAt
-    ),
+    index("webhook_event_delivery_status_next_idx").on(t.status, t.nextAttemptAt),
     index("webhook_event_delivery_endpoint_idx").on(t.webhookEndpointId),
     index("webhook_event_delivery_claim_idx").on(t.status, t.claimExpiresAt),
-  ]
+  ],
 );
 
 export type WebhookEventDelivery = typeof webhookEventDelivery.$inferSelect;
-export type WebhookEventDeliveryInsert =
-  typeof webhookEventDelivery.$inferInsert;
+export type WebhookEventDeliveryInsert = typeof webhookEventDelivery.$inferInsert;

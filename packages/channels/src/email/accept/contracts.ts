@@ -1,7 +1,4 @@
-import type {
-  EmailFrom,
-  EmailHeaders,
-} from "@repo/persistence/db/validators/channels/email";
+import type { EmailFrom, EmailHeaders } from "@repo/persistence/db/validators/channels/email";
 import type { MessageContactInput } from "../../messages/accept/contacts";
 import type { TransactionalMessageIntent } from "../../messages/accept/types";
 
@@ -28,8 +25,7 @@ export interface EmailAttachmentInput {
     | { readonly kind: "url"; readonly url: string };
 }
 
-export interface AcceptTransactionalEmailInput
-  extends TransactionalMessageIntent {
+export interface AcceptTransactionalEmailInput extends TransactionalMessageIntent {
   readonly email: {
     readonly attachments: readonly EmailAttachmentInput[];
     readonly bcc: readonly MessageContactInput[];

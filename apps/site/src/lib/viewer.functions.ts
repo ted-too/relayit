@@ -10,7 +10,7 @@ export interface Viewer {
 
 /** Matches `relayit.session_token=` and its `__Secure-` variant. */
 const SESSION_COOKIE = new RegExp(
-  `(?:^|;\\s*)(?:__Secure-)?${COOKIE_PREFIX}\\.session_token=[^;]+`
+  `(?:^|;\\s*)(?:__Secure-)?${COOKIE_PREFIX}\\.session_token=[^;]+`,
 );
 
 const SESSION_LOOKUP_TIMEOUT_MS = 1200;
@@ -59,9 +59,7 @@ const readViewer = async (): Promise<Viewer | null> => {
   }
 };
 
-export const getSiteContext = createServerFn({ method: "GET" }).handler(
-  async () => ({
-    appUrl: appUrl(),
-    viewer: await readViewer(),
-  })
-);
+export const getSiteContext = createServerFn({ method: "GET" }).handler(async () => ({
+  appUrl: appUrl(),
+  viewer: await readViewer(),
+}));

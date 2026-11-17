@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The quick checks share one runner, each step running even when an earlier one fails so
+  # every failure shows at once; the tests get their own runner. `Check` at the end is the
+  # single status to require: it passes only when every other job does.
+  #
+  # Installs skip dependencies' own install scripts, as the Docker images' do; none is
+  # needed to lint, typecheck, test or build.
+  static:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - id: setup
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 24
+          cache: true
+          run-install: |
+            - args: ['--frozen-lockfile', '--ignore-scripts']
+      # Patches tsc with the Effect language service, which only the typecheck needs.
+      - name: Prepare
+        if: ${{ steps.setup.outcome == 'success' }}
+        run: bun run prepare
+      - name: Check unused code
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: vp run knip
+      - name: Format and lint
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: vp check
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: vp run typecheck
+      - name: Build
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: vp run build
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 24
+          cache: true
+          run-install: |
+            - args: ['--frozen-lockfile', '--ignore-scripts']
+      # The PostgreSQL and Redis integration tests are opt-in: they run only when
+      # TEST_DATABASE_URL / TEST_REDIS_URL are set and skip themselves otherwise. CI sets
+      # neither, so this job runs the unit tests alone.
+      - run: vp run test
+        env:
+          # apps/web's tests import its env module, which validates these at load. Nothing
+          # connects: the URLs point at a closed port and the secret signs nothing real.
+          BETTER_AUTH_SECRETS: "1:ci-placeholder-not-a-secret"
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:1/ci
+          REDIS_URL: redis://127.0.0.1:1
+          VITE_BASE_URL: http://localhost:3000
+
+  check:
+    name: Check
+    if: always()
+    needs: [static, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to pass
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            exit 1
+          fi

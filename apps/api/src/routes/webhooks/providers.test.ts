@@ -16,7 +16,7 @@ const makeApp = (handle: typeof handleProviderWebhook) => {
   const runtime = ManagedRuntime.make(makeTestLayer());
   const runEffect = runtime.runPromise as RunApiEffect;
   const app = new Elysia().group("/webhooks", (group) =>
-    group.use(createProviderWebhookRoutes(runEffect, handle))
+    group.use(createProviderWebhookRoutes(runEffect, handle)),
   );
   return { app, runtime };
 };
@@ -24,14 +24,14 @@ const makeApp = (handle: typeof handleProviderWebhook) => {
 const postProviderWebhook = async (
   app: { handle: (request: Request) => Response | Promise<Response> },
   path: string,
-  body: string
+  body: string,
 ): Promise<Response> =>
   await app.handle(
     new Request(`http://localhost/webhooks/providers${path}`, {
       body,
       headers: { "content-type": "text/plain" },
       method: "POST",
-    })
+    }),
   );
 
 describe("POST /webhooks/providers/:vendorId/:productId", () => {
@@ -41,15 +41,13 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
         new ProviderWebhookHandlerError({
           code: "not_found",
           message: "Webhook handler not found",
-        })
-      )
+        }),
+      ),
     );
 
     return Effect.runPromise(
       Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postProviderWebhook(app, "/aws/ses", "{}")
-        );
+        const response = yield* Effect.promise(() => postProviderWebhook(app, "/aws/ses", "{}"));
         const body = yield* Effect.promise(() => response.json());
 
         expect(response.status).toBe(404);
@@ -57,7 +55,7 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
           code: "not_found",
           message: "Webhook handler not found",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -80,7 +78,7 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
     return Effect.runPromise(
       Effect.gen(function* () {
         const response = yield* Effect.promise(() =>
-          postProviderWebhook(app, "/aws/ses", '{"Type":"Notification"}')
+          postProviderWebhook(app, "/aws/ses", '{"Type":"Notification"}'),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -91,7 +89,7 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
           rawBody: '{"Type":"Notification"}',
           vendorId: "aws",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 
@@ -102,14 +100,14 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
           cause: new Error("bad sns"),
           code: "bad_request",
           message: "Provider webhook handling failed",
-        })
-      )
+        }),
+      ),
     );
 
     return Effect.runPromise(
       Effect.gen(function* () {
         const response = yield* Effect.promise(() =>
-          postProviderWebhook(app, "/aws/ses", "not-json")
+          postProviderWebhook(app, "/aws/ses", "not-json"),
         );
         const body = yield* Effect.promise(() => response.json());
 
@@ -118,7 +116,7 @@ describe("POST /webhooks/providers/:vendorId/:productId", () => {
           code: "bad_request",
           message: "Provider webhook handling failed",
         });
-      }).pipe(Effect.ensuring(runtime.disposeEffect))
+      }).pipe(Effect.ensuring(runtime.disposeEffect)),
     );
   });
 });

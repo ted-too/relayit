@@ -1,10 +1,6 @@
 import { apiKey } from "@better-auth/api-key";
 import { type StripeOptions, stripe } from "@better-auth/stripe";
-import {
-  type BetterAuthOptions,
-  betterAuth,
-  type SocialProviders,
-} from "better-auth";
+import { type BetterAuthOptions, betterAuth, type SocialProviders } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
   admin,
@@ -22,12 +18,7 @@ import {
   member as organizationMemberRole,
   owner as organizationOwnerRole,
 } from "./permissions";
-import {
-  BROADCAST_LIMITS,
-  ensureUserLimits,
-  FREE_LIMITS,
-  SIGNAL_LIMITS,
-} from "./plans";
+import { BROADCAST_LIMITS, ensureUserLimits, FREE_LIMITS, SIGNAL_LIMITS } from "./plans";
 
 interface AuthStripePlanPriceIds {
   annualPriceId: string;
@@ -117,9 +108,7 @@ export const createAuth = ({
         generateId: false,
       },
       cookiePrefix: COOKIE_PREFIX,
-      ...(cookieDomain
-        ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
-        : {}),
+      ...(cookieDomain ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } } : {}),
     },
     user: {
       additionalFields: {
@@ -155,19 +144,16 @@ export const createAuth = ({
                     name: "signal",
                     limits: SIGNAL_LIMITS,
                     priceId: plugins.stripe.plans.signal.monthlyPriceId,
-                    annualDiscountPriceId:
-                      plugins.stripe.plans.signal.annualPriceId,
+                    annualDiscountPriceId: plugins.stripe.plans.signal.annualPriceId,
                   },
                   {
                     name: "broadcast",
                     limits: BROADCAST_LIMITS,
                     priceId: plugins.stripe.plans.broadcast.monthlyPriceId,
-                    annualDiscountPriceId:
-                      plugins.stripe.plans.broadcast.annualPriceId,
+                    annualDiscountPriceId: plugins.stripe.plans.broadcast.annualPriceId,
                   },
                 ],
-                authorizeReference: async ({ user, referenceId }) =>
-                  referenceId === user.id,
+                authorizeReference: async ({ user, referenceId }) => referenceId === user.id,
                 onSubscriptionComplete: async ({ subscription }) => {
                   await ensureUserLimits(db, {
                     userId: subscription.referenceId,
@@ -181,10 +167,7 @@ export const createAuth = ({
                   });
                 },
                 onSubscriptionUpdate: async ({ subscription }) => {
-                  if (
-                    subscription.status === "active" ||
-                    subscription.status === "trialing"
-                  ) {
+                  if (subscription.status === "active" || subscription.status === "trialing") {
                     await ensureUserLimits(db, {
                       userId: subscription.referenceId,
                       planName: subscription.plan,

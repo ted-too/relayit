@@ -29,13 +29,12 @@ export const DynamicForm = withForm({
       switch (def.type) {
         case "object": {
           const objDef = def as z.core.$ZodObjectDef;
-          return Object.entries(objDef.shape).flatMap(
-            ([nestedKey, nestedField]) =>
-              getFieldsFromZodType({
-                field: nestedField as z.core.$ZodType,
-                key: nestedKey,
-                parentPath: fieldName,
-              })
+          return Object.entries(objDef.shape).flatMap(([nestedKey, nestedField]) =>
+            getFieldsFromZodType({
+              field: nestedField as z.core.$ZodType,
+              key: nestedKey,
+              parentPath: fieldName,
+            }),
           );
         }
 
@@ -193,7 +192,7 @@ export const DynamicForm = withForm({
           field: subField as z.core.$ZodType,
           key,
           parentPath: baseKey ?? undefined,
-        })
+        }),
       )
       .sort((a, b) => {
         // If 'a.order' is undefined, push to end; same for 'b.order'

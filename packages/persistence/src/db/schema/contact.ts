@@ -26,33 +26,24 @@ export const AVAILABLE_CONTACT_SUPPRESSION_REASONS = [
   "manual",
 ] as const;
 
-export const zContactSuppressionReason = z.enum(
-  AVAILABLE_CONTACT_SUPPRESSION_REASONS
-);
+export const zContactSuppressionReason = z.enum(AVAILABLE_CONTACT_SUPPRESSION_REASONS);
 
-export type ContactSuppressionReason =
-  (typeof AVAILABLE_CONTACT_SUPPRESSION_REASONS)[number];
+export type ContactSuppressionReason = (typeof AVAILABLE_CONTACT_SUPPRESSION_REASONS)[number];
 
 export const contactSuppressionReasonEnum = pgEnum(
   "contact_suppression_reason",
-  AVAILABLE_CONTACT_SUPPRESSION_REASONS
+  AVAILABLE_CONTACT_SUPPRESSION_REASONS,
 );
 
-export const AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES = [
-  "marketing",
-  "all",
-] as const;
+export const AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES = ["marketing", "all"] as const;
 
-export const zContactSuppressionSeverity = z.enum(
-  AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES
-);
+export const zContactSuppressionSeverity = z.enum(AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES);
 
-export type ContactSuppressionSeverity =
-  (typeof AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES)[number];
+export type ContactSuppressionSeverity = (typeof AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES)[number];
 
 export const contactSuppressionSeverityEnum = pgEnum(
   "contact_suppression_severity",
-  AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES
+  AVAILABLE_CONTACT_SUPPRESSION_SEVERITIES,
 );
 
 /**
@@ -84,20 +75,15 @@ export const contact = pgTable(
       .notNull(),
   },
   (t) => [
-    index("contact_organization_app_environment_idx").on(
-      t.organizationAppEnvironmentId
-    ),
-    uniqueIndex("contact_app_env_email_unique_idx").on(
-      t.organizationAppEnvironmentId,
-      t.email
-    ),
+    index("contact_organization_app_environment_idx").on(t.organizationAppEnvironmentId),
+    uniqueIndex("contact_app_env_email_unique_idx").on(t.organizationAppEnvironmentId, t.email),
     index("contact_email_idx").on(t.email),
     index("contact_properties_gin_idx").using("gin", t.properties),
     index("contact_unsubscribed_idx").on(t.unsubscribed),
     index("contact_suppression_reason_idx").on(t.suppressionReason),
     index("contact_suppression_severity_idx").on(t.suppressionSeverity),
     index("contact_deleted_at_idx").on(t.deletedAt),
-  ]
+  ],
 );
 
 /** Project-scoped marketing consent category. */
@@ -120,7 +106,7 @@ export const topic = pgTable(
   (t) => [
     index("topic_organization_idx").on(t.organizationId),
     uniqueIndex("topic_organization_name_uidx").on(t.organizationId, t.name),
-  ]
+  ],
 );
 
 /** Project-scoped Campaign Send targeting set (static membership). */
@@ -143,7 +129,7 @@ export const segment = pgTable(
   (t) => [
     index("segment_organization_idx").on(t.organizationId),
     uniqueIndex("segment_organization_name_uidx").on(t.organizationId, t.name),
-  ]
+  ],
 );
 
 export const segmentMember = pgTable(
@@ -161,12 +147,9 @@ export const segmentMember = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("segment_member_segment_contact_uidx").on(
-      t.segmentId,
-      t.contactId
-    ),
+    uniqueIndex("segment_member_segment_contact_uidx").on(t.segmentId, t.contactId),
     index("segment_member_contact_idx").on(t.contactId),
-  ]
+  ],
 );
 
 /** Per-Topic marketing opt-out for a Contact. */
@@ -187,5 +170,5 @@ export const contactTopicUnsubscribe = pgTable(
   (t) => [
     uniqueIndex("contact_topic_unsubscribe_uidx").on(t.contactId, t.topicId),
     index("contact_topic_unsubscribe_topic_idx").on(t.topicId),
-  ]
+  ],
 );

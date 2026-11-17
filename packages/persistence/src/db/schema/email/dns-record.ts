@@ -32,8 +32,7 @@ export const emailDnsRecordRoleEnum = pgEnum("email_dns_record_role", [
   "shared",
 ]);
 
-export type EmailDnsRecordRole =
-  (typeof emailDnsRecordRoleEnum.enumValues)[number];
+export type EmailDnsRecordRole = (typeof emailDnsRecordRoleEnum.enumValues)[number];
 
 export const emailDnsRecordStatusEnum = pgEnum("email_dns_record_status", [
   "pending",
@@ -41,8 +40,7 @@ export const emailDnsRecordStatusEnum = pgEnum("email_dns_record_status", [
   "missing",
 ]);
 
-export type EmailDnsRecordStatus =
-  (typeof emailDnsRecordStatusEnum.enumValues)[number];
+export type EmailDnsRecordStatus = (typeof emailDnsRecordStatusEnum.enumValues)[number];
 
 export interface DnsRecordWarning {
   readonly code: "multiple_dmarc_records";
@@ -69,10 +67,9 @@ export const emailDnsRecord = pgTable(
     customDomainId: text("custom_domain_id").references(() => customDomain.id, {
       onDelete: "cascade",
     }),
-    sandboxDomainId: text("sandbox_domain_id").references(
-      () => sandboxDomain.id,
-      { onDelete: "cascade" }
-    ),
+    sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
+      onDelete: "cascade",
+    }),
     purpose: dnsRecordPurposeEnum("purpose").notNull(),
     recordType: dnsRecordTypeEnum("record_type").notNull(),
     name: text("name").notNull(),
@@ -80,10 +77,7 @@ export const emailDnsRecord = pgTable(
     cloudflareZoneId: text("cloudflare_zone_id"),
     cloudflareRecordId: text("cloudflare_record_id"),
     status: emailDnsRecordStatusEnum("status").notNull().default("pending"),
-    warnings: jsonb("warnings")
-      .$type<DnsRecordWarning[]>()
-      .notNull()
-      .default([]),
+    warnings: jsonb("warnings").$type<DnsRecordWarning[]>().notNull().default([]),
     priority: integer("priority"),
     /**
      * Logical grouping key for managed DNS reconcile/remove (e.g.
@@ -98,12 +92,12 @@ export const emailDnsRecord = pgTable(
     // `shared` records target no domain; every other role targets exactly one.
     check(
       "email_dns_record_scope_check",
-      sql`(${t.role} = 'shared' AND ${t.customDomainId} IS NULL AND ${t.sandboxDomainId} IS NULL) OR (${t.role} <> 'shared' AND ((${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)))`
+      sql`(${t.role} = 'shared' AND ${t.customDomainId} IS NULL AND ${t.sandboxDomainId} IS NULL) OR (${t.role} <> 'shared' AND ((${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)))`,
     ),
     // Cloudflare ids are set together (we manage it) or not at all (customer does).
     check(
       "email_dns_record_cloudflare_pairing_check",
-      sql`(${t.cloudflareZoneId} IS NULL) = (${t.cloudflareRecordId} IS NULL)`
+      sql`(${t.cloudflareZoneId} IS NULL) = (${t.cloudflareRecordId} IS NULL)`,
     ),
     uniqueIndex("email_dns_record_custom_role_purpose_unique_idx")
       .on(t.customDomainId, t.role, t.purpose)
@@ -120,7 +114,7 @@ export const emailDnsRecord = pgTable(
     index("email_dns_record_custom_domain_idx").on(t.customDomainId),
     index("email_dns_record_sandbox_domain_idx").on(t.sandboxDomainId),
     index("email_dns_record_owner_idx").on(t.owner),
-  ]
+  ],
 );
 
 export type EmailDnsRecord = typeof emailDnsRecord.$inferSelect;

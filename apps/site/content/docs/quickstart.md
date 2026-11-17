@@ -108,11 +108,11 @@ If the response contains a `stripped` array, some recipients were removed becaus
 
 If you get an error, the body has a `code` that tells you what went wrong. The most common first-send errors are:
 
-| Code | Fix |
-| --- | --- |
-| `invalid_api_key` | Check the `x-api-key` header and that the key has not expired or been deleted. |
-| `invalid_from_address` | The `from` domain is not a verified, unpaused Domain of this Project, and is not the sandbox address. |
-| `sandbox_recipient_not_member` | Sandbox sends can only go to Project members. Verify your own Domain to send to anyone. |
+| Code                           | Fix                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `invalid_api_key`              | Check the `x-api-key` header and that the key has not expired or been deleted.                        |
+| `invalid_from_address`         | The `from` domain is not a verified, unpaused Domain of this Project, and is not the sandbox address. |
+| `sandbox_recipient_not_member` | Sandbox sends can only go to Project members. Verify your own Domain to send to anyone.               |
 
 The full list is in [Errors and limits](/docs/errors-and-limits).
 

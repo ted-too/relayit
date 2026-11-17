@@ -1,16 +1,12 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { DB } from "@repo/persistence/db/effect";
 import { templatingWorkspaceEntry } from "@repo/persistence/db/schema";
 import { renderSealedReactEmailArtifact } from "@repo/template-render/react-email";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
-import {
-  checkoutRefToDirectory,
-  HOSTED_DEV_REF,
-  withWorkspaceGitLock,
-} from "../git";
+import { checkoutRefToDirectory, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
@@ -47,8 +43,8 @@ export const previewHostedWorkspaceEntry = (input: {
             and(
               eq(templatingWorkspaceEntry.id, input.entryId),
               eq(templatingWorkspaceEntry.workspaceId, input.workspaceId),
-              isNull(templatingWorkspaceEntry.deletedAt)
-            )
+              isNull(templatingWorkspaceEntry.deletedAt),
+            ),
           )
           .limit(1)
           .pipe(
@@ -57,8 +53,8 @@ export const previewHostedWorkspaceEntry = (input: {
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to load workspace entry.",
-                })
-            )
+                }),
+            ),
           );
 
         if (!entry) {
@@ -75,10 +71,9 @@ export const previewHostedWorkspaceEntry = (input: {
                 code: "failed",
                 message: "Failed to create preview temp directory.",
               }),
-            try: () => fs.mkdtemp(path.join(os.tmpdir(), "relayit-preview-")),
+            try: () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-preview-")),
           }),
-          (dir) =>
-            Effect.promise(() => fs.rm(dir, { force: true, recursive: true }))
+          (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
         );
 
         const checkedOut = yield* checkoutRefToDirectory({
@@ -93,7 +88,7 @@ export const previewHostedWorkspaceEntry = (input: {
               code: "failed",
               message: "Failed to read package.json.",
             }),
-          try: () => fs.readFile(path.join(tempDir, "package.json"), "utf8"),
+          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
         });
         yield* assertHardenedPackageJson(packageJson);
 
@@ -123,7 +118,7 @@ export const previewHostedWorkspaceEntry = (input: {
           try: () =>
             renderSealedReactEmailArtifact({
               artifact,
-              // Preview only — never merge PreviewProps on the send path.
+              // Preview only — never merge PreviewProps on the send NodePath.
               mergePreviewProps: true,
               props: input.props ?? {},
               subjectOverride: input.subjectOverride,
@@ -142,10 +137,8 @@ export const previewHostedWorkspaceEntry = (input: {
           html: rendered.value.html,
           props: rendered.value.props,
           subject: rendered.value.subject,
-          ...(rendered.value.text === undefined
-            ? {}
-            : { text: rendered.value.text }),
+          ...(rendered.value.text === undefined ? {} : { text: rendered.value.text }),
         } satisfies PreviewResult;
-      })
-    )
+      }),
+    ),
   );

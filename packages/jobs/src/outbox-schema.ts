@@ -1,19 +1,9 @@
-import {
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 
 const JOB_OUTBOX_STATUSES = ["pending", "published"] as const;
 
-export const jobOutboxStatusEnum = pgEnum(
-  "job_outbox_status",
-  JOB_OUTBOX_STATUSES
-);
+export const jobOutboxStatusEnum = pgEnum("job_outbox_status", JOB_OUTBOX_STATUSES);
 
 export const jobOutbox = pgTable(
   "job_outbox",
@@ -35,9 +25,6 @@ export const jobOutbox = pgTable(
   },
   (table) => [
     index("job_outbox_pending_created_idx").on(table.status, table.createdAt),
-    index("job_outbox_claim_expires_idx").on(
-      table.status,
-      table.claimExpiresAt
-    ),
-  ]
+    index("job_outbox_claim_expires_idx").on(table.status, table.claimExpiresAt),
+  ],
 );

@@ -17,8 +17,8 @@ export const getRef = (workspaceId: string, name: string) =>
             new TemplatingBuilderError({
               code: "failed",
               message: "Failed to load workspace ref.",
-            })
-        )
+            }),
+        ),
       );
     return row?.sha ?? null;
   });
@@ -36,8 +36,8 @@ export const listRefs = (workspaceId: string) =>
             new TemplatingBuilderError({
               code: "failed",
               message: "Failed to list workspace refs.",
-            })
-        )
+            }),
+        ),
       );
     return rows.map((row) => ({ name: row.name, sha: row.sha }));
   });
@@ -76,8 +76,8 @@ export const updateRef = (input: {
               new TemplatingBuilderError({
                 code: "failed",
                 message: "Failed to create workspace ref.",
-              })
-          )
+              }),
+          ),
         );
     } else {
       yield* db
@@ -86,8 +86,8 @@ export const updateRef = (input: {
         .where(
           and(
             eq(templatingWorkspaceRef.workspaceId, workspaceId),
-            eq(templatingWorkspaceRef.name, name)
-          )
+            eq(templatingWorkspaceRef.name, name),
+          ),
         )
         .pipe(
           Effect.mapError(
@@ -95,8 +95,8 @@ export const updateRef = (input: {
               new TemplatingBuilderError({
                 code: "failed",
                 message: "Failed to update workspace ref.",
-              })
-          )
+              }),
+          ),
         );
     }
 

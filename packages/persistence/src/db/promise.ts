@@ -12,10 +12,7 @@ export interface PromiseDbConfig extends DatabaseConfig {
   onPoolError?: (error: Error) => void;
 }
 
-export const createPromiseDb = ({
-  databaseUrl,
-  onPoolError,
-}: PromiseDbConfig) => {
+export const createPromiseDb = ({ databaseUrl, onPoolError }: PromiseDbConfig) => {
   const pool = new Pool({ connectionString: databaseUrl });
   // Without a listener `pg.Pool` re-raises idle-connection errors as an
   // unhandled `error` event, which takes the whole process down.
@@ -28,7 +25,5 @@ export const createPromiseDb = ({
 };
 
 export type PromiseDb = ReturnType<typeof createPromiseDb>;
-export type PromiseTransaction = Parameters<
-  Parameters<PromiseDb["transaction"]>[0]
->[0];
+export type PromiseTransaction = Parameters<Parameters<PromiseDb["transaction"]>[0]>[0];
 export type PromiseDbOrTransaction = PromiseDb | PromiseTransaction;

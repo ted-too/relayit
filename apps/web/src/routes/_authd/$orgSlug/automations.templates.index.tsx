@@ -11,16 +11,14 @@ import { CreateTemplate } from "@/components/templates/create";
 import { TemplateItem } from "@/components/templates/item";
 import { queries } from "@/lib/queries";
 
-export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/")(
-  {
-    loader: ({ context, params }) => {
-      void context.queryClient.ensureQueryData(
-        queries.organizations.bySlug(params.orgSlug).listTemplates
-      );
-    },
-    component: RouteComponent,
-  }
-);
+export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/")({
+  loader: ({ context, params }) => {
+    void context.queryClient.ensureQueryData(
+      queries.organizations.bySlug(params.orgSlug).listTemplates,
+    );
+  },
+  component: RouteComponent,
+});
 
 const SORT_OPTIONS = [
   { label: "Date created", value: "createdAt" },
@@ -30,11 +28,9 @@ const SORT_OPTIONS = [
 function RouteComponent() {
   const { orgSlug } = Route.useParams();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(
-    SORT_OPTIONS[0]
-  );
+  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number] | null>(SORT_OPTIONS[0]);
   const { data: rawTemplates } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug).listTemplates
+    queries.organizations.bySlug(orgSlug).listTemplates,
   );
 
   const templates = rawTemplates
@@ -42,14 +38,12 @@ function RouteComponent() {
       (template) =>
         !template.archivedAt &&
         (template.name.toLowerCase().includes(search.toLowerCase()) ||
-          template.slug.toLowerCase().includes(search.toLowerCase()))
+          template.slug.toLowerCase().includes(search.toLowerCase())),
     )
     .sort((a, b) => {
       switch (sort?.value) {
         case "createdAt":
-          return (
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         case "name":
           return a.name.localeCompare(b.name);
         default:

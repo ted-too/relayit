@@ -3,11 +3,7 @@
 import { RiAddCircleLine, RiCheckLine } from "@remixicon/react";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@repo/ui/components/ui/coss/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/ui/coss/popover";
 import { Separator } from "@repo/ui/components/ui/coss/separator";
 import { Input } from "@repo/ui/components/ui/shad/input";
 import { cn } from "@repo/ui/lib/utils";
@@ -31,9 +27,7 @@ function DataGridColumnFilter<TData, TValue>({
 }: DataGridColumnFilterProps<TData, TValue>) {
   const facets = column?.getFacetedUniqueValues();
   const filterValue = column?.getFilterValue();
-  const selectedValues = new Set(
-    Array.isArray(filterValue) ? (filterValue as string[]) : []
-  );
+  const selectedValues = new Set(Array.isArray(filterValue) ? (filterValue as string[]) : []);
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredOptions = useMemo(() => {
@@ -41,7 +35,7 @@ function DataGridColumnFilter<TData, TValue>({
       return options;
     }
     return options.filter((option) =>
-      option.label.toLowerCase().includes(searchQuery.toLowerCase())
+      option.label.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [options, searchQuery]);
 
@@ -55,10 +49,7 @@ function DataGridColumnFilter<TData, TValue>({
             {selectedValues?.size > 0 && (
               <>
                 <Separator className="mx-2 h-4" orientation="vertical" />
-                <Badge
-                  className="px-1 font-normal lg:hidden"
-                  variant="secondary"
-                >
+                <Badge className="px-1 font-normal lg:hidden" variant="secondary">
                   {selectedValues.size}
                 </Badge>
                 <div className="hidden space-x-1 lg:flex">
@@ -70,11 +61,7 @@ function DataGridColumnFilter<TData, TValue>({
                     options
                       .filter((option) => selectedValues.has(option.value))
                       .map((option) => (
-                        <Badge
-                          className="px-1 font-normal"
-                          key={option.value}
-                          variant="secondary"
-                        >
+                        <Badge className="px-1 font-normal" key={option.value} variant="secondary">
                           {option.label}
                         </Badge>
                       ))
@@ -96,9 +83,7 @@ function DataGridColumnFilter<TData, TValue>({
         </div>
         <div className="max-h-[300px] overflow-y-auto">
           {filteredOptions.length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground text-sm">
-              No results found.
-            </div>
+            <div className="py-6 text-center text-muted-foreground text-sm">No results found.</div>
           ) : (
             <div className="p-1">
               {filteredOptions.map((option) => {
@@ -111,16 +96,14 @@ function DataGridColumnFilter<TData, TValue>({
                     selectedValues.add(option.value);
                   }
                   const filterValues = Array.from(selectedValues);
-                  column?.setFilterValue(
-                    filterValues.length ? filterValues : undefined
-                  );
+                  column?.setFilterValue(filterValues.length ? filterValues : undefined);
                 };
                 return (
                   <button
                     aria-pressed={isSelected}
                     className={cn(
                       "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden",
-                      "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                      "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                     )}
                     key={option.value}
                     onClick={toggleOption}
@@ -131,14 +114,12 @@ function DataGridColumnFilter<TData, TValue>({
                         "flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
                         isSelected
                           ? "bg-primary text-primary-foreground"
-                          : "opacity-50 [&_svg]:invisible"
+                          : "opacity-50 [&_svg]:invisible",
                       )}
                     >
                       <RiCheckLine className="h-4 w-4" />
                     </div>
-                    {option.icon && (
-                      <option.icon className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    {option.icon && <option.icon className="h-4 w-4 text-muted-foreground" />}
                     <span>{option.label}</span>
                     {facetCount !== undefined && (
                       <span className="ms-auto flex h-4 w-4 items-center justify-center font-mono text-xs">

@@ -53,10 +53,10 @@ export const user = pgTable("user", {
   limitRetention: integer("limit_retention"),
 });
 
-export const userChannelPausedReasonEnum = pgEnum(
-  "user_channel_paused_reason",
-  ["abuse_detected", "manual_admin_pause"]
-);
+export const userChannelPausedReasonEnum = pgEnum("user_channel_paused_reason", [
+  "abuse_detected",
+  "manual_admin_pause",
+]);
 
 /**
  * Per-(billing user, channel) sending governance — the single source of truth
@@ -94,7 +94,7 @@ export const userChannel = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.channelType] }),
     index("user_channel_user_idx").on(t.userId),
-  ]
+  ],
 );
 
 /** Linked external/credential accounts (OAuth providers, password). */
@@ -123,7 +123,7 @@ export const account = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)]
+  (table) => [index("account_userId_idx").on(table.userId)],
 );
 
 /**
@@ -152,7 +152,7 @@ export const subscription = pgTable(
     billingInterval: text("billing_interval"),
     stripeScheduleId: text("stripe_schedule_id"),
   },
-  (t) => [index("subscription_reference_id_idx").on(t.referenceId)]
+  (t) => [index("subscription_reference_id_idx").on(t.referenceId)],
 );
 
 /**
@@ -178,10 +178,9 @@ export const organization = pgTable(
     // The shared sandbox root domain this org is allocated to. Nullable: an org
     // may have no sandbox sender (no active root available). better-auth ignores
     // this column; we set it ourselves after org creation.
-    sandboxDomainId: text("sandbox_domain_id").references(
-      () => sandboxDomain.id,
-      { onDelete: "set null" }
-    ),
+    sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
+      onDelete: "set null",
+    }),
     // User whose Plan/Usage buckets this Project draws from. Defaults to the
     // Owner on create; may be reassigned. Null means "resolve to Owner".
     billingUserId: text("billing_user_id").references(() => user.id, {
@@ -192,7 +191,7 @@ export const organization = pgTable(
     uniqueIndex("organization_slug_uidx").on(table.slug),
     index("organization_sandbox_domain_idx").on(table.sandboxDomainId),
     index("organization_billing_user_idx").on(table.billingUserId),
-  ]
+  ],
 );
 
 /**
@@ -222,9 +221,9 @@ export const organizationAppEnvironment = pgTable(
     uniqueIndex("organization_app_environment_org_app_env_unique_idx").on(
       t.organizationId,
       sql`coalesce(${t.app}, '')`,
-      sql`coalesce(${t.environment}, '')`
+      sql`coalesce(${t.environment}, '')`,
     ),
-  ]
+  ],
 );
 
 /** Join row placing a user in an organization with a role. */
@@ -248,7 +247,7 @@ export const member = pgTable(
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
-  ]
+  ],
 );
 
 /** Pending invitation for an email address to join an organization. */
@@ -273,7 +272,7 @@ export const invitation = pgTable(
   (table) => [
     index("invitation_organizationId_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
-  ]
+  ],
 );
 
 /** API keys for programmatic access; `referenceId` is the owning org/user. */
@@ -309,5 +308,5 @@ export const apikey = pgTable(
     index("apikey_configId_idx").on(table.configId),
     index("apikey_referenceId_idx").on(table.referenceId),
     index("apikey_key_idx").on(table.key),
-  ]
+  ],
 );

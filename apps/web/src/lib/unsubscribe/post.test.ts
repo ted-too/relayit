@@ -8,7 +8,7 @@ import { createUnsubscribePostHandler } from "./post.server";
 
 const postUnsubscribe = (
   handle: typeof handleListUnsubscribeOneClick,
-  path: string
+  path: string,
 ): Promise<Response> => {
   const post = createUnsubscribePostHandler(handle, {
     runEffect: (effect) => Effect.runPromise(effect),
@@ -26,10 +26,7 @@ const postUnsubscribe = (
 
 describe("POST /unsubscribe/$orgSlug/$contactId", () => {
   test("returns 400 when query params are missing", async () => {
-    const response = await postUnsubscribe(
-      () => Effect.die("unused"),
-      "/unsubscribe/acme/cont_1"
-    );
+    const response = await postUnsubscribe(() => Effect.die("unused"), "/unsubscribe/acme/cont_1");
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -46,9 +43,9 @@ describe("POST /unsubscribe/$orgSlug/$contactId", () => {
           new ListUnsubscribeError({
             code: "invalid_signature",
             message: "Invalid unsubscribe signature",
-          })
+          }),
         ),
-      "/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=bad"
+      "/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=bad",
     );
     const body = await response.json();
 
@@ -66,9 +63,9 @@ describe("POST /unsubscribe/$orgSlug/$contactId", () => {
           new ListUnsubscribeError({
             code: "not_found",
             message: "Contact not found",
-          })
+          }),
         ),
-      "/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=sig"
+      "/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=sig",
     );
     const body = await response.json();
 

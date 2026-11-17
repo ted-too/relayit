@@ -49,21 +49,12 @@ export const emailVerifyOwnershipJob = defineJob({
     organizationId: Schema.String,
   }),
   recurrence: {
-    identity: ({ customDomainId, organizationId }) =>
-      `${organizationId}:${customDomainId}`,
+    identity: ({ customDomainId, organizationId }) => `${organizationId}:${customDomainId}`,
   },
   retry: verifyRetry,
 });
 
-export type EmailVerifyProviderIdentityPayload = JobPayload<
-  typeof emailVerifyProviderIdentityJob
->;
-export type EmailVerifySandboxDomainPayload = JobPayload<
-  typeof emailVerifySandboxDomainJob
->;
-export type EmailVerifyCustomDomainPayload = JobPayload<
-  typeof emailVerifyCustomDomainJob
->;
-export type EmailVerifyOwnershipPayload = JobPayload<
-  typeof emailVerifyOwnershipJob
->;
+export type EmailVerifyProviderIdentityPayload = JobPayload<typeof emailVerifyProviderIdentityJob>;
+export type EmailVerifySandboxDomainPayload = JobPayload<typeof emailVerifySandboxDomainJob>;
+export type EmailVerifyCustomDomainPayload = JobPayload<typeof emailVerifyCustomDomainJob>;
+export type EmailVerifyOwnershipPayload = JobPayload<typeof emailVerifyOwnershipJob>;

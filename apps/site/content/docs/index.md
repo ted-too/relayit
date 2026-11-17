@@ -15,13 +15,13 @@ The transactional send endpoint, `POST /messages/email`, is shaped to match Rese
 
 You can use Relayit in two ways.
 
-| | Relayit Cloud | Self-hosted |
-| --- | --- | --- |
-| Dashboard | https://app.relayit.io | Your own web container |
-| API | https://api.relayit.io | Your own api container |
-| Plans and send limits | Free, Signal, Broadcast | None, everything is unlimited |
-| Sign-in | Email and password, GitHub when enabled | Email and password |
-| Managed email provider and Sandbox Domain | Provided by Relayit | Only if you configure them |
+|                                           | Relayit Cloud                           | Self-hosted                   |
+| ----------------------------------------- | --------------------------------------- | ----------------------------- |
+| Dashboard                                 | https://app.relayit.io                  | Your own web container        |
+| API                                       | https://api.relayit.io                  | Your own api container        |
+| Plans and send limits                     | Free, Signal, Broadcast                 | None, everything is unlimited |
+| Sign-in                                   | Email and password, GitHub when enabled | Email and password            |
+| Managed email provider and Sandbox Domain | Provided by Relayit                     | Only if you configure them    |
 
 Self-hosting is covered in [Self-hosting](/docs/self-hosting).
 

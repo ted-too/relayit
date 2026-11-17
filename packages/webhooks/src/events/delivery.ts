@@ -11,7 +11,7 @@ const defineDeliveryOutcome = <
     | "delivery_delayed"
     | "opened",
 >(
-  kind: Kind
+  kind: Kind,
 ) =>
   defineWebhookEvent({
     payload: Schema.Struct({

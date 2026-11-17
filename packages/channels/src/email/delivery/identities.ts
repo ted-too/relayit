@@ -18,16 +18,15 @@ export interface RoutableEmailProviderIdentity {
   readonly verificationStatus: string;
 }
 
-export const providerKindFor = (row: {
-  readonly scope: string;
-}): ProviderKind => (row.scope === "platform" ? "managed" : "byo");
+export const providerKindFor = (row: { readonly scope: string }): ProviderKind =>
+  row.scope === "platform" ? "managed" : "byo";
 
 export const listFailoverProviderIdentities = (
   db: DatabaseExecutor,
   input:
     | { readonly customDomainId: string; readonly kind: "custom-domain" }
     | { readonly kind: "sandbox-domain"; readonly sandboxDomainId: string },
-  deliveryId: string
+  deliveryId: string,
 ) =>
   db
     .select({
@@ -39,26 +38,17 @@ export const listFailoverProviderIdentities = (
       verificationStatus: emailDomainProviderIdentity.verificationStatus,
     })
     .from(emailDomainProviderIdentity)
-    .innerJoin(
-      provider,
-      eq(emailDomainProviderIdentity.providerId, provider.id)
-    )
+    .innerJoin(provider, eq(emailDomainProviderIdentity.providerId, provider.id))
     .where(
       input.kind === "custom-domain"
         ? and(
-            eq(
-              emailDomainProviderIdentity.customDomainId,
-              input.customDomainId
-            ),
-            eq(emailDomainProviderIdentity.verificationStatus, "verified")
+            eq(emailDomainProviderIdentity.customDomainId, input.customDomainId),
+            eq(emailDomainProviderIdentity.verificationStatus, "verified"),
           )
         : and(
-            eq(
-              emailDomainProviderIdentity.sandboxDomainId,
-              input.sandboxDomainId
-            ),
-            eq(emailDomainProviderIdentity.verificationStatus, "verified")
-          )
+            eq(emailDomainProviderIdentity.sandboxDomainId, input.sandboxDomainId),
+            eq(emailDomainProviderIdentity.verificationStatus, "verified"),
+          ),
     )
     .pipe(
       Effect.map((rows) => {
@@ -71,7 +61,7 @@ export const listFailoverProviderIdentities = (
               isActive: row.isActive,
               provider: row.provider,
               verificationStatus: row.verificationStatus,
-            }) satisfies RoutableEmailProviderIdentity
+            }) satisfies RoutableEmailProviderIdentity,
         );
         const active = routable.find((identity) => identity.isActive);
         const failover = routable
@@ -79,17 +69,14 @@ export const listFailoverProviderIdentities = (
             (identity) =>
               !identity.isActive &&
               identity.failoverEligible &&
-              identity.verificationStatus === "verified"
+              identity.verificationStatus === "verified",
           )
           .toSorted((a, b) => a.failoverPriority - b.failoverPriority);
 
         if (!active) {
           return failover;
         }
-        return [
-          active,
-          ...failover.filter((identity) => identity.id !== active.id),
-        ];
+        return [active, ...failover.filter((identity) => identity.id !== active.id)];
       }),
       Effect.mapError(
         (cause) =>
@@ -97,6 +84,6 @@ export const listFailoverProviderIdentities = (
             cause,
             deliveryId,
             operation: "load_identities",
-          })
-      )
+          }),
+      ),
     );

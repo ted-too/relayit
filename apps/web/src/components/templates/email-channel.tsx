@@ -22,9 +22,7 @@ import type { WorkspaceEntryListItem } from "@/lib/templating/types";
 import type { Template } from "./types";
 
 function emailVariantOf(template: Template) {
-  return template.channelVariants.find(
-    (variant) => variant.channel === "email"
-  );
+  return template.channelVariants.find((variant) => variant.channel === "email");
 }
 
 function subjectFromVariant(template: Template) {
@@ -44,9 +42,7 @@ function subjectFromVariant(template: Template) {
 export function TemplateEmailChannel({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [subject, setSubject] = useState(
-    () => subjectFromVariant(template) || template.name
-  );
+  const [subject, setSubject] = useState(() => subjectFromVariant(template) || template.name);
 
   useEffect(() => {
     const next = subjectFromVariant(template);
@@ -56,13 +52,11 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
   }, [template]);
 
   const { data: entries } = useSuspenseQuery(
-    queries.organizations.bySlug(orgSlug).workspace("reactEmail").entries
+    queries.organizations.bySlug(orgSlug).workspace("reactEmail").entries,
   );
 
   const emailVariant = emailVariantOf(template);
-  const linkedEntry = entries.find(
-    (entry) => entry.id === emailVariant?.workspaceEntryId
-  );
+  const linkedEntry = entries.find((entry) => entry.id === emailVariant?.workspaceEntryId);
   const pickableEntries = entries.filter((entry) => entry.pickable);
 
   const { mutate: linkEntry, isPending: isLinking } = useMutation({
@@ -80,8 +74,7 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
       });
       await client.invalidateQueries({
-        queryKey: queries.organizations.bySlug(orgSlug).template(template.id)
-          .queryKey,
+        queryKey: queries.organizations.bySlug(orgSlug).template(template.id).queryKey,
       });
       toast.success("Email channel saved");
       setPickerOpen(false);
@@ -98,8 +91,8 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
       <section className="flex flex-col gap-3 rounded-lg border bg-card p-6">
         <h2 className="font-medium text-lg">Email channel</h2>
         <p className="text-muted-foreground text-sm">
-          This Template is archived. Unarchive is not available — create a new
-          Template to send again.
+          This Template is archived. Unarchive is not available — create a new Template to send
+          again.
         </p>
       </section>
     );
@@ -111,9 +104,8 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
         <div className="flex flex-col gap-1">
           <h2 className="font-medium text-lg">Email channel</h2>
           <p className="text-muted-foreground text-sm">
-            Set the email subject on this Template, then link a published React
-            Email Workspace Entry. Drafts are not sendable until Publish
-            succeeds.
+            Set the email subject on this Template, then link a published React Email Workspace
+            Entry. Drafts are not sendable until Publish succeeds.
           </p>
         </div>
         {emailVariant?.broken ? (
@@ -136,8 +128,8 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
           value={subject}
         />
         <p className="text-muted-foreground text-xs">
-          Lives on the Template — not in the React Email Entry source. Send
-          requests may still override it.
+          Lives on the Template — not in the React Email Entry source. Send requests may still
+          override it.
         </p>
       </div>
 
@@ -151,9 +143,7 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
           </div>
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">
-          No Workspace Entry linked yet.
-        </p>
+        <p className="text-muted-foreground text-sm">No Workspace Entry linked yet.</p>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -253,8 +243,8 @@ function EntryPickerDialog({
         <DialogHeader>
           <DialogTitle>Pick a Workspace Entry</DialogTitle>
           <DialogDescription>
-            Only Entries with a successful Publish are listed. Subject for this
-            Template: {subject.trim() || "(required above)"}
+            Only Entries with a successful Publish are listed. Subject for this Template:{" "}
+            {subject.trim() || "(required above)"}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex flex-col gap-2">

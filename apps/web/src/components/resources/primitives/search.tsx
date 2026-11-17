@@ -55,7 +55,7 @@ export function Search({
         align="inline-end"
         className={cn(
           "pr-3 transition-opacity duration-200",
-          search.length > 0 ? "opacity-100" : "pointer-events-none opacity-0"
+          search.length > 0 ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
         <InputGroupButton

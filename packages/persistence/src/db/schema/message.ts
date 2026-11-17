@@ -27,12 +27,9 @@ export const message = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    index("message_app_environment_created_idx").on(
-      t.organizationAppEnvironmentId,
-      t.createdAt
-    ),
+    index("message_app_environment_created_idx").on(t.organizationAppEnvironmentId, t.createdAt),
     index("message_template_idx").on(t.templateId),
-  ]
+  ],
 );
 
 export type Message = typeof message.$inferSelect;

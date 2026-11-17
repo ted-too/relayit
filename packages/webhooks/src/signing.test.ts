@@ -24,9 +24,7 @@ describe("webhook signing", () => {
       signWebhookPayload({
         secret: "whsec_test_secret",
         ...payload,
-      })
-    ).toBe(
-      "v1=6615bc31b9ec76bc3801fdde47d2d742a15cd5edcd1a2b05a0b6410cf3a26ac3"
-    );
+      }),
+    ).toBe("v1=6615bc31b9ec76bc3801fdde47d2d742a15cd5edcd1a2b05a0b6410cf3a26ac3");
   });
 });

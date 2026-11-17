@@ -19,23 +19,20 @@ export interface DeadLetterRecord {
   readonly id: string;
 }
 
-export class DeadLetterStoreError extends Data.TaggedError(
-  "DeadLetterStoreError"
-)<{
+export class DeadLetterStoreError extends Data.TaggedError("DeadLetterStoreError")<{
   readonly cause: unknown;
   readonly operation: "record";
 }> {}
 
 export interface DeadLetterStoreService {
   readonly record: (
-    input: DeadLetterInput
+    input: DeadLetterInput,
   ) => Effect.Effect<DeadLetterRecord, DeadLetterStoreError>;
 }
 
-export class DeadLetterStore extends Context.Service<
-  DeadLetterStore,
-  DeadLetterStoreService
->()("Jobs/DeadLetterStore") {}
+export class DeadLetterStore extends Context.Service<DeadLetterStore, DeadLetterStoreService>()(
+  "Jobs/DeadLetterStore",
+) {}
 
 export const DeadLetterStoreLive = Layer.effect(
   DeadLetterStore,
@@ -52,9 +49,7 @@ export const DeadLetterStoreLive = Layer.effect(
                 attempts: input.attempts,
                 failedAt: DateTime.toDate(DateTime.makeUnsafe(input.failedAt)),
                 failure: input.failure,
-                firstEnqueuedAt: DateTime.toDate(
-                  DateTime.makeUnsafe(input.firstEnqueuedAt)
-                ),
+                firstEnqueuedAt: DateTime.toDate(DateTime.makeUnsafe(input.firstEnqueuedAt)),
                 jobName: input.jobName,
                 originalStreamId: input.originalStreamId,
                 payload: input.payload,
@@ -71,23 +66,21 @@ export const DeadLetterStoreLive = Layer.effect(
                     new DeadLetterStoreError({
                       cause,
                       operation: "record",
-                    })
+                    }),
                 ),
                 Effect.flatMap(([record]) =>
                   record
                     ? Effect.succeed(record)
                     : Effect.fail(
                         new DeadLetterStoreError({
-                          cause: new Error(
-                            "Dead-letter insert returned no record"
-                          ),
+                          cause: new Error("Dead-letter insert returned no record"),
                           operation: "record",
-                        })
-                      )
-                )
-              )
-          )
+                        }),
+                      ),
+                ),
+              ),
+          ),
         ),
     } satisfies DeadLetterStoreService;
-  })
+  }),
 );

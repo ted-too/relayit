@@ -7,15 +7,13 @@ import { useId, useState } from "react";
 import { BYO_CEILING, type Plan, plans } from "@/lib/plans";
 
 const VOLUMES = [
-  1000, 2500, 10_000, 25_000, 40_000, 100_000, 200_000, 500_000, 1_000_000,
-  2_000_000,
+  1000, 2500, 10_000, 25_000, 40_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000,
 ] as const;
 const DEFAULT_INDEX = 4;
 
 const number = new Intl.NumberFormat("en-US");
 
-const pickPlan = (volume: number) =>
-  plans.find((plan) => volume <= plan.monthlySends) ?? null;
+const pickPlan = (volume: number) => plans.find((plan) => volume <= plan.monthlySends) ?? null;
 
 /** Swaps a value with a short vertical roll so the change reads as a change. */
 function Roll({ children, id }: { children: React.ReactNode; id: string }) {
@@ -64,9 +62,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
         </Roll>{" "}
         covers it for{" "}
         <Roll id={`${plan.id}-${cadence}`}>
-          <span className="text-primary dark:text-brand-mint">
-            {price(plan, annual)}
-          </span>
+          <span className="text-primary dark:text-brand-mint">{price(plan, annual)}</span>
         </Roll>{" "}
         a {cadence}.
       </>
@@ -138,7 +134,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
                   "relative cursor-pointer rounded-md px-3 py-1.5 text-sm transition-colors",
                   annual === value
                     ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 key={String(value)}
                 onClick={() => setAnnual(value)}
@@ -158,37 +154,25 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {plans.map((item) => {
-            const chosen =
-              item.id === plan?.id || (byo && item.id === "broadcast");
+            const chosen = item.id === plan?.id || (byo && item.id === "broadcast");
             return (
               <div
                 className={cn(
                   "flex flex-col rounded-xl border p-7 transition-colors duration-500",
                   chosen
                     ? "border-brand-ink bg-brand-ink text-brand-mint dark:border-brand-mint/20"
-                    : "bg-card"
+                    : "bg-card",
                 )}
                 key={item.id}
               >
                 <div className="flex items-baseline justify-between gap-4">
-                  <p
-                    className={cn(
-                      "font-medium text-lg",
-                      chosen && "text-white"
-                    )}
-                  >
-                    {item.name}
-                  </p>
-                  {chosen && (
-                    <span className="text-brand-mint/70 text-xs">
-                      Fits your volume
-                    </span>
-                  )}
+                  <p className={cn("font-medium text-lg", chosen && "text-white")}>{item.name}</p>
+                  {chosen && <span className="text-brand-mint/70 text-xs">Fits your volume</span>}
                 </div>
                 <p
                   className={cn(
                     "mt-1 text-sm",
-                    chosen ? "text-brand-mint/70" : "text-muted-foreground"
+                    chosen ? "text-brand-mint/70" : "text-muted-foreground",
                   )}
                 >
                   {item.pitch}
@@ -197,7 +181,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
                   <span
                     className={cn(
                       "font-semibold text-5xl tabular-nums tracking-[-0.04em]",
-                      chosen && "text-white"
+                      chosen && "text-white",
                     )}
                   >
                     {price(item, annual)}
@@ -205,7 +189,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
                   <span
                     className={cn(
                       "text-sm",
-                      chosen ? "text-brand-mint/70" : "text-muted-foreground"
+                      chosen ? "text-brand-mint/70" : "text-muted-foreground",
                     )}
                   >
                     / {item.monthly === 0 ? "forever" : cadence}
@@ -217,9 +201,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
                       <RiCheckLine
                         className={cn(
                           "mt-0.5 size-4 shrink-0",
-                          chosen
-                            ? "text-brand-mint"
-                            : "text-primary dark:text-brand-mint"
+                          chosen ? "text-brand-mint" : "text-primary dark:text-brand-mint",
                         )}
                       />
                       {limit}
@@ -230,7 +212,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
                   className={cn(
                     "mt-10 w-full active:scale-[0.98]",
                     chosen &&
-                      "border-brand-mint bg-brand-mint text-brand-ink shadow-none hover:bg-brand-mint/90"
+                      "border-brand-mint bg-brand-mint text-brand-ink shadow-none hover:bg-brand-mint/90",
                   )}
                   render={<a href={signUp} />}
                   variant={chosen ? "default" : "outline"}
@@ -247,23 +229,17 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
             "mt-4 flex flex-col gap-4 rounded-xl border p-7 transition-colors duration-500 md:flex-row md:items-center md:justify-between",
             plan || byo
               ? "bg-card"
-              : "border-brand-ink bg-brand-ink text-brand-mint dark:border-brand-mint/20"
+              : "border-brand-ink bg-brand-ink text-brand-mint dark:border-brand-mint/20",
           )}
         >
           <div>
-            <p
-              className={cn(
-                "font-medium text-lg",
-                !(plan || byo) && "text-white"
-              )}
-            >
-              Self-hosted{" "}
-              <span className="font-normal opacity-70">$0, no send limits</span>
+            <p className={cn("font-medium text-lg", !(plan || byo) && "text-white")}>
+              Self-hosted <span className="font-normal opacity-70">$0, no send limits</span>
             </p>
             <p
               className={cn(
                 "mt-1 text-sm",
-                plan || byo ? "text-muted-foreground" : "text-brand-mint/70"
+                plan || byo ? "text-muted-foreground" : "text-brand-mint/70",
               )}
             >
               Run the same API on your own servers. Every feature, no plans.

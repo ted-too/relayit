@@ -1,8 +1,4 @@
-import type {
-  ChannelType,
-  MessagePurpose,
-  ProviderKind,
-} from "@repo/persistence/db/schema";
+import type { ChannelType, MessagePurpose, ProviderKind } from "@repo/persistence/db/schema";
 import type { RedisService } from "@repo/redis";
 
 const RESERVATION_KEY_PREFIX = "relayit:usage:reservation";
@@ -176,24 +172,18 @@ export interface UsageLedgerPolicy {
   readonly periodStart: Date;
 }
 
-const reservationKey = (deliveryId: string) =>
-  `${RESERVATION_KEY_PREFIX}:${deliveryId}`;
+const reservationKey = (deliveryId: string) => `${RESERVATION_KEY_PREFIX}:${deliveryId}`;
 
 const secondsUntil = (end: Date, from: Date) =>
   Math.max(1, Math.ceil((end.getTime() - from.getTime()) / 1000));
 
 const secondsUntilDayEnd = (date: Date) =>
   secondsUntil(
-    new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)
-    ),
-    date
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)),
+    date,
   );
 
-const counterKeys = (
-  policy: UsageLedgerPolicy,
-  input: UsageLedgerDimensions
-) => ({
+const counterKeys = (policy: UsageLedgerPolicy, input: UsageLedgerDimensions) => ({
   daily: `${COUNTER_KEY_PREFIX}:${policy.billingUserId}:${input.channel}:${input.purpose}:${input.providerKind}:day:${input.reservedAt.slice(0, 10)}`,
   monthly: `${COUNTER_KEY_PREFIX}:${policy.billingUserId}:${input.channel}:${input.purpose}:${input.providerKind}:period:${policy.periodStart.toISOString()}`,
 });
@@ -233,7 +223,7 @@ export const makeUsageLedger = (redis: RedisService) => ({
     deliveryId: string,
     input: UsageLedgerDimensions,
     policy: UsageLedgerPolicy,
-    fingerprint: string
+    fingerprint: string,
   ) => {
     const keys = counterKeys(policy, input);
     const reservedAt = new Date(input.reservedAt);
@@ -250,11 +240,7 @@ export const makeUsageLedger = (redis: RedisService) => ({
       script: REMETER_SCRIPT,
     });
   },
-  reserve: (
-    deliveryId: string,
-    input: UsageLedgerDimensions,
-    policy: UsageLedgerPolicy
-  ) => {
+  reserve: (deliveryId: string, input: UsageLedgerDimensions, policy: UsageLedgerPolicy) => {
     const keys = counterKeys(policy, input);
     const reservedAt = new Date(input.reservedAt);
     return redis.evaluateNumber({

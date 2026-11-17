@@ -1,11 +1,7 @@
 import { RiCalendarLine } from "@remixicon/react";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { Calendar } from "@repo/ui/components/ui/coss/calendar";
-import {
-  Popover,
-  PopoverPopup,
-  PopoverTrigger,
-} from "@repo/ui/components/ui/coss/popover";
+import { Popover, PopoverPopup, PopoverTrigger } from "@repo/ui/components/ui/coss/popover";
 import type { BaseFieldProps } from "@repo/ui/components/ui/custom/form";
 import {
   Field,
@@ -27,7 +23,7 @@ export function FieldExpiresAt(
       onChange: (date: string | undefined | null) => void;
       value: string | undefined | null;
       errors: FieldErrorsType;
-    }
+    },
 ) {
   const {
     label,
@@ -74,9 +70,7 @@ export function FieldExpiresAt(
         </PopoverPopup>
       </Popover>
       {description && (
-        <FieldDescription className={className.description}>
-          {description}
-        </FieldDescription>
+        <FieldDescription className={className.description}>{description}</FieldDescription>
       )}
       {!hideError && <FieldError className={className.error} errors={errors} />}
     </Field>

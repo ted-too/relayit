@@ -9,14 +9,14 @@ describe("Webhook Endpoint matching", () => {
         enabled: true,
         eventTypes: [],
         type: "message.sent",
-      })
+      }),
     ).toBe(false);
     expect(
       endpointMatches({
         enabled: true,
         eventTypes: ["message.sent"],
         type: "message.sent",
-      })
+      }),
     ).toBe(true);
   });
 
@@ -26,7 +26,7 @@ describe("Webhook Endpoint matching", () => {
         enabled: false,
         eventTypes: ["message.sent"],
         type: "message.sent",
-      })
+      }),
     ).toBe(false);
   });
 
@@ -38,7 +38,7 @@ describe("Webhook Endpoint matching", () => {
         messageTags: { app: "checkout", environment: "production" },
         tagFilter: { app: "checkout", environment: "production" },
         type: "message.sent",
-      })
+      }),
     ).toBe(true);
     expect(
       endpointMatches({
@@ -47,7 +47,7 @@ describe("Webhook Endpoint matching", () => {
         messageTags: { app: "checkout" },
         tagFilter: { app: "checkout", environment: "production" },
         type: "message.sent",
-      })
+      }),
     ).toBe(false);
   });
 });

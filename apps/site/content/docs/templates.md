@@ -18,10 +18,10 @@ You can send with either the id or the slug. Use the id if you want references t
 
 ## Template engines
 
-| Engine | Content | Variables | Where you author it |
-| --- | --- | --- | --- |
-| React Email | A React component in the Email Workspace | Component props, any JSON shape | Dashboard |
-| Primitive | `subject`, `html`, `text` with `{{{NAME}}}` placeholders | Flat string or number values | Coming soon |
+| Engine      | Content                                                  | Variables                       | Where you author it |
+| ----------- | -------------------------------------------------------- | ------------------------------- | ------------------- |
+| React Email | A React component in the Email Workspace                 | Component props, any JSON shape | Dashboard           |
+| Primitive   | `subject`, `html`, `text` with `{{{NAME}}}` placeholders | Flat string or number values    | Coming soon         |
 
 The dashboard currently authors React Email Templates. The send endpoint also renders primitive Templates (Resend-compatible placeholder syntax), but there is no editor or API for creating them yet.
 
@@ -149,15 +149,15 @@ Archive a Template with **Archive** in its menu in the Templates list. Archived 
 
 All of these return `422` with the `code` shown. See [Errors and limits](/docs/errors-and-limits) for the response shape.
 
-| Code | Cause |
-| --- | --- |
-| `template_not_found` | No active Template with that id or slug in this Project. |
-| `missing_email_variant` | The Template has no email channel set up. |
-| `broken_react_email_link` | The linked Workspace Entry was removed. Pick another Entry. |
-| `missing_react_email_artifact` | The Entry has never been published. Publish the workspace. |
-| `missing_subject` | No subject on the Template and none in the request. |
-| `react_email_render_failed` | The component threw while rendering. `details.detail` has the renderer message. |
-| `invalid_primitive_content` | A primitive Template is missing its subject. |
-| `missing_variable` | A primitive variable has no value and no fallback. `details.variable` names it. |
-| `type_mismatch` | A primitive variable has the wrong type. `details.variable` names it. |
-| `undeclared_placeholder` | A primitive placeholder is not declared. `details.variable` names it. |
+| Code                           | Cause                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| `template_not_found`           | No active Template with that id or slug in this Project.                        |
+| `missing_email_variant`        | The Template has no email channel set up.                                       |
+| `broken_react_email_link`      | The linked Workspace Entry was removed. Pick another Entry.                     |
+| `missing_react_email_artifact` | The Entry has never been published. Publish the workspace.                      |
+| `missing_subject`              | No subject on the Template and none in the request.                             |
+| `react_email_render_failed`    | The component threw while rendering. `details.detail` has the renderer message. |
+| `invalid_primitive_content`    | A primitive Template is missing its subject.                                    |
+| `missing_variable`             | A primitive variable has no value and no fallback. `details.variable` names it. |
+| `type_mismatch`                | A primitive variable has the wrong type. `details.variable` names it.           |
+| `undeclared_placeholder`       | A primitive placeholder is not declared. `details.variable` names it.           |

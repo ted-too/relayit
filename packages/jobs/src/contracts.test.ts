@@ -75,9 +75,7 @@ describe("work contracts", () => {
 
   test("defines identity-managed recurring jobs", () => {
     expect(verifyDomain.name).toBe("email.verify-domain");
-    expect(verifyDomain.recurrence.identity({ domainId: "domain_1" })).toBe(
-      "domain_1"
-    );
+    expect(verifyDomain.recurrence.identity({ domainId: "domain_1" })).toBe("domain_1");
   });
 
   test("omits payload for unit recurring jobs", () => {

@@ -1,9 +1,6 @@
 import { Jobs } from "@repo/jobs";
 import type { DatabaseTransaction } from "@repo/persistence/db/effect";
-import {
-  webhookEndpoint,
-  webhookEventDelivery,
-} from "@repo/persistence/db/schema";
+import { webhookEndpoint, webhookEventDelivery } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect } from "effect";
 import { webhookDeliverJob } from "./deliver";
@@ -11,13 +8,6 @@ import { WebhookManagementError } from "./errors";
 import { generateWebhookSigningSecret } from "./signing";
 
 const DUAL_SECRET_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-const operationFailed = (message: string, cause: unknown) =>
-  new WebhookManagementError({
-    cause,
-    code: "operation_failed",
-    message,
-  });
 
 export interface SetWebhookEndpointEnabledInput {
   readonly enabled: boolean;
@@ -27,7 +17,7 @@ export interface SetWebhookEndpointEnabledInput {
 
 export const setWebhookEndpointEnabled = (
   transaction: DatabaseTransaction,
-  input: SetWebhookEndpointEnabledInput
+  input: SetWebhookEndpointEnabledInput,
 ): Effect.Effect<void, WebhookManagementError> =>
   Effect.gen(function* () {
     const [endpoint] = yield* transaction
@@ -36,14 +26,19 @@ export const setWebhookEndpointEnabled = (
       .where(
         and(
           eq(webhookEndpoint.id, input.endpointId),
-          eq(webhookEndpoint.organizationId, input.organizationId)
-        )
+          eq(webhookEndpoint.organizationId, input.organizationId),
+        ),
       )
       .returning({ id: webhookEndpoint.id })
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Endpoint could not be updated", cause)
-        )
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Endpoint could not be updated",
+            }),
+        ),
       );
 
     if (!endpoint) {
@@ -62,12 +57,8 @@ export interface ReplayWebhookDeliveryInput {
 
 export const replayWebhookDelivery = (
   transaction: DatabaseTransaction,
-  input: ReplayWebhookDeliveryInput
-): Effect.Effect<
-  { readonly status: "pending" },
-  WebhookManagementError,
-  Jobs
-> =>
+  input: ReplayWebhookDeliveryInput,
+): Effect.Effect<{ readonly status: "pending" }, WebhookManagementError, Jobs> =>
   Effect.gen(function* () {
     const jobs = yield* Jobs;
     const [record] = yield* transaction
@@ -78,21 +69,23 @@ export const replayWebhookDelivery = (
         replayCount: webhookEventDelivery.replayCount,
       })
       .from(webhookEventDelivery)
-      .innerJoin(
-        webhookEndpoint,
-        eq(webhookEventDelivery.webhookEndpointId, webhookEndpoint.id)
-      )
+      .innerJoin(webhookEndpoint, eq(webhookEventDelivery.webhookEndpointId, webhookEndpoint.id))
       .where(
         and(
           eq(webhookEventDelivery.id, input.deliveryId),
           eq(webhookEndpoint.id, input.endpointId),
-          eq(webhookEndpoint.organizationId, input.organizationId)
-        )
+          eq(webhookEndpoint.organizationId, input.organizationId),
+        ),
       )
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Event Delivery could not be loaded", cause)
-        )
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Event Delivery could not be loaded",
+            }),
+        ),
       );
 
     if (!record) {
@@ -127,21 +120,25 @@ export const replayWebhookDelivery = (
       })
       .where(eq(webhookEventDelivery.id, record.deliveryId))
       .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook Event Delivery could not be replayed", cause)
-        )
+        Effect.mapError(
+          (cause) =>
+            new WebhookManagementError({
+              cause,
+              code: "operation_failed",
+              message: "Webhook Event Delivery could not be replayed",
+            }),
+        ),
       );
-    yield* jobs
-      .enqueue(
-        webhookDeliverJob,
-        { deliveryId: record.deliveryId },
-        transaction
-      )
-      .pipe(
-        Effect.mapError((cause) =>
-          operationFailed("Webhook replay could not be scheduled", cause)
-        )
-      );
+    yield* jobs.enqueue(webhookDeliverJob, { deliveryId: record.deliveryId }, transaction).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WebhookManagementError({
+            cause,
+            code: "operation_failed",
+            message: "Webhook replay could not be scheduled",
+          }),
+      ),
+    );
 
     return { status: "pending" as const };
   });
@@ -153,7 +150,7 @@ export interface RotateWebhookSigningSecretInput {
 
 export const rotateWebhookSigningSecret = (
   transaction: DatabaseTransaction,
-  input: RotateWebhookSigningSecretInput
+  input: RotateWebhookSigningSecretInput,
 ): Effect.Effect<string, WebhookManagementError> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -164,8 +161,8 @@ export const rotateWebhookSigningSecret = (
       .where(
         and(
           eq(webhookEndpoint.id, input.endpointId),
-          eq(webhookEndpoint.organizationId, input.organizationId)
-        )
+          eq(webhookEndpoint.organizationId, input.organizationId),
+        ),
       );
     if (!endpoint) {
       return yield* new WebhookManagementError({
@@ -177,9 +174,7 @@ export const rotateWebhookSigningSecret = (
     yield* transaction
       .update(webhookEndpoint)
       .set({
-        previousSecretExpiresAt: DateTime.toDate(
-          DateTime.makeUnsafe(now + DUAL_SECRET_WINDOW_MS)
-        ),
+        previousSecretExpiresAt: DateTime.toDate(DateTime.makeUnsafe(now + DUAL_SECRET_WINDOW_MS)),
         previousSigningSecret: endpoint.signingSecret,
         signingSecret,
       })
@@ -190,13 +185,17 @@ export const rotateWebhookSigningSecret = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed("Webhook signing secret could not be rotated", error)
-    )
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Webhook signing secret could not be rotated",
+          }),
+    ),
   );
 
 export const clearPreviousWebhookSigningSecret = (
   transaction: DatabaseTransaction,
-  input: RotateWebhookSigningSecretInput
+  input: RotateWebhookSigningSecretInput,
 ): Effect.Effect<void, WebhookManagementError> =>
   Effect.gen(function* () {
     const [endpoint] = yield* transaction
@@ -208,8 +207,8 @@ export const clearPreviousWebhookSigningSecret = (
       .where(
         and(
           eq(webhookEndpoint.id, input.endpointId),
-          eq(webhookEndpoint.organizationId, input.organizationId)
-        )
+          eq(webhookEndpoint.organizationId, input.organizationId),
+        ),
       )
       .returning({ id: webhookEndpoint.id });
     if (!endpoint) {
@@ -222,9 +221,10 @@ export const clearPreviousWebhookSigningSecret = (
     Effect.mapError((error) =>
       error._tag === "WebhookManagementError"
         ? error
-        : operationFailed(
-            "Previous Webhook signing secret could not be cleared",
-            error
-          )
-    )
+        : new WebhookManagementError({
+            cause: error,
+            code: "operation_failed",
+            message: "Previous Webhook signing secret could not be cleared",
+          }),
+    ),
   );

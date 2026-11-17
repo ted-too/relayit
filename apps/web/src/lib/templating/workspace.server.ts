@@ -3,9 +3,7 @@ import { templatingWorkspace } from "@repo/persistence/db/schema";
 import { Data, Effect } from "effect";
 import type { WorkspaceEntryListItem } from "./types";
 
-export class TemplateWorkspaceError extends Data.TaggedError(
-  "TemplateWorkspaceError"
-)<{
+export class TemplateWorkspaceError extends Data.TaggedError("TemplateWorkspaceError")<{
   readonly cause?: unknown;
   readonly code: "not_found" | "failed";
   readonly message: string;
@@ -33,8 +31,8 @@ export const getOrCreateHostedWorkspaceMeta = (input: {
               cause,
               code: "failed",
               message: "Failed to load Email Workspace.",
-            })
-        )
+            }),
+        ),
       );
 
     if (existing) {
@@ -57,8 +55,8 @@ export const getOrCreateHostedWorkspaceMeta = (input: {
               cause,
               code: "failed",
               message: "Failed to create Email Workspace.",
-            })
-        )
+            }),
+        ),
       );
 
     if (!created) {
@@ -93,21 +91,19 @@ export const listWorkspaceEntriesForProject = (input: {
               cause,
               code: "failed",
               message: "Failed to list Workspace Entries.",
-            })
-        )
+            }),
+        ),
       );
 
-    return entries.map(
-      (entry): WorkspaceEntryListItem => ({
-        artifactCommitSha: entry.artifactCommitSha,
-        artifactStorageKey: entry.artifactStorageKey,
-        builtAt: entry.builtAt,
-        createdAt: entry.createdAt,
-        deletedAt: entry.deletedAt,
-        id: entry.id,
-        path: entry.path,
-        pickable: Boolean(!entry.deletedAt && entry.artifactStorageKey),
-        updatedAt: entry.updatedAt,
-      })
-    );
+    return entries.map((entry): WorkspaceEntryListItem => ({
+      artifactCommitSha: entry.artifactCommitSha,
+      artifactStorageKey: entry.artifactStorageKey,
+      builtAt: entry.builtAt,
+      createdAt: entry.createdAt,
+      deletedAt: entry.deletedAt,
+      id: entry.id,
+      path: entry.path,
+      pickable: Boolean(!entry.deletedAt && entry.artifactStorageKey),
+      updatedAt: entry.updatedAt,
+    }));
   });

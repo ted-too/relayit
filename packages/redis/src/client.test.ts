@@ -50,8 +50,8 @@ describe("makeRedisClient", () => {
       isRedisConnectionError(
         Object.assign(new Error("Connection timeout reached after 10000ms"), {
           code: "ERR_REDIS_CONNECTION_TIMEOUT",
-        })
-      )
+        }),
+      ),
     ).toBe(true);
     expect(isRedisConnectionError(serverError())).toBe(false);
     expect(isRedisConnectionError(new Error("Connection closed"))).toBe(true);
@@ -61,7 +61,7 @@ describe("makeRedisClient", () => {
   test("replaces a failed client and replays the command once", async () => {
     const { clients, open } = scripted(
       () => Promise.reject(connectionClosed()),
-      () => Promise.resolve("PONG")
+      () => Promise.resolve("PONG"),
     );
     const events: RedisReconnectEvent[] = [];
     const client = makeRedisClient({
@@ -86,7 +86,7 @@ describe("makeRedisClient", () => {
   test("surfaces the second failure when the replacement is also down", async () => {
     const { clients, open } = scripted(
       () => Promise.reject(connectionClosed()),
-      () => Promise.reject(connectionClosed())
+      () => Promise.reject(connectionClosed()),
     );
     const client = makeRedisClient({ open, url: "redis://test" });
 
@@ -115,7 +115,7 @@ describe("makeRedisClient", () => {
   test("concurrent failures share a single replacement", async () => {
     const { clients, open } = scripted(
       () => Promise.reject(connectionClosed()),
-      () => Promise.resolve("OK")
+      () => Promise.resolve("OK"),
     );
     const events: RedisReconnectEvent[] = [];
     const client = makeRedisClient({
@@ -135,9 +135,7 @@ describe("makeRedisClient", () => {
   });
 
   test("does not reopen after close", async () => {
-    const { clients, open } = scripted(() =>
-      Promise.reject(connectionClosed())
-    );
+    const { clients, open } = scripted(() => Promise.reject(connectionClosed()));
     const client = makeRedisClient({ open, url: "redis://test" });
     client.close();
 

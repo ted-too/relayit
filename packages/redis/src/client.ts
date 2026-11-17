@@ -67,8 +67,7 @@ const DEFAULT_OPTIONS = {
   maxRetries: 10,
 } satisfies RedisOptions;
 
-const openBunClient = (url: string, options: RedisOptions) =>
-  new RedisClient(url, options);
+const openBunClient = (url: string, options: RedisOptions) => new RedisClient(url, options);
 
 export const makeRedisClient = ({
   onReconnect,

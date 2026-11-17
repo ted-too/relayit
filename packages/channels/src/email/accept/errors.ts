@@ -16,9 +16,7 @@ export interface EmailAcceptRejectedDetails {
   readonly variable?: string;
 }
 
-export class EmailAcceptRejected extends Data.TaggedError(
-  "EmailAcceptRejected"
-)<{
+export class EmailAcceptRejected extends Data.TaggedError("EmailAcceptRejected")<{
   readonly code:
     | "all_recipients_suppressed"
     | "broken_react_email_link"
@@ -41,20 +39,15 @@ export class EmailAcceptRejected extends Data.TaggedError(
 }> {}
 
 export class EmailAcceptInfrastructureError extends Data.TaggedError(
-  "EmailAcceptInfrastructureError"
+  "EmailAcceptInfrastructureError",
 )<{
   readonly cause: unknown;
   readonly operation: "attachments" | "content" | "sender" | "suppressions";
   readonly organizationId: string;
 }> {}
 
-export class EmailAcceptPersistenceError extends Data.TaggedError(
-  "EmailAcceptPersistenceError"
-)<{
+export class EmailAcceptPersistenceError extends Data.TaggedError("EmailAcceptPersistenceError")<{
   readonly cause: unknown;
   readonly messageId: string;
-  readonly operation:
-    | "find_email_delivery"
-    | "insert_email_delivery"
-    | "insert_message";
+  readonly operation: "find_email_delivery" | "insert_email_delivery" | "insert_message";
 }> {}

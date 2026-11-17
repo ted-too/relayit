@@ -34,9 +34,7 @@ const makeDb = (input: {
         orderBy: () => ({
           limit: () =>
             Effect.succeed(
-              identityJoinApplied && pick
-                ? [{ id: pick.id }]
-                : ([] as { id: string }[])
+              identityJoinApplied && pick ? [{ id: pick.id }] : ([] as { id: string }[]),
             ),
         }),
       }),
@@ -89,8 +87,8 @@ describe("allocateSandboxDomain", () => {
         Effect.map((result) => {
           expect(result).toBeNull();
           return result;
-        })
-      )
+        }),
+      ),
     ));
 
   test("requires a usable managed identity join before assigning a root", () => {
@@ -110,8 +108,8 @@ describe("allocateSandboxDomain", () => {
             },
           ]);
           return result;
-        })
-      )
+        }),
+      ),
     );
   });
 });
@@ -129,14 +127,14 @@ describe("sweepIfSandboxAllocatable", () => {
                 isPaused: false,
                 verificationStatus: "not_verified",
               },
-            }).db
-          )
+            }).db,
+          ),
         ),
         Effect.map((assigned) => {
           expect(assigned).toBe(0);
           return assigned;
-        })
-      )
+        }),
+      ),
     ));
 
   test("assigns unassigned organizations while roots remain allocatable", () => {
@@ -156,12 +154,10 @@ describe("sweepIfSandboxAllocatable", () => {
         Effect.map((assigned) => {
           expect(assigned).toBe(2);
           expect(updates).toHaveLength(2);
-          expect(updates.every((u) => u.sandboxDomainId === "snd_ready")).toBe(
-            true
-          );
+          expect(updates.every((u) => u.sandboxDomainId === "snd_ready")).toBe(true);
           return assigned;
-        })
-      )
+        }),
+      ),
     );
   });
 });

@@ -2,7 +2,7 @@
 # Railway builds this from the repo root on every push to the branch the
 # service follows; deploy settings (Dockerfile path, PORT, APP_URL) live on
 # the service.
-FROM oven/bun:1.3.5-alpine AS build
+FROM oven/bun:1.4.4-alpine AS build
 WORKDIR /app
 
 # One layer: Railway builds on a fresh builder with no layer cache, so a
@@ -14,7 +14,7 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && cd apps/site \
   && NODE_ENV=production bun run build
 
-FROM oven/bun:1.3.5-alpine
+FROM oven/bun:1.4.4-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/apps/site/.output .output

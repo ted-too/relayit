@@ -11,9 +11,7 @@ export type SesIdentityClient = Pick<
   | "putEmailIdentityMailFromAttributes"
 >;
 
-const isByodkimConversionFailure = (error: {
-  readonly _tag: string;
-}): boolean => {
+const isByodkimConversionFailure = (error: { readonly _tag: string }): boolean => {
   switch (error._tag) {
     case "BadRequestException":
     case "ConflictException":
@@ -38,7 +36,7 @@ export const ensureSesDomainIdentity = (
     readonly dkimSelector: string;
     readonly fqdn: string;
     readonly region: string;
-  }
+  },
 ) => {
   const createByodkim = () =>
     ses.createEmailIdentity({
@@ -60,32 +58,31 @@ export const ensureSesDomainIdentity = (
     });
 
   const replaceWithByodkim = () =>
-    ses.deleteEmailIdentity({ EmailIdentity: input.fqdn }).pipe(
-      Effect.catchTag("NotFoundException", () => Effect.void),
-      Effect.andThen(createByodkim)
-    );
+    ses
+      .deleteEmailIdentity({ EmailIdentity: input.fqdn })
+      .pipe(
+        Effect.catchTags({ NotFoundException: () => Effect.void }),
+        Effect.andThen(createByodkim),
+      );
 
   const adoptExisting = (origin: string | undefined) =>
     origin === "EXTERNAL"
       ? applyByodkim()
-      : applyByodkim().pipe(
-          Effect.catchIf(isByodkimConversionFailure, replaceWithByodkim)
-        );
+      : applyByodkim().pipe(Effect.catchIf(isByodkimConversionFailure, replaceWithByodkim));
 
   return Effect.gen(function* () {
     const existing = yield* ses
       .getEmailIdentity({ EmailIdentity: input.fqdn })
-      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(null)));
+      .pipe(Effect.catchTags({ NotFoundException: () => Effect.succeed(null) }));
 
     if (existing) {
       yield* adoptExisting(existing.DkimAttributes?.SigningAttributesOrigin);
     } else {
       yield* createByodkim().pipe(
-        Effect.catchTag("AlreadyExistsException", () =>
-          applyByodkim().pipe(
-            Effect.catchIf(isByodkimConversionFailure, replaceWithByodkim)
-          )
-        )
+        Effect.catchTags({
+          AlreadyExistsException: () =>
+            applyByodkim().pipe(Effect.catchIf(isByodkimConversionFailure, replaceWithByodkim)),
+        }),
       );
     }
 

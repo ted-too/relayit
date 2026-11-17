@@ -14,6 +14,4 @@ export const templateBuilderConfig = Config.all({
   templatingBuilderSecret: Config.redacted("TEMPLATING_BUILDER_SECRET"),
 });
 
-export type TemplateBuilderConfig = Effect.Success<
-  typeof templateBuilderConfig
->;
+export type TemplateBuilderConfig = Effect.Success<typeof templateBuilderConfig>;

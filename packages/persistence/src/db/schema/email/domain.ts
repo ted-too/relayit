@@ -12,21 +12,20 @@ import * as z from "zod";
  * progress with `verificationStatus`. `*_paused` state is orthogonal to
  * verification — a verified domain can still be paused for reputation/abuse.
  */
-export const domainVerificationStatusEnum = pgEnum(
-  "domain_verification_status",
-  ["not_verified", "partially_verified", "verified"]
-);
+export const domainVerificationStatusEnum = pgEnum("domain_verification_status", [
+  "not_verified",
+  "partially_verified",
+  "verified",
+]);
 
-export type DomainVerificationStatus =
-  (typeof domainVerificationStatusEnum.enumValues)[number];
+export type DomainVerificationStatus = (typeof domainVerificationStatusEnum.enumValues)[number];
 
 export const domainPausedReasonEnum = pgEnum("domain_paused_reason", [
   "bad_reputation",
   "manual_admin_pause",
 ]);
 
-export type DomainPausedReason =
-  (typeof domainPausedReasonEnum.enumValues)[number];
+export type DomainPausedReason = (typeof domainPausedReasonEnum.enumValues)[number];
 
 /**
  * What a given DNS record proves (`dkim`/`spf`/`dmarc` all authenticate the
@@ -52,12 +51,6 @@ export const zDnsRecordType = z.enum(AVAILABLE_DNS_RECORD_TYPES);
 
 export type DnsRecordType = (typeof AVAILABLE_DNS_RECORD_TYPES)[number];
 
-export const dnsRecordPurposeEnum = pgEnum(
-  "dns_record_purpose",
-  AVAILABLE_DNS_RECORD_PURPOSES
-);
+export const dnsRecordPurposeEnum = pgEnum("dns_record_purpose", AVAILABLE_DNS_RECORD_PURPOSES);
 
-export const dnsRecordTypeEnum = pgEnum(
-  "dns_record_type",
-  AVAILABLE_DNS_RECORD_TYPES
-);
+export const dnsRecordTypeEnum = pgEnum("dns_record_type", AVAILABLE_DNS_RECORD_TYPES);

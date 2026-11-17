@@ -1,14 +1,7 @@
 export { syncWorkspaceEntriesFromPaths } from "./entries";
-export {
-  HOSTED_DEV_REF,
-  HOSTED_MAIN_REF,
-  scaffoldHostedWorkspace,
-} from "./git";
+export { HOSTED_DEV_REF, HOSTED_MAIN_REF, scaffoldHostedWorkspace } from "./git";
 export * as WorkspaceOps from "./ops/workspace";
-export {
-  makeBuilderAuthClientLayer,
-  makeBuilderAuthServerLayer,
-} from "./rpc/auth";
+export { makeBuilderAuthClientLayer, makeBuilderAuthServerLayer } from "./rpc/auth";
 export {
   makeTemplatingBuilderClientLive,
   makeTemplatingBuilderProtocolLive,

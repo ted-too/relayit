@@ -1,10 +1,6 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { stripeClient } from "@better-auth/stripe/client";
-import {
-  adminClient,
-  lastLoginMethodClient,
-  organizationClient,
-} from "better-auth/client/plugins";
+import { adminClient, lastLoginMethodClient, organizationClient } from "better-auth/client/plugins";
 import { createAuthClient as createBetterAuthClient } from "better-auth/react";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import {

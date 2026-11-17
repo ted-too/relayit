@@ -9,27 +9,17 @@ import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { awsSesProviderFactory } from "@repo/provider-aws/email/runtime";
 import { makeRedisLive } from "@repo/redis";
-import {
-  Effect,
-  Layer,
-  Logger,
-  ManagedRuntime,
-  type Option,
-  Redacted,
-  References,
-} from "effect";
+import { Effect, Layer, Logger, ManagedRuntime, type Option, Redacted, References } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { type ApiConfig, apiConfig } from "./env";
 
 export const loggingLive = (config: ApiConfig) =>
   Layer.mergeAll(
     Logger.layer([
-      Bun.env.NODE_ENV === "production"
-        ? Logger.consoleJson
-        : Logger.consolePretty(),
+      Bun.env.NODE_ENV === "production" ? Logger.consoleJson : Logger.consolePretty(),
       Logger.tracerLogger,
     ]),
-    Layer.succeed(References.MinimumLogLevel, config.logLevel)
+    Layer.succeed(References.MinimumLogLevel, config.logLevel),
   );
 
 export const LoggingLive = Layer.unwrap(Effect.map(apiConfig, loggingLive));
@@ -72,9 +62,7 @@ const cloudflareFromConfig = (config: {
 };
 
 export const makeRuntime = (config: ApiConfig) => {
-  const secrets = parseBetterAuthSecrets(
-    Redacted.value(config.betterAuthSecrets)
-  );
+  const secrets = parseBetterAuthSecrets(Redacted.value(config.betterAuthSecrets));
   const logging = loggingLive(config);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
@@ -91,23 +79,19 @@ export const makeRuntime = (config: ApiConfig) => {
     secretAccessKey: Redacted.value(config.s3SecretAccessKey),
   });
   const usagePolicyLive = UsagePolicyLive.pipe(Layer.provide(dbLive));
-  const usageLive = UsageLive.pipe(
-    Layer.provide(Layer.merge(redisLive, usagePolicyLive))
-  );
+  const usageLive = UsageLive.pipe(Layer.provide(Layer.merge(redisLive, usagePolicyLive)));
   const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
   const deadLetterStoreLive = DeadLetterStoreLive.pipe(Layer.provide(dbLive));
   const httpLive = FetchHttpClient.layer.pipe(
     Layer.provide(
       Layer.succeed(FetchHttpClient.RequestInit, {
         redirect: "error",
-      })
-    )
+      }),
+    ),
   );
   const credentialsVaultLive = ProviderCredentialsVault.live(secrets);
   const symmetricCryptoLive = SymmetricCrypto.live(secrets);
-  const emailProviderRegistryLive = EmailProviderRegistry.live(
-    awsSesProviderFactory
-  );
+  const emailProviderRegistryLive = EmailProviderRegistry.live(awsSesProviderFactory);
   const cloudflareConfig = cloudflareFromConfig(config);
   const managedDnsLive = cloudflareConfig
     ? EmailManagedDns.live(cloudflareConfig).pipe(Layer.provide(dbLive))
@@ -126,7 +110,7 @@ export const makeRuntime = (config: ApiConfig) => {
       symmetricCryptoLive,
       emailProviderRegistryLive,
       managedDnsLive,
-      logging
-    )
+      logging,
+    ),
   );
 };

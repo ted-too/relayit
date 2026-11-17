@@ -1,14 +1,6 @@
-import {
-  SidebarInset,
-  SidebarProvider,
-} from "@repo/ui/components/ui/shad/sidebar";
+import { SidebarInset, SidebarProvider } from "@repo/ui/components/ui/shad/sidebar";
 import { useSuspenseQueries } from "@tanstack/react-query";
-import {
-  createFileRoute,
-  Outlet,
-  redirect,
-  useLocation,
-} from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import {
   BrushSquare,
   Category2,
@@ -32,13 +24,10 @@ export const Route = createFileRoute("/_authd/$orgSlug")({
   beforeLoad: async ({ context, params }) => {
     const userOrganizations = await listOrganizations();
 
-    await context.queryClient.setQueryData(
-      queries.organizations.list.queryKey,
-      userOrganizations
-    );
+    await context.queryClient.setQueryData(queries.organizations.list.queryKey, userOrganizations);
 
     const currentOrganization = userOrganizations.find(
-      (organization) => organization.slug === params.orgSlug
+      (organization) => organization.slug === params.orgSlug,
     );
 
     if (!currentOrganization) {
@@ -47,9 +36,7 @@ export const Route = createFileRoute("/_authd/$orgSlug")({
   },
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(queries.session.me);
-    void context.queryClient.prefetchQuery(
-      queries.organizations.bySlug(params.orgSlug)
-    );
+    void context.queryClient.prefetchQuery(queries.organizations.bySlug(params.orgSlug));
   },
   component: RouteComponent,
 });
@@ -143,9 +130,7 @@ function RouteComponent() {
     queries: [queries.session.me, queries.organizations.bySlug(orgSlug)],
   });
 
-  const member = organization?.members.find(
-    (member) => member.userId === me.user.id
-  );
+  const member = organization?.members.find((member) => member.userId === me.user.id);
 
   if (!member) {
     return null;
@@ -172,17 +157,9 @@ function RouteComponent() {
   return (
     <div className="flex size-full">
       <SidebarProvider defaultOpen={sidebarOpen} isMobile={isMobile}>
-        <AppSidebar
-          items={FILTERED_NAV_ITEMS}
-          linkParams={{ orgSlug }}
-          pathname={pathname}
-        />
+        <AppSidebar items={FILTERED_NAV_ITEMS} linkParams={{ orgSlug }} pathname={pathname} />
         <SidebarInset className="grow bg-[hsl(0,0%,98%)] *:data-[slot=balanced-outlet]:mx-auto *:data-[slot=balanced-outlet]:mt-6 *:data-[slot=full-outlet]:mt-0 *:data-[slot=full-outlet]:flex *:data-[slot=full-outlet]:min-h-0 *:data-[slot=balanced-outlet]:w-[calc(1200px+3rem)] *:data-[slot=full-outlet]:w-full *:data-[slot=balanced-outlet]:max-w-full *:data-[slot=full-outlet]:flex-1 *:data-[slot=full-outlet]:flex-col *:data-[slot=balanced-outlet]:px-6 *:data-[slot=full-outlet]:px-4 *:data-[slot=full-outlet]:pt-4 *:data-[slot=full-outlet]:pb-4">
-          <AppHeader
-            items={FILTERED_NAV_ITEMS}
-            linkParams={{ orgSlug }}
-            pathname={pathname}
-          />
+          <AppHeader items={FILTERED_NAV_ITEMS} linkParams={{ orgSlug }} pathname={pathname} />
           <Outlet />
         </SidebarInset>
       </SidebarProvider>

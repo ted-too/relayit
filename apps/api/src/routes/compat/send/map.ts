@@ -10,9 +10,7 @@ import { tryParseEmailFrom } from "../../messages/validators/email";
 import type { LegacySendRawBody, LegacySendTemplateBody } from "./validators";
 
 type LegacySendContact = NonNullable<LegacySendRawBody["contact"]>;
-type LegacySendAttachment = NonNullable<
-  LegacySendRawBody["attachments"]
->[number];
+type LegacySendAttachment = NonNullable<LegacySendRawBody["attachments"]>[number];
 
 export type LegacyMapResult =
   | { readonly input: AcceptTransactionalEmailInput; readonly ok: true }
@@ -23,17 +21,12 @@ export type LegacyMapResult =
       readonly status: 400;
     };
 
-const mapLegacyContact = (
-  to: string,
-  contact: LegacySendContact | undefined
-) => {
+const mapLegacyContact = (to: string, contact: LegacySendContact | undefined) => {
   if (!contact) {
     return { email: to };
   }
 
-  const properties = contact.externalIdentifiers
-    ? { ...contact.externalIdentifiers }
-    : undefined;
+  const properties = contact.externalIdentifiers ? { ...contact.externalIdentifiers } : undefined;
 
   return {
     email: to,
@@ -44,7 +37,7 @@ const mapLegacyContact = (
 
 const attributionFromLegacy = (
   app: string | undefined,
-  appEnvironment: string | undefined
+  appEnvironment: string | undefined,
 ): AcceptTransactionalEmailInput["attribution"] => {
   const hasApp = app != null && app.length > 0;
   const hasEnvironment = appEnvironment != null && appEnvironment.length > 0;
@@ -55,7 +48,7 @@ const attributionFromLegacy = (
 };
 
 const mapLegacyAttachments = (
-  attachments: readonly LegacySendAttachment[] | undefined
+  attachments: readonly LegacySendAttachment[] | undefined,
 ): AcceptTransactionalEmailInput["email"]["attachments"] => {
   if (!attachments?.length) {
     return [];
@@ -85,8 +78,7 @@ const resolveMappedFrom = (input: {
   if (!from) {
     return {
       details: [],
-      message:
-        "No sender identity available; pass from or provision Sandbox Domain",
+      message: "No sender identity available; pass from or provision Sandbox Domain",
       ok: false,
       status: 400,
     };
@@ -120,10 +112,7 @@ export const mapLegacyRawToAccept = (input: {
 
   return {
     input: {
-      attribution: attributionFromLegacy(
-        input.body.app,
-        input.body.appEnvironment
-      ),
+      attribution: attributionFromLegacy(input.body.app, input.body.appEnvironment),
       email: {
         attachments: mapLegacyAttachments(input.body.attachments),
         bcc: [],
@@ -160,10 +149,7 @@ export const mapLegacyTemplateToAccept = (input: {
 
   return {
     input: {
-      attribution: attributionFromLegacy(
-        input.body.app,
-        input.body.appEnvironment
-      ),
+      attribution: attributionFromLegacy(input.body.app, input.body.appEnvironment),
       email: {
         attachments: mapLegacyAttachments(input.body.attachments),
         bcc: [],
@@ -238,7 +224,7 @@ export const resolveLegacyDefaultFromAddress = async (input: {
 };
 
 export const mapAcceptResultToLegacyResponse = (
-  result: AcceptedTransactionalEmail | EmailAcceptRejected | UsageLimitExceeded
+  result: AcceptedTransactionalEmail | EmailAcceptRejected | UsageLimitExceeded,
 ) => {
   if ("messageId" in result) {
     return {
@@ -256,11 +242,7 @@ export const mapAcceptResultToLegacyResponse = (
     case "UsageLimitExceeded":
       return {
         body: {
-          details: [
-            result.window === "daily"
-              ? "daily_limit_exceeded"
-              : "monthly_limit_exceeded",
-          ],
+          details: [result.window === "daily" ? "daily_limit_exceeded" : "monthly_limit_exceeded"],
           message: `${result.window === "daily" ? "Daily" : "Monthly"} email send limit exceeded`,
         },
         status: 429 as const,

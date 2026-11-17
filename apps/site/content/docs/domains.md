@@ -7,14 +7,14 @@ description: "Send from your own domain: add it in the dashboard, publish DKIM, 
 
 Every email you send needs a sending identity. Relayit offers two.
 
-| | Sandbox Domain | Custom Domain |
-| --- | --- | --- |
-| Who owns it | Relayit | You |
-| Setup | None. New Projects are allocated to it when it is available. | Add it and publish DNS records. |
-| From address | `sandbox@` the Sandbox Domain, only | Any address on the domain |
-| Recipients | Project members only | Anyone |
-| Provider | Managed | Managed or BYO |
-| Use it for | Testing your integration | Production mail |
+|              | Sandbox Domain                                               | Custom Domain                   |
+| ------------ | ------------------------------------------------------------ | ------------------------------- |
+| Who owns it  | Relayit                                                      | You                             |
+| Setup        | None. New Projects are allocated to it when it is available. | Add it and publish DNS records. |
+| From address | `sandbox@` the Sandbox Domain, only                          | Any address on the domain       |
+| Recipients   | Project members only                                         | Anyone                          |
+| Provider     | Managed                                                      | Managed or BYO                  |
+| Use it for   | Testing your integration                                     | Production mail                 |
 
 The Project keeps the Sandbox Domain after your own Domains verify, so you can keep using it for tests.
 
@@ -76,11 +76,11 @@ After you publish the records, select **Refresh** on the Domain page. Relayit al
 
 Each record shows its own status, and the Domain shows an overall status:
 
-| Status | Meaning |
-| --- | --- |
-| **Not verified** | No records found yet. |
-| **Partially verified** | Some records are in place, others are still missing. |
-| **Verified** | All required records are in place and the Provider has verified the domain. |
+| Status                 | Meaning                                                                     |
+| ---------------------- | --------------------------------------------------------------------------- |
+| **Not verified**       | No records found yet.                                                       |
+| **Partially verified** | Some records are in place, others are still missing.                        |
+| **Verified**           | All required records are in place and the Provider has verified the domain. |
 
 The Domain header also shows **Can Send**. It is **Yes** only when the Domain is verified and not paused. Once it is, any address on that exact domain works as `from`.
 

@@ -12,10 +12,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
-import {
-  type MessageContactInput,
-  normalizeContactEmail,
-} from "../../messages/accept/contacts";
+import { type MessageContactInput, normalizeContactEmail } from "../../messages/accept/contacts";
 import { type ResolvedEmailSender, SANDBOX_FROM_LOCAL_PART } from "../sender";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "./errors";
 
@@ -24,7 +21,7 @@ export const resolveEmailSender = (
   input: {
     readonly fromAddress: string;
     readonly organizationId: string;
-  }
+  },
 ) =>
   Effect.gen(function* () {
     const normalizedFrom = normalizeContactEmail(input.fromAddress);
@@ -32,8 +29,7 @@ export const resolveEmailSender = (
     if (!fromDomain) {
       return yield* new EmailAcceptRejected({
         code: "invalid_from_address",
-        message:
-          "The 'from' address is not a verified sending domain for this Project.",
+        message: "The 'from' address is not a verified sending domain for this Project.",
       });
     }
 
@@ -46,10 +42,7 @@ export const resolveEmailSender = (
         verificationStatus: sandboxDomain.verificationStatus,
       })
       .from(organization)
-      .leftJoin(
-        sandboxDomain,
-        eq(organization.sandboxDomainId, sandboxDomain.id)
-      )
+      .leftJoin(sandboxDomain, eq(organization.sandboxDomainId, sandboxDomain.id))
       .where(eq(organization.id, input.organizationId))
       .limit(1)
       .pipe(
@@ -59,16 +52,14 @@ export const resolveEmailSender = (
               cause,
               operation: "sender",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (
       sandbox?.id &&
       normalizedFrom ===
-        normalizeContactEmail(
-          `${SANDBOX_FROM_LOCAL_PART}@${sandbox.rootDomain}`
-        ) &&
+        normalizeContactEmail(`${SANDBOX_FROM_LOCAL_PART}@${sandbox.rootDomain}`) &&
       sandbox.isActive &&
       !sandbox.isPaused &&
       sandbox.verificationStatus === "verified"
@@ -82,17 +73,14 @@ export const resolveEmailSender = (
     const [custom] = yield* db
       .select({ customDomainId: customDomain.id })
       .from(organizationDomain)
-      .innerJoin(
-        customDomain,
-        eq(organizationDomain.customDomainId, customDomain.id)
-      )
+      .innerJoin(customDomain, eq(organizationDomain.customDomainId, customDomain.id))
       .where(
         and(
           eq(organizationDomain.organizationId, input.organizationId),
           eq(sql`lower(${customDomain.fqdn})`, fromDomain),
           eq(customDomain.verificationStatus, "verified"),
-          eq(customDomain.isPaused, false)
-        )
+          eq(customDomain.isPaused, false),
+        ),
       )
       .limit(1)
       .pipe(
@@ -102,8 +90,8 @@ export const resolveEmailSender = (
               cause,
               operation: "sender",
               organizationId: input.organizationId,
-            })
-        )
+            }),
+        ),
       );
 
     if (custom) {
@@ -115,15 +103,14 @@ export const resolveEmailSender = (
 
     return yield* new EmailAcceptRejected({
       code: "invalid_from_address",
-      message:
-        "The 'from' address is not a verified sending domain for this Project.",
+      message: "The 'from' address is not a verified sending domain for this Project.",
     });
   });
 
 export const resolveEmailProviderKind = (
   db: DatabaseExecutor,
   organizationId: string,
-  sender: ResolvedEmailSender
+  sender: ResolvedEmailSender,
 ): Effect.Effect<ProviderKind, EmailAcceptInfrastructureError> => {
   if (sender.kind === "sandbox") {
     return Effect.succeed("managed");
@@ -132,30 +119,25 @@ export const resolveEmailProviderKind = (
   return db
     .select({ scope: provider.scope })
     .from(emailDomainProviderIdentity)
-    .innerJoin(
-      provider,
-      eq(emailDomainProviderIdentity.providerId, provider.id)
-    )
+    .innerJoin(provider, eq(emailDomainProviderIdentity.providerId, provider.id))
     .where(
       and(
         eq(emailDomainProviderIdentity.customDomainId, sender.customDomainId),
         eq(emailDomainProviderIdentity.isActive, true),
-        eq(emailDomainProviderIdentity.verificationStatus, "verified")
-      )
+        eq(emailDomainProviderIdentity.verificationStatus, "verified"),
+      ),
     )
     .limit(1)
     .pipe(
-      Effect.map(([identity]) =>
-        identity?.scope === "platform" ? "managed" : "byo"
-      ),
+      Effect.map(([identity]) => (identity?.scope === "platform" ? "managed" : "byo")),
       Effect.mapError(
         (cause) =>
           new EmailAcceptInfrastructureError({
             cause,
             operation: "sender",
             organizationId,
-          })
-      )
+          }),
+      ),
     );
 };
 
@@ -164,7 +146,7 @@ export const assertSandboxRecipientsAreMembers = (
   input: {
     readonly organizationId: string;
     readonly recipients: readonly MessageContactInput[];
-  }
+  },
 ) =>
   db
     .select({ email: user.email })
@@ -178,24 +160,20 @@ export const assertSandboxRecipientsAreMembers = (
             cause,
             operation: "sender",
             organizationId: input.organizationId,
-          })
+          }),
       ),
       Effect.flatMap((rows) => {
-        const memberEmails = new Set(
-          rows.map((row) => normalizeContactEmail(row.email))
-        );
+        const memberEmails = new Set(rows.map((row) => normalizeContactEmail(row.email)));
         const hasNonMember = input.recipients.some(
-          (recipient) =>
-            !memberEmails.has(normalizeContactEmail(recipient.email))
+          (recipient) => !memberEmails.has(normalizeContactEmail(recipient.email)),
         );
         return hasNonMember
           ? Effect.fail(
               new EmailAcceptRejected({
                 code: "sandbox_recipient_not_member",
-                message:
-                  "Sandbox Domain sends may only target Project member email addresses.",
-              })
+                message: "Sandbox Domain sends may only target Project member email addresses.",
+              }),
             )
           : Effect.void;
-      })
+      }),
     );

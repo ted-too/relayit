@@ -1,0 +1,19 @@
+{
+  "name": "@repo/oxlint-plugin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "@oxlint/plugins": "1.87.0",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "oxlint": "1.87.0",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

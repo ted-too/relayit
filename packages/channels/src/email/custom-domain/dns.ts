@@ -1,17 +1,14 @@
-import { randomBytes } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { dkimRecordName, formatDkimTxtRecord } from "../dkim";
 import { formatTxtRecordContent, type ManagedDnsRecord } from "../managed-dns";
 import type { MailFromDnsRecord } from "../provider-adapter";
 
 const OWNERSHIP_PREFIX = "relayit-domain-verification=";
 
-export const customDomainRootDnsOwner = (customDomainId: string) =>
-  `custom:${customDomainId}:root`;
+export const customDomainRootDnsOwner = (customDomainId: string) => `custom:${customDomainId}:root`;
 
-export const customDomainIdentityDnsOwner = (
-  customDomainId: string,
-  providerId: string
-) => `custom:${customDomainId}:identity:${providerId}`;
+export const customDomainIdentityDnsOwner = (customDomainId: string, providerId: string) =>
+  `custom:${customDomainId}:identity:${providerId}`;
 
 /** Customer-published root records (DKIM + DMARC). No platform SPF / CF auto-manage. */
 export const buildCustomDomainRootDnsRecords = (input: {
@@ -53,11 +50,9 @@ export const resolveCustomDomainMailFromRecords = (input: {
     value: record.value,
   }));
 
-export const ownershipChallengeHost = (fqdn: string): string =>
-  `_relayit-challenge.${fqdn}`;
+export const ownershipChallengeHost = (fqdn: string): string => `_relayit-challenge.${fqdn}`;
 
 export const ownershipChallengeValue = (token: string): string =>
   formatTxtRecordContent(`${OWNERSHIP_PREFIX}${token}`);
 
-export const createOwnershipToken = (): string =>
-  randomBytes(24).toString("hex");
+export const createOwnershipToken = (): string => NodeCrypto.randomBytes(24).toString("hex");

@@ -6,8 +6,7 @@ const FAILURE_THRESHOLD = 5;
 const COOLDOWN_MS = 60_000;
 const TTL_MS = COOLDOWN_MS;
 
-const breakerKey = (providerId: string) =>
-  `relayit:breaker:provider:${providerId}`;
+const breakerKey = (providerId: string) => `relayit:breaker:provider:${providerId}`;
 
 /**
  * Returns 1 when the call may proceed (closed or half_open), else 0.
@@ -60,8 +59,8 @@ export const providerCircuitAllow = (providerId: string) =>
             new MessageDeliveryInfrastructureError({
               cause,
               operation: "circuit",
-            })
-        )
+            }),
+        ),
       );
     return allowed === 1;
   });
@@ -82,8 +81,8 @@ export const providerCircuitRecordFailure = (providerId: string) =>
             new MessageDeliveryInfrastructureError({
               cause,
               operation: "circuit",
-            })
-        )
+            }),
+        ),
       );
   });
 
@@ -102,7 +101,7 @@ export const providerCircuitRecordSuccess = (providerId: string) =>
             new MessageDeliveryInfrastructureError({
               cause,
               operation: "circuit",
-            })
-        )
+            }),
+        ),
       );
   });

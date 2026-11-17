@@ -29,7 +29,7 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
   db: DatabaseExecutor,
   table: T,
   name: string,
-  options?: GenerateDbSlugOptions
+  options?: GenerateDbSlugOptions,
 ): Effect.Effect<string, EffectDrizzleQueryError> =>
   Effect.gen(function* () {
     const baseSlug = slugify(name) || "item";
@@ -39,9 +39,7 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
       .select({ count: count() })
       // @ts-expect-error - drizzle orm bug see - https://github.com/drizzle-team/drizzle-orm/issues/4069
       .from(table)
-      .where(
-        scope ? and(eq(table.slug, baseSlug), scope) : eq(table.slug, baseSlug)
-      );
+      .where(scope ? and(eq(table.slug, baseSlug), scope) : eq(table.slug, baseSlug));
 
     if ((existingRows[0]?.count ?? 0) === 0) {
       return baseSlug;
@@ -52,11 +50,7 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
       .select({ slug: table.slug })
       // @ts-expect-error - drizzle orm bug see - https://github.com/drizzle-team/drizzle-orm/issues/4069
       .from(table)
-      .where(
-        scope
-          ? and(like(table.slug, pattern), scope)
-          : like(table.slug, pattern)
-      );
+      .where(scope ? and(like(table.slug, pattern), scope) : like(table.slug, pattern));
 
     const escaped = baseSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const existingNumbers = existingSlugs
@@ -67,8 +61,7 @@ export const generateDbSlug = <T extends AnyPgTable & { slug: AnyPgColumn }>(
       })
       .filter((num) => num > 0);
 
-    const nextNumber =
-      existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 2;
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 2;
 
     return `${baseSlug}-${nextNumber}`;
   });

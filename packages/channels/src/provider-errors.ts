@@ -11,20 +11,18 @@ export interface ProviderInstanceErrorContext extends ProviderTypeErrorContext {
 }
 
 export class ProviderNotFound extends Data.TaggedError(
-  "ProviderNotFound"
+  "ProviderNotFound",
 )<ProviderTypeErrorContext> {}
 
 export class DuplicateProvider extends Data.TaggedError(
-  "DuplicateProvider"
+  "DuplicateProvider",
 )<ProviderTypeErrorContext> {}
 
-export class ProviderAuthenticationError extends Data.TaggedError(
-  "ProviderAuthenticationError"
-)<ProviderInstanceErrorContext & { readonly cause?: unknown }> {}
+export class ProviderAuthenticationError extends Data.TaggedError("ProviderAuthenticationError")<
+  ProviderInstanceErrorContext & { readonly cause?: unknown }
+> {}
 
-export class ProviderConfigurationError extends Data.TaggedError(
-  "ProviderConfigurationError"
-)<
+export class ProviderConfigurationError extends Data.TaggedError("ProviderConfigurationError")<
   ProviderInstanceErrorContext & {
     readonly cause?: unknown;
     readonly code:
@@ -34,9 +32,9 @@ export class ProviderConfigurationError extends Data.TaggedError(
   }
 > {}
 
-export class ProviderRateLimited extends Data.TaggedError(
-  "ProviderRateLimited"
-)<ProviderInstanceErrorContext & { readonly retryAfterMs?: number }> {}
+export class ProviderRateLimited extends Data.TaggedError("ProviderRateLimited")<
+  ProviderInstanceErrorContext & { readonly retryAfterMs?: number }
+> {}
 
 export class ProviderRejected extends Data.TaggedError("ProviderRejected")<
   ProviderInstanceErrorContext & {
@@ -45,9 +43,7 @@ export class ProviderRejected extends Data.TaggedError("ProviderRejected")<
   }
 > {}
 
-export class ProviderMessageError extends Data.TaggedError(
-  "ProviderMessageError"
-)<
+export class ProviderMessageError extends Data.TaggedError("ProviderMessageError")<
   ProviderInstanceErrorContext & {
     readonly cause?: unknown;
     readonly code: "invalid_attachment_encoding";
@@ -55,13 +51,11 @@ export class ProviderMessageError extends Data.TaggedError(
   }
 > {}
 
-export class ProviderUnavailable extends Data.TaggedError(
-  "ProviderUnavailable"
-)<ProviderInstanceErrorContext & { readonly cause?: unknown }> {}
+export class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")<
+  ProviderInstanceErrorContext & { readonly cause?: unknown }
+> {}
 
-export class ProviderWebhookError extends Data.TaggedError(
-  "ProviderWebhookError"
-)<
+export class ProviderWebhookError extends Data.TaggedError("ProviderWebhookError")<
   ProviderTypeErrorContext & {
     readonly cause?: unknown;
     readonly providerId?: Provider["id"];

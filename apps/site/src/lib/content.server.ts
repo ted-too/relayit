@@ -88,16 +88,9 @@ export const highlight = async (code: string, lang: string) => {
 };
 
 const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const renderPage = async (
-  slug: string,
-  source: string
-): Promise<RenderedPage> => {
+const renderPage = async (slug: string, source: string): Promise<RenderedPage> => {
   const { body, data } = parseFrontmatter(source);
   const shiki = await getHighlighter();
   const toc: TocItem[] = [];
@@ -153,7 +146,7 @@ const renderPage = async (
         const rows = token.rows
           .map(
             (row) =>
-              `<tr>${row.map((cell) => `<td>${this.parser.parseInline(cell.tokens)}</td>`).join("")}</tr>`
+              `<tr>${row.map((cell) => `<td>${this.parser.parseInline(cell.tokens)}</td>`).join("")}</tr>`,
           )
           .join("");
         return `<div class="table-wrap"><table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -194,9 +187,7 @@ export const listPages = (collection: Collection) =>
     .filter(([path]) => path.startsWith(`/content/${collection}/`))
     .map(([path, source]) => {
       const { data } = parseFrontmatter(source);
-      const slug = path
-        .slice(`/content/${collection}/`.length)
-        .replace(MD_EXTENSION, "");
+      const slug = path.slice(`/content/${collection}/`.length).replace(MD_EXTENSION, "");
       return {
         description: data.description ?? "",
         slug: slug === "index" ? "" : slug,

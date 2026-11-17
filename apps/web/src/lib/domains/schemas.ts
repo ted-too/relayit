@@ -12,10 +12,9 @@ export const createCustomDomainFormSchema = z.object({
   providerId: z.string().min(1).optional(),
 });
 
-export const createCustomDomainInputSchema =
-  createCustomDomainFormSchema.extend({
-    orgSlug: z.string().min(1),
-  });
+export const createCustomDomainInputSchema = createCustomDomainFormSchema.extend({
+  orgSlug: z.string().min(1),
+});
 
 export const customDomainIdInputSchema = z.object({
   customDomainId: z.string().min(1),
@@ -30,9 +29,5 @@ export const listProjectProvidersInputSchema = z.object({
   orgSlug: z.string().min(1),
 });
 
-export type CreateCustomDomainFormValues = z.infer<
-  typeof createCustomDomainFormSchema
->;
-export type CreateCustomDomainInput = z.infer<
-  typeof createCustomDomainInputSchema
->;
+export type CreateCustomDomainFormValues = z.infer<typeof createCustomDomainFormSchema>;
+export type CreateCustomDomainInput = z.infer<typeof createCustomDomainInputSchema>;

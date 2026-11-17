@@ -1,5 +1,5 @@
-import * as dns from "node:dns";
-import * as net from "node:net";
+import * as NodeDns from "node:dns";
+import * as NodeNet from "node:net";
 import type { DnsRecordWarning } from "@repo/persistence/db/schema";
 
 const TRAILING_DOT_REGEX = /\.$/;
@@ -18,10 +18,7 @@ export interface LiveDnsEvaluation {
 const isDnsNotFound = (error: unknown): boolean => {
   const code = (error as NodeJS.ErrnoException).code;
   return (
-    code === "ENOTFOUND" ||
-    code === "ENODATA" ||
-    code === "DNS_ENOTFOUND" ||
-    code === "DNS_ENODATA"
+    code === "ENOTFOUND" || code === "ENODATA" || code === "DNS_ENOTFOUND" || code === "DNS_ENODATA"
   );
 };
 
@@ -39,22 +36,20 @@ const isTransientDnsError = (error: unknown): boolean => {
   );
 };
 
-const toFqdn = (host: string): string =>
-  host.endsWith(".") ? host : `${host}.`;
+const toFqdn = (host: string): string => (host.endsWith(".") ? host : `${host}.`);
 
-const stripTrailingDot = (value: string): string =>
-  value.replace(TRAILING_DOT_REGEX, "");
+const stripTrailingDot = (value: string): string => value.replace(TRAILING_DOT_REGEX, "");
 
 const createResolver = (servers: readonly string[]) => {
-  const resolver = new dns.promises.Resolver(RESOLVER_OPTIONS);
+  const resolver = new NodeDns.promises.Resolver(RESOLVER_OPTIONS);
   resolver.setServers([...servers]);
   return resolver;
 };
 
 const queryResolver = async <T>(
   servers: readonly string[],
-  run: (resolver: dns.promises.Resolver) => Promise<T>,
-  emptyOnNotFound: T
+  run: (resolver: NodeDns.promises.Resolver) => Promise<T>,
+  emptyOnNotFound: T,
 ): Promise<T> => {
   try {
     return await run(createResolver(servers));
@@ -67,15 +62,9 @@ const queryResolver = async <T>(
 };
 
 const lookupNsRecords = async (host: string): Promise<string[]> =>
-  queryResolver(
-    PUBLIC_RESOLVER_IPS,
-    (resolver) => resolver.resolveNs(toFqdn(host)),
-    []
-  );
+  queryResolver(PUBLIC_RESOLVER_IPS, (resolver) => resolver.resolveNs(toFqdn(host)), []);
 
-export const lookupAuthoritativeNameservers = async (
-  fqdn: string
-): Promise<string[]> => {
+export const lookupAuthoritativeNameservers = async (fqdn: string): Promise<string[]> => {
   const labels = fqdn.toLowerCase().split(".");
 
   for (let index = 0; index < labels.length - 1; index += 1) {
@@ -90,27 +79,17 @@ export const lookupAuthoritativeNameservers = async (
 };
 
 const lookupIpv4 = async (host: string): Promise<string[]> =>
-  queryResolver(
-    PUBLIC_RESOLVER_IPS,
-    (resolver) => resolver.resolve4(toFqdn(host)),
-    []
-  );
+  queryResolver(PUBLIC_RESOLVER_IPS, (resolver) => resolver.resolve4(toFqdn(host)), []);
 
 const lookupIpv6 = async (host: string): Promise<string[]> =>
-  queryResolver(
-    PUBLIC_RESOLVER_IPS,
-    (resolver) => resolver.resolve6(toFqdn(host)),
-    []
-  );
+  queryResolver(PUBLIC_RESOLVER_IPS, (resolver) => resolver.resolve6(toFqdn(host)), []);
 
-const nameserverIps = async (
-  nameservers: readonly string[]
-): Promise<string[]> => {
+const nameserverIps = async (nameservers: readonly string[]): Promise<string[]> => {
   const ips: string[] = [];
 
   for (const nameserver of nameservers) {
     const hostname = stripTrailingDot(nameserver).toLowerCase();
-    if (net.isIP(hostname)) {
+    if (NodeNet.isIP(hostname)) {
       ips.push(hostname);
       continue;
     }
@@ -136,18 +115,14 @@ const serversForHost = async (host: string): Promise<string[]> => {
 
 const lookupOnServers = async <T>(
   host: string,
-  run: (resolver: dns.promises.Resolver, fqdn: string) => Promise<T>,
-  emptyOnNotFound: T
+  run: (resolver: NodeDns.promises.Resolver, fqdn: string) => Promise<T>,
+  emptyOnNotFound: T,
 ): Promise<T> => {
   const fqdn = toFqdn(host);
   const authoritative = await serversForHost(host);
 
   try {
-    return await queryResolver(
-      authoritative,
-      (resolver) => run(resolver, fqdn),
-      emptyOnNotFound
-    );
+    return await queryResolver(authoritative, (resolver) => run(resolver, fqdn), emptyOnNotFound);
   } catch (error) {
     if (!isTransientDnsError(error)) {
       throw error;
@@ -155,18 +130,12 @@ const lookupOnServers = async <T>(
 
     if (
       authoritative.length === PUBLIC_RESOLVER_IPS.length &&
-      authoritative.every(
-        (server, index) => server === PUBLIC_RESOLVER_IPS[index]
-      )
+      authoritative.every((server, index) => server === PUBLIC_RESOLVER_IPS[index])
     ) {
       throw error;
     }
 
-    return queryResolver(
-      PUBLIC_RESOLVER_IPS,
-      (resolver) => run(resolver, fqdn),
-      emptyOnNotFound
-    );
+    return queryResolver(PUBLIC_RESOLVER_IPS, (resolver) => run(resolver, fqdn), emptyOnNotFound);
   }
 };
 
@@ -174,28 +143,19 @@ export const lookupTxtRecords = async (host: string): Promise<string[][]> =>
   lookupOnServers(host, (resolver, fqdn) => resolver.resolveTxt(fqdn), []);
 
 export const lookupCname = async (host: string): Promise<string | null> => {
-  const records = await lookupOnServers(
-    host,
-    (resolver, fqdn) => resolver.resolveCname(fqdn),
-    []
-  );
+  const records = await lookupOnServers(host, (resolver, fqdn) => resolver.resolveCname(fqdn), []);
   return records[0] ?? null;
 };
 
 export const lookupMxRecords = async (
-  host: string
+  host: string,
 ): Promise<{ exchange: string; priority: number }[]> =>
   lookupOnServers(host, (resolver, fqdn) => resolver.resolveMx(fqdn), []);
 
-export const txtRecordsIncludeValue = (
-  records: string[][],
-  expected: string
-): boolean => {
+export const txtRecordsIncludeValue = (records: string[][], expected: string): boolean => {
   const normalizedExpected = expected.replace(/^"|"$/g, "");
   const matchesJoined = (joined: string) =>
-    joined === expected ||
-    joined === normalizedExpected ||
-    joined.includes(normalizedExpected);
+    joined === expected || joined === normalizedExpected || joined.includes(normalizedExpected);
 
   if (records.some((chunks) => matchesJoined(chunks.join("")))) {
     return true;
@@ -204,15 +164,12 @@ export const txtRecordsIncludeValue = (
   return matchesJoined(records.map((chunks) => chunks.join("")).join(""));
 };
 
-const joinedTxt = (chunks: readonly string[]): string =>
-  chunks.join("").replace(/^"|"$/g, "");
+const joinedTxt = (chunks: readonly string[]): string => chunks.join("").replace(/^"|"$/g, "");
 
 const isDmarcTxt = (chunks: readonly string[]): boolean =>
   DMARC_VERSION_REGEX.test(joinedTxt(chunks));
 
-export const inspectDmarcTxtRecords = (
-  records: string[][]
-): DnsRecordWarning[] => {
+export const inspectDmarcTxtRecords = (records: string[][]): DnsRecordWarning[] => {
   const dmarcCount = records.filter(isDmarcTxt).length;
 
   if (dmarcCount > 1) {
@@ -225,9 +182,7 @@ export const inspectDmarcTxtRecords = (
 const hostnamesMatch = (seen: string, expected: string): boolean => {
   const left = stripTrailingDot(seen).toLowerCase();
   const right = stripTrailingDot(expected).toLowerCase();
-  return (
-    left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`)
-  );
+  return left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`);
 };
 
 export const evaluateLiveDnsRecord = async (record: {
@@ -252,16 +207,13 @@ export const evaluateLiveDnsRecord = async (record: {
           : txtRecordsIncludeValue(txtRecords, record.value);
       return {
         matches,
-        warnings:
-          record.purpose === "dmarc" ? inspectDmarcTxtRecords(txtRecords) : [],
+        warnings: record.purpose === "dmarc" ? inspectDmarcTxtRecords(txtRecords) : [],
       };
     }
     case "MX": {
       const mxRecords = await lookupMxRecords(record.name);
       return {
-        matches: mxRecords.some((mx) =>
-          hostnamesMatch(mx.exchange, record.value)
-        ),
+        matches: mxRecords.some((mx) => hostnamesMatch(mx.exchange, record.value)),
         warnings: [],
       };
     }

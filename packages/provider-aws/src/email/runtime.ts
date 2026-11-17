@@ -13,16 +13,9 @@ import {
 import { Effect, Layer } from "effect";
 import { awsSesProviderDefinition } from "../client";
 import { awsCredentialsSchema } from "../credentials";
-import {
-  AwsUnexpectedResponseError,
-  createAwsErrorMapper,
-  createAwsWebhookErrorMapper,
-} from "../errors";
+import { AwsUnexpectedResponseError, createAwsErrorMapper } from "../errors";
 import { ensureSesDomainIdentity } from "./identity";
-import {
-  createAwsSesInfrastructure,
-  SES_CONFIGURATION_SET_NAME,
-} from "./infrastructure";
+import { createAwsSesInfrastructure, SES_CONFIGURATION_SET_NAME } from "./infrastructure";
 import {
   detachSesIdentityFromTenants,
   ensureSesTenant,
@@ -38,7 +31,7 @@ type CreateEmailProviderInput = Parameters<EmailProviderFactory["create"]>[0];
 
 const parseAwsCredentials = (
   credentials: CreateEmailProviderInput["credentials"],
-  context: ProviderInstanceErrorContext
+  context: ProviderInstanceErrorContext,
 ) =>
   Effect.try({
     catch: (error) =>
@@ -52,7 +45,7 @@ const parseAwsCredentials = (
 
 export const createAwsEmailClients = (
   credentials: CreateEmailProviderInput["credentials"],
-  context: ProviderInstanceErrorContext
+  context: ProviderInstanceErrorContext,
 ) =>
   parseAwsCredentials(credentials, context).pipe(
     Effect.map((aws) => ({
@@ -72,10 +65,8 @@ export const createAwsEmailClients = (
           ses,
           sns,
         };
-      }).pipe(
-        Effect.provide(Layer.merge(SESv2.layer(config), SNS.layer(config)))
-      )
-    )
+      }).pipe(Effect.provide(Layer.merge(SESv2.layer(config), SNS.layer(config)))),
+    ),
   );
 
 export const awsSesProviderFactory = {
@@ -107,23 +98,18 @@ export const awsSesProviderFactory = {
               return input.tenantName as string | undefined;
             }),
             Effect.catch((cause) =>
-              Effect.logWarning(
-                "Failed to ensure SES tenant; sending untenanted",
-                {
-                  cause,
-                  identityFqdn: input.identityFqdn,
-                  providerId,
-                  tenantName: input.tenantName,
-                }
-              ).pipe(Effect.as(undefined))
-            )
+              Effect.logWarning("Failed to ensure SES tenant; sending untenanted", {
+                cause,
+                identityFqdn: input.identityFqdn,
+                providerId,
+                tenantName: input.tenantName,
+              }).pipe(Effect.as(undefined)),
+            ),
           );
         };
 
         return {
-          checkConnection: ses
-            .getAccount({})
-            .pipe(Effect.as(true), Effect.mapError(mapAwsError)),
+          checkConnection: ses.getAccount({}).pipe(Effect.as(true), Effect.mapError(mapAwsError)),
           createIdentity: ({ dkimPrivateKey, dkimSelector, fqdn }) =>
             ensureSesDomainIdentity(ses, {
               dkimPrivateKey,
@@ -138,15 +124,16 @@ export const awsSesProviderFactory = {
               // surfaces the real error while associations remain.
               yield* detachSesIdentityFromTenants(ses, { fqdn, region }).pipe(
                 Effect.catch((cause) =>
-                  Effect.logWarning(
-                    "Failed to detach SES identity from tenants",
-                    { cause, fqdn, providerId }
-                  )
-                )
+                  Effect.logWarning("Failed to detach SES identity from tenants", {
+                    cause,
+                    fqdn,
+                    providerId,
+                  }),
+                ),
               );
               yield* ses
                 .deleteEmailIdentity({ EmailIdentity: fqdn })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+                .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
             }).pipe(Effect.mapError(mapAwsError)),
           getIdentityStatus: ({ fqdn }) =>
             ses.getEmailIdentity({ EmailIdentity: fqdn }).pipe(
@@ -154,7 +141,7 @@ export const awsSesProviderFactory = {
                 dkimVerified: identity.DkimAttributes?.Status === "SUCCESS",
                 verified: identity.VerifiedForSendingStatus === true,
               })),
-              Effect.mapError(mapAwsError)
+              Effect.mapError(mapAwsError),
             ),
           infrastructure: createAwsSesInfrastructure({
             context,
@@ -164,29 +151,26 @@ export const awsSesProviderFactory = {
           }),
           send: (message) =>
             Effect.gen(function* () {
-              const attachments = yield* Effect.forEach(
-                message.attachments ?? [],
-                (attachment) =>
-                  Effect.try({
-                    catch: (cause) =>
-                      new ProviderMessageError({
-                        ...context,
-                        cause,
-                        code: "invalid_attachment_encoding",
-                        filename: attachment.filename,
-                      }),
-                    try: () => ({
-                      ContentDisposition: attachment.contentId
-                        ? ("INLINE" as const)
-                        : ("ATTACHMENT" as const),
-                      ContentId: attachment.contentId,
-                      ContentTransferEncoding: "BASE64" as const,
-                      ContentType:
-                        attachment.contentType ?? "application/octet-stream",
-                      FileName: attachment.filename,
-                      RawContent: Uint8Array.fromBase64(attachment.content),
+              const attachments = yield* Effect.forEach(message.attachments ?? [], (attachment) =>
+                Effect.try({
+                  catch: (cause) =>
+                    new ProviderMessageError({
+                      ...context,
+                      cause,
+                      code: "invalid_attachment_encoding",
+                      filename: attachment.filename,
                     }),
-                  })
+                  try: () => ({
+                    ContentDisposition: attachment.contentId
+                      ? ("INLINE" as const)
+                      : ("ATTACHMENT" as const),
+                    ContentId: attachment.contentId,
+                    ContentTransferEncoding: "BASE64" as const,
+                    ContentType: attachment.contentType ?? "application/octet-stream",
+                    FileName: attachment.filename,
+                    RawContent: Uint8Array.fromBase64(attachment.content),
+                  }),
+                }),
               );
               const tenantName = message.sender
                 ? yield* ensureTenantForSend({
@@ -200,19 +184,15 @@ export const awsSesProviderFactory = {
                   TenantName: tenantName,
                   Content: {
                     Simple: {
-                      Attachments:
-                        attachments.length > 0 ? attachments : undefined,
+                      Attachments: attachments.length > 0 ? attachments : undefined,
                       Body: {
-                        Html: message.html
-                          ? { Charset: "UTF-8", Data: message.html }
-                          : undefined,
-                        Text: message.text
-                          ? { Charset: "UTF-8", Data: message.text }
-                          : undefined,
+                        Html: message.html ? { Charset: "UTF-8", Data: message.html } : undefined,
+                        Text: message.text ? { Charset: "UTF-8", Data: message.text } : undefined,
                       },
-                      Headers: Object.entries(message.headers ?? {}).map(
-                        ([Name, Value]) => ({ Name, Value })
-                      ),
+                      Headers: Object.entries(message.headers ?? {}).map(([Name, Value]) => ({
+                        Name,
+                        Value,
+                      })),
                       Subject: { Charset: "UTF-8", Data: message.subject },
                     },
                   },
@@ -225,24 +205,25 @@ export const awsSesProviderFactory = {
                   ReplyToAddresses: message.replyTo ?? undefined,
                 })
                 .pipe(
-                  Effect.catchTag("SendingPausedException", (error) =>
-                    tenantName
-                      ? isSesTenantPaused(ses, tenantName).pipe(
-                          Effect.orElseSucceed(() => false),
-                          Effect.flatMap((tenantPaused) =>
-                            Effect.fail(
-                              tenantPaused
-                                ? new ProviderRejected({
-                                    ...context,
-                                    cause: error,
-                                    reason: "project_sending_paused",
-                                  })
-                                : error
-                            )
+                  Effect.catchTags({
+                    SendingPausedException: (error) =>
+                      tenantName
+                        ? isSesTenantPaused(ses, tenantName).pipe(
+                            Effect.orElseSucceed(() => false),
+                            Effect.flatMap((tenantPaused) =>
+                              Effect.fail(
+                                tenantPaused
+                                  ? new ProviderRejected({
+                                      ...context,
+                                      cause: error,
+                                      reason: "project_sending_paused",
+                                    })
+                                  : error,
+                              ),
+                            ),
                           )
-                        )
-                      : Effect.fail(error)
-                  )
+                        : Effect.fail(error),
+                  }),
                 );
               if (!result.MessageId) {
                 return yield* new AwsUnexpectedResponseError({
@@ -253,13 +234,9 @@ export const awsSesProviderFactory = {
               return { providerMessageId: result.MessageId };
             }).pipe(Effect.mapError(mapAwsError)),
         } satisfies EmailProviderAdapter;
-      })
+      }),
     );
   },
   definition: awsSesProviderDefinition,
-  webhooks: createAwsSesWebhooks(
-    createAwsWebhookErrorMapper({
-      typeId: awsSesProviderDefinition.typeId,
-    })
-  ),
+  webhooks: createAwsSesWebhooks({ typeId: awsSesProviderDefinition.typeId }),
 } satisfies EmailProviderFactory;

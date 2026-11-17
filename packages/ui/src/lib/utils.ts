@@ -13,19 +13,6 @@ export function getInitials(name: string) {
     .join("");
 }
 
-export function formatCompactNumber(value: number) {
-  if (value >= 100 && value < 1000) {
-    return value.toString(); // Keep the number as is if it's in the hundreds
-  }
-  if (value >= 1000 && value < 1_000_000) {
-    return `${(value / 1000).toFixed(1)}k`; // Convert to 'k' for thousands
-  }
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`; // Convert to 'M' for millions
-  }
-  return value.toString(); // Optionally handle numbers less than 100 if needed
-}
-
 export function formatDateTime(date: Date) {
   return date.toLocaleString(undefined, {
     dateStyle: "short",

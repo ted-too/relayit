@@ -1,9 +1,4 @@
-import {
-  createFileRoute,
-  Outlet,
-  redirect,
-  useLocation,
-} from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { Image } from "@unpic/react";
 import { z } from "zod";
 import { getSession } from "@/lib/auth.functions";
@@ -19,10 +14,7 @@ export const Route = createFileRoute("/auth")({
     const session = await getSession();
 
     if (session) {
-      await context.queryClient.setQueryData(
-        queries.session.me.queryKey,
-        session
-      );
+      await context.queryClient.setQueryData(queries.session.me.queryKey, session);
       throw redirect({
         to: search.redirect ?? "/",
       });

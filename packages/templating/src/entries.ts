@@ -22,8 +22,8 @@ export const syncWorkspaceEntriesForPaths = (input: {
             new TemplatingBuilderError({
               code: "failed",
               message: "Failed to load workspace entries.",
-            })
-        )
+            }),
+        ),
       );
 
     const byPath = new Map(existing.map((row) => [row.path, row]));
@@ -48,8 +48,8 @@ export const syncWorkspaceEntriesForPaths = (input: {
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to create workspace entry.",
-                })
-            )
+                }),
+            ),
           );
       } else if (row.deletedAt) {
         yield* db
@@ -62,17 +62,14 @@ export const syncWorkspaceEntriesForPaths = (input: {
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to revive workspace entry.",
-                })
-            )
+                }),
+            ),
           );
       }
     }
 
     for (const row of existing) {
-      if (
-        !(row.deletedAt || seen.has(row.path)) &&
-        isReactEmailEntryPath(row.path)
-      ) {
+      if (!(row.deletedAt || seen.has(row.path)) && isReactEmailEntryPath(row.path)) {
         yield* db
           .update(templatingWorkspaceEntry)
           .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -83,18 +80,15 @@ export const syncWorkspaceEntriesForPaths = (input: {
                 new TemplatingBuilderError({
                   code: "failed",
                   message: "Failed to soft-delete workspace entry.",
-                })
-            )
+                }),
+            ),
           );
       }
     }
   });
 
 /** After a partial commit, sync entries from the new tip’s full tree. */
-export const syncWorkspaceEntriesFromPaths = (
-  workspaceId: string,
-  allPaths: string[]
-) =>
+export const syncWorkspaceEntriesFromPaths = (workspaceId: string, allPaths: string[]) =>
   syncWorkspaceEntriesForPaths({
     entryPaths: allPaths.filter(isReactEmailEntryPath),
     workspaceId,

@@ -1,7 +1,4 @@
-import type {
-  ProjectDomainDnsRecord,
-  ProjectDomainListItem,
-} from "@/lib/domains/types";
+import type { ProjectDomainDnsRecord, ProjectDomainListItem } from "@/lib/domains/types";
 
 export type Domain = ProjectDomainListItem;
 

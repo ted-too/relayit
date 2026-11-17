@@ -18,21 +18,17 @@ export type OpenedProviderCredentials = ProviderCredentials & {
   readonly [openedProviderCredentials]: true;
 };
 
-export class CredentialsEncryptionError extends Data.TaggedError(
-  "CredentialsEncryptionError"
-)<{
+export class CredentialsEncryptionError extends Data.TaggedError("CredentialsEncryptionError")<{
   readonly cause: unknown;
 }> {}
 
-export class CredentialsDecryptionError extends Data.TaggedError(
-  "CredentialsDecryptionError"
-)<{
+export class CredentialsDecryptionError extends Data.TaggedError("CredentialsDecryptionError")<{
   readonly cause: unknown;
 }> {}
 
 const transformRecord = <E>(
   record: Record<string, unknown>,
-  transform: (value: string) => Effect.Effect<string, E>
+  transform: (value: string) => Effect.Effect<string, E>,
 ): Effect.Effect<Record<string, unknown>, E> =>
   Effect.gen(function* () {
     const transformed: Record<string, unknown> = {};
@@ -46,13 +42,10 @@ const transformRecord = <E>(
             ? transform(item)
             : typeof item === "object" && item !== null
               ? transformRecord(item as Record<string, unknown>, transform)
-              : Effect.succeed(item)
+              : Effect.succeed(item),
         );
       } else if (typeof value === "object" && value !== null) {
-        transformed[key] = yield* transformRecord(
-          value as Record<string, unknown>,
-          transform
-        );
+        transformed[key] = yield* transformRecord(value as Record<string, unknown>, transform);
       } else {
         transformed[key] = value;
       }
@@ -65,10 +58,10 @@ export class ProviderCredentialsVault extends Context.Service<
   ProviderCredentialsVault,
   {
     readonly open: (
-      credentials: StoredProviderCredentials
+      credentials: StoredProviderCredentials,
     ) => Effect.Effect<OpenedProviderCredentials, CredentialsDecryptionError>;
     readonly seal: (
-      credentials: ProviderCredentials
+      credentials: ProviderCredentials,
     ) => Effect.Effect<StoredProviderCredentials, CredentialsEncryptionError>;
   }
 >()("Persistence/ProviderCredentialsVault") {
@@ -93,8 +86,8 @@ export class ProviderCredentialsVault extends Context.Service<
               ({
                 encrypted,
                 unencrypted: credentials.unencrypted,
-              }) as OpenedProviderCredentials
-          )
+              }) as OpenedProviderCredentials,
+          ),
         ),
       seal: (credentials) =>
         transformRecord(credentials.encrypted, encrypt).pipe(
@@ -103,8 +96,8 @@ export class ProviderCredentialsVault extends Context.Service<
               ({
                 encrypted,
                 unencrypted: credentials.unencrypted,
-              }) as StoredProviderCredentials
-          )
+              }) as StoredProviderCredentials,
+          ),
         ),
     });
   }

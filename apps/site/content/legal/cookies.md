@@ -53,13 +53,13 @@ We use analytics cookies to understand how our service is used:
 
 ## 4. Cookie details
 
-| Cookie name | Purpose | Type | Duration |
-| --- | --- | --- | --- |
-| `relayit.session_token` | Authentication and session management | Essential | Session lifetime |
-| `relayit.session_data` | Short-lived cache of session details | Essential | 5 minutes |
-| `relayit.last_used_login_method` | Remembers which sign-in method you used last | Functional | Persistent |
-| `sidebar_state` | Remembers whether the dashboard sidebar is open | Functional | 7 days |
-| `ph_*` | PostHog analytics tracking | Analytics | 1 year |
+| Cookie name                      | Purpose                                         | Type       | Duration         |
+| -------------------------------- | ----------------------------------------------- | ---------- | ---------------- |
+| `relayit.session_token`          | Authentication and session management           | Essential  | Session lifetime |
+| `relayit.session_data`           | Short-lived cache of session details            | Essential  | 5 minutes        |
+| `relayit.last_used_login_method` | Remembers which sign-in method you used last    | Functional | Persistent       |
+| `sidebar_state`                  | Remembers whether the dashboard sidebar is open | Functional | 7 days           |
+| `ph_*`                           | PostHog analytics tracking                      | Analytics  | 1 year           |
 
 When you sign in over HTTPS, browsers may show the authentication cookies with a `__Secure-` prefix.
 

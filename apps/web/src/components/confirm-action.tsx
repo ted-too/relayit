@@ -64,9 +64,7 @@ export function ConfirmAction({
       }}
       open={isOpen}
     >
-      {children && (
-        <AlertDialogTrigger render={render}>{children}</AlertDialogTrigger>
-      )}
+      {children && <AlertDialogTrigger render={render}>{children}</AlertDialogTrigger>}
       <AlertDialogPopup finalFocus={finalFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -89,14 +87,10 @@ export function ConfirmAction({
           </div>
         )}
         <AlertDialogFooter>
-          <AlertDialogClose render={<Button variant="outline" />}>
-            Cancel
-          </AlertDialogClose>
+          <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button
             className="min-w-24"
-            disabled={
-              verificationText ? verification !== verificationText : false
-            }
+            disabled={verificationText ? verification !== verificationText : false}
             isLoading={isLoading}
             onClick={async () => {
               try {
