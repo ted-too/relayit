@@ -25,14 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - id: setup
         uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 24
+          node-version: 26
           cache: true
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']
@@ -58,13 +58,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 24
+          node-version: 26
           cache: true
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']

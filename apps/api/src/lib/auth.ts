@@ -94,7 +94,7 @@ export class ApiAuth extends Context.Service<
             (stripe) =>
               ({
                 client: new Stripe(Redacted.value(stripe.secretKey), {
-                  apiVersion: "2026-05-27.dahlia",
+                  apiVersion: "2026-08-26.dahlia",
                 }),
                 plans: {
                   broadcast: {

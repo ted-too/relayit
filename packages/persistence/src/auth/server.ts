@@ -136,6 +136,21 @@ export const createAuth = ({
       delete: async (key) => {
         await redis.send("DEL", [`${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`]);
       },
+      getAndDelete: async (key) => {
+        const value = await redis.send("GETDEL", [`${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`]);
+        return typeof value === "string" ? value : null;
+      },
+      // The TTL is set only when the counter is created, in the same step, so a window
+      // never outlives its first request and a crash can't leave a counter without one.
+      increment: async (key, ttl) =>
+        Number(
+          await redis.send("EVAL", [
+            "local n = redis.call('INCR', KEYS[1]) if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return n",
+            "1",
+            `${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`,
+            String(ttl),
+          ]),
+        ),
     },
     emailAndPassword: {
       enabled: true,

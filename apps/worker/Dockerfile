@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.29
 
 FROM oven/bun:1 AS base
 WORKDIR /app
@@ -27,8 +27,10 @@ ENV HOME=/home/relayit \
 
 # This install runs as root with XDG_CACHE_HOME set, so bun creates its cache
 # under /home/relayit as root; chown it back or runtime installs fail (EACCES).
-# Runtime extras not fully inlined by bun build (the react-email isolate that renders sends).
-RUN echo '{"dependencies":{"react": "^19.0.0", "react-dom": "^19.0.0", "@react-email/components": "^0.5.3", "@react-email/render": "^1.4.0"}}' > package.json && \
+# Runtime extras not inlined by bun build: what the react-email isolate that renders sends
+# imports. A sealed artifact bundles its own @react-email/components and leaves only react
+# external.
+RUN echo '{"dependencies":{"react": "^19.3.1", "react-dom": "^19.3.1", "@react-email/render": "^2.3.1"}}' > package.json && \
     bun install --production && \
     chown -R relayit:relayit /app /home/relayit
 
