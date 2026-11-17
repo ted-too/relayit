@@ -1,7 +1,10 @@
 import { Context, Schema } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 
-/** No signed-in session: the dashboard sends the person to sign in. */
+/**
+ * No signed-in session, or an API key where only a session is taken: the dashboard sends
+ * the person to sign in.
+ */
 export class Unauthenticated extends Schema.TaggedError<Unauthenticated>()(
   "Unauthenticated",
   { message: Schema.String },

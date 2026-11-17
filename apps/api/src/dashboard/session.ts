@@ -21,20 +21,29 @@ const forbidden = new Forbidden({
 });
 
 /**
- * The signed-in user behind a request's session cookie. A change (anything but GET or
- * HEAD) must come from the dashboard's own origin: the session cookie is `SameSite=Lax`,
- * so a browser leaves it off another site's POST anyway, and this refuses one that names
- * another origin even so. A request with no `Origin` is not from a browser page.
+ * The signed-in user behind a request's session cookie, on the dashboard's routes, which
+ * take that and nothing else:
+ *
+ * - An API key is refused (401) even beside a cookie: a server holding a key has the public
+ *   API, and a key here would be a mistake worth saying so about rather than ignoring.
+ * - A change (anything but GET or HEAD) must name the dashboard's origin in `Origin`, as
+ *   better-auth requires of its own routes when a cookie is sent. Its check doesn't run
+ *   here, since these handlers call `auth.api` directly, which skips it. The cookie is
+ *   `SameSite=Lax`, so a browser leaves it off another site's POST anyway; this refuses one
+ *   that names another origin, or none, even so.
  */
 const signedInUser = (auth: ApiAuth["Service"]["auth"], appOrigin: string) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const origin = request.headers.origin;
+    if (request.headers["x-api-key"] !== undefined) {
+      return yield* new Unauthenticated({
+        message: "This endpoint takes a dashboard session, not an API key.",
+      });
+    }
     if (
       request.method !== "GET" &&
       request.method !== "HEAD" &&
-      origin !== undefined &&
-      origin !== appOrigin
+      request.headers.origin !== appOrigin
     ) {
       return yield* new Forbidden({ message: "Cross-site request refused." });
     }

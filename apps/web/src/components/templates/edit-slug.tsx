@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import { TemplateSlugInput } from "@repo/contracts/dashboard";
+import { UpdateTemplateInput } from "@repo/contracts/dashboard";
 import { Schema } from "effect";
 import { dashboard } from "@/lib/dashboard";
 import type { Template } from "./types";
@@ -14,9 +14,9 @@ export function TemplateEditSlug({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
 
   const { mutateAsync } = useMutation({
-    mutationFn: async (payload: typeof TemplateSlugInput.Type) =>
+    mutationFn: async (payload: typeof UpdateTemplateInput.Type) =>
       await dashboard((client) =>
-        client.templates.updateSlug({ params: { orgSlug, templateId: template.id }, payload }),
+        client.templates.update({ params: { orgSlug, templateId: template.id }, payload }),
       ),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
@@ -39,9 +39,9 @@ export function TemplateEditSlug({ template }: { template: Template }) {
   const form = useAppForm({
     defaultValues: {
       slug: template.slug,
-    } satisfies typeof TemplateSlugInput.Type,
+    } satisfies typeof UpdateTemplateInput.Type,
     validators: {
-      onSubmit: Schema.toStandardSchemaV1(TemplateSlugInput),
+      onSubmit: Schema.toStandardSchemaV1(UpdateTemplateInput),
     },
     onSubmit: async ({ value }) => {
       if (value.slug === template.slug) {

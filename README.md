@@ -57,7 +57,7 @@ docker compose logs -f
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>` — the public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), Better Auth (`/auth/*`) and the dashboard's operations (`/dashboard/*`); applies migrations on start
+- `ghcr.io/ted-too/relayit-api:<tag>` — the public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), Better Auth (`/auth/*`) and the dashboard's operations (`/config`, `/projects/*`); applies migrations on start
 - `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port, never migrates
 - `ghcr.io/ted-too/relayit-web:<tag>` — the dashboard: static files that call the api from the browser
 - `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)

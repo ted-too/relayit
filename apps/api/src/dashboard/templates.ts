@@ -169,7 +169,7 @@ export const templateHandlers = HttpApiBuilder.group(DashboardApi, "templates", 
           return serializeTemplate({ ...existing, ...updated });
         }),
       )
-      .handle("updateSlug", ({ params, payload }) =>
+      .handle("update", ({ params, payload }) =>
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
           const existing = yield* changeableTemplate({
@@ -216,7 +216,7 @@ export const templateHandlers = HttpApiBuilder.group(DashboardApi, "templates", 
           return serializeTemplate({ ...existing, ...updated });
         }),
       )
-      .handle("linkReactEmail", ({ params, payload }) =>
+      .handle("setEmail", ({ params, payload }) =>
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
           const existing = yield* changeableTemplate({

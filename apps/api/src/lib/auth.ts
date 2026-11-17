@@ -148,6 +148,7 @@ export class ApiAuth extends Context.Service<
           baseUrl: config.apiUrl.origin,
           cookieDomain: Option.getOrUndefined(config.authCookieDomain),
           db,
+          errorUrl: new URL("/auth/sign-in", config.appUrl.origin).href,
           rateLimit: config.rateLimit,
           hooks: {
             // leaveOrganization does not invoke organizationHooks.beforeRemoveMember in

@@ -1,11 +1,13 @@
 /**
  * The dashboard's operations: what a signed-in user does to their Projects, as an
- * `HttpApi` the api serves under `/dashboard` and the dashboard calls with the client
- * derived from it, from its own origin. Separate from the api's public `Api`, so none of it
- * is in `/docs`; under one prefix, so no public path the api adds later (`/projects` for a
- * user's API key, say) can collide with it, and CORS for the dashboard's origin covers
- * exactly it. better-auth's own endpoints (`/auth/*`: sign-in, the session, organizations,
- * members, deleting an API key, billing) are called with its client, not through this.
+ * `HttpApi` the api serves at its root beside the public API, and the dashboard calls with
+ * the client derived from it, from its own origin. Every endpoint here but `GET /config`
+ * takes the session cookie and nothing else; the api grants the dashboard's origin CORS on
+ * every route of this contract and refuses a change from any other origin
+ * (`apps/api/src/auth-rule.test.ts`). It is separate from the api's public `Api`, so none
+ * of it is in `/docs`: it is the dashboard's, with no stability promise. better-auth's own
+ * endpoints (`/auth/*`: sign-in, the session, organizations, members, billing) are called
+ * with its client, not through this.
  */
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -26,7 +28,7 @@ import {
   PreviewEntryInput,
   ProjectRef,
   Template,
-  TemplateSlugInput,
+  UpdateTemplateInput,
   Workspace,
   WorkspaceCommit,
   WorkspaceEntry,
@@ -42,8 +44,8 @@ const project = { orgSlug: Schema.String };
 /** What any operation on a Project's data can fail with besides access. */
 const failures = [NotFound, Conflict, Invalid, OperationFailed];
 
-/** Before sign-in: what the deployment offers. */
-export class ConfigApi extends HttpApiGroup.make("dashboardConfig").add(
+/** Before sign-in: what the deployment offers. The one endpoint here without a session. */
+export class ConfigApi extends HttpApiGroup.make("config").add(
   HttpApiEndpoint.get("get", "/config", { success: DashboardConfig }),
 ) {}
 
@@ -58,6 +60,8 @@ export class ProjectsApi extends HttpApiGroup.make("projects")
     }),
   )
   .middleware(DashboardSession) {}
+
+const apiKey = { ...project, keyId: Schema.String };
 
 export class ApiKeysApi extends HttpApiGroup.make("apiKeys")
   .add(
@@ -74,10 +78,14 @@ export class ApiKeysApi extends HttpApiGroup.make("apiKeys")
     }).annotate(RequiresPermission, { apiKey: ["create"] }),
     HttpApiEndpoint.patch("update", "/:keyId", {
       error: failures,
-      params: { ...project, keyId: Schema.String },
+      params: apiKey,
       payload: ApiKeyInput,
       success: ApiKey,
     }).annotate(RequiresPermission, { apiKey: ["update"] }),
+    HttpApiEndpoint.delete("delete", "/:keyId", {
+      error: failures,
+      params: apiKey,
+    }).annotate(RequiresPermission, { apiKey: ["delete"] }),
   )
   .middleware(ProjectAccess)
   .prefix("/projects/:orgSlug/api-keys") {}
@@ -142,19 +150,19 @@ export class TemplatesApi extends HttpApiGroup.make("templates")
       payload: CreateTemplateInput,
       success: Template,
     }).annotate(RequiresPermission, { template: ["create"] }),
+    HttpApiEndpoint.patch("update", "/:templateId", {
+      error: failures,
+      params: template,
+      payload: UpdateTemplateInput,
+      success: Template,
+    }).annotate(RequiresPermission, { template: ["update"] }),
     HttpApiEndpoint.post("archive", "/:templateId/archive", {
       error: failures,
       params: template,
       success: Template,
     }).annotate(RequiresPermission, { template: ["update"] }),
-    HttpApiEndpoint.put("updateSlug", "/:templateId/slug", {
-      error: failures,
-      params: template,
-      payload: TemplateSlugInput,
-      success: Template,
-    }).annotate(RequiresPermission, { template: ["update"] }),
-    // Points the email variant at a published Workspace Entry.
-    HttpApiEndpoint.put("linkReactEmail", "/:templateId/email", {
+    // Replaces the email variant with one linking a published Workspace Entry.
+    HttpApiEndpoint.put("setEmail", "/:templateId/email", {
       error: failures,
       params: template,
       payload: LinkReactEmailInput,
@@ -176,29 +184,37 @@ export class WorkspacesApi extends HttpApiGroup.make("workspaces")
       params: workspace,
       success: Workspace,
     }).annotate(RequiresPermission, { template: ["read"] }),
-    HttpApiEndpoint.get("entries", "/entries", {
+    HttpApiEndpoint.get("listEntries", "/entries", {
       error: failures,
       params: workspace,
       success: Schema.Array(WorkspaceEntry),
     }).annotate(RequiresPermission, { template: ["read"] }),
-    HttpApiEndpoint.get("files", "/files", {
+    // Renders an Entry from the workspace's current source, with sample props.
+    HttpApiEndpoint.post("previewEntry", "/entries/:entryId/preview", {
+      error: builderFailures,
+      params: { ...workspace, entryId: Schema.String },
+      payload: PreviewEntryInput,
+      success: EntryPreview,
+    }).annotate(RequiresPermission, { template: ["read"] }),
+    HttpApiEndpoint.get("listFiles", "/files", {
       error: builderFailures,
       params: workspace,
       success: WorkspaceFiles,
     }).annotate(RequiresPermission, { template: ["read"] }),
-    HttpApiEndpoint.get("readFile", "/file", {
+    // A file's path has slashes, so it is a query parameter rather than a path segment.
+    HttpApiEndpoint.get("getFile", "/files/content", {
       error: builderFailures,
       params: workspace,
       query: { path: Schema.NonEmptyString },
       success: WorkspaceFile,
     }).annotate(RequiresPermission, { template: ["read"] }),
-    HttpApiEndpoint.post("commit", "/commits", {
+    HttpApiEndpoint.post("createCommit", "/commits", {
       error: builderFailures,
       params: workspace,
       payload: CommitWorkspaceInput,
       success: WorkspaceCommit,
     }).annotate(RequiresPermission, { template: ["update"] }),
-    HttpApiEndpoint.post("depsSync", "/deps-sync", {
+    HttpApiEndpoint.post("syncDependencies", "/sync-dependencies", {
       error: builderFailures,
       params: workspace,
       success: WorkspaceCommit,
@@ -208,12 +224,6 @@ export class WorkspacesApi extends HttpApiGroup.make("workspaces")
       params: workspace,
       success: WorkspacePublish,
     }).annotate(RequiresPermission, { template: ["update"] }),
-    HttpApiEndpoint.post("preview", "/preview", {
-      error: builderFailures,
-      params: workspace,
-      payload: PreviewEntryInput,
-      success: EntryPreview,
-    }).annotate(RequiresPermission, { template: ["read"] }),
   )
   .middleware(ProjectAccess)
   .prefix("/projects/:orgSlug/workspaces/:kind") {}
@@ -224,5 +234,4 @@ export class DashboardApi extends HttpApi.make("dashboard")
   .add(ApiKeysApi)
   .add(DomainsApi)
   .add(TemplatesApi)
-  .add(WorkspacesApi)
-  .prefix("/dashboard") {}
+  .add(WorkspacesApi) {}

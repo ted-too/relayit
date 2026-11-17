@@ -128,6 +128,25 @@ export const apiKeyHandlers = HttpApiBuilder.group(DashboardApi, "apiKeys", (han
           );
           return yield* describeKey(updated);
         }),
+      )
+      .handle("delete", ({ params }) =>
+        Effect.gen(function* () {
+          const { organizationId } = yield* DashboardMember;
+          const db = yield* DB;
+          // As for update: the key must be the Project's in the path.
+          const [owned] = yield* db
+            .select({ id: apikey.id })
+            .from(apikey)
+            .where(and(eq(apikey.id, params.keyId), eq(apikey.referenceId, organizationId)))
+            .pipe(Effect.catch(operationFailed("Failed to delete API key.")));
+          if (!owned) {
+            return yield* new NotFound({ message: "API key not found." });
+          }
+          const headers = yield* requestHeaders;
+          yield* callAuth("Failed to delete API key.", () =>
+            auth.api.deleteApiKey({ body: { configId: CONFIG_ID, keyId: owned.id }, headers }),
+          );
+        }),
       );
   }),
 );
