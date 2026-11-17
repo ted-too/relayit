@@ -56,7 +56,7 @@ No deployment's URL is in the build, because self-hosters run the published imag
 
 Unsubscribe links point at the api (`API_URL/unsubscribe/:orgSlug/:contactId?msg&topic&sig`). A mailbox provider's one-click POST is answered there without a cookie; a person who opens the link is redirected to the dashboard's page at the same path on `APP_URL`, which sends the same POST when they confirm. A GET never unsubscribes, because link scanners open every URL in a message.
 
-A Project's slug is the first segment of its dashboard URL, so the dashboard's own top-level pages and the files its server answers at the root (`admin`, `auth`, `assets`, `config.js`, `favicon.ico`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed. The api's paths don't matter here: it is another host.
+A Project's slug names it in every URL (the dashboard's `/<slug>`, the api's `/projects/<slug>/…` and `/send/<slug>/…`), so it is held to one rule, `ProjectSlug` in the contract: lowercase letters, digits and single hyphens, 2 to 48 characters. better-auth's organization hooks in `createAuth` check it, so no create or rename escapes it, and a new Project's slug is derived from its name to pass it (`projectSlugFromName`). It is the first segment of the dashboard's URLs, so the dashboard's top-level pages and `assets/` (`RESERVED_PROJECT_SLUGS`) are refused too; its other root files (`config.js`, `favicon.ico`) have a dot, which no slug can. The api's paths don't matter here: it is another host.
 
 ### Work crosses processes as typed jobs
 

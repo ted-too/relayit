@@ -32,31 +32,62 @@ export const Fqdn = Schema.String.pipe(
 
 /**
  * First path segments of the dashboard's origin a Project's slug may not take, since its
- * URL is `/<slug>`: the dashboard's own top-level pages, and the files its server answers
- * at the root (`apps/web/public`, `config.js`, `assets/`), which it serves before any
- * page. A Project slugged `admin` could never be opened. `apps/web/server/http.test.ts`
- * checks every root file is here.
+ * URL is `/<slug>`: the dashboard's own top-level pages, and `assets/`, which its server
+ * answers before any page. Its other root files (`config.js`, `favicon.ico`, …) have a dot,
+ * which no slug can. A Project slugged `admin` could never be opened.
+ * `apps/web/src/lib/reserved-slugs.test.ts` checks every root page and file is covered.
  */
 export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "admin",
+  "assets",
   "auth",
   "create-project",
   "unsubscribe",
   "user",
-  "assets",
-  "config.js",
-  "apple-touch-icon.png",
-  "auth-1.svg",
-  "auth-2.svg",
-  "auth-3.svg",
-  "favicon-16x16.png",
-  "favicon-96x96.png",
-  "favicon.ico",
-  "favicon.svg",
-  "site.webmanifest",
-  "web-app-manifest-192x192.png",
-  "web-app-manifest-512x512.png",
 ]);
+
+export const PROJECT_SLUG_MAX_LENGTH = 48;
+
+/**
+ * A Project's slug, its name in URLs (`app.relayit.io/<slug>`, `/projects/<slug>/…`,
+ * `/send/<slug>/…`): lowercase letters, digits and single hyphens between them, 2 to 48
+ * characters, and not one of the dashboard's own root paths. Every place a slug is made or
+ * changed checks it with this: the dashboard's forms and better-auth's organization hooks,
+ * which every create and rename goes through.
+ */
+export const ProjectSlug = Schema.String.check(
+  Schema.isMinLength(2, { message: "A Project slug has at least 2 characters." }),
+  Schema.isMaxLength(PROJECT_SLUG_MAX_LENGTH, {
+    message: `A Project slug has at most ${PROJECT_SLUG_MAX_LENGTH} characters.`,
+  }),
+  Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message:
+      "A Project slug is lowercase letters, digits and hyphens, with no hyphen at either end or two together.",
+  }),
+  Schema.makeFilter((slug: string) =>
+    RESERVED_PROJECT_SLUGS.has(slug) ? "That Project slug is reserved." : true,
+  ),
+);
+
+/**
+ * The slug a new Project is given from its name: lowercased, each run of anything but a
+ * letter or digit made one hyphen, trimmed of hyphens, and cut short enough that a `-2`,
+ * `-3`… suffix for uniqueness still fits. A name with too little in it gets `project`, and
+ * one that comes out reserved gets `-project` after it, so the result always passes
+ * `ProjectSlug`.
+ */
+export const projectSlugFromName = (name: string) => {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, PROJECT_SLUG_MAX_LENGTH - 4)
+    .replace(/-+$/, "");
+  if (slug.length < 2) {
+    return "project";
+  }
+  return RESERVED_PROJECT_SLUGS.has(slug) ? `${slug}-project` : slug;
+};
 
 export const CreateProjectInput = Schema.Struct({ name: SafeName });
 

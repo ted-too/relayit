@@ -4,6 +4,7 @@
   "exclude": ["node_modules"],
   "compilerOptions": {
     "paths": {
+      "@repo/contracts/*": ["../contracts/src/*"],
       "@repo/persistence/*": ["./src/*"]
     }
   }

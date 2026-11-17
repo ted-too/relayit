@@ -5,6 +5,7 @@
   "compilerOptions": {
     "paths": {
       "@repo/channels/*": ["../../packages/channels/src/*"],
+      "@repo/contracts/*": ["../../packages/contracts/src/*"],
       "@repo/jobs": ["../../packages/jobs/src/index.ts"],
       "@repo/jobs/*": ["../../packages/jobs/src/*"],
       "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
