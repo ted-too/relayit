@@ -31,7 +31,7 @@
     },
     "apps/web": {
       // The browser's entry, and the server the web image runs.
-      "entry": ["src/main.tsx", "src/routes/**/*.{ts,tsx}", "server/index.ts"],
+      "entry": ["src/main.tsx", "src/routes/**/*.{ts,tsx}"],
     },
     "apps/worker": {
       "entry": ["src/index.ts"],

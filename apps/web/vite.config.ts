@@ -18,14 +18,14 @@ const config = defineConfig({
     dedupe: ["react", "react-dom"],
   },
   build: {
-    // The image's server caches `assets/` for good: their names change with them.
+    // The image's nginx caches `assets/` for good: their names change with them.
     assetsDir: "assets",
     sourcemap: false,
   },
   plugins: [
     {
       // `/config.js` in development, from `API_URL` as `bun run dev` builds it, written as
-      // the image's server writes it (`server/http.ts`). The dashboard then calls the api on
+      // the image's nginx writes it (`nginx/default.conf.template`). The dashboard then calls the api on
       // its own port, cross-origin as it does when deployed, so CORS and cookies are
       // exercised here too.
       name: "relayit-runtime-config",

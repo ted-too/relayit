@@ -76,13 +76,7 @@ services:
       - PORT=3000
       - API_URL=${API_URL:-http://localhost:3005}
     healthcheck:
-      test:
-        [
-          "CMD",
-          "bun",
-          "-e",
-          "fetch('http://localhost:3000/config.js').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
-        ]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3000/config.js"]
       interval: 5s
       timeout: 5s
       retries: 12

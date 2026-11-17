@@ -86,7 +86,6 @@
       "name": "@repo/web",
       "version": "1.0.50",
       "dependencies": {
-        "@effect/platform-bun": "catalog:",
         "@monaco-editor/react": "^4.7.0",
         "@remixicon/react": "catalog:",
         "@repo/contracts": "workspace:*",
