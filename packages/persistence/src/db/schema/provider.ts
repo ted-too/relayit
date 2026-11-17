@@ -25,9 +25,9 @@ export type ProviderScope = (typeof providerScopeEnum.enumValues)[number];
  * `scope` decides ownership:
  *   - `platform` → ops-wired managed backend; `organizationId` is null.
  *     At most one platform provider per channel may be `isDefault` (used when
- *     Domain create omits providerId — see ADR-0007).
+ *     Domain create omits providerId; read at that moment, never stored per Project).
  *   - `project` → Project-owned BYO; `organizationId` is set. Credentials do
- *     not span Projects (see ADR-0006).
+ *     not span Projects.
  *
  * `channelType` + `vendorId` + `productId` locate the registry config used for ops.
  */

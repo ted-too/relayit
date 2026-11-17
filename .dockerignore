@@ -13,8 +13,6 @@
 !README.md
 # The marketing site bundles its docs and legal pages at build time.
 !apps/site/content/**/*.md
-.cursor
-.agents
 .vscode
 agent-transcripts
 **/coverage

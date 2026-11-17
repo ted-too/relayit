@@ -4,8 +4,8 @@ const MESSAGE =
   "Use `Database`, `DatabaseTransaction` or `DatabaseExecutor` from `@repo/persistence/db/effect` instead of `Effect.Success<typeof DB>`.";
 
 /**
- * Reports `Effect.Success<typeof DB>`, and so any method picked off it (docs/agents/nitpicks.md,
- * "Use the shared DB aliases").
+ * Reports `Effect.Success<typeof DB>`, and so any method picked off it. Structural picks of the client
+ * drift from it and fight transaction typing; the aliases are the one DB surface.
  */
 export default defineRule({
   meta: {

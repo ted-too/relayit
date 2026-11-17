@@ -27,8 +27,8 @@ const isEmptyStruct = (node: unknown): boolean => {
 };
 
 /**
- * Reports `defineJob({ payload: Schema.Struct({}) })` (docs/agents/nitpicks.md, "Omit job `payload`
- * when there is none").
+ * Reports `defineJob({ payload: Schema.Struct({}) })`. A job with no payload omits `payload`, so its
+ * producers use the no-payload overloads instead of passing a dummy `{}` at every call site.
  */
 export default defineRule({
   meta: {

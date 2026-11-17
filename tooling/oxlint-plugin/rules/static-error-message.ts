@@ -7,9 +7,8 @@ const MESSAGE =
   "Keep an error's `message` static; put the identifiers and other varying data in their own fields.";
 
 /**
- * Reports `new SomeError({ message: \`...${value}...\` })` (docs/agents/nitpicks.md, "Keep error
- * `message` static; put identifiers in fields"). Logs and metrics key off the fields; the message is
- * stable copy.
+ * Reports `new SomeError({ message: \`...${value}...\` })`. Logs and metrics key off the fields; the
+ * message is stable copy.
  */
 export default defineRule({
   meta: {
