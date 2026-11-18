@@ -8,8 +8,13 @@
  * also calls, are checked by path.
  */
 import { describe, expect, it } from "@effect/vitest";
-import { DashboardApi, DashboardSession, ProjectAccess } from "@repo/contracts/dashboard";
-import { Effect } from "effect";
+import {
+  DashboardApi,
+  DashboardSession,
+  ProjectAccess,
+  RequiresPermission,
+} from "@repo/contracts/dashboard";
+import { Context, Effect } from "effect";
 import { HttpApi, type HttpApiGroup } from "effect/http-api";
 import { Api, ApiKeyAuth, LegacyApiKeyAuth } from "./api";
 import { APP_ORIGIN, GOOD_KEY, serve, stubs } from "./testing";
@@ -22,6 +27,8 @@ interface Reflected {
   readonly path: string;
   /** The keys of the middleware in front of it. */
   readonly middleware: ReadonlySet<string>;
+  /** Whether it declares the permission a member's role must grant. */
+  readonly declaresPermission: boolean;
 }
 
 const endpointsOf = <Id extends string, Groups extends HttpApiGroup.Constraint>(
@@ -31,6 +38,8 @@ const endpointsOf = <Id extends string, Groups extends HttpApiGroup.Constraint>(
   HttpApi.reflect(api, {
     onEndpoint: ({ endpoint, group, middleware }) =>
       endpoints.push({
+        declaresPermission:
+          Context.getOption(endpoint.annotations, RequiresPermission)._tag === "Some",
         method: endpoint.method,
         middleware: new Set([...middleware].map((service) => service.key)),
         name: `${group.identifier}.${endpoint.identifier}`,
@@ -96,6 +105,15 @@ describe("the auth rule", () => {
         endpoint.name,
         endpoint.middleware.has(DashboardSession.key) || endpoint.middleware.has(ProjectAccess.key),
       ]).toEqual([endpoint.name, false]);
+    }
+  });
+
+  // ProjectAccess lets any member through an endpoint that declares no permission.
+  it("makes every Project endpoint declare the permission it needs", () => {
+    for (const endpoint of endpointsOf(DashboardApi)) {
+      if (endpoint.middleware.has(ProjectAccess.key)) {
+        expect([endpoint.name, endpoint.declaresPermission]).toEqual([endpoint.name, true]);
+      }
     }
   });
 

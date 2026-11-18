@@ -27,32 +27,39 @@ export const signListUnsubscribe = (input: {
     )
     .digest("base64url");
 
+/**
+ * Whether `signature` was made by any of `secrets`: every secret in `BETTER_AUTH_SECRETS`,
+ * so a link in mail already delivered keeps working after the secret rotates.
+ */
 export const verifyListUnsubscribe = (input: {
   readonly contactId: string;
   readonly messageId: string;
-  readonly secret: string;
+  readonly secrets: ReadonlyArray<string>;
   readonly signature: string;
   readonly topicId: string;
 }) => {
-  const expected = signListUnsubscribe({
-    contactId: input.contactId,
-    messageId: input.messageId,
-    secret: input.secret,
-    topicId: input.topicId,
-  });
-  const expectedBuffer = Buffer.from(expected);
   const signatureBuffer = Buffer.from(input.signature);
-
-  if (expectedBuffer.length !== signatureBuffer.length) {
-    return false;
-  }
-
-  return NodeCrypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+  return input.secrets.some((secret) => {
+    const expectedBuffer = Buffer.from(
+      signListUnsubscribe({
+        contactId: input.contactId,
+        messageId: input.messageId,
+        secret,
+        topicId: input.topicId,
+      }),
+    );
+    return (
+      expectedBuffer.length === signatureBuffer.length &&
+      NodeCrypto.timingSafeEqual(expectedBuffer, signatureBuffer)
+    );
+  });
 };
 
 /**
  * The `List-Unsubscribe` URL: the api's one-click endpoint (`apiOrigin` is `API_URL`), which
  * a mailbox provider POSTs to and which sends a person who opens it to the dashboard's page.
+ * The Project's slug is in the path for a person reading it; nothing looks the Project up by
+ * it, since a rename would break every link already delivered.
  */
 export const buildListUnsubscribeUrl = (input: {
   readonly contactId: string;
@@ -140,11 +147,15 @@ export class ListUnsubscribeError extends Data.TaggedError("ListUnsubscribeError
   readonly message: string;
 }> {}
 
+/**
+ * One-click unsubscribe from a Topic. The Project is the Contact's, not the slug in the link:
+ * the signature covers the Contact, and a Project renamed since the mail went out keeps its
+ * old links working. The Topic and the Message must belong to that same Project.
+ */
 export const handleListUnsubscribeOneClick = (input: {
   readonly contactId: string;
   readonly messageId: string;
-  readonly orgSlug: string;
-  readonly secret: string;
+  readonly secrets: ReadonlyArray<string>;
   readonly signature: string;
   readonly topicId: string;
 }) =>
@@ -153,7 +164,7 @@ export const handleListUnsubscribeOneClick = (input: {
       !verifyListUnsubscribe({
         contactId: input.contactId,
         messageId: input.messageId,
-        secret: input.secret,
+        secrets: input.secrets,
         signature: input.signature,
         topicId: input.topicId,
       })
@@ -165,29 +176,6 @@ export const handleListUnsubscribeOneClick = (input: {
     }
 
     const db = yield* DB;
-
-    const organization = yield* db.query.organization
-      .findFirst({
-        columns: { id: true, slug: true },
-        where: { slug: input.orgSlug },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new ListUnsubscribeError({
-              cause,
-              code: "bad_request",
-              message: "Unsubscribe lookup failed",
-            }),
-        ),
-      );
-
-    if (!organization) {
-      return yield* new ListUnsubscribeError({
-        code: "not_found",
-        message: "Project not found",
-      });
-    }
 
     const contact = yield* db.query.contact
       .findFirst({
@@ -210,7 +198,8 @@ export const handleListUnsubscribeOneClick = (input: {
         ),
       );
 
-    if (contact?.appEnvironment?.organizationId !== organization.id) {
+    const organizationId = contact?.appEnvironment?.organizationId;
+    if (!(contact && organizationId)) {
       return yield* new ListUnsubscribeError({
         code: "not_found",
         message: "Contact not found",
@@ -222,7 +211,7 @@ export const handleListUnsubscribeOneClick = (input: {
         columns: { id: true, organizationId: true },
         where: {
           id: input.topicId,
-          organizationId: organization.id,
+          organizationId,
         },
       })
       .pipe(
@@ -264,7 +253,7 @@ export const handleListUnsubscribeOneClick = (input: {
         ),
       );
 
-    if (message?.appEnvironment?.organizationId !== organization.id) {
+    if (message?.appEnvironment?.organizationId !== organizationId) {
       return yield* new ListUnsubscribeError({
         code: "not_found",
         message: "Message not found",

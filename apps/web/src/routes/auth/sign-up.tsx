@@ -1,3 +1,4 @@
+import { Alert, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { useAppForm } from "@repo/ui/components/ui/custom/form";
@@ -7,9 +8,13 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type SignUpBody, signUpBodySchema } from "@/lib/auth/schemas";
+import { returnPath } from "@/lib/auth/return-path";
+import { signInErrorMessage } from "@/lib/auth/sign-in-error";
 import { authClient } from "@/lib/auth-client";
 
 const signUpSearchSchema = z.object({
+  /** better-auth's code for a sign-in it refused, when it sends the browser back here. */
+  error: z.string().optional(),
   redirect: z.string().optional(),
 });
 
@@ -20,23 +25,23 @@ export const Route = createFileRoute("/auth/sign-up")({
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { redirect } = Route.useSearch();
+  const { error: signInError, redirect } = Route.useSearch();
   const { isGitHubAuthEnabled } = Route.useRouteContext();
   const lastMethod = authClient.getLastUsedLoginMethod();
 
   const baseURL = window.location.origin;
-  const callbackURL = redirect
-    ? `${baseURL}${redirect.startsWith("/") ? redirect : `/${redirect}`}`
-    : `${baseURL}/`;
+  const next = returnPath(redirect, baseURL);
+  const callbackURL = `${baseURL}${next}`;
 
   const { mutate: signUpWithGitHub, isPending: isSigningUpWithGitHub } = useMutation({
     mutationFn: async () => {
       // GitHub returns to the api, which sends the browser back here: absolute URLs on this
-      // origin, which the api trusts. A failure comes back to sign-in, not to the api.
+      // origin, which the api trusts. A failure comes back to sign-in, not to the api, still
+      // knowing where the person was going.
       const { data, error } = await authClient.signIn.social({
         provider: "github",
         callbackURL,
-        errorCallbackURL: `${baseURL}/auth/sign-in`,
+        errorCallbackURL: `${baseURL}/auth/sign-in?${new URLSearchParams({ redirect: next })}`,
       });
 
       if (error) {
@@ -81,7 +86,7 @@ function RouteComponent() {
 
       toast.success("Signed up successfully");
 
-      navigate({ to: redirect ?? "/" });
+      navigate({ href: next });
     },
   });
 
@@ -111,6 +116,11 @@ function RouteComponent() {
         <p className="mb-6 text-center text-muted-foreground">
           Sign up for a new account to continue
         </p>
+        {signInError && (
+          <Alert className="mb-6" variant="destructive">
+            <AlertTitle className="line-clamp-none">{signInErrorMessage(signInError)}</AlertTitle>
+          </Alert>
+        )}
         {isGitHubAuthEnabled && (
           <>
             <div className="mb-6 flex w-full flex-col items-center gap-4 sm:flex-row">

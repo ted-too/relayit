@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { Image } from "@unpic/react";
 import { z } from "zod";
-import { queries } from "@/lib/queries";
+import { returnPath } from "@/lib/auth/return-path";
+import { fetchSessionOrNull } from "@/lib/queries/session";
 
 const authSearchSchema = z.object({
   redirect: z.string().optional(),
@@ -10,12 +11,10 @@ const authSearchSchema = z.object({
 export const Route = createFileRoute("/auth")({
   validateSearch: authSearchSchema,
   beforeLoad: async ({ context, search }) => {
-    const session = await context.queryClient.fetchQuery(queries.session.me).catch(() => null);
+    const session = await fetchSessionOrNull(context.queryClient);
 
     if (session) {
-      throw redirect({
-        to: search.redirect ?? "/",
-      });
+      throw redirect({ href: returnPath(search.redirect, window.location.origin) });
     }
   },
   component: RouteComponent,

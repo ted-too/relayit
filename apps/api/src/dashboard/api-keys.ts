@@ -1,4 +1,5 @@
 import { type ApiKey, DashboardApi, DashboardMember, NotFound } from "@repo/contracts/dashboard";
+import { logEffectFailure } from "@repo/logging";
 import { DB } from "@repo/persistence/db/effect";
 import { apikey } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -11,6 +12,11 @@ import { callAuth, operationFailed } from "./failures";
 /** Project keys; a user's own keys are `user-keys`. */
 const CONFIG_ID = "org-keys";
 
+interface KeyMetadata {
+  readonly createdBy?: string;
+  readonly end?: string | null;
+}
+
 interface BetterAuthKey {
   readonly createdAt: Date;
   readonly expiresAt?: Date | null;
@@ -21,36 +27,47 @@ interface BetterAuthKey {
   readonly start?: string | null;
 }
 
+/** Who made a key, as the dashboard shows them. */
+const loadCreator = (userId: string | undefined) =>
+  Effect.gen(function* () {
+    if (!userId) {
+      return null;
+    }
+    const db = yield* DB;
+    const creator = yield* db.query.user
+      .findFirst({
+        columns: { email: true, image: true, name: true },
+        where: { id: userId },
+      })
+      .pipe(Effect.catch(operationFailed("Failed to load API key.")));
+    return creator ?? null;
+  });
+
 /**
  * A key as the dashboard lists it: its last characters and who made it, both kept in its
- * metadata when it was created.
+ * metadata.
  */
+const toApiKey = (
+  key: BetterAuthKey,
+  metadata: KeyMetadata | null,
+  createdBy: ApiKey["createdBy"],
+) =>
+  ({
+    createdAt: key.createdAt,
+    createdBy,
+    end: metadata?.end ?? null,
+    expiresAt: key.expiresAt ?? null,
+    id: key.id,
+    lastRequest: key.lastRequest ?? null,
+    name: key.name ?? null,
+    start: key.start ?? null,
+  }) satisfies ApiKey;
+
 const describeKey = (key: BetterAuthKey) =>
   Effect.gen(function* () {
     const metadata =
-      key.metadata && typeof key.metadata === "object"
-        ? (key.metadata as { readonly createdBy?: string; readonly end?: string | null })
-        : null;
-    const createdById = metadata?.createdBy;
-    const db = yield* DB;
-    const createdBy = createdById
-      ? yield* db.query.user
-          .findFirst({
-            columns: { email: true, image: true, name: true },
-            where: { id: createdById },
-          })
-          .pipe(Effect.catch(operationFailed("Failed to load API key.")))
-      : undefined;
-    return {
-      createdAt: key.createdAt,
-      createdBy: createdBy ?? null,
-      end: metadata?.end ?? null,
-      expiresAt: key.expiresAt ?? null,
-      id: key.id,
-      lastRequest: key.lastRequest ?? null,
-      name: key.name ?? null,
-      start: key.start ?? null,
-    } satisfies ApiKey;
+      key.metadata && typeof key.metadata === "object" ? (key.metadata as KeyMetadata) : null;
+    return toApiKey(key, metadata, yield* loadCreator(metadata?.createdBy));
   });
 
 /** better-auth wants a lifetime, not an expiry. */
@@ -79,25 +96,38 @@ export const apiKeyHandlers = HttpApiBuilder.group(DashboardApi, "apiKeys", (han
         Effect.gen(function* () {
           const { organizationId, userId } = yield* DashboardMember;
           const headers = yield* requestHeaders;
+          // Nothing may fail once the key exists: a failed response would leave a live key
+          // whose secret nobody was shown. So the creator is read first, and the follow-up
+          // below is only logged when it fails.
+          const createdBy = yield* loadCreator(userId);
           const { key, ...created } = yield* callAuth("Failed to create API key.", () =>
             auth.api.createApiKey({
               body: {
                 configId: CONFIG_ID,
                 expiresIn: expiresIn(payload.expiresAt),
+                metadata: { createdBy: userId },
                 name: payload.name,
                 organizationId,
               },
               headers,
             }),
           );
+          // better-auth generates the key, so its last characters are known only now.
           const metadata = { createdBy: userId, end: key.slice(-6) };
-          yield* callAuth("Failed to create API key.", () =>
+          const stored = yield* Effect.tryPromise(() =>
             auth.api.updateApiKey({
               body: { configId: CONFIG_ID, keyId: created.id, metadata },
               headers,
             }),
+          ).pipe(
+            Effect.as(metadata),
+            Effect.catchCause((cause) =>
+              logEffectFailure("API key created without its last characters")(cause).pipe(
+                Effect.as({ createdBy: userId }),
+              ),
+            ),
           );
-          return { apiKey: yield* describeKey({ ...created, metadata }), key };
+          return { apiKey: toApiKey(created, stored, createdBy), key };
         }),
       )
       .handle("update", ({ params, payload }) =>

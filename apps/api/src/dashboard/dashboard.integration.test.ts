@@ -49,7 +49,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             dashboard: { billing: false, githubSignIn: false },
             hostname: "127.0.0.1",
             port: 0,
-            unsubscribeSecret: "test-secret",
+            unsubscribeSecrets: ["test-secret"],
           }),
         ),
         Layer.provideMerge(ApiAuth.layer({ ...config, rateLimit: false })),
@@ -138,6 +138,36 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           const body = method === "GET" ? undefined : { name: "x" };
           expect((yield* call(method, path, { body })).status).toBe(401);
         }
+      }),
+    );
+
+    it.effect("hands over a new API key even when writing its last characters fails", () =>
+      Effect.gen(function* () {
+        const { auth } = yield* ApiAuth;
+        const owner = yield* signUp("keyholder");
+        const p = `/projects/${(yield* createProject(owner, `Keys ${run.slice(-8)}`)).slug}`;
+        const updateApiKey = auth.api.updateApiKey;
+        const created = yield* Effect.acquireUseRelease(
+          // better-auth is the boundary here: its write fails as a lost connection would.
+          Effect.sync(() =>
+            Object.assign(auth.api, {
+              updateApiKey: () => Promise.reject(new Error("connection lost")),
+            }),
+          ),
+          () => call("POST", `${p}/api-keys`, { as: owner, body: { name: "Flaky" } }),
+          () => Effect.sync(() => Object.assign(auth.api, { updateApiKey })),
+        );
+
+        // A 500 here would leave a live key whose secret nobody was shown.
+        expect(created).toMatchObject({
+          body: { apiKey: { end: null, name: "Flaky" } },
+          status: 200,
+        });
+        const { apiKey, key } = created.body as { apiKey: { id: string }; key: string };
+        expect(key.startsWith("rel_org_")).toBe(true);
+        expect((yield* call("GET", `${p}/api-keys`, { as: owner })).body).toMatchObject([
+          { createdBy: { name: "keyholder" }, end: null, id: apiKey.id },
+        ]);
       }),
     );
 
@@ -415,7 +445,13 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           status: 200,
         });
         expect(yield* call("GET", `${p}/workspaces/reactEmail/files`, { as: owner })).toMatchObject(
-          { body: { _tag: "Unavailable" }, status: 503 },
+          {
+            body: {
+              _tag: "Unavailable",
+              message: "Email Workspaces aren't available on this deployment.",
+            },
+            status: 503,
+          },
         );
       }),
     );

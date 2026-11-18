@@ -76,8 +76,8 @@ export const apiServer = (options: {
   readonly appOrigin: string;
   /** What the dashboard's `GET /config` reports. */
   readonly dashboard: { readonly billing: boolean; readonly githubSignIn: boolean };
-  /** The current better-auth secret, which signs unsubscribe links. */
-  readonly unsubscribeSecret: string;
+  /** Every better-auth secret, current first, any of which may have signed an unsubscribe link. */
+  readonly unsubscribeSecrets: ReadonlyArray<string>;
   readonly accept?: typeof acceptTransactionalEmail;
   readonly handleSes?: typeof handleSesNotification;
   readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
@@ -92,7 +92,7 @@ export const apiServer = (options: {
         unsubscribeRoutes({
           appOrigin: options.appOrigin,
           handle: options.unsubscribe,
-          secret: options.unsubscribeSecret,
+          secrets: options.unsubscribeSecrets,
         }),
       ).pipe(Layer.provide(dashboardCors(options.appOrigin))),
       fallback,

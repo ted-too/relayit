@@ -69,7 +69,7 @@ describe("POST /unsubscribe/:orgSlug/:contactId", () => {
     }),
   );
 
-  it.live("unsubscribes with the link's parts and the current secret", () =>
+  it.live("unsubscribes with the link's parts and every secret", () =>
     Effect.gen(function* () {
       const calls: unknown[] = [];
       const origin = yield* serve(
@@ -91,8 +91,7 @@ describe("POST /unsubscribe/:orgSlug/:contactId", () => {
         {
           contactId: "cont_1",
           messageId: "msg_1",
-          orgSlug: "acme",
-          secret: "test-secret",
+          secrets: ["test-secret"],
           signature: "sig_1",
           topicId: "topc_1",
         },
