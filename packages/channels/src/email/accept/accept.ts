@@ -177,6 +177,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     const to = yield* filterSuppressedContacts(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
+      purpose: "transactional",
       recipients: input.email.to,
     }).pipe(
       Effect.mapError(
@@ -191,6 +192,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     const cc = yield* filterSuppressedContacts(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
+      purpose: "transactional",
       recipients: input.email.cc,
     }).pipe(
       Effect.mapError(
@@ -205,6 +207,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     const bcc = yield* filterSuppressedContacts(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
+      purpose: "transactional",
       recipients: input.email.bcc,
     }).pipe(
       Effect.mapError(
