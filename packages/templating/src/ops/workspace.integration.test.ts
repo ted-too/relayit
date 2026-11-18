@@ -114,6 +114,23 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
     }).pipe(Effect.provide(services)),
   );
 
+  it.live("refuses a write at once while the lock is held, without the read's wait", () =>
+    Effect.gen(function* () {
+      const workspaceId = typeid("twsp").toString();
+
+      const refused = yield* withWorkspaceGitLock(
+        workspaceId,
+        commitFiles({ changes: { "reactEmail/a.tsx": "" }, workspaceId }).pipe(
+          Effect.flip,
+          // Far under the 30 seconds a first read waits.
+          Effect.timeout("5 seconds"),
+        ),
+      );
+
+      expect(refused).toMatchObject({ code: "busy" });
+    }).pipe(Effect.provide(services)),
+  );
+
   it.live(
     "renders a published Entry that uses a hook, on send and in preview",
     () =>

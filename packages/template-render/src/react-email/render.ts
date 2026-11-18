@@ -52,8 +52,12 @@ export async function renderSealedReactEmailArtifact(input: {
       cwd: runnerDir,
       stdout: "pipe",
       stderr: "pipe",
+      // The artifact is a customer's code, so the isolate gets none of the server's
+      // environment: only PATH to find bun, and NODE_ENV so React is the build the server
+      // itself runs. Bun needs nothing else to start.
       env: {
-        ...process.env,
+        NODE_ENV: process.env.NODE_ENV,
+        PATH: process.env.PATH,
         RELAYIT_MERGE_PREVIEW_PROPS: input.mergePreviewProps ? "1" : "0",
       },
     });
