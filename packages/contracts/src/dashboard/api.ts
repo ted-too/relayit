@@ -116,7 +116,6 @@ export class DomainsApi extends HttpApiGroup.make("domains")
       error: failures,
       params: domain,
     }).annotate(RequiresPermission, { domain: ["delete"] }),
-    // Not in the dashboard yet.
     HttpApiEndpoint.post("pause", "/:domainId/pause", {
       error: failures,
       params: domain,

@@ -525,6 +525,85 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("pauses a Domain only for a role that may update it, and rejects its sends", () =>
+      Effect.gen(function* () {
+        const { auth } = yield* ApiAuth;
+        const owner = yield* signUp("pauser");
+        const plain = yield* signUp("onlooker");
+        const project = yield* createProject(owner, `Pauser ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        const fqdn = `${run}.paused.example.test`;
+        const plainUser = yield* Effect.promise(() =>
+          auth.api.getSession({ headers: new Headers({ cookie: plain }) }),
+        );
+        yield* Effect.promise(() =>
+          auth.api.addMember({
+            body: { organizationId: project.id, role: "member", userId: plainUser?.user.id ?? "" },
+          }),
+        );
+        const added = yield* call("POST", `${p}/domains`, { as: owner, body: { fqdn } });
+        const domainId = (added.body as { id: string }).id;
+        yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner });
+        const created = yield* call("POST", `${p}/api-keys`, { as: owner, body: { name: "K" } });
+        const { key } = created.body as { key: string };
+        const send = call("POST", "/messages/email", {
+          body: { from: `hello@${fqdn}`, subject: "Hi", text: "Hi", to: "someone@example.test" },
+          key,
+        });
+        const listed = call("GET", `${p}/domains`, { as: plain });
+
+        // A plain member sees the Domain and pauses nothing.
+        expect(
+          yield* call("POST", `${p}/domains/${domainId}/pause`, {
+            as: plain,
+            body: { reason: "manual_admin_pause" },
+          }),
+        ).toMatchObject({ body: { _tag: "Forbidden" }, status: 403 });
+        expect(yield* listed).toMatchObject({
+          body: [{ id: domainId, isPaused: false, pausedReason: null }],
+          status: 200,
+        });
+        expect((yield* send).status).toBe(201);
+
+        // A reason the contract doesn't name is refused before anything changes.
+        expect(
+          (yield* call("POST", `${p}/domains/${domainId}/pause`, {
+            as: owner,
+            body: { reason: "because" },
+          })).status,
+        ).toBe(400);
+
+        // The owner pauses it: the list says so and why, and accept rejects a send from it.
+        expect(
+          (yield* call("POST", `${p}/domains/${domainId}/pause`, {
+            as: owner,
+            body: { reason: "bad_reputation" },
+          })).status,
+        ).toBe(204);
+        expect((yield* listed).body).toMatchObject([
+          { id: domainId, isPaused: true, pausedReason: "bad_reputation" },
+        ]);
+        expect(yield* send).toMatchObject({
+          body: { code: "invalid_from_address" },
+          status: 422,
+        });
+
+        // Nor does a plain member unpause it.
+        expect(
+          yield* call("POST", `${p}/domains/${domainId}/unpause`, { as: plain }),
+        ).toMatchObject({ body: { _tag: "Forbidden" }, status: 403 });
+        expect((yield* send).status).toBe(422);
+
+        expect(
+          (yield* call("POST", `${p}/domains/${domainId}/unpause`, { as: owner })).status,
+        ).toBe(204);
+        expect((yield* listed).body).toMatchObject([
+          { id: domainId, isPaused: false, pausedReason: null },
+        ]);
+        expect((yield* send).status).toBe(201);
+      }),
+    );
+
     it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("unregistered");

@@ -3,8 +3,10 @@ import {
   RiCloseCircleFill,
   RiDeleteBin6Line,
   RiErrorWarningFill,
+  RiPauseCircleLine,
   RiRefreshLine,
 } from "@remixicon/react";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { formatDateTime } from "@repo/ui/lib/utils";
@@ -15,6 +17,9 @@ import { useState } from "react";
 import { ConfirmAction } from "@/components/confirm-action";
 import { DNSRecordsTable } from "@/components/settings/custom-domains/dns-records-table";
 import {
+  DomainPause,
+  PAUSED_REASONS,
+  useCanPauseDomain,
   useDeleteDomain,
   useRefreshDomain,
 } from "@/components/settings/custom-domains/domain-actions";
@@ -46,6 +51,8 @@ function RouteComponent() {
     select: (domains) => domains.find((domain) => domain.fqdn === fqdn)!,
   });
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const canPause = useCanPauseDomain({ domain });
   const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain({
     domain,
     onDeleted: () =>
@@ -65,11 +72,20 @@ function RouteComponent() {
   return (
     <div className="w-full">
       <div className="flex w-full flex-col gap-6 border-y bg-card p-6">
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-center gap-3">
           <span className="font-medium text-3xl">{domain.fqdn}</span>
+          {domain.isPaused && <Badge variant="destructive-light">Paused</Badge>}
+          <div className="grow" />
+          {canPause && !domain.isPaused && (
+            <Button onClick={() => setPauseOpen(true)} variant="outline">
+              <RiPauseCircleLine />
+              Pause
+            </Button>
+          )}
           <Button onClick={() => setDeleteOpen(true)} size="icon-lg" variant="destructive-light">
             <RiDeleteBin6Line />
           </Button>
+          <DomainPause domain={domain} open={pauseOpen} setOpen={setPauseOpen} />
           <ConfirmAction
             execute={() => deleteDomain()}
             isLoading={isDeletingDomain}
@@ -78,6 +94,25 @@ function RouteComponent() {
             verificationText={domain.fqdn}
           />
         </div>
+        {domain.isPaused && (
+          <Alert className="px-3 py-3" variant="destructive">
+            <RiPauseCircleLine />
+            <AlertTitle>This Domain is paused</AlertTitle>
+            <AlertDescription>
+              <p>
+                {domain.pausedReason && `${PAUSED_REASONS[domain.pausedReason].description} `}
+                New sends from it are rejected and queued Deliveries fail until it is unpaused.
+              </p>
+            </AlertDescription>
+            {canPause && (
+              <AlertAction>
+                <Button onClick={() => setPauseOpen(true)} size="sm" variant="outline">
+                  Unpause
+                </Button>
+              </AlertAction>
+            )}
+          </Alert>
+        )}
         <div className="grid grid-cols-5 gap-6">
           {(
             [
