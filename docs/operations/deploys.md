@@ -32,7 +32,7 @@ The step is a pre-deploy command on the **api** service. Railway's documentation
 Two things it does not promise:
 
 - **How the command meets the image's entrypoint.** The documentation says a start command replaces an image's `ENTRYPOINT` and says nothing for a pre-deploy command. The api image therefore has a `CMD` and no `ENTRYPOINT` of its own, so the command runs whether Railway replaces the entrypoint or passes the command to it. The first deploy with the setting is the proof: the pre-deploy log ends with `Database migrations up to date`.
-- **That other services wait.** Railway deploys each service by itself; nothing holds the worker or the builder back until the api's pre-deploy command has finished. The apps' own check covers that: a new worker or builder that starts first waits for the step.
+- **That other services wait.** Railway orders services only when they are deployed together in one batch (a template, staged changes), and then by the reference variables between them, not by a pre-deploy command; otherwise each service deploys independently. Nothing holds the worker or the builder back until the api's pre-deploy command has finished. The apps' own check covers that: a new worker or builder that starts first waits for the step.
 
 #### The api's healthcheck comes first
 
@@ -40,34 +40,37 @@ The api service must have `/health` as its healthcheck path before any of this i
 
 #### Setting it up
 
-Do these in order.
+This is done once, around the first release whose api image carries `migrate.js`. That release still has no pre-deploy command when it deploys, and nothing migrates as it starts any more, so the database has to be current before it goes out and stay so until the command is in place. Do these in order.
 
 1. On the api service, confirm Settings → Deploy → Healthcheck Path is `/health`, and set it if it is not. Do the same on the builder.
-2. Confirm the production database has every migration on `main`. The first deploy of an image that checks finds anything missing and waits rather than starts. Compare the folder names in `packages/persistence/drizzle/` with:
+2. Immediately before merging that release, confirm the production database has every migration on `main`. From a checkout of `main` as it will be released, this prints a query that returns the migrations the database lacks:
 
-   ```sql
-   select name from drizzle.__drizzle_migrations order by name;
+   ```sh
+   echo "values $(ls packages/persistence/drizzle | sed "s/.*/('&')/" | paste -sd, -) except select name from drizzle.__drizzle_migrations;"
    ```
 
-   Every folder must be in the result. Rows the folder does not have are fine.
+   Run what it prints against the production database and expect no rows. From here until step 7 has shown the database up to date, merge nothing else: a migration that lands in between is one nothing applies.
 
-3. Deploy the first release whose api image carries `migrate.js`, with no pre-deploy command yet. An image from before it has no `migrate.js`, so the command set early would fail and block the deploy.
-4. On the api service, set Settings → Deploy → Pre-deploy Command to:
+3. If the query returns a row, production is behind `main`. Deploy the latest release from before the migrate step first: its api still migrates as it starts. Some of those releases carry their own deploy procedure in their pull request (#88 does); follow it. Then run step 2 again.
+4. Merge and deploy the release, with no pre-deploy command yet. An image from before it has no `migrate.js`, so the command set early would fail and block the deploy. With step 2 done the database already has every migration this release carries, and its api, worker and builder start in any order.
+5. On the api service, set Settings → Deploy → Pre-deploy Command to:
 
    ```
    bun run migrate.js
    ```
 
-5. Set Pre-deploy Timeout to 600 seconds. Without one a step that hangs holds the deployment open for good, and a step can hang: it waits without limit for the advisory lock while another run, or a session that died holding it, has it. Ten minutes is far longer than a migration here takes; raise it for a release with a slow one.
-6. Deploy the api and read the pre-deploy log. It ends with `Database migrations up to date`.
+6. Set Pre-deploy Timeout to 600 seconds. Without one a step that hangs holds the deployment open for good, and a step can hang: it waits without limit for the advisory lock while another run, or a session that died holding it, has it. Ten minutes is far longer than a migration here takes; raise it for a release with a slow one.
+7. Deploy the staged change: Railway stages the two settings and shows a Deploy button for them. Do not use Redeploy on an existing deployment instead; Railway documents that as a new deployment "with the exact same code and build/deploy configuration", so it may not have the new command. Read the deployment's log: it has a pre-deploy step that ends with `Database migrations up to date`. If the log shows no pre-deploy step, the command was not picked up; check the setting and deploy again.
 
-All of this must be done before the first release that carries a migration.
+#### A release with a migration arrives and the command is not set
+
+If the procedure above was skipped or step 7 never ran, the next release that carries a migration reaches Railway with nothing to apply it. The new api waits for the migration without listening, so it never answers its healthcheck, its deployment fails at the healthcheck timeout, and the previous api keeps serving. The new worker has no healthcheck: it replaces the previous worker at once, logs `Waiting for the migrate step` with the migration it is missing, exits after five minutes and is restarted, so no jobs run. The image has `migrate.js`, so the fix is steps 5 to 7: set the Pre-deploy Command and the timeout on the api service and deploy the staged change. Once its log shows `Database migrations up to date`, redeploy the worker and the builder.
 
 #### What a release does afterwards
 
-When the step succeeds, there is no ordering to arrange by hand, which is weaker than before, when the worker had to be rolled out after the api or it ran against a schema it did not match. A new worker or builder that starts before the step has finished waits for it. While a new worker waits no jobs run, because Railway has stopped the previous one; accepted sends stay queued and go out when it gets going.
+When the step succeeds, there is no ordering to arrange by hand, which is weaker than before, when the worker had to be rolled out after the api or it ran against a schema it did not match. A new worker or builder that starts before the step has finished waits for it. While a new worker waits no jobs run, because Railway has stopped the previous one; accepted sends stay queued and go out when it gets going. A new builder that waits longer than its healthcheck timeout has its deployment failed while the previous builder keeps running, and needs redeploying once the step is through.
 
-When the step fails, the api stays on the previous release. The release's worker and builder wait five minutes and exit non-zero. Railway's default restart policy is On Failure with at most ten restarts, so they are restarted and wait again, and once the restarts are used up they stay crashed. Nothing runs jobs meanwhile (#100). Fix the migration, redeploy the api so the step runs, then redeploy the worker and the builder if they have crashed.
+When the step fails, the api stays on the previous release. The release's worker and builder wait five minutes and exit non-zero. Railway's default restart policy is On Failure with at most ten restarts, so the worker is restarted and waits again, and once the restarts are used up it stays crashed. Nothing runs jobs meanwhile (#100). A fixed migration is a new release: merge the fix and deploy that release's images, the api's first so that its step runs. Redeploying the failed deployment would run the same migration again.
 
 #### Rolling back
 
