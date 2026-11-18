@@ -23,6 +23,8 @@ export const unsubscribeRoutes = (options: {
   readonly secret: string;
 }) =>
   Layer.mergeAll(
+    // For the CORS middleware this is given, which answers the dashboard page's preflight.
+    HttpRouter.add("OPTIONS", PATH, HttpServerResponse.empty({ status: 204 })),
     HttpRouter.add("GET", PATH, (request) =>
       Effect.succeed(HttpServerResponse.redirect(`${options.appOrigin}${request.url}`)),
     ),

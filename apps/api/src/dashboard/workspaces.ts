@@ -109,7 +109,7 @@ export const workspaceHandlers = HttpApiBuilder.group(DashboardApi, "workspaces"
           };
         }),
       )
-      .handle("entries", ({ params }) =>
+      .handle("listEntries", ({ params }) =>
         Effect.gen(function* () {
           const workspace = yield* projectWorkspace(params.kind);
           const db = yield* DB;
@@ -132,15 +132,15 @@ export const workspaceHandlers = HttpApiBuilder.group(DashboardApi, "workspaces"
           }));
         }),
       )
-      .handle("files", ({ params }) =>
+      .handle("listFiles", ({ params }) =>
         withBuilder(params.kind, (client, workspaceId) => client.listFiles({ workspaceId })),
       )
-      .handle("readFile", ({ params, query }) =>
+      .handle("getFile", ({ params, query }) =>
         withBuilder(params.kind, (client, workspaceId) =>
           client.readFile({ path: query.path, workspaceId }),
         ),
       )
-      .handle("commit", ({ params, payload }) =>
+      .handle("createCommit", ({ params, payload }) =>
         withBuilder(params.kind, (client, workspaceId) =>
           client.commitFiles({
             changes: payload.changes,
@@ -149,16 +149,16 @@ export const workspaceHandlers = HttpApiBuilder.group(DashboardApi, "workspaces"
           }),
         ),
       )
-      .handle("depsSync", ({ params }) =>
+      .handle("syncDependencies", ({ params }) =>
         withBuilder(params.kind, (client, workspaceId) => client.depsSync({ workspaceId })),
       )
       .handle("publish", ({ params }) =>
         withBuilder(params.kind, (client, workspaceId) => client.publish({ workspaceId })),
       )
-      .handle("preview", ({ params, payload }) =>
+      .handle("previewEntry", ({ params, payload }) =>
         withBuilder(params.kind, (client, workspaceId) =>
           client.preview({
-            entryId: payload.entryId,
+            entryId: params.entryId,
             ...(payload.props ? { props: payload.props } : {}),
             ...(payload.subject ? { subjectOverride: payload.subject } : {}),
             workspaceId,

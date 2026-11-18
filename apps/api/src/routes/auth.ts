@@ -5,7 +5,7 @@ import { ApiAuth } from "../lib/auth";
 
 /**
  * better-auth at `/auth/*`: sign-in and sign-up, the session, organizations and their
- * members, API key deletion, the GitHub OAuth callback (`/auth/callback/github`) and
+ * members, the GitHub OAuth callback (`/auth/callback/github`) and
  * Stripe's webhook (`/auth/stripe/webhook`). GitHub and Stripe are configured with those
  * URLs on `API_URL`.
  */

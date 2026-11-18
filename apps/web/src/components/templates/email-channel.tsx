@@ -61,7 +61,7 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
   const { mutate: linkEntry, isPending: isLinking } = useMutation({
     mutationFn: async (input: { workspaceEntryId: string; subject: string }) =>
       await dashboard((client) =>
-        client.templates.linkReactEmail({
+        client.templates.setEmail({
           params: { orgSlug, templateId: template.id },
           payload: { subject: input.subject, workspaceEntryId: input.workspaceEntryId },
         }),

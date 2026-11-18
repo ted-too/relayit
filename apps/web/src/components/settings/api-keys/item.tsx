@@ -17,7 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
-import { authClient } from "@/lib/auth-client";
+import { dashboard } from "@/lib/dashboard";
 import type { ApiKey } from "@repo/contracts/dashboard";
 import { queries } from "@/lib/queries";
 import { UpsertApiKey } from "./upsert";
@@ -29,14 +29,7 @@ export function ApiKeyItem({ apiKey }: { apiKey: ApiKey }) {
 
   const { mutate: deleteApiKey, isPending: isDeletingApiKey } = useMutation({
     mutationFn: async () => {
-      const { error } = await authClient.apiKey.delete({
-        configId: "org-keys",
-        keyId: apiKey.id,
-      });
-
-      if (error) {
-        return Promise.reject(error);
-      }
+      await dashboard((client) => client.apiKeys.delete({ params: { keyId: apiKey.id, orgSlug } }));
     },
     onSuccess: (_, __, ___, { client }) => {
       client.setQueryData(

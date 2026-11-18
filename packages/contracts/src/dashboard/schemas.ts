@@ -174,7 +174,8 @@ export const CreateTemplateInput = Schema.Struct({
   name: SafeName.check(Schema.isNonEmpty(), Schema.isMaxLength(256)),
 });
 
-export const TemplateSlugInput = Schema.Struct({
+/** A Template's changeable fields: its slug, slugified as it is saved. */
+export const UpdateTemplateInput = Schema.Struct({
   slug: SafeName.check(Schema.isNonEmpty(), Schema.isMaxLength(128)),
 });
 
@@ -279,7 +280,6 @@ export const WorkspacePublish = Schema.Struct({
 });
 
 export const PreviewEntryInput = Schema.Struct({
-  entryId: Schema.NonEmptyString,
   props: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   subject: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(998))),
 });

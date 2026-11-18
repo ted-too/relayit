@@ -45,11 +45,11 @@ export const organizations = q.createQueryKeys("organizations", {
         dashboard((client) => client.workspaces.get({ params: { kind, orgSlug: slug } })),
       entries: q.static({
         queryFn: () =>
-          dashboard((client) => client.workspaces.entries({ params: { kind, orgSlug: slug } })),
+          dashboard((client) => client.workspaces.listEntries({ params: { kind, orgSlug: slug } })),
       }),
       files: q.static({
         queryFn: () =>
-          dashboard((client) => client.workspaces.files({ params: { kind, orgSlug: slug } })),
+          dashboard((client) => client.workspaces.listFiles({ params: { kind, orgSlug: slug } })),
       }),
     })),
   })),

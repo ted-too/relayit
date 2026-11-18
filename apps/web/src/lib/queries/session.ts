@@ -20,7 +20,7 @@ export const session = q.createQueryKeys("session", {
 /** What the deployment offers: billing, GitHub sign-in. Asked before sign-in. */
 export const config = q.createQueryKeys("config", {
   get: q.static({
-    queryFn: () => dashboard((client) => client.dashboardConfig.get()),
+    queryFn: () => dashboard((client) => client.config.get()),
   }),
 });
 

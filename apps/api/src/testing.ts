@@ -67,6 +67,8 @@ export const stubs = (overrides: Partial<Stubs> = {}) => {
 const makeAuth = (stubs: Stubs): ApiAuth["Service"] => ({
   auth: {
     api: {
+      // No request here carries a session; the dashboard's are tested with real ones.
+      getSession: () => Promise.resolve(null),
       verifyApiKey: ({ body }: { body: { key: string } }) =>
         Promise.resolve(
           body.key === GOOD_KEY

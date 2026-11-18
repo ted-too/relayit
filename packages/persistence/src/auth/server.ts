@@ -43,6 +43,12 @@ export interface AuthConfig {
    */
   cookieDomain?: string;
   db: PromiseDb;
+  /**
+   * Where a sign-in failure better-auth can't send back to the page's own
+   * `errorCallbackURL` lands (an OAuth callback whose state is gone, its `/error` page): the
+   * dashboard's sign-in page. Without it the browser is left on the api's origin.
+   */
+  errorUrl?: string;
   hooks?: BetterAuthOptions["hooks"];
   /**
    * Limits requests to `/auth/*` per client IP, in Redis. better-auth would decide by
@@ -77,6 +83,7 @@ export const createAuth = ({
   baseUrl,
   cookieDomain,
   db,
+  errorUrl,
   redis,
   redisKeyPrefix,
   socialProviders,
@@ -89,6 +96,7 @@ export const createAuth = ({
     baseURL: baseUrl,
     basePath: AUTH_BASE_PATH,
     trustedOrigins,
+    onAPIError: { errorURL: errorUrl },
     database: drizzleAdapter(db, {
       provider: "pg",
       schema,

@@ -125,14 +125,14 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const { mutateAsync: readFile } = useMutation({
     mutationFn: async (path: string) =>
       await dashboard((client) =>
-        client.workspaces.readFile({ params: { kind: KIND, orgSlug }, query: { path } }),
+        client.workspaces.getFile({ params: { kind: KIND, orgSlug }, query: { path } }),
       ),
   });
 
   const { mutateAsync: commitFiles, isPending: isSaving } = useMutation({
     mutationFn: async (input: { changes: Record<string, string | null>; message?: string }) =>
       await dashboard((client) =>
-        client.workspaces.commit({
+        client.workspaces.createCommit({
           params: { kind: KIND, orgSlug },
           payload: {
             changes: input.changes,
@@ -144,7 +144,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
   const { mutateAsync: depsSync } = useMutation({
     mutationFn: async () =>
-      await dashboard((client) => client.workspaces.depsSync({ params: { kind: KIND, orgSlug } })),
+      await dashboard((client) =>
+        client.workspaces.syncDependencies({ params: { kind: KIND, orgSlug } }),
+      ),
   });
 
   const { mutateAsync: publish, isPending: isPublishing } = useMutation({
@@ -159,10 +161,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       subject?: string;
     }) =>
       await dashboard((client) =>
-        client.workspaces.preview({
-          params: { kind: KIND, orgSlug },
+        client.workspaces.previewEntry({
+          params: { entryId: input.entryId, kind: KIND, orgSlug },
           payload: {
-            entryId: input.entryId,
             props: input.props,
             ...(input.subject ? { subject: input.subject } : {}),
           },
@@ -173,7 +174,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const { mutateAsync: linkEntry } = useMutation({
     mutationFn: async (input: { templateId: string; workspaceEntryId: string; subject: string }) =>
       await dashboard((client) =>
-        client.templates.linkReactEmail({
+        client.templates.setEmail({
           params: { orgSlug, templateId: input.templateId },
           payload: { subject: input.subject, workspaceEntryId: input.workspaceEntryId },
         }),

@@ -116,7 +116,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
 
   const createProject = (as: string, name: string) =>
     Effect.gen(function* () {
-      const response = yield* call("POST", "/dashboard/projects", { as, body: { name } });
+      const response = yield* call("POST", "/projects", { as, body: { name } });
       expect(response.status).toBe(200);
       return response.body as { readonly id: string; readonly slug: string };
     });
@@ -124,16 +124,16 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   layer(server, { timeout: "60 seconds" })((it) => {
     it.effect("refuses every operation without a session, and reports the config without one", () =>
       Effect.gen(function* () {
-        expect(yield* call("GET", "/dashboard/config")).toMatchObject({
+        expect(yield* call("GET", "/config")).toMatchObject({
           body: { billing: false, githubSignIn: false },
           status: 200,
         });
         for (const [method, path] of [
-          ["POST", "/dashboard/projects"],
-          ["GET", "/dashboard/projects/acme/api-keys"],
-          ["GET", "/dashboard/projects/acme/domains"],
-          ["GET", "/dashboard/projects/acme/templates"],
-          ["GET", "/dashboard/projects/acme/workspaces/reactEmail/entries"],
+          ["POST", "/projects"],
+          ["GET", "/projects/acme/api-keys"],
+          ["GET", "/projects/acme/domains"],
+          ["GET", "/projects/acme/templates"],
+          ["GET", "/projects/acme/workspaces/reactEmail/entries"],
         ] as const) {
           const body = method === "GET" ? undefined : { name: "x" };
           expect((yield* call(method, path, { body })).status).toBe(401);
@@ -149,8 +149,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const carol = yield* signUp("carol");
         const projectA = yield* createProject(alice, `Alpha ${run.slice(-8)}`);
         const projectB = yield* createProject(bob, `Bravo ${run.slice(-8)}`);
-        const a = `/dashboard/projects/${projectA.slug}`;
-        const b = `/dashboard/projects/${projectB.slug}`;
+        const a = `/projects/${projectA.slug}`;
+        const b = `/projects/${projectB.slug}`;
 
         // Bob's Project has a Domain, a Template, an API key and a published Entry.
         const bobsDomain = yield* call("POST", `${b}/domains`, {
@@ -200,6 +200,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["GET", `${b}/api-keys`],
           ["POST", `${b}/api-keys`, { name: "Mine" }],
           ["PATCH", `${b}/api-keys/${keyId}`, { name: "Mine" }],
+          ["DELETE", `${b}/api-keys/${keyId}`],
           ["GET", `${b}/domains`],
           ["POST", `${b}/domains`, { fqdn: "alice.example.test" }],
           ["POST", `${b}/domains/${domainId}/refresh`],
@@ -210,7 +211,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["GET", `${b}/templates/${templateId}`],
           ["POST", `${b}/templates`, { name: "Mine" }],
           ["POST", `${b}/templates/${templateId}/archive`],
-          ["PUT", `${b}/templates/${templateId}/slug`, { slug: "mine" }],
+          ["PATCH", `${b}/templates/${templateId}`, { slug: "mine" }],
           [
             "PUT",
             `${b}/templates/${templateId}/email`,
@@ -219,12 +220,12 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["GET", `${b}/workspaces/reactEmail`],
           ["GET", `${b}/workspaces/reactEmail/entries`],
           ["GET", `${b}/workspaces/reactEmail/files`],
-          ["GET", `${b}/workspaces/reactEmail/file?path=a.tsx`],
+          ["GET", `${b}/workspaces/reactEmail/files/content?path=a.tsx`],
           ["POST", `${b}/workspaces/reactEmail/commits`, { changes: {} }],
-          ["POST", `${b}/workspaces/reactEmail/deps-sync`],
+          ["POST", `${b}/workspaces/reactEmail/sync-dependencies`],
           ["POST", `${b}/workspaces/reactEmail/publish`],
-          ["POST", `${b}/workspaces/reactEmail/preview`, { entryId: entry?.id }],
-          ["GET", `/dashboard/projects/no-such-project/domains`],
+          ["POST", `${b}/workspaces/reactEmail/entries/${entry?.id}/preview`, {}],
+          ["GET", `/projects/no-such-project/domains`],
         ] as const) {
           expect([method, path, (yield* call(method, path, { as: alice, body })).status]).toEqual([
             method,
@@ -241,13 +242,14 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const aliceTemplateId = (aliceTemplate.body as { id: string }).id;
         for (const [method, path, body] of [
           ["PATCH", `${a}/api-keys/${keyId}`, { name: "Mine" }],
+          ["DELETE", `${a}/api-keys/${keyId}`],
           ["POST", `${a}/domains/${domainId}/refresh`],
           ["DELETE", `${a}/domains/${domainId}`],
           ["POST", `${a}/domains/${domainId}/pause`, { reason: "manual_admin_pause" }],
           ["POST", `${a}/domains/${domainId}/unpause`],
           ["GET", `${a}/templates/${templateId}`],
           ["POST", `${a}/templates/${templateId}/archive`],
-          ["PUT", `${a}/templates/${templateId}/slug`, { slug: "mine" }],
+          ["PATCH", `${a}/templates/${templateId}`, { slug: "mine" }],
           [
             "PUT",
             `${a}/templates/${aliceTemplateId}/email`,
@@ -286,9 +288,10 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         }
         for (const [method, path, body] of [
           ["POST", `${a}/api-keys`, { name: "Carol" }],
+          ["DELETE", `${a}/api-keys/key_unknown`],
           ["POST", `${a}/domains`, { fqdn: "carol.example.test" }],
           ["POST", `${a}/templates`, { name: "Carol" }],
-          ["PUT", `${a}/templates/${aliceTemplateId}/slug`, { slug: "carol" }],
+          ["PATCH", `${a}/templates/${aliceTemplateId}`, { slug: "carol" }],
           ["POST", `${a}/workspaces/reactEmail/publish`],
         ] as const) {
           expect([method, path, (yield* call(method, path, { as: carol, body })).status]).toEqual([
@@ -306,6 +309,38 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             origin: "https://evil.test",
           })).status,
         ).toBe(403);
+        // So is one that names no origin: browsers always send it on a change.
+        const forged = yield* Effect.gen(function* () {
+          const origin = yield* Origin;
+          return yield* Effect.promise(() =>
+            fetch(`${origin}${a}/templates`, {
+              body: JSON.stringify({ name: "Forged" }),
+              headers: { "content-type": "application/json", cookie: alice },
+              method: "POST",
+            }),
+          );
+        });
+        expect(forged.status).toBe(403);
+
+        // An API key is no way in, even with Alice's own key beside her cookie.
+        const aliceKey = yield* call("POST", `${a}/api-keys`, { as: alice, body: { name: "K" } });
+        const { key } = aliceKey.body as { key: string };
+        const withKey = yield* Effect.gen(function* () {
+          const origin = yield* Origin;
+          return yield* Effect.promise(async () => {
+            const response = await fetch(`${origin}${a}/domains`, {
+              headers: { cookie: alice, "x-api-key": key },
+            });
+            return { body: (await response.json()) as unknown, status: response.status };
+          });
+        });
+        expect(withKey).toEqual({
+          body: {
+            _tag: "Unauthenticated",
+            message: "This endpoint takes a dashboard session, not an API key.",
+          },
+          status: 401,
+        });
       }),
     );
 
@@ -315,7 +350,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const project = yield* createProject(owner, "Admin");
         // `admin` is the dashboard's own page, so the Project is given another slug.
         expect(project.slug).not.toBe("admin");
-        const p = `/dashboard/projects/${project.slug}`;
+        const p = `/projects/${project.slug}`;
 
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         const created = yield* call("POST", `${p}/api-keys`, {
@@ -333,6 +368,10 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             body: { name: "Renamed" },
           }),
         ).toMatchObject({ body: { end: key.slice(-6), name: "Renamed" }, status: 200 });
+        expect((yield* call("DELETE", `${p}/api-keys/${apiKey.id}`, { as: owner })).status).toBe(
+          204,
+        );
+        expect((yield* call("GET", `${p}/api-keys`, { as: owner })).body).toEqual([]);
 
         const domain = yield* call("POST", `${p}/domains`, {
           as: owner,
@@ -355,7 +394,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         });
         const templateId = (template.body as { id: string }).id;
         expect(
-          yield* call("PUT", `${p}/templates/${templateId}/slug`, {
+          yield* call("PATCH", `${p}/templates/${templateId}`, {
             as: owner,
             body: { slug: "Order Receipt" },
           }),
@@ -364,7 +403,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           yield* call("POST", `${p}/templates/${templateId}/archive`, { as: owner }),
         ).toMatchObject({ status: 200 });
         expect(
-          yield* call("PUT", `${p}/templates/${templateId}/slug`, {
+          yield* call("PATCH", `${p}/templates/${templateId}`, {
             as: owner,
             body: { slug: "again" },
           }),
@@ -414,6 +453,25 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         });
         const fromElsewhere = yield* session("https://evil.test");
         expect(fromElsewhere.headers.get("access-control-allow-origin")).toBeNull();
+      }),
+    );
+
+    it.effect("sends a sign-in failure with nowhere else to go to the dashboard's sign-in", () =>
+      Effect.gen(function* () {
+        const origin = yield* Origin;
+        const location = (path: string) =>
+          Effect.promise(async () => {
+            const response = await fetch(`${origin}${path}`, { redirect: "manual" });
+            return { location: response.headers.get("location") ?? "", status: response.status };
+          });
+        // GitHub returning to the api without the state the sign-in started with.
+        const stateless = yield* location("/auth/callback/github?code=c");
+        expect(stateless.status).toBe(302);
+        expect(stateless.location.startsWith(`${APP}/auth/sign-in?error=`)).toBe(true);
+        expect(yield* location("/auth/error?error=access_denied")).toEqual({
+          location: `${APP}/auth/sign-in?error=access_denied`,
+          status: 302,
+        });
       }),
     );
 
