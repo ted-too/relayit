@@ -8,7 +8,8 @@
  * it reaches the api's sessions and rewrites them in the shape the api stores.
  *
  * Exit codes: 0 changed and confirmed, 2 usage, 3 no such user, 4 environment, 5 database,
- * 6 the sessions could not be confirmed. The last line printed is the outcome: a failing
+ * 6 the sessions could not be confirmed, 7 the role was removed but no session of the user
+ * was found and the session store it searched holds no session of anyone. The last line printed is the outcome: a failing
  * Redis logs its reconnects, and better-auth its own errors, before it.
  */
 import { JobsLive } from "@repo/jobs";
@@ -85,6 +86,12 @@ const program = Effect.gen(function* () {
     },
   })) {
     console.log(line);
+  }
+  // A removal that searched a store with nobody's sessions in it has most likely looked in
+  // the wrong place, and the removed admin may still be signed in: a script must not read
+  // that as done. A grant is left at 0: a new deployment's first admin has no session yet.
+  if (action === "remove" && empty) {
+    process.exitCode = 7;
   }
 }).pipe(
   Effect.scoped,
