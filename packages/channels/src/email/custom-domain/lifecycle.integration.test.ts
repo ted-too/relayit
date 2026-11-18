@@ -1244,6 +1244,9 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           insert into email_delivery_event (id, email_delivery_id, custom_domain_id, kind)
           select 'edev_' || ${prefix} || g, 'edlv_' || ${prefix} || g, ${customDomainId}, 'delivered'
           from numbered`);
+        // A deployment's tables have statistics; rows loaded a moment ago do not, and
+        // without them the planner joins these the slow way round.
+        yield* db.execute(sql`analyze message, email_delivery, email_delivery_event`);
         const counts = Effect.gen(function* () {
           const [deliveries] = yield* db
             .select({ naming: count(emailDelivery.customDomainId), total: count() })
@@ -1276,7 +1279,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         });
       }).pipe(Effect.provide(layer));
     },
-    60_000,
+    120_000,
   );
 
   it.live("a Delivery can't be written, or left, naming no Domain at all", () => {
