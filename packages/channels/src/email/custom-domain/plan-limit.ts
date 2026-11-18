@@ -42,7 +42,8 @@ const decodeDomainLimit = Schema.decodeUnknownEffect(
  * included: counted only once proven, claims could be made without limit and proven later.
  * Domains are counted across every Project the Billing User is Billing User for, each once
  * however many of those Projects are linked to it, so `customDomainId`, the Domain about to
- * be claimed, costs nothing when another of their Projects is already linked to it. The
+ * be claimed, takes no further place when another of their Projects is already linked to it
+ * (over the limit it is refused all the same, like any new link). The
  * Sandbox Domain is not an `organization_domain` link and never counts.
  *
  * Only a new link is checked. A Billing User already over the limit keeps every Domain and
@@ -139,7 +140,7 @@ export const requireDomainAllowance = (
         held,
         limit,
         message:
-          "The Project's Plan doesn't allow another Domain. Remove a Domain or a pending claim, or upgrade the Billing User's Plan.",
+          "The Billing User's Plan doesn't allow another Domain. It counts the Domains and pending claims of every Project billed to them: remove one, or upgrade the Plan.",
         organizationId: input.organizationId,
       });
     }

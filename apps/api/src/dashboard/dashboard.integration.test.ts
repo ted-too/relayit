@@ -796,6 +796,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const p = `/projects/${project.slug}`;
         // The Free Plan's limits, as sign-in writes them on a deployment with Stripe.
         const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        yield* Effect.addFinalizer(() => Effect.promise(() => db.$client.end()));
         const billingUser = yield* Effect.promise(() =>
           db.query.user.findFirst({
             columns: { id: true },
@@ -821,7 +822,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             _tag: "PlanLimitReached",
             limit: 1,
             message:
-              "The Project's Plan doesn't allow another Domain. Remove a Domain or a pending claim, or upgrade the Billing User's Plan.",
+              "The Billing User's Plan doesn't allow another Domain. It counts the Domains and pending claims of every Project billed to them: remove one, or upgrade the Plan.",
           },
           cookies: [],
           status: 402,
@@ -840,7 +841,6 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             body: { fqdn: `${run}.second.limited.example.test` },
           })).status,
         ).toBe(200);
-        yield* Effect.promise(() => db.$client.end());
       }),
     );
 
