@@ -8,13 +8,14 @@ import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { verifyCustomDomainRegistration } from "@repo/channels/email/verification/custom-identity";
 import { JobsLive } from "@repo/jobs";
+import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { syncSessionUserLimits } from "@repo/persistence/auth/plans";
 import { createAuth } from "@repo/persistence/auth/server";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import { createPromiseDb } from "@repo/persistence/db/promise";
-import { organization, user } from "@repo/persistence/db/schema";
+import { organization } from "@repo/persistence/db/schema";
 import { emailBackendConfig, emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisClient, makeRedisLive } from "@repo/redis";
 import { eq } from "drizzle-orm";
@@ -62,7 +63,8 @@ try {
       .join("; "),
   });
   const userId = signedIn.response.user.id;
-  await db.update(user).set({ role: "admin" }).where(eq(user.id, userId));
+  // As an operator grants it, so the session signed in above sees the role too.
+  await setPlatformAdmin(auth, { admin: true, email: SEED.email });
   // What the web app's sign-in hook does: no Stripe locally, so no limits.
   await syncSessionUserLimits(db, { stripeConfigured: false, userId });
 

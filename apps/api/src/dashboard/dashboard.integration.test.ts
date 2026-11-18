@@ -6,6 +6,7 @@
  * another Project reaches nothing.
  */
 import { describe, expect, layer, test } from "@effect/vitest";
+import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
   emailDomainRegistration,
@@ -129,21 +130,14 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       return response.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
     });
 
-  /**
-   * A platform admin's session cookie. The role is set as the seed and an operator set it,
-   * on the user's row: better-auth has no first admin to grant it.
-   */
+  /** A platform admin's session cookie, the role granted as an operator grants it. */
   const signUpAdmin = (name: string) =>
     Effect.gen(function* () {
+      const { auth } = yield* ApiAuth;
       const cookie = yield* signUp(name);
-      const db = createPromiseDb({ databaseUrl: testDatabaseUrl ?? "" });
       yield* Effect.promise(() =>
-        db
-          .update(user)
-          .set({ role: "admin" })
-          .where(eq(user.email, `${name}-${run}@example.test`)),
+        setPlatformAdmin(auth, { admin: true, email: `${name}-${run}@example.test` }),
       );
-      yield* Effect.promise(() => db.$client.end());
       return cookie;
     });
 
@@ -693,6 +687,48 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           { id: domainId, isPaused: false, pausedReason: null },
         ]);
         expect((yield* send).status).toBe(201);
+      }),
+    );
+
+    it.effect("grants and removes the platform admin role in the sessions a user has open", () =>
+      Effect.gen(function* () {
+        const { auth } = yield* ApiAuth;
+        const email = `role-changed-${run}@example.test`;
+        const setAdmin = (admin: boolean) =>
+          Effect.promise(() => setPlatformAdmin(auth, { admin, email }));
+        // Two sessions, both opened before the role changes.
+        const first = yield* signUp("role-changed");
+        const signedIn = yield* call("POST", "/auth/sign-in/email", {
+          body: { email, password: "a-long-password" },
+        });
+        expect(signedIn.status).toBe(200);
+        const second = signedIn.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
+        // better-auth's own admin endpoints, and the dashboard's.
+        const statuses = Effect.gen(function* () {
+          const seen: number[] = [];
+          for (const as of [first, second]) {
+            seen.push((yield* call("GET", "/auth/admin/list-users", { as })).status);
+            seen.push((yield* call("GET", "/admin/projects", { as })).status);
+          }
+          return seen;
+        });
+
+        expect(yield* statuses).toEqual([403, 403, 403, 403]);
+        expect(yield* setAdmin(true)).toBe("admin");
+        expect(yield* statuses).toEqual([200, 200, 200, 200]);
+
+        expect(yield* setAdmin(false)).toBe("user");
+        expect(yield* statuses).toEqual([403, 403, 403, 403]);
+        // Still signed in: only the role went.
+        expect((yield* call("GET", "/auth/get-session", { as: first })).body).toMatchObject({
+          user: { email, role: "user" },
+        });
+
+        expect(
+          yield* Effect.promise(() =>
+            setPlatformAdmin(auth, { admin: true, email: `nobody-${run}@example.test` }),
+          ),
+        ).toBeNull();
       }),
     );
 

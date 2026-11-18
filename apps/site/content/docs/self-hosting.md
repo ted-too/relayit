@@ -73,6 +73,23 @@ Then open:
 
 Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/quickstart) using your own API URL instead of `https://api.relayit.io`.
 
+## Platform admins
+
+A platform admin is a user who operates the deployment: they see the dashboard's Admin pages, which list every Project, and they pause and unpause Domains. Nobody is one until you say so, and signing up first does not make you one.
+
+Grant the role to a user who has signed up, and remove it, with the command in the api image:
+
+```bash
+docker compose exec api bun platform-admin.js grant you@your-domain.com
+docker compose exec api bun platform-admin.js remove you@your-domain.com
+```
+
+Outside Compose, run the same `bun platform-admin.js …` in a running api container, or in a one-off container of the api image with the api's `DATABASE_URL`, `REDIS_URL` and `API_URL`.
+
+Both take effect at once, in the sessions the user already has open: they don't sign out, and a removed admin's next request to anything admin-only is refused.
+
+Don't change the role by editing the `user` table. A signed-in user's sessions are kept in Redis, each with its own copy of the user and their role, and the sign-in service's own admin endpoints (`/auth/admin/*`) go by that copy. A role removed in the database alone stays in those sessions until they end, and a session in use keeps renewing, so the user you demoted keeps those endpoints. The command changes the database and the sessions together.
+
 ## Environment variables
 
 `env.example` mirrors what the services validate at startup. Compose passes `API_URL` to the api, the worker and web, `APP_URL` to the api, and builds `DATABASE_URL` from the `POSTGRES_*` values.
