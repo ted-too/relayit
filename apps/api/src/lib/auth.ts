@@ -1,4 +1,6 @@
+import { removeDeletedProjectDomains } from "@repo/channels/email/custom-domain";
 import { allocateSandboxDomain } from "@repo/channels/email/sandbox";
+import type { Jobs } from "@repo/jobs";
 import { failureAnnotations } from "@repo/logging";
 import { syncSessionUserLimits } from "@repo/persistence/auth/plans";
 import {
@@ -49,9 +51,9 @@ export class ApiAuth extends Context.Service<
       Effect.gen(function* () {
         // The pool and the Redis client report connection trouble from callbacks, and
         // better-auth's hooks are promises; run those effects with the app's services.
-        const services = yield* Effect.context<DB>();
+        const services = yield* Effect.context<DB | Jobs>();
         const runFork = (effect: Effect.Effect<void>) => Effect.runForkWith(services)(effect);
-        const runPromise = <A, E>(effect: Effect.Effect<A, E, DB>) =>
+        const runPromise = <A, E>(effect: Effect.Effect<A, E, DB | Jobs>) =>
           Effect.runPromiseWith(services)(effect);
         const db = yield* Effect.acquireRelease(
           Effect.sync(() =>
@@ -126,6 +128,12 @@ export class ApiAuth extends Context.Service<
               Effect.catchTags({ SandboxAllocateError: () => Effect.succeed(null) }),
             ),
           );
+
+        // better-auth's hooks around a Project's deletion share nothing but the Project.
+        const domainLinksOfDeleting = new Map<
+          string,
+          Parameters<typeof removeDeletedProjectDomains>[0]["links"]
+        >();
 
         const billingUserOf = async (organizationId: string) => {
           const row = await db.query.organization.findFirst({
@@ -213,6 +221,34 @@ export class ApiAuth extends Context.Service<
                     .set({ billingUserId: createdBy.id })
                     .where(eq(organization.id, created.id));
                   await allocateSandbox(created.id);
+                },
+                // A Project's links to its Domains go with it in the database, where no
+                // code sees them: they are read while they exist and followed up once the
+                // Project has gone. A failure doesn't undo the deletion; the worker removes
+                // the Domains left without a link when it next starts.
+                beforeDeleteOrganization: async ({ organization: deleting }) => {
+                  domainLinksOfDeleting.set(
+                    deleting.id,
+                    await db.query.organizationDomain.findMany({
+                      columns: { customDomainId: true, ownershipVerificationStatus: true },
+                      where: { organizationId: deleting.id },
+                    }),
+                  );
+                },
+                afterDeleteOrganization: async ({ organization: deleted }) => {
+                  const links = domainLinksOfDeleting.get(deleted.id) ?? [];
+                  domainLinksOfDeleting.delete(deleted.id);
+                  await runPromise(
+                    removeDeletedProjectDomains({ links, organizationId: deleted.id }).pipe(
+                      Effect.annotateLogs({ organizationId: deleted.id }),
+                      Effect.tapError((error) =>
+                        Effect.logWarning("Domains of a deleted Project not removed").pipe(
+                          Effect.annotateLogs(failureAnnotations(error)),
+                        ),
+                      ),
+                      Effect.catchTags({ CustomDomainError: () => Effect.void }),
+                    ),
+                  );
                 },
                 beforeRemoveMember: async ({ member: removed, organization: from }) => {
                   if ((await billingUserOf(from.id)) === removed.userId) {

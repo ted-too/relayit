@@ -12,7 +12,11 @@ import { and, eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { ownershipChallengeHost, ownershipChallengeValue } from "../custom-domain/dns";
-import { CLAIM_TTL_MS, completeDomainClaimTransfer } from "../custom-domain/lifecycle";
+import {
+  CLAIM_TTL_MS,
+  completeDomainClaimTransfer,
+  removeDomainLink,
+} from "../custom-domain/lifecycle";
 import { DnsLookups } from "../dns-lookups";
 import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
 
@@ -254,28 +258,25 @@ export const verifyCustomDomainOwnership = (input: {
     }
 
     if (Date.now() - new Date(link.createdAt).getTime() > CLAIM_TTL_MS) {
-      yield* input.db
-        .delete(organizationDomain)
-        .where(
-          and(
-            eq(organizationDomain.organizationId, input.organizationId),
-            eq(organizationDomain.customDomainId, input.customDomain.id),
-            // A refresh that proved the claim a moment ago keeps it.
-            eq(organizationDomain.ownershipVerificationStatus, "not_verified"),
-          ),
-        )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyCustomDomainError({
-                cause,
-                customDomainId: input.customDomain.id,
-                message: "Failed to remove a lapsed claim.",
-                operation: "claim",
-                organizationId: input.organizationId,
-              }),
-          ),
-        );
+      // A refresh that proved the claim a moment ago keeps it. A Domain this was the last
+      // link to goes with it.
+      yield* removeDomainLink({
+        customDomainId: input.customDomain.id,
+        db: input.db,
+        organizationId: input.organizationId,
+        unprovenOnly: true,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new VerifyCustomDomainError({
+              cause,
+              customDomainId: input.customDomain.id,
+              message: "Failed to remove a lapsed claim.",
+              operation: "claim",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
       return {
         customDomainId: input.customDomain.id,
         organizationId: input.organizationId,

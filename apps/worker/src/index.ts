@@ -1,5 +1,9 @@
 import * as NodeOS from "node:os";
 import { EmailBackend } from "@repo/channels/email/backend";
+import {
+  emailDeleteDomainIdentityHandler,
+  removeUnlinkedDomains,
+} from "@repo/channels/email/custom-domain";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureSandboxDomain } from "@repo/channels/email/sandbox";
 import {
@@ -44,6 +48,12 @@ const workerProgram = Effect.gen(function* () {
       }).pipe(Effect.catchCause(logEffectFailure("Failed to ensure the Sandbox Domain")));
     }
 
+    // Catches a Domain whose last link went where the api could not follow it up: a Project
+    // deleted as the api stopped, or deleted in the database.
+    yield* removeUnlinkedDomains().pipe(
+      Effect.catchCause(logEffectFailure("Failed to remove Domains without a link")),
+    );
+
     yield* Effect.logInfo("Relayit job worker started");
     return yield* runJobWorker(
       [
@@ -57,6 +67,7 @@ const workerProgram = Effect.gen(function* () {
         registerJobHandler(emailVerifySandboxDomainHandler),
         registerJobHandler(emailVerifyCustomDomainHandler),
         registerJobHandler(emailVerifyOwnershipHandler),
+        registerJobHandler(emailDeleteDomainIdentityHandler),
       ],
       {
         blockMs: 5000,
