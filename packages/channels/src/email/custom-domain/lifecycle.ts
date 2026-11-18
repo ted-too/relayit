@@ -17,7 +17,7 @@ import {
   type OrganizationDomainInsert,
   organizationDomain,
 } from "@repo/persistence/db/schema";
-import { and, eq, exists, inArray, ne, notExists, or, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, notExists, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import type { DomainKeyMaterial } from "../dkim";
@@ -134,11 +134,9 @@ const registerCustomDomainIdentity = (input: {
     const region = backend.defaultRegion;
 
     // The identity and its registration land as one step against the Domain's removal.
-    // Holding the row keeps the Domain and its links until the registration is recorded,
-    // so a removal either came first and nothing is created, or comes after and deletes
-    // the identity. The row alone is not enough to go on: a Domain kept bare for its
-    // Deliveries outlives its last link, and registering it would leave an identity no
-    // Project is linked to.
+    // Holding the row keeps the Domain until the registration is recorded, so a removal
+    // either came first, the row is gone and nothing is created, or comes after and
+    // deletes the identity.
     yield* input.db
       .transaction((tx) =>
         Effect.gen(function* () {
@@ -148,20 +146,15 @@ const registerCustomDomainIdentity = (input: {
             .from(customDomain)
             .where(eq(customDomain.id, input.customDomainId))
             .for("key share");
-          const [linked] = yield* tx
-            .select({ organizationId: organizationDomain.organizationId })
-            .from(organizationDomain)
-            .where(eq(organizationDomain.customDomainId, input.customDomainId))
-            .limit(1);
-          if (!(held && linked)) {
+          if (!held) {
             return yield* new CustomDomainError({
               customDomainId: input.customDomainId,
               message: "Domain was removed before it was registered with SES.",
               operation: "register_identity",
             });
           }
-          // Another claim on the same unregistered Domain registered it while this one
-          // waited for the lock.
+          // Another add of the same unregistered Domain registered it while this one waited
+          // for the lock.
           const [registered] = yield* tx
             .select({ id: emailDomainRegistration.id })
             .from(emailDomainRegistration)
@@ -344,9 +337,10 @@ const createOrgDomainLink = (input: {
   });
 
 /**
- * Add a Domain to a Project. A new FQDN is the Project's at once. One already added, by
- * another Project or by none that still holds it, becomes a claim the Project proves with
- * a TXT record before it may send from or change the Domain.
+ * Add a Domain to a Project. A new FQDN is the Project's at once, and so is one that was
+ * removed: its row went with its last link, so it is added with a new DKIM key and nothing
+ * of what was sent from it before. One another Project is linked to becomes a claim the
+ * Project proves with a TXT record before it may send from or change the Domain.
  */
 export const createCustomDomain = (input: CreateCustomDomainInput) =>
   Effect.gen(function* () {
@@ -386,14 +380,10 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
             organizationId: input.organizationId,
           });
         }
-        // A first add that failed after writing the Domain left it unregistered or never
-        // checked, and a claim on an unregistered Domain whose registration failed left it
-        // unregistered; adding it again finishes the job.
-        if (
-          ownLink.ownershipVerificationStatus === "verified"
-            ? existing.lastCheckedAt === null
-            : !existing.registration
-        ) {
+        // An add that failed after writing the Domain or the claim left the Domain
+        // unregistered, or registered and never checked because its verification was not
+        // scheduled; adding it again finishes the job, for its holder and for a claimant.
+        if (!existing.registration || existing.lastCheckedAt === null) {
           if (!existing.registration) {
             yield* registerCustomDomainIdentity({
               customDomainId: existing.id,
@@ -441,14 +431,15 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       }
 
       // Proof is asked for even when no Project holds the Domain any more: one whose holder
-      // was deleted, or left while a claim was pending, is still someone's DNS and DKIM key.
-      // Claims run side by side: each has its own token, and the first proven takes the
-      // Domain from the rest, so one claim never blocks another.
+      // left while a claim was pending is still someone's DNS and DKIM key. Claims run side
+      // by side: each has its own token, and the first proven takes the Domain from the
+      // rest, so one claim never blocks another.
       //
       // The Domain may be going as this claim arrives: its last link was removed a moment
       // ago. Waiting on its row settles which came first. If the claim did, the Domain
-      // stays; if the removal did, the Domain is gone, or is left unregistered because
-      // Deliveries still name it, which is why its registration is read only now.
+      // stays; if the removal did, the Domain is gone and the FQDN is added as new. A held
+      // Domain can still be unregistered, when its holder's registration failed, so the
+      // claim reads that here and registers it.
       const claim = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -743,9 +734,10 @@ export const completeDomainClaimTransfer = (input: {
  * Project is linked, so a claim that arrived first keeps the Domain; the row is held, so
  * one arriving now waits for this to commit.
  *
- * A Delivery keeps naming the Domain it was sent from and the database refuses to drop a
- * Domain one names (#70). Such a Domain is left as its bare row, unregistered and unverified, and
- * goes once its Deliveries do. Adding its FQDN meanwhile is a claim that registers it again.
+ * What was sent from the Domain stays with the Project that sent it. Each Delivery stops
+ * referring to the row and records the FQDN instead, and its events lose the reference by
+ * their foreign key, so the FQDN added again is a new Domain with none of this history.
+ * One still `queued` then fails in the delivery handler: no Project holds its Domain.
  */
 const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =>
   Effect.gen(function* () {
@@ -781,24 +773,11 @@ const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =
     // A Domain's records are the customer's to publish and exist only as these rows.
     yield* tx.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, customDomainId));
 
-    const [sent] = yield* tx
-      .select({ id: emailDelivery.id })
-      .from(emailDelivery)
-      .where(eq(emailDelivery.customDomainId, customDomainId))
-      .limit(1);
-    if (sent) {
-      yield* tx
-        .update(customDomain)
-        .set({
-          lastCheckedAt: null,
-          nextVerifyAt: null,
-          verificationStatus: "not_verified",
-          verifyBackoffLevel: 0,
-        })
-        .where(eq(customDomain.id, customDomainId));
-    } else {
-      yield* tx.delete(customDomain).where(eq(customDomain.id, customDomainId));
-    }
+    yield* tx
+      .update(emailDelivery)
+      .set({ customDomainId: null, removedDomainFqdn: domain.fqdn })
+      .where(eq(emailDelivery.customDomainId, customDomainId));
+    yield* tx.delete(customDomain).where(eq(customDomain.id, customDomainId));
     return true;
   });
 
@@ -859,8 +838,7 @@ export const removeDomainLink = (input: {
  * Removes the Domains left without a link, among `among` or of them all. Deleting a Project
  * takes its links in the database, where no code sees the last one go, so this follows a
  * Project's deletion with the Domains it was linked to, and runs over every Domain when
- * the worker starts. A Domain kept only for its Deliveries is passed over until they go.
- * One that fails is logged and the rest still go.
+ * the worker starts. One that fails is logged and the rest still go.
  */
 export const removeUnlinkedDomains = (among?: readonly string[]) =>
   Effect.gen(function* () {
@@ -876,20 +854,6 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
               .select({ organizationId: organizationDomain.organizationId })
               .from(organizationDomain)
               .where(eq(organizationDomain.customDomainId, customDomain.id)),
-          ),
-          or(
-            exists(
-              db
-                .select({ id: emailDomainRegistration.id })
-                .from(emailDomainRegistration)
-                .where(eq(emailDomainRegistration.customDomainId, customDomain.id)),
-            ),
-            notExists(
-              db
-                .select({ id: emailDelivery.id })
-                .from(emailDelivery)
-                .where(eq(emailDelivery.customDomainId, customDomain.id)),
-            ),
           ),
         ),
       )

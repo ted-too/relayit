@@ -45,6 +45,7 @@ import {
   type EmailBackendService,
   EmailBackendUnavailable,
 } from "./backend";
+import { deleteCustomDomain } from "./custom-domain/lifecycle";
 import { emailDeliverJob } from "./delivery/job";
 import { makeEmailDeliverHandler } from "./delivery/handler";
 import { MessageDeliveryRetryableError } from "../messages/delivery";
@@ -1190,6 +1191,81 @@ describe("an accepted email send", () => {
         sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
       );
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  /** Another Project adds the FQDN a removed Domain had: a new Domain, verified and sending. */
+  const addedByAnotherProject = (fqdn: string) =>
+    Effect.gen(function* () {
+      const db = yield* DB;
+      const other = yield* seedProject();
+      yield* db.update(customDomain).set({ fqdn }).where(eq(customDomain.id, other.customDomainId));
+      return other;
+    });
+
+  it.live("ends failed, unsent, when its Domain is removed after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      yield* deleteCustomDomain(project);
+      // The FQDN sending again, for another Project, sends nothing of the removed Domain's.
+      const other = yield* addedByAnotherProject(project.fqdn);
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "The Project no longer holds the sending Domain" },
+        from: { address: `hello@${project.fqdn}` },
+        removedDomainFqdn: project.fqdn,
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+      expect(yield* eventsFor(other.organizationId, accepted.deliveryId)).toEqual([]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is not sent when its Domain is removed while the run was loading attachments", () => {
+    const backend = makeBackend();
+    const storage = makeStorageWithDownloadHook();
+    return Effect.gen(function* () {
+      const context = yield* Effect.context<DB | Jobs>();
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [ATTACHMENT]),
+      );
+      // The run has read the Delivery with its Domain, registered and sending; by the time
+      // it claims, the Domain is gone and the same FQDN is another Project's.
+      storage.hook.whileLoading = deleteCustomDomain(project).pipe(
+        Effect.andThen(addedByAnotherProject(project.fqdn)),
+        Effect.provide(context),
+        Effect.orDie,
+      );
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "The Project no longer holds the sending Domain" },
+        removedDomainFqdn: project.fqdn,
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
   });
 
   it.live("ends failed when its Sandbox Domain is paused after accept", () => {

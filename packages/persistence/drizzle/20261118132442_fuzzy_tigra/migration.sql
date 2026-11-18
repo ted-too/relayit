@@ -1,0 +1,4 @@
+ALTER TABLE "email_delivery" ADD COLUMN "removed_domain_fqdn" text;--> statement-breakpoint
+ALTER TABLE "email_delivery_event" DROP CONSTRAINT "email_delivery_event_custom_domain_id_custom_domain_id_fkey", ADD CONSTRAINT "email_delivery_event_custom_domain_id_custom_domain_id_fkey" FOREIGN KEY ("custom_domain_id") REFERENCES "custom_domain"("id") ON DELETE SET NULL;--> statement-breakpoint
+ALTER TABLE "email_delivery" DROP CONSTRAINT "email_delivery_sender_kind_check", ADD CONSTRAINT "email_delivery_sender_kind_check" CHECK (num_nonnulls("custom_domain_id", "sandbox_domain_id", "removed_domain_fqdn") = 1);--> statement-breakpoint
+ALTER TABLE "email_delivery_event" DROP CONSTRAINT "email_delivery_event_sender_kind_check", ADD CONSTRAINT "email_delivery_event_sender_kind_check" CHECK (num_nonnulls("custom_domain_id", "sandbox_domain_id") <= 1);

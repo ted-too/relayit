@@ -53,9 +53,13 @@ const CLAIM_LEASE = Duration.minutes(2);
  * Project removing the Domain, ends that), or its Sandbox Domain is active and not paused. The
  * claim carries them in its `WHERE`, so no gap separates the check from the claim; a claim
  * that matched nothing reads them back to say why.
+ *
+ * A removed Domain leaves its Deliveries naming no Domain at all, so `domainHeld` asks for a
+ * Sandbox Domain or a held Domain and never passes on a missing one. The Project adding the
+ * same FQDN again does not revive them: that is another Domain.
  */
 const senderMaySend = (organizationId: string) => ({
-  domainHeld: sql<boolean>`(${emailDelivery.customDomainId} is null or exists (
+  domainHeld: sql<boolean>`(${emailDelivery.sandboxDomainId} is not null or exists (
     select 1 from ${organizationDomain}
     where ${organizationDomain.customDomainId} = ${emailDelivery.customDomainId}
       and ${organizationDomain.organizationId} = ${organizationId}
@@ -493,10 +497,11 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
 
         const identityFqdn = loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
         if (!identityFqdn) {
+          // Its Domain was removed while it was queued.
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
-            message: "Email Delivery has no sender domain",
-            stage: "registration",
+            message: "The Project no longer holds the sending Domain",
+            stage: "domain",
           });
         }
 

@@ -1,0 +1,133 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "547ef2ad-50a5-4129-99fa-423a3c637c22",
+  "prevIds": [
+    "adba1402-9f09-4731-b887-716dbe8a73ce"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "email_delivery",
+        "removed_domain_fqdn"
+      ],
+      "writes": [
+        "s|col|public.email_delivery.removed_domain_fqdn",
+        "n|col|public.email_delivery.removed_domain_fqdn",
+        "e|col|public.email_delivery.removed_domain_fqdn"
+      ],
+      "reads": [
+        "n|tbl|public.email_delivery",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "recreate_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "email_delivery_event"
+      ],
+      "writes": [
+        "s|fk|public.email_delivery_event.email_delivery_event_custom_domain_id_custom_domain_id_fkey",
+        "n|fk|public.email_delivery_event.email_delivery_event_custom_domain_id_custom_domain_id_fkey",
+        "e|fk|public.email_delivery_event.email_delivery_event_custom_domain_id_custom_domain_id_fkey",
+        "n|con|public.email_delivery_event.email_delivery_event_custom_domain_id_custom_domain_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.email_delivery_event",
+        "n|sch|public",
+        "n|tbl|public.custom_domain",
+        "n|sch|public",
+        "n|col|public.email_delivery_event.custom_domain_id",
+        "n|col|public.custom_domain.id",
+        "e|uniqueness|public.custom_domain.id"
+      ],
+      "sqlHash": "4b5b1a3e3fba1333"
+    },
+    {
+      "statementType": "alter_check",
+      "statementTarget": [
+        "table",
+        "public",
+        "email_delivery"
+      ],
+      "writes": [
+        "s|ck|public.email_delivery.email_delivery_sender_kind_check"
+      ],
+      "reads": [
+        "n|tbl|public.email_delivery",
+        "n|sch|public",
+        "n|col|public.email_delivery.custom_domain_id",
+        "n|col|public.email_delivery.sandbox_domain_id",
+        "n|col|public.email_delivery.removed_domain_fqdn",
+        "e|col|public.email_delivery.custom_domain_id",
+        "e|col|public.email_delivery.sandbox_domain_id"
+      ],
+      "sqlHash": "40b1b22024c63b3b"
+    },
+    {
+      "statementType": "alter_check",
+      "statementTarget": [
+        "table",
+        "public",
+        "email_delivery_event"
+      ],
+      "writes": [
+        "s|ck|public.email_delivery_event.email_delivery_event_sender_kind_check"
+      ],
+      "reads": [
+        "n|tbl|public.email_delivery_event",
+        "n|sch|public",
+        "n|col|public.email_delivery_event.custom_domain_id",
+        "n|col|public.email_delivery_event.sandbox_domain_id",
+        "e|col|public.email_delivery_event.custom_domain_id",
+        "e|col|public.email_delivery_event.sandbox_domain_id"
+      ],
+      "sqlHash": "694c265de2fc5a42"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "email_delivery",
+        "name": "removed_domain_fqdn",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "fks\u0000[\"public\",\"email_delivery_event\",\"email_delivery_event_custom_domain_id_custom_domain_id_fkey\"]",
+      "set": {
+        "onDelete": "SET NULL"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "checks\u0000[\"public\",\"email_delivery\",\"email_delivery_sender_kind_check\"]",
+      "set": {
+        "value": "num_nonnulls(\"custom_domain_id\", \"sandbox_domain_id\", \"removed_domain_fqdn\") = 1"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "checks\u0000[\"public\",\"email_delivery_event\",\"email_delivery_event_sender_kind_check\"]",
+      "set": {
+        "value": "num_nonnulls(\"custom_domain_id\", \"sandbox_domain_id\") <= 1"
+      }
+    }
+  ]
+}
