@@ -19,6 +19,7 @@ import {
   organization,
   organizationAppEnvironment,
   organizationDomain,
+  sandboxDomain,
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
@@ -358,6 +359,131 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       });
     }
     return payloads;
+  });
+
+  it.live("a Sandbox Domain's root, or a name under it, can't be added", () => {
+    const { createdIdentities, enqueued, layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const projectId = yield* insertProject();
+      const root = `${Bun.randomUUIDv7()}.sandbox.test`;
+      yield* db.insert(sandboxDomain).values({
+        cloudflareZoneId: "zone",
+        dkimPrivateKey: "private",
+        dkimPublicKey: "public",
+        dkimSelector: "relayit",
+        // Stored as configured; the FQDN a Project types arrives lowercased.
+        rootDomain: root.toUpperCase(),
+      });
+
+      for (const fqdn of [root, `mail.${root}`, `a.b.${root}`]) {
+        expect(
+          yield* Effect.flip(createCustomDomain({ fqdn, organizationId: projectId })),
+        ).toMatchObject({ _tag: "CustomDomainReserved", fqdn });
+      }
+      expect(
+        yield* db
+          .select({ fqdn: customDomain.fqdn })
+          .from(customDomain)
+          .where(sql`${customDomain.fqdn} like ${`%${root}`}`),
+      ).toEqual([]);
+      expect({ createdIdentities, enqueued, scheduled }).toEqual({
+        createdIdentities: [],
+        enqueued: [],
+        scheduled: [],
+      });
+
+      // A name that only ends with the root's letters is another domain, added as usual.
+      const other = yield* createCustomDomain({
+        fqdn: `x${root}`,
+        organizationId: projectId,
+      });
+      expect(other.kind).toBe("created");
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a Domain already on a Sandbox Domain's root is not claimed or finished", () => {
+    const { createdIdentities, enqueued, layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const holderId = yield* insertProject();
+      const claimantId = yield* insertProject();
+      const root = `${Bun.randomUUIDv7()}.sandbox.test`;
+      // As a deployment holds it if the root was added before it was refused: a row with its
+      // holder's link and no registration.
+      const [held] = yield* db
+        .insert(customDomain)
+        .values({
+          dkimPrivateKey: "private",
+          dkimPublicKey: "public",
+          dkimSelector: "s",
+          fqdn: root,
+        })
+        .returning({ id: customDomain.id });
+      const customDomainId = held?.id ?? "";
+      yield* db.insert(organizationDomain).values({
+        customDomainId,
+        organizationId: holderId,
+        ownershipToken: createOwnershipToken(),
+        ownershipVerificationStatus: "verified",
+      });
+      yield* db.insert(sandboxDomain).values({
+        cloudflareZoneId: "zone",
+        dkimPrivateKey: "private",
+        dkimPublicKey: "public",
+        dkimSelector: "relayit",
+        rootDomain: root,
+      });
+
+      for (const organizationId of [claimantId, holderId]) {
+        expect(
+          yield* Effect.flip(createCustomDomain({ fqdn: root, organizationId })),
+        ).toMatchObject({ _tag: "CustomDomainReserved" });
+      }
+
+      expect(
+        yield* db
+          .select({ organizationId: organizationDomain.organizationId })
+          .from(organizationDomain)
+          .where(eq(organizationDomain.customDomainId, customDomainId)),
+      ).toEqual([{ organizationId: holderId }]);
+      expect(
+        yield* db
+          .select({ id: emailDomainRegistration.id })
+          .from(emailDomainRegistration)
+          .where(eq(emailDomainRegistration.customDomainId, customDomainId)),
+      ).toEqual([]);
+      expect({ createdIdentities, enqueued, scheduled }).toEqual({
+        createdIdentities: [],
+        enqueued: [],
+        scheduled: [],
+      });
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a removal queued for a Sandbox Domain's FQDN leaves its identity alone", () => {
+    const { deletedIdentities, layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const root = `${Bun.randomUUIDv7()}.sandbox.test`;
+      const other = `${Bun.randomUUIDv7()}.example.test`;
+      yield* db.insert(sandboxDomain).values({
+        cloudflareZoneId: "zone",
+        dkimPrivateKey: "private",
+        dkimPublicKey: "public",
+        dkimSelector: "relayit",
+        rootDomain: root,
+      });
+
+      for (const fqdn of [root, other]) {
+        yield* emailDeleteDomainIdentityHandler.handle(
+          { fqdn, region: null },
+          { attempt: 1, enqueuedAt: Date.now(), id: fqdn },
+        );
+      }
+
+      expect(deletedIdentities).toEqual([{ fqdn: other, region: null }]);
+    }).pipe(Effect.provide(layer));
   });
 
   it.live("a new Domain is the adding Project's, registered and scheduled for checks", () => {

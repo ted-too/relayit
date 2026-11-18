@@ -13,6 +13,7 @@ export {
   type CreateCustomDomainInput,
   CustomDomainError,
   CustomDomainNotFound,
+  CustomDomainReserved,
   completeDomainClaimTransfer,
   createCustomDomain,
   type DeleteCustomDomainInput,

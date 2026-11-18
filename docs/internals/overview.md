@@ -124,7 +124,7 @@ Per-Project configuration sets were rejected because they give metrics but no en
 
 ### Setup assistance, not a provider proxy
 
-Relayit helps a Project finish the setup a vendor needs before it can send, and stops there; it does not proxy the vendor's control plane, which was too much work for what customers need. For email that means Relayit generates the Domain's DKIM key (BYODKIM), registers it with SES, and lists the DNS records the customer publishes, then polls until they verify. The Sandbox Domain's records are on Relayit's own Cloudflare zone, so Relayit publishes them itself.
+Relayit helps a Project finish the setup a vendor needs before it can send, and stops there; it does not proxy the vendor's control plane, which was too much work for what customers need. For email that means Relayit generates the Domain's DKIM key (BYODKIM), registers it with SES, and lists the DNS records the customer publishes, then polls until they verify. The Sandbox Domain's records are on Relayit's own Cloudflare zone, so Relayit publishes them itself. SES names an identity by its FQDN alone, with one DKIM key, so a Sandbox Domain's root and every name under it are refused as a custom Domain: one added there would take over the identity all sandbox mail is signed with, and removing it would delete that identity.
 
 ### One SES account, configured by ops
 

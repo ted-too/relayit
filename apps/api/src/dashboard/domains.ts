@@ -13,6 +13,7 @@ import {
   DashboardApi,
   DashboardMember,
   type Domain,
+  Invalid,
   NotFound,
   type OperationFailed,
 } from "@repo/contracts/dashboard";
@@ -32,8 +33,10 @@ const lifecycleFailure =
     readonly _tag: string;
     readonly message: string;
     readonly operation?: string;
-  }): Effect.Effect<never, Conflict | NotFound | OperationFailed> => {
+  }): Effect.Effect<never, Conflict | Invalid | NotFound | OperationFailed> => {
     switch (error._tag) {
+      case "CustomDomainReserved":
+        return Effect.fail(new Invalid({ message: error.message }));
       case "CustomDomainError":
         switch (error.operation) {
           // A claim not yet proven asked to change the Domain it claims.

@@ -10,6 +10,7 @@ import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
   emailDomainRegistration,
+  sandboxDomain,
   templatingWorkspace,
   templatingWorkspaceEntry,
   user,
@@ -746,6 +747,45 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             ),
           ).toMatchObject({ _tag: "PlatformAdminUserNotFound" });
         }),
+    );
+
+    it.effect("refuses a Sandbox Domain's root, and any name under it, as a Project's Domain", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("reserved");
+        const project = yield* createProject(owner, `Reserved ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        const root = `${run}.sandbox.example.test`;
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        yield* Effect.promise(() =>
+          db.insert(sandboxDomain).values({
+            cloudflareZoneId: "zone",
+            dkimPrivateKey: "private",
+            dkimPublicKey: "public",
+            dkimSelector: "relayit",
+            rootDomain: root,
+          }),
+        );
+
+        for (const fqdn of [root, ` ${root.toUpperCase()} `, `mail.${root}`]) {
+          expect(yield* call("POST", `${p}/domains`, { as: owner, body: { fqdn } })).toMatchObject({
+            body: { _tag: "Invalid" },
+            status: 422,
+          });
+        }
+        expect(yield* call("GET", `${p}/domains`, { as: owner })).toMatchObject({
+          body: [],
+          status: 200,
+        });
+        expect(
+          yield* Effect.promise(() =>
+            db.query.emailDomainRegistration.findMany({
+              columns: { id: true },
+              where: { customDomain: { fqdn: root } },
+            }),
+          ),
+        ).toEqual([]);
+        yield* Effect.promise(() => db.$client.end());
+      }),
     );
 
     it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>
