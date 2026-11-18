@@ -58,6 +58,16 @@ export class DashboardSession extends HttpApiMiddleware.Service<
 >()("contracts/dashboard/DashboardSession", { error: [Unauthenticated, Forbidden] }) {}
 
 /**
+ * Resolves the session cookie to a platform admin (better-auth's admin role, not a
+ * Project's `admin` member role): 401 without a session, 403 for anyone else. What it
+ * guards acts across Projects, so membership of one is neither needed nor enough.
+ */
+export class PlatformAdmin extends HttpApiMiddleware.Service<
+  PlatformAdmin,
+  { provides: DashboardUser }
+>()("contracts/dashboard/PlatformAdmin", { error: [Unauthenticated, Forbidden] }) {}
+
+/**
  * Resolves the session cookie and the `:orgSlug` path param to the user's membership of
  * that Project, then checks the endpoint's `RequiresPermission`: 401 without a session,
  * 403 otherwise.

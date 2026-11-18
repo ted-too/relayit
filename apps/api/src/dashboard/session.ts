@@ -3,6 +3,7 @@ import {
   DashboardSession,
   DashboardUser,
   Forbidden,
+  PlatformAdmin,
   ProjectAccess,
   RequiresPermission,
   Unauthenticated,
@@ -64,6 +65,35 @@ export const DashboardSessionLive = (appOrigin: string) =>
       return DashboardSession.of((httpEffect) =>
         Effect.gen(function* () {
           const user = yield* signedInUser(auth, appOrigin);
+          return yield* Effect.provideService(httpEffect, DashboardUser, {
+            email: user.email,
+            id: user.id,
+          }).pipe(Effect.annotateLogs({ userId: user.id }));
+        }),
+      );
+    }),
+  );
+
+/**
+ * Platform admins only, by better-auth's admin role on the user. The role is read from the
+ * database on every request, not from the session: the session cookie caches the user for
+ * minutes, and an admin who has been demoted must lose this at once.
+ */
+export const PlatformAdminLive = (appOrigin: string) =>
+  Layer.effect(
+    PlatformAdmin,
+    Effect.gen(function* () {
+      const { auth } = yield* ApiAuth;
+      const db = yield* DB;
+      return PlatformAdmin.of((httpEffect) =>
+        Effect.gen(function* () {
+          const user = yield* signedInUser(auth, appOrigin);
+          const row = yield* db.query.user
+            .findFirst({ columns: { role: true }, where: { id: user.id } })
+            .pipe(Effect.orDie);
+          if (!row?.role?.split(",").includes("admin")) {
+            return yield* new Forbidden({ message: "Only a platform admin can do that." });
+          }
           return yield* Effect.provideService(httpEffect, DashboardUser, {
             email: user.email,
             id: user.id,

@@ -6,7 +6,7 @@ import {
   RiPauseCircleLine,
   RiRefreshLine,
 } from "@remixicon/react";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@repo/ui/components/reui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { formatDateTime } from "@repo/ui/lib/utils";
@@ -17,13 +17,11 @@ import { useState } from "react";
 import { ConfirmAction } from "@/components/confirm-action";
 import { DNSRecordsTable } from "@/components/settings/custom-domains/dns-records-table";
 import {
-  DomainPause,
-  PAUSED_REASONS,
-  useCanPauseDomain,
   useDeleteDomain,
   useRefreshDomain,
 } from "@/components/settings/custom-domains/domain-actions";
 import { VERIFICATION_STATUS } from "@/components/settings/custom-domains/item";
+import { PAUSED_REASONS } from "@/components/settings/custom-domains/paused-reasons";
 import { DOMAIN_PROVIDER_ICONS } from "@/components/settings/custom-domains/provider-icons";
 import { queries } from "@/lib/queries";
 
@@ -51,8 +49,6 @@ function RouteComponent() {
     select: (domains) => domains.find((domain) => domain.fqdn === fqdn)!,
   });
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [pauseOpen, setPauseOpen] = useState(false);
-  const canPause = useCanPauseDomain({ domain });
   const { mutate: deleteDomain, isPending: isDeletingDomain } = useDeleteDomain({
     domain,
     onDeleted: () =>
@@ -76,16 +72,9 @@ function RouteComponent() {
           <span className="font-medium text-3xl">{domain.fqdn}</span>
           {domain.isPaused && <Badge variant="destructive-light">Paused</Badge>}
           <div className="grow" />
-          {canPause && !domain.isPaused && (
-            <Button onClick={() => setPauseOpen(true)} variant="outline">
-              <RiPauseCircleLine />
-              Pause
-            </Button>
-          )}
           <Button onClick={() => setDeleteOpen(true)} size="icon-lg" variant="destructive-light">
             <RiDeleteBin6Line />
           </Button>
-          <DomainPause domain={domain} open={pauseOpen} setOpen={setPauseOpen} />
           <ConfirmAction
             execute={() => deleteDomain()}
             isLoading={isDeletingDomain}
@@ -97,20 +86,14 @@ function RouteComponent() {
         {domain.isPaused && (
           <Alert className="px-3 py-3" variant="destructive">
             <RiPauseCircleLine />
-            <AlertTitle>This Domain is paused</AlertTitle>
+            <AlertTitle>Sending from this Domain is paused</AlertTitle>
             <AlertDescription>
               <p>
                 {domain.pausedReason && `${PAUSED_REASONS[domain.pausedReason].description} `}
-                New sends from it are rejected and queued Deliveries fail until it is unpaused.
+                New sends from it are rejected and Deliveries already queued from it fail; none are
+                held to send later. It stays paused until Relayit's operators unpause it.
               </p>
             </AlertDescription>
-            {canPause && (
-              <AlertAction>
-                <Button onClick={() => setPauseOpen(true)} size="sm" variant="outline">
-                  Unpause
-                </Button>
-              </AlertAction>
-            )}
           </Alert>
         )}
         <div className="grid grid-cols-5 gap-6">

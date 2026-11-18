@@ -86,14 +86,14 @@ DNS changes can take a while to propagate. If a record stays pending, check that
 
 ## Paused Domains
 
-A Domain can be paused, for example by Relayit because of a bad sending reputation, or by an administrator. A paused Domain shows a `paused` badge and **Can Send: No**.
+A Domain is paused by Relayit, not by its Project: automatically for a bad sending reputation, or by one of Relayit's operators. A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**.
 
 While a Domain is paused:
 
 - New sends from it fail with `422 invalid_from_address`.
 - Emails that were already queued fail at send time. They are not held for later.
 
-Pausing and unpausing are not available as dashboard actions yet. Contact support if one of your Domains is paused.
+A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**.
 
 ## Claiming a domain from another Project
 
@@ -103,7 +103,7 @@ If you add a domain that was already added to Relayit, by another Project or by 
 2. The Domain page shows an **Ownership** table with a `_relayit-challenge` TXT record.
 3. Publish that record and select **Refresh**.
 
-Until ownership verifies, the Domain is not yours: you cannot send from it, pause or unpause it, and its page shows only the ownership record.
+Until ownership verifies, the Domain is not yours: you cannot send from it, and its page shows only the ownership record.
 
 When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 

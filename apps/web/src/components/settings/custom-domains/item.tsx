@@ -9,7 +9,8 @@ import {
 } from "@repo/ui/components/ui/shad/item";
 import { formatDateTime } from "@repo/ui/lib/utils";
 import { Link, useParams } from "@tanstack/react-router";
-import { DomainMenu, PAUSED_REASONS } from "./domain-actions";
+import { DomainMenu } from "./domain-actions";
+import { PAUSED_REASONS } from "./paused-reasons";
 import { DOMAIN_PROVIDER_ICONS } from "./provider-icons";
 import type { Domain } from "./types";
 
@@ -62,8 +63,8 @@ export function DomainItem({ domain }: { domain: Domain }) {
         <span
           onClick={(event) => {
             event.stopPropagation();
-            // Only the trigger is inside the anchor in the DOM; preventing more would stop
-            // the pause form's submit.
+            // Only the trigger is inside the anchor in the DOM; the menu and the delete
+            // dialog are drawn elsewhere and keep their own defaults.
             if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
               event.preventDefault();
             }

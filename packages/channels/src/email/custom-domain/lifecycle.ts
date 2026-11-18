@@ -50,15 +50,18 @@ export interface CreateCustomDomainInput {
   readonly organizationId: string;
 }
 
+export class CustomDomainNotFound extends Data.TaggedError("CustomDomainNotFound")<{
+  readonly customDomainId: string;
+  readonly message: string;
+}> {}
+
 export interface PauseCustomDomainInput {
   readonly customDomainId: string;
-  readonly organizationId: string;
   readonly reason: DomainPausedReason;
 }
 
 export interface UnpauseCustomDomainInput {
   readonly customDomainId: string;
-  readonly organizationId: string;
 }
 
 export interface DeleteCustomDomainInput {
@@ -93,54 +96,6 @@ const loadCustomDomainKeyMaterial = (domain: CustomDomain) =>
  * removes it, so abandoned claims don't pile up.
  */
 export const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** The Project holds the Domain: its link is ownership-verified, not a claim. */
-const assertDomainHolder = (input: {
-  readonly customDomainId: string;
-  readonly organizationId: string;
-}) =>
-  Effect.gen(function* () {
-    const db = yield* DB;
-    const link = yield* db.query.organizationDomain
-      .findFirst({
-        where: {
-          customDomainId: input.customDomainId,
-          organizationId: input.organizationId,
-        },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              message: "Failed to load organization domain link.",
-              operation: "persist",
-              organizationId: input.organizationId,
-            }),
-        ),
-      );
-
-    if (!link) {
-      return yield* new CustomDomainError({
-        customDomainId: input.customDomainId,
-        message: "Domain is not linked to this Project.",
-        operation: "persist",
-        organizationId: input.organizationId,
-      });
-    }
-
-    if (link.ownershipVerificationStatus !== "verified") {
-      return yield* new CustomDomainError({
-        customDomainId: input.customDomainId,
-        message: "Prove ownership of this Domain before changing it.",
-        operation: "claim",
-        organizationId: input.organizationId,
-      });
-    }
-
-    return link;
-  });
 
 /**
  * Records the Domain's root DNS records, registers it with SES in the default region and
@@ -520,18 +475,23 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     return { customDomainId: row.id, kind: "created" as const };
   });
 
+/**
+ * A pause is the platform's act on a Domain, not its Project's: it names the Domain alone
+ * and asks nothing of who holds it, so the caller is what decides who may (the api keeps it
+ * to platform admins).
+ */
 export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
   Effect.gen(function* () {
-    yield* assertDomainHolder(input);
     const db = yield* DB;
 
-    yield* db
+    const [paused] = yield* db
       .update(customDomain)
       .set({
         isPaused: true,
         pausedReason: input.reason,
       })
       .where(eq(customDomain.id, input.customDomainId))
+      .returning({ id: customDomain.id })
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -540,26 +500,31 @@ export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
               customDomainId: input.customDomainId,
               message: "Failed to pause custom domain.",
               operation: "pause",
-              organizationId: input.organizationId,
             }),
         ),
       );
+    if (!paused) {
+      return yield* new CustomDomainNotFound({
+        customDomainId: input.customDomainId,
+        message: "Domain not found.",
+      });
+    }
 
     return { customDomainId: input.customDomainId, isPaused: true as const };
   });
 
 export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   Effect.gen(function* () {
-    yield* assertDomainHolder(input);
     const db = yield* DB;
 
-    yield* db
+    const [unpaused] = yield* db
       .update(customDomain)
       .set({
         isPaused: false,
         pausedReason: null,
       })
       .where(eq(customDomain.id, input.customDomainId))
+      .returning({ id: customDomain.id })
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -568,10 +533,15 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
               customDomainId: input.customDomainId,
               message: "Failed to unpause custom domain.",
               operation: "unpause",
-              organizationId: input.organizationId,
             }),
         ),
       );
+    if (!unpaused) {
+      return yield* new CustomDomainNotFound({
+        customDomainId: input.customDomainId,
+        message: "Domain not found.",
+      });
+    }
 
     return { customDomainId: input.customDomainId, isPaused: false as const };
   });

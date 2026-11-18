@@ -13,6 +13,7 @@ import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { Conflict, Invalid, NotFound, OperationFailed, Unavailable } from "./errors";
 import {
+  AdminProject,
   ApiKey,
   ApiKeyInput,
   CommitWorkspaceInput,
@@ -37,7 +38,7 @@ import {
   WorkspaceKind,
   WorkspacePublish,
 } from "./schemas";
-import { DashboardSession, ProjectAccess, RequiresPermission } from "./session";
+import { DashboardSession, PlatformAdmin, ProjectAccess, RequiresPermission } from "./session";
 
 const project = { orgSlug: Schema.String };
 
@@ -116,18 +117,33 @@ export class DomainsApi extends HttpApiGroup.make("domains")
       error: failures,
       params: domain,
     }).annotate(RequiresPermission, { domain: ["delete"] }),
-    HttpApiEndpoint.post("pause", "/:domainId/pause", {
-      error: failures,
-      params: domain,
-      payload: PauseDomainInput,
-    }).annotate(RequiresPermission, { domain: ["update"] }),
-    HttpApiEndpoint.post("unpause", "/:domainId/unpause", {
-      error: failures,
-      params: domain,
-    }).annotate(RequiresPermission, { domain: ["update"] }),
   )
   .middleware(ProjectAccess)
   .prefix("/projects/:orgSlug/domains") {}
+
+/**
+ * What only a platform admin does. Pausing a Domain is here and nowhere in a Project's own
+ * operations: a Project's members, its owner included, see a pause and cannot lift it. The
+ * Domain is named directly, since an admin is a member of none of the Projects they act on.
+ */
+export class AdminApi extends HttpApiGroup.make("admin")
+  .add(
+    HttpApiEndpoint.get("listProjects", "/projects", {
+      error: failures,
+      success: Schema.Array(AdminProject),
+    }),
+    HttpApiEndpoint.post("pauseDomain", "/domains/:domainId/pause", {
+      error: failures,
+      params: { domainId: Schema.String },
+      payload: PauseDomainInput,
+    }),
+    HttpApiEndpoint.post("unpauseDomain", "/domains/:domainId/unpause", {
+      error: failures,
+      params: { domainId: Schema.String },
+    }),
+  )
+  .middleware(PlatformAdmin)
+  .prefix("/admin") {}
 
 const template = { ...project, templateId: Schema.String };
 
@@ -232,5 +248,6 @@ export class DashboardApi extends HttpApi.make("dashboard")
   .add(ProjectsApi)
   .add(ApiKeysApi)
   .add(DomainsApi)
+  .add(AdminApi)
   .add(TemplatesApi)
   .add(WorkspacesApi) {}
