@@ -11,7 +11,8 @@ import {
   SettingsCardTitle,
 } from "@/components/settings/card";
 import { authClient } from "@/lib/auth-client";
-import { type CreateProjectBody, createProjectBodySchema } from "@/lib/projects/schemas";
+import { CreateProjectInput } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
 import { queries } from "@/lib/queries";
 
 export function ProjectEditName() {
@@ -21,7 +22,7 @@ export function ProjectEditName() {
   });
   const member = organization?.members.find((member) => member.userId === me.user.id);
   const { mutateAsync } = useMutation({
-    mutationFn: async (body: CreateProjectBody) => {
+    mutationFn: async (body: typeof CreateProjectInput.Type) => {
       const { data, error } = await authClient.organization.update({
         data: { name: body.name },
         organizationId: organization.id,
@@ -52,9 +53,9 @@ export function ProjectEditName() {
   const form = useAppForm({
     defaultValues: {
       name: organization.name,
-    } as CreateProjectBody,
+    } as typeof CreateProjectInput.Type,
     validators: {
-      onSubmit: createProjectBodySchema,
+      onSubmit: Schema.toStandardSchemaV1(CreateProjectInput),
     },
     onSubmit: async ({ value }) => await mutateAsync(value),
   });

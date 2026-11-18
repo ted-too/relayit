@@ -91,16 +91,13 @@ docker run -d \
 
 ### Web dashboard
 
-Auth and session-authenticated ops run in this process. Change the public web URL at deploy time via `VITE_BASE_URL` (no rebuild).
+Serves the dashboard and forwards `/api/*` and the unsubscribe POST to the api, which runs auth and every session-authenticated operation.
 
 ```bash
 docker run -d \
   --name relayit-web \
   -p 3000:3000 \
-  --env-file .env \
-  -e VITE_BASE_URL="http://localhost:3000" \
-  -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
-  -e REDIS_URL="redis://redis:6379" \
+  -e API_URL="http://api:3005" \
   ghcr.io/ted-too/relayit-web:alpha
 ```
 
@@ -114,11 +111,12 @@ Validated at process start (`apps/api/src/env.ts`).
 | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                                          | Postgres connection string                                                    |
 | `REDIS_URL`                                                                             | Redis connection string                                                       |
-| `API_URL`                                                                               | Public API URL                                                                |
+| `APP_URL`                                                                               | Public dashboard URL: better-auth's base URL and the only origin it trusts    |
 | `BETTER_AUTH_SECRETS`                                                                   | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`)                     |
+| `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                             | Same as worker; the api registers Domains with SES                            |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
 
-Optional: `LOG_LEVEL`.
+Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`.
 
 ### Required environment (worker)
 
@@ -138,15 +136,9 @@ Optional: `LOG_LEVEL`; `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sand
 
 ### Required environment (web)
 
-| Variable              | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `VITE_BASE_URL`       | Public web URL (compose: from `WEB_URL`)       |
-| `DATABASE_URL`        | Postgres connection string                     |
-| `REDIS_URL`           | Redis connection string                        |
-| `BETTER_AUTH_SECRETS` | Same versioned secrets as api                  |
-| `SES_*`               | Same as worker; web registers Domains with SES |
-
-`VITE_DEBUG` is optional. Stripe keys are optional; when they are absent, entitlements are unlimited (self-hosted). Template workspace Git ops also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`.
+| Variable  | Description                         |
+| --------- | ----------------------------------- |
+| `API_URL` | The api's address as web reaches it |
 
 ### Image tags
 

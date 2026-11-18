@@ -17,7 +17,7 @@ export function DNSRecordsTable({
   hasPriority = false,
 }: {
   fqdn: string;
-  records: DNSRecord[];
+  records: readonly DNSRecord[];
   title: string;
   optional?: boolean;
   hasPriority?: boolean;
@@ -26,7 +26,7 @@ export function DNSRecordsTable({
 
   const table = useReactTable({
     columns,
-    data: records,
+    data: [...records],
     initialState: {
       columnVisibility: {
         priority: hasPriority,

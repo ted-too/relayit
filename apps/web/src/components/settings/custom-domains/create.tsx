@@ -17,13 +17,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { createCustomDomainFn } from "@/lib/domains/custom-domain.functions";
-import {
-  type CreateCustomDomainFormValues,
-  createCustomDomainFormSchema,
-} from "@/lib/domains/schemas";
-import type { ProjectDomainListItem } from "@/lib/domains/types";
+import { CreateDomainInput, type Domain } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
+import { dashboard } from "@/lib/dashboard";
 import { queries } from "@/lib/queries";
+
+const decodeCreateDomainInput = Schema.decodeSync(CreateDomainInput);
 
 export function CreateDomain({
   render,
@@ -43,17 +42,18 @@ export function CreateDomain({
   const setOpen = _setOpenProp ?? _setOpen;
 
   const { mutateAsync: createDomain } = useMutation({
-    mutationFn: async (body: CreateCustomDomainFormValues) =>
-      await createCustomDomainFn({
-        data: {
-          ...body,
-          orgSlug,
-        },
-      }),
+    mutationFn: async (body: typeof CreateDomainInput.Encoded) =>
+      await dashboard((client) =>
+        client.domains.create({
+          params: { orgSlug },
+          // As typed: the schema trims and lowercases it.
+          payload: decodeCreateDomainInput(body),
+        }),
+      ),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: ProjectDomainListItem[] | undefined) => [
+        (old: readonly Domain[] | undefined) => [
           ...(old ?? []).filter((domain) => domain.id !== data.id),
           data,
         ],
@@ -79,10 +79,9 @@ export function CreateDomain({
   const form = useAppForm({
     defaultValues: {
       fqdn: "",
-    } as CreateCustomDomainFormValues,
+    } as typeof CreateDomainInput.Encoded,
     validators: {
-      // Transform on fqdn makes Zod input/output diverge from form values.
-      onSubmit: createCustomDomainFormSchema as any,
+      onSubmit: Schema.toStandardSchemaV1(CreateDomainInput),
     },
     onSubmit: async ({ value }) => {
       await createDomain({ fqdn: value.fqdn });

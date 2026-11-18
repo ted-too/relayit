@@ -27,15 +27,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import {
-  commitWorkspaceFilesFn,
-  depsSyncWorkspaceFn,
-  getWorkspaceFn,
-  previewWorkspaceEntryFn,
-  publishWorkspaceFn,
-  putReactEmailChannelFn,
-  readWorkspaceFileFn,
-} from "@/lib/templating/template.functions";
+import { dashboard } from "@/lib/dashboard";
 import { componentNameFromSlug, starterReactEmailEntrySource } from "./starter-entry";
 
 const toastError = (error: unknown, fallback = "Something went wrong") => {
@@ -132,35 +124,32 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
   const { mutateAsync: readFile } = useMutation({
     mutationFn: async (path: string) =>
-      await readWorkspaceFileFn({
-        data: { kind: KIND, orgSlug, path },
-      }),
+      await dashboard((client) =>
+        client.workspaces.readFile({ params: { kind: KIND, orgSlug }, query: { path } }),
+      ),
   });
 
   const { mutateAsync: commitFiles, isPending: isSaving } = useMutation({
     mutationFn: async (input: { changes: Record<string, string | null>; message?: string }) =>
-      await commitWorkspaceFilesFn({
-        data: {
-          changes: input.changes,
-          kind: KIND,
-          orgSlug,
-          ...(input.message ? { message: input.message } : {}),
-        },
-      }),
+      await dashboard((client) =>
+        client.workspaces.commit({
+          params: { kind: KIND, orgSlug },
+          payload: {
+            changes: input.changes,
+            ...(input.message ? { message: input.message } : {}),
+          },
+        }),
+      ),
   });
 
   const { mutateAsync: depsSync } = useMutation({
     mutationFn: async () =>
-      await depsSyncWorkspaceFn({
-        data: { kind: KIND, orgSlug },
-      }),
+      await dashboard((client) => client.workspaces.depsSync({ params: { kind: KIND, orgSlug } })),
   });
 
   const { mutateAsync: publish, isPending: isPublishing } = useMutation({
     mutationFn: async () =>
-      await publishWorkspaceFn({
-        data: { kind: KIND, orgSlug },
-      }),
+      await dashboard((client) => client.workspaces.publish({ params: { kind: KIND, orgSlug } })),
   });
 
   const { mutateAsync: preview, isPending: isPreviewing } = useMutation({
@@ -169,27 +158,26 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       props: Record<string, unknown>;
       subject?: string;
     }) =>
-      await previewWorkspaceEntryFn({
-        data: {
-          entryId: input.entryId,
-          kind: KIND,
-          orgSlug,
-          props: input.props,
-          ...(input.subject ? { subject: input.subject } : {}),
-        },
-      }),
+      await dashboard((client) =>
+        client.workspaces.preview({
+          params: { kind: KIND, orgSlug },
+          payload: {
+            entryId: input.entryId,
+            props: input.props,
+            ...(input.subject ? { subject: input.subject } : {}),
+          },
+        }),
+      ),
   });
 
   const { mutateAsync: linkEntry } = useMutation({
     mutationFn: async (input: { templateId: string; workspaceEntryId: string; subject: string }) =>
-      await putReactEmailChannelFn({
-        data: {
-          orgSlug,
-          subject: input.subject,
-          templateId: input.templateId,
-          workspaceEntryId: input.workspaceEntryId,
-        },
-      }),
+      await dashboard((client) =>
+        client.templates.linkReactEmail({
+          params: { orgSlug, templateId: input.templateId },
+          payload: { subject: input.subject, workspaceEntryId: input.workspaceEntryId },
+        }),
+      ),
   });
 
   // Soft-create workspace + optional create-new Entry from Template.slug.
@@ -207,9 +195,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
 
     async function bootstrap() {
       try {
-        await getWorkspaceFn({
-          data: { kind: KIND, orgSlug },
-        });
+        await queryClient.fetchQuery(queries.organizations.bySlug(orgSlug).workspace(KIND));
         const files = await queryClient.fetchQuery(
           queries.organizations.bySlug(orgSlug).workspace(KIND).files,
         );
@@ -410,13 +396,8 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       });
       setPreviewHtml(result.html);
       setPreviewSubject(result.subject);
-      if (result.propsJson && activePath) {
-        let nextJson = result.propsJson;
-        try {
-          nextJson = `${JSON.stringify(JSON.parse(result.propsJson), null, 2)}\n`;
-        } catch {
-          nextJson = result.propsJson;
-        }
+      if (activePath) {
+        const nextJson = `${JSON.stringify(result.props, null, 2)}\n`;
         setPropsJson(nextJson);
         setPropsByPath((prev) => ({ ...prev, [activePath]: nextJson }));
         setPropsOpen(false);

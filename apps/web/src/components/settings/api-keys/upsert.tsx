@@ -20,11 +20,15 @@ import { type QueryClient, useMutation } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { createApiKeyFn, updateApiKeyFn } from "@/lib/projects/api-key.functions";
-import { type ApiKeyFormValues, apiKeyFormSchema } from "@/lib/projects/api-key-schemas";
-import type { HydratedApiKey } from "@/lib/projects/api-key-types";
+import { type ApiKey, ApiKeyInput } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
+import { dashboard } from "@/lib/dashboard";
 import { queries } from "@/lib/queries";
 import { FieldExpiresAt } from "./field-expires-at";
+
+type ApiKeyFormValues = typeof ApiKeyInput.Encoded;
+
+const decodeApiKeyInput = Schema.decodeSync(ApiKeyInput);
 
 async function optimisticUpdate({
   client,
@@ -32,12 +36,12 @@ async function optimisticUpdate({
   orgSlug,
 }: {
   client: QueryClient;
-  data: HydratedApiKey;
+  data: ApiKey;
   orgSlug: string;
 }) {
   client.setQueryData(
     queries.organizations.bySlug(orgSlug).listApiKeys.queryKey,
-    (old: HydratedApiKey[] | undefined) => [
+    (old: readonly ApiKey[] | undefined) => [
       ...(old ?? []).filter((key) => key.id !== data.id),
       data,
     ],
@@ -54,7 +58,7 @@ export function UpsertApiKey({
   open: _openProp,
   setOpen: _setOpenProp,
 }: {
-  initialData?: HydratedApiKey;
+  initialData?: ApiKey;
   render?: DialogTriggerProps["render"];
   children?: React.ReactNode;
   open?: boolean;
@@ -68,30 +72,21 @@ export function UpsertApiKey({
 
   const { mutateAsync: upsertApiKey } = useMutation({
     mutationFn: async (body: ApiKeyFormValues) => {
+      const payload = decodeApiKeyInput(body);
       if (initialData) {
-        return await updateApiKeyFn({
-          data: {
-            ...body,
-            id: initialData.id,
-            orgSlug,
-          },
-        });
+        const apiKey = await dashboard((client) =>
+          client.apiKeys.update({ params: { keyId: initialData.id, orgSlug }, payload }),
+        );
+        return { apiKey, key: null };
       }
-
-      return await createApiKeyFn({
-        data: {
-          ...body,
-          orgSlug,
-        },
-      });
+      return await dashboard((client) => client.apiKeys.create({ params: { orgSlug }, payload }));
     },
     onSuccess: async (result, _, __, { client }) => {
-      await optimisticUpdate({ client, data: result.data, orgSlug });
+      await optimisticUpdate({ client, data: result.apiKey, orgSlug });
       toast.success(initialData ? "API key updated successfully" : "API key created successfully");
       form.reset();
-      const createdKey = "key" in result && typeof result.key === "string" ? result.key : null;
-      if (createdKey) {
-        setCreatedApiKey(createdKey);
+      if (result.key) {
+        setCreatedApiKey(result.key);
       } else {
         setOpen(false);
       }
@@ -109,7 +104,7 @@ export function UpsertApiKey({
       expiresAt: initialData?.expiresAt?.toISOString() ?? undefined,
     } as ApiKeyFormValues,
     validators: {
-      onSubmit: apiKeyFormSchema,
+      onSubmit: Schema.toStandardSchemaV1(ApiKeyInput),
     },
     onSubmit: async ({ value }) => await upsertApiKey(value),
   });

@@ -17,9 +17,8 @@ import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import { putReactEmailChannelFn } from "@/lib/templating/template.functions";
-import type { WorkspaceEntryListItem } from "@/lib/templating/types";
-import type { Template } from "./types";
+import { dashboard } from "@/lib/dashboard";
+import type { Template, WorkspaceEntry } from "./types";
 
 function emailVariantOf(template: Template) {
   return template.channelVariants.find((variant) => variant.channel === "email");
@@ -61,14 +60,12 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
 
   const { mutate: linkEntry, isPending: isLinking } = useMutation({
     mutationFn: async (input: { workspaceEntryId: string; subject: string }) =>
-      await putReactEmailChannelFn({
-        data: {
-          orgSlug,
-          subject: input.subject,
-          templateId: template.id,
-          workspaceEntryId: input.workspaceEntryId,
-        },
-      }),
+      await dashboard((client) =>
+        client.templates.linkReactEmail({
+          params: { orgSlug, templateId: template.id },
+          payload: { subject: input.subject, workspaceEntryId: input.workspaceEntryId },
+        }),
+      ),
     onSuccess: async (_, __, ___, { client }) => {
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -232,8 +229,8 @@ function EntryPickerDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entries: WorkspaceEntryListItem[];
-  onLink: (entry: WorkspaceEntryListItem) => void;
+  entries: readonly WorkspaceEntry[];
+  onLink: (entry: WorkspaceEntry) => void;
   isLinking: boolean;
   subject: string;
 }) {

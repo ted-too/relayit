@@ -2,7 +2,6 @@ import { apiKeyClient } from "@better-auth/api-key/client";
 import { stripeClient } from "@better-auth/stripe/client";
 import { adminClient, lastLoginMethodClient, organizationClient } from "better-auth/client/plugins";
 import { createAuthClient as createBetterAuthClient } from "better-auth/react";
-import { tanstackStartCookies } from "better-auth/tanstack-start";
 import {
   ac as organizationAc,
   admin as organizationAdminRole,
@@ -10,13 +9,9 @@ import {
   owner as organizationOwnerRole,
 } from "./permissions";
 
-interface AuthClientConfig {
-  baseURL: string;
-}
-
-export const createAuthClient = ({ baseURL }: AuthClientConfig) =>
+/** better-auth's client, on the page's own origin (`/api/auth`). */
+export const createAuthClient = () =>
   createBetterAuthClient({
-    baseURL,
     plugins: [
       adminClient(),
       stripeClient({
@@ -32,6 +27,5 @@ export const createAuthClient = ({ baseURL }: AuthClientConfig) =>
       }),
       lastLoginMethodClient(),
       apiKeyClient(),
-      tanstackStartCookies(),
     ],
   });

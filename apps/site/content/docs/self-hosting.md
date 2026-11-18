@@ -75,7 +75,7 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 
 ## Environment variables
 
-`env.example` mirrors what the services validate at startup. Compose maps `WEB_URL` to the worker's `APP_URL` and the web's `VITE_BASE_URL`, and builds `DATABASE_URL` from the `POSTGRES_*` values.
+`env.example` mirrors what the services validate at startup. Compose maps `WEB_URL` to the api's and the worker's `APP_URL`, and builds `DATABASE_URL` from the `POSTGRES_*` values.
 
 ### api (required)
 
@@ -83,11 +83,12 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                      |
 | `REDIS_URL`                                                                         | Redis connection string.                                                                                                         |
-| `API_URL`                                                                           | Public URL of the API.                                                                                                           |
+| `APP_URL`                                                                           | Public URL of the dashboard. Sign-in trusts requests from it alone.                                                              |
 | `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
+| `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                         | The same as the worker. The api registers new Domains with SES.                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
-Optional: `LOG_LEVEL`. The api applies database migrations when it starts.
+Optional: `LOG_LEVEL`. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
 
 ### worker (required)
 
@@ -105,15 +106,9 @@ Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a 
 
 ### web (required)
 
-| Variable              | Description                                                                   |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `VITE_BASE_URL`       | Public URL of the dashboard. Can be changed at deploy time without a rebuild. |
-| `DATABASE_URL`        | Postgres connection string.                                                   |
-| `REDIS_URL`           | Redis connection string.                                                      |
-| `BETTER_AUTH_SECRETS` | The same value as the api.                                                    |
-| `SES_*`               | The same as the worker. The dashboard registers new Domains with SES.         |
-
-Optional: `VITE_DEBUG`. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
+| Variable  | Description                                                                          |
+| --------- | ------------------------------------------------------------------------------------ |
+| `API_URL` | The api's address as web reaches it. The dashboard's sign-in and data go through it. |
 
 ## Image tags
 
@@ -129,7 +124,7 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `WEB_URL` to those URLs.
 - The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
-- If the dashboard points at the wrong origin, restart web with the corrected `VITE_BASE_URL`. No rebuild is needed.
+- If sign-in fails from the dashboard, check that the api's `APP_URL` is the dashboard's public URL.
 - Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
 
 ## How self-hosted differs from Cloud

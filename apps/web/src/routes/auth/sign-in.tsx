@@ -6,7 +6,6 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { z } from "zod";
-import { env } from "@/env";
 import { type SignInBody, signInBodySchema } from "@/lib/auth/schemas";
 import { authClient } from "@/lib/auth-client";
 
@@ -25,7 +24,7 @@ function RouteComponent() {
   const { isGitHubAuthEnabled } = Route.useRouteContext();
   const lastMethod = authClient.getLastUsedLoginMethod();
 
-  const baseURL = env.VITE_BASE_URL;
+  const baseURL = window.location.origin;
   const callbackURL = redirect
     ? `${baseURL}${redirect.startsWith("/") ? redirect : `/${redirect}`}`
     : `${baseURL}/`;

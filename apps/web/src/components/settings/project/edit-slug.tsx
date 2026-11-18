@@ -3,7 +3,8 @@ import { InputGroupText } from "@repo/ui/components/ui/shad/input-group";
 import { useMutation, useSuspenseQueries } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
-import * as z from "zod";
+import { SafeName } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
 import {
   SettingsCard,
   SettingsCardContent,
@@ -12,16 +13,13 @@ import {
   SettingsCardHeader,
   SettingsCardTitle,
 } from "@/components/settings/card";
-import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";
-import { safeString } from "@/lib/projects/schemas";
 import { queries } from "@/lib/queries";
 
-const formSchema = z.object({
-  slug: safeString,
-});
+// better-auth sets the slug, and refuses one the api or the dashboard routes itself.
+const SlugInput = Schema.Struct({ slug: SafeName });
 
-type FormSchema = z.infer<typeof formSchema>;
+type FormSchema = typeof SlugInput.Type;
 
 export function ProjectEditSlug() {
   const navigate = useNavigate();
@@ -66,7 +64,7 @@ export function ProjectEditSlug() {
       slug: organization.slug,
     } as FormSchema,
     validators: {
-      onSubmit: formSchema,
+      onSubmit: Schema.toStandardSchemaV1(SlugInput),
     },
     onSubmit: async ({ value }) => await mutateAsync(value),
   });
@@ -75,13 +73,7 @@ export function ProjectEditSlug() {
     return null;
   }
 
-  const rawBaseUrl = env.VITE_BASE_URL;
-  const appURL = new URL(rawBaseUrl);
-  let baseUrl = new URL(rawBaseUrl).hostname;
-
-  if (!["80", "443"].includes(appURL.port)) {
-    baseUrl = `${baseUrl}:${appURL.port}`;
-  }
+  const baseUrl = window.location.host;
 
   const canUpdate = authClient.organization.checkRolePermission({
     permissions: {

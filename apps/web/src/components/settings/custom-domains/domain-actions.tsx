@@ -6,8 +6,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
-import { deleteCustomDomainFn, refreshCustomDomainFn } from "@/lib/domains/custom-domain.functions";
-import type { ProjectDomainListItem } from "@/lib/domains/types";
+import { dashboard } from "@/lib/dashboard";
 import { queries } from "@/lib/queries";
 import type { Domain } from "./types";
 
@@ -16,16 +15,13 @@ export function useRefreshDomain({ domain }: { domain: Domain }) {
 
   return useMutation({
     mutationFn: async () =>
-      await refreshCustomDomainFn({
-        data: {
-          customDomainId: domain.id,
-          orgSlug,
-        },
-      }),
+      await dashboard((client) =>
+        client.domains.refresh({ params: { domainId: domain.id, orgSlug } }),
+      ),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: ProjectDomainListItem[] | undefined) =>
+        (old: readonly Domain[] | undefined) =>
           (old ?? []).map((existingDomain) =>
             existingDomain.id === data.id ? data : existingDomain,
           ),
@@ -48,17 +44,14 @@ export function useDeleteDomain({ domain, onDeleted }: { domain: Domain; onDelet
 
   return useMutation({
     mutationFn: async () =>
-      await deleteCustomDomainFn({
-        data: {
-          customDomainId: domain.id,
-          orgSlug,
-        },
-      }),
+      await dashboard((client) =>
+        client.domains.delete({ params: { domainId: domain.id, orgSlug } }),
+      ),
     onSuccess: (_, __, ___, { client }) => {
       onDeleted?.();
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listDomains.queryKey,
-        (old: ProjectDomainListItem[] | undefined) =>
+        (old: readonly Domain[] | undefined) =>
           (old ?? []).filter((existingDomain) => existingDomain.id !== domain.id),
       );
       client.invalidateQueries({

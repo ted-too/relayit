@@ -40,16 +40,16 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 ## Ways to hurt yourself
 
 1. **Production data and real cloud accounts.** Production's database holds customers' Projects, credentials and send history; AWS and Cloudflare hold live sending infrastructure. Never point a dev server, script, migration or test at them, or call their APIs, without Ted's permission for that task.
-2. **Starting an app.** The api, web and builder migrate their `DATABASE_URL` as they start, and the worker sends whatever is queued. What else it reaches depends on the root `.env`:
+2. **Starting an app.** The api and builder migrate their `DATABASE_URL` as they start, and the worker sends whatever is queued. What else it reaches depends on the root `.env`:
    - **Safe:** a `.env` written by `bun run worktree:setup`, or copied from `.env.example`. `EMAIL_BACKEND=fake` sends nothing and makes nothing in AWS, Domains verify without AWS or public DNS, objects stay in `temp/`, Redis keys carry the worktree's prefix, and with no `CF_*`, `STRIPE_*` or `GITHUB_*` nothing calls Cloudflare, Stripe or GitHub.
-   - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the worker uses the `SES_*` account, points SES and SNS at the api's `API_URL` in every region and sends queued mail for real, and adding a Domain in web creates a real SES identity. Don't start an app or `bun run dev` against one unless Ted asks for that run.
+   - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the worker uses the `SES_*` account, points SES and SNS at the api's `API_URL` in every region and sends queued mail for real, and adding a Domain in the dashboard creates a real SES identity. Don't start an app or `bun run dev` against one unless Ted asks for that run.
 3. **Killing by pattern.** Never `pkill -f`, `killall`, or kill a PID found by matching a name or path; other dev servers and agents run on this machine. Kill only a PID you started. Killing only the PID of a background `bun run dev` leaves its apps running, so kill every PID in its process tree.
 4. **Migrations.** Never hand-write or edit anything under `packages/persistence/drizzle/`. Change the schema (`packages/persistence/src/db/schema/`, plus the jobs tables in `packages/jobs/src/*-schema.ts`), then run `bun run db:generate` and read the SQL. If generate asks a question (rename or create) or fails for want of a TTY, stop and ask Ted to run it; never feed it keypresses or write the files yourself.
 5. **Secrets.** The main checkout's `.env` files hold real credentials. Never commit, print, paste, copy or edit them; name the variable instead. A worktree's `.env` holds only generated local secrets.
 
 ## How it works
 
-Four deployables share one Postgres and one Redis. `apps/web` is a TanStack Start app: the dashboard, better-auth at `/api/auth/*`, and every session-authenticated operation as a server function. `apps/api` serves API-key traffic (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`) and nothing else, as an Effect `HttpApi` on Bun: the routes, schemas and every response are declared in `apps/api/src/api.ts`, and the OpenAPI document is generated from it. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only web calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
+Four deployables share one Postgres and one Redis. `apps/api` is an Effect `HttpApi` on Bun serving the public API (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`), declared with every response in `apps/api/src/api.ts`, from which the OpenAPI document is generated; and, for the dashboard, better-auth at `/api/auth/*`, one-click unsubscribe, and every session-authenticated operation as the `DashboardApi` contract in `packages/contracts`, under `/api/dashboard`. `apps/web` is the dashboard, a client of those: a TanStack Start app with SSR off whose server only forwards `/api/*` and the unsubscribe POST to the api. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only the api calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
 
 The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, the `EmailBackend` contract and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
 
@@ -60,10 +60,11 @@ Architecture, decisions and their reasons: [docs/internals/overview.md](docs/int
 ```
 apps/api/                 HttpApi ingress, HTTP only
 apps/worker/              the job worker: every job handler, no HTTP
-apps/web/                 TanStack Start dashboard, better-auth, server functions
+apps/web/                 the dashboard: TanStack Start, SSR off, calls the api
 apps/template-builder/    Email Workspace build and publish, Effect Rpc
 apps/site/                marketing site; public docs in content/
 packages/channels/        accept, delivery, Domains, the EmailBackend contract, Usage
+packages/contracts/       the dashboard's HttpApi contract, shared by the api and web
 packages/persistence/     Drizzle schema, migrations, DB layer, auth, credential sealing
 packages/jobs/            job contracts, worker, outbox, dead letters
 packages/webhooks/        Webhook Events, Endpoints, signed delivery
@@ -87,7 +88,7 @@ Bun installs and runs the apps; Vite+ (`vp`) runs lint, format and the workspace
 - `bun install`: also patches `tsc` with the Effect language service and installs the commit hook.
 - `bun run dev`: all five apps, reading the root `.env`: dashboard on `WEB_PORT`, site `SITE_PORT`, api `API_PORT`, builder `BUILDER_PORT` (3000, 3001, 3005, 3006 in the main checkout), and the worker, which has no port. Read Ways to hurt yourself first. Setup: [docs/operations/development.md](docs/operations/development.md).
 - `bun run db:migrate`, `bun run db:seed`: migrate and seed the root `.env`'s local database; the seed prints how to sign in and an API key.
-- `bun run db:generate`: a migration from the schema. The api, web and builder apply migrations when they start; the worker doesn't.
+- `bun run db:generate`: a migration from the schema. The api and builder apply migrations when they start; the worker doesn't.
 - `bun run worktree:setup` (`--reset`), `bun run worktree:prune` (`--dry-run`): see Worktrees.
 - `vp lint <files>`, `vp run --filter <pkg> test`, `vp run --filter <pkg> typecheck`, `bun run test <file>` inside a package: targeted checks.
 - `vp check` (format + lint, `--fix` to fix), `bun run typecheck`, `bun run test`, `bun run build`, `bun run knip`: repo-wide.
@@ -109,11 +110,11 @@ Each task gets its own git worktree: T3 Code makes it under `~/.t3/worktrees/` a
 
 ## Code
 
-- **Effect.** Effect 4. Services are `Context.Service` classes; errors are `Data.TaggedError` (`Schema.TaggedError` where they cross an Rpc). Run effects only at app edges: the api's and the worker's composition roots, a web server function through `runApp`, the builder's Rpc server.
+- **Effect.** Effect 4. Services are `Context.Service` classes; errors are `Data.TaggedError` (`Schema.TaggedError` where they cross an Rpc). Run effects only at app edges: the api's and the worker's composition roots, the builder's Rpc server, and in the dashboard a query or mutation through `dashboard()` (`apps/web/src/lib/dashboard.ts`).
 - **Errors.** Construct a tagged error where it is raised, with a static `message` and the varying data in fields; lint enforces both. Classify failures with a `switch` on `_tag` listing what is retryable, `default` terminal, rather than an `isX` guard or `instanceof`. Map a shared function's error where you call it; don't wrap it under a new name to remap it.
 - **Services.** Take the service at the call site (`const usage = yield* Usage`) and call it; no helper that only yields a service and forwards one method.
 - **Jobs.** A job's contract and handler live in their domain package. Producers enqueue in the transaction that writes the rows the job reads; only `apps/worker` registers handlers.
-- **Schemas.** Zod for the web app's env, forms and server-function inputs; Effect Schema for job payloads, Rpc, the api's `HttpApi` and config. Use the one the module around you uses.
+- **Schemas.** Effect Schema everywhere: job payloads, Rpc, both `HttpApi`s, config, and the dashboard's forms, which validate with the contract's input schema through `Schema.toStandardSchemaV1` rather than a second definition. Zod remains only in forms that have no contract shape (sign-in, sign-up) and in better-auth's own plugins.
 - **Types.** Inferred over annotated; `satisfies` over `as`. Never cast away an Effect's requirements.
 - **Comments** say why, not what, and move with the code. No narration ("added X").
 - **Lint suppressions** need a reason: end the directive with `-- reason` or put a comment on the line above.

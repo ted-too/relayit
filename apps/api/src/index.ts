@@ -1,6 +1,7 @@
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
-import { Cause, Effect, Fiber, Layer, Redacted } from "effect";
+import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
+import { Cause, Effect, Fiber, Layer, Option, Redacted } from "effect";
 import { apiConfig } from "./env";
 import { apiServer } from "./http";
 import { makeApiServices } from "./layers";
@@ -11,13 +12,21 @@ const apiProgram = Effect.gen(function* () {
   yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
   yield* Effect.logInfo("Database migrations up to date");
 
-  const server = apiServer({ hostname: config.hostname, port: config.port }).pipe(
+  const server = apiServer({
+    dashboard: {
+      appOrigin: config.appUrl.origin,
+      billing: Option.isSome(config.stripe),
+      githubSignIn: Option.isSome(config.github),
+    },
+    hostname: config.hostname,
+    port: config.port,
+    unsubscribeSecret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
+  }).pipe(
     Layer.provide(
       ApiAuth.layer({
-        apiUrl: config.apiUrl.toString(),
-        databaseUrl: Redacted.value(config.databaseUrl),
-        redisKeyPrefix: config.redisKeyPrefix,
-        redisUrl: Redacted.value(config.redisUrl),
+        ...config,
+        // better-auth's rate limit is for deployments; development and tests sign in often.
+        rateLimit: !Option.exists(config.nodeEnv, (env) => env === "development" || env === "test"),
       }),
     ),
     Layer.provide(makeApiServices(config)),

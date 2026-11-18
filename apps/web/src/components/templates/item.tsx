@@ -16,8 +16,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { queries } from "@/lib/queries";
-import { archiveTemplateFn } from "@/lib/templating/template.functions";
-import type { TemplateListItem } from "@/lib/templating/types";
+import { dashboard } from "@/lib/dashboard";
 import type { Template } from "./types";
 
 export function TemplateItem({ template }: { template: Template }) {
@@ -28,13 +27,13 @@ export function TemplateItem({ template }: { template: Template }) {
 
   const { mutate: archiveTemplate, isPending: isArchiving } = useMutation({
     mutationFn: async () =>
-      await archiveTemplateFn({
-        data: { orgSlug, templateId: template.id },
-      }),
+      await dashboard((client) =>
+        client.templates.archive({ params: { orgSlug, templateId: template.id } }),
+      ),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
-        (old: TemplateListItem[] | undefined) =>
+        (old: readonly Template[] | undefined) =>
           (old ?? []).map((row) => (row.id === data.id ? { ...row, ...data } : row)),
       );
       await client.invalidateQueries({

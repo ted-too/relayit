@@ -18,9 +18,9 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
-import { type CreateTemplateFormValues, createTemplateFormSchema } from "@/lib/templating/schemas";
-import { createTemplateFn } from "@/lib/templating/template.functions";
-import type { TemplateListItem } from "@/lib/templating/types";
+import { CreateTemplateInput, type Template } from "@repo/contracts/dashboard";
+import { Schema } from "effect";
+import { dashboard } from "@/lib/dashboard";
 
 export function CreateTemplate({
   render,
@@ -40,17 +40,12 @@ export function CreateTemplate({
   const setOpen = setOpenProp ?? setInternalOpen;
 
   const { mutateAsync: createTemplate } = useMutation({
-    mutationFn: async (body: CreateTemplateFormValues) =>
-      await createTemplateFn({
-        data: {
-          ...body,
-          orgSlug,
-        },
-      }),
+    mutationFn: async (payload: typeof CreateTemplateInput.Type) =>
+      await dashboard((client) => client.templates.create({ params: { orgSlug }, payload })),
     onSuccess: async (data, _, __, { client }) => {
       client.setQueryData(
         queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
-        (old: TemplateListItem[] | undefined) => [...(old ?? []), data],
+        (old: readonly Template[] | undefined) => [...(old ?? []), data],
       );
       await client.invalidateQueries({
         queryKey: queries.organizations.bySlug(orgSlug).listTemplates.queryKey,
@@ -73,9 +68,9 @@ export function CreateTemplate({
   const form = useAppForm({
     defaultValues: {
       name: "",
-    } satisfies CreateTemplateFormValues,
+    } satisfies typeof CreateTemplateInput.Type,
     validators: {
-      onSubmit: createTemplateFormSchema,
+      onSubmit: Schema.toStandardSchemaV1(CreateTemplateInput),
     },
     onSubmit: async ({ value }) => {
       await createTemplate(value);

@@ -1,5 +1,1 @@
-import type { ProjectDomainDnsRecord, ProjectDomainListItem } from "@/lib/domains/types";
-
-export type Domain = ProjectDomainListItem;
-
-export type DNSRecord = ProjectDomainDnsRecord;
+export type { DnsRecord as DNSRecord, Domain } from "@repo/contracts/dashboard";
