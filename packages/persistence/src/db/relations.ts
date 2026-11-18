@@ -103,13 +103,13 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.topic.id,
     }),
   },
-  provider: {
-    providerIdentities: r.many.emailDomainProviderIdentity(),
-  },
   customDomain: {
     organizations: r.many.organizationDomain(),
     dnsRecords: r.many.emailDnsRecord(),
-    providerIdentities: r.many.emailDomainProviderIdentity(),
+    registration: r.one.emailDomainRegistration({
+      from: r.customDomain.id,
+      to: r.emailDomainRegistration.customDomainId,
+    }),
   },
   organizationDomain: {
     organization: r.one.organization({
@@ -124,7 +124,10 @@ export const relations = defineRelations(schema, (r) => ({
   sandboxDomain: {
     dnsRecords: r.many.emailDnsRecord(),
     organizations: r.many.organization(),
-    providerIdentities: r.many.emailDomainProviderIdentity(),
+    registration: r.one.emailDomainRegistration({
+      from: r.sandboxDomain.id,
+      to: r.emailDomainRegistration.sandboxDomainId,
+    }),
   },
   emailDnsRecord: {
     customDomain: r.one.customDomain({
@@ -136,18 +139,14 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.sandboxDomain.id,
     }),
   },
-  emailDomainProviderIdentity: {
+  emailDomainRegistration: {
     customDomain: r.one.customDomain({
-      from: r.emailDomainProviderIdentity.customDomainId,
+      from: r.emailDomainRegistration.customDomainId,
       to: r.customDomain.id,
     }),
     sandboxDomain: r.one.sandboxDomain({
-      from: r.emailDomainProviderIdentity.sandboxDomainId,
+      from: r.emailDomainRegistration.sandboxDomainId,
       to: r.sandboxDomain.id,
-    }),
-    provider: r.one.provider({
-      from: r.emailDomainProviderIdentity.providerId,
-      to: r.provider.id,
     }),
   },
   message: {
@@ -187,10 +186,6 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.emailDelivery.sandboxDomainId,
       to: r.sandboxDomain.id,
     }),
-    provider: r.one.provider({
-      from: r.emailDelivery.providerId,
-      to: r.provider.id,
-    }),
   },
   emailAttachment: {
     delivery: r.one.emailDelivery({
@@ -210,10 +205,6 @@ export const relations = defineRelations(schema, (r) => ({
     sandboxDomain: r.one.sandboxDomain({
       from: r.emailDeliveryEvent.sandboxDomainId,
       to: r.sandboxDomain.id,
-    }),
-    provider: r.one.provider({
-      from: r.emailDeliveryEvent.providerId,
-      to: r.provider.id,
     }),
   },
   dmarcReport: {

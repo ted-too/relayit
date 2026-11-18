@@ -5,6 +5,5 @@ export * from "./contact";
 export * from "./email";
 export * from "./message";
 export * from "./message-idempotency";
-export * from "./provider";
 export * from "./templating";
 export * from "./webhook";

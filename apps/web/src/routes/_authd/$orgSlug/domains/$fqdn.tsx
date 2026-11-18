@@ -82,7 +82,7 @@ function RouteComponent() {
           {(
             [
               {
-                label: "Provider",
+                label: "DNS host",
                 children: (
                   <div className="flex items-center gap-2">
                     <ProviderIcon className="size-5" />

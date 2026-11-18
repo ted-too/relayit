@@ -10,12 +10,10 @@ import {
   unpauseCustomDomainForProject,
 } from "@/lib/domains/custom-domain.server";
 import { listCustomDomainsForProject } from "@/lib/domains/list.server";
-import { listProvidersForProject } from "@/lib/domains/providers.server";
 import {
   createCustomDomainInputSchema,
   customDomainIdInputSchema,
   listCustomDomainsInputSchema,
-  listProjectProvidersInputSchema,
 } from "@/lib/domains/schemas";
 import { refreshCustomDomainForProject } from "@/lib/domains/verify.server";
 import { runApp } from "@/lib/layers.server";
@@ -55,18 +53,6 @@ export const listCustomDomainsFn = createServerFn({ method: "GET" })
     return runApp(listCustomDomainsForProject({ organizationId: org.id }));
   });
 
-export const listProjectProvidersFn = createServerFn({ method: "GET" })
-  .middleware([sessionMiddleware])
-  .validator(listProjectProvidersInputSchema)
-  .handler(async ({ data }) => {
-    const org = await runApp(requireOrganizationBySlug(data.orgSlug));
-    await assertDomainPermission({
-      organizationId: org.id,
-      permission: "read",
-    });
-    return runApp(listProvidersForProject());
-  });
-
 /** Project member: create or claim a Custom Domain; returns list projection. */
 export const createCustomDomainFn = createServerFn({ method: "POST" })
   .middleware([sessionMiddleware])
@@ -81,7 +67,6 @@ export const createCustomDomainFn = createServerFn({ method: "POST" })
       createCustomDomainForProject({
         fqdn: data.fqdn,
         organizationId: org.id,
-        providerId: data.providerId,
       }),
     );
   });

@@ -4,7 +4,6 @@ import { DeadLetterStoreLive, JobsLive } from "@repo/jobs";
 import { loggingLive } from "@repo/logging";
 import { makeObjectStorageLayer } from "@repo/object-storage";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { emailBackendLayer } from "@repo/provider-aws/email/backend";
@@ -16,7 +15,7 @@ import type { WorkerConfig } from "./env";
 const optionValue = <A>(option: Option.Option<A>): A | undefined =>
   option._tag === "Some" ? option.value : undefined;
 
-const cloudflareFromConfig = (config: WorkerConfig) => {
+export const cloudflareFromConfig = (config: WorkerConfig) => {
   const apiToken = optionValue(config.cfApiToken);
   const rootDomain = optionValue(config.cfRootDomain);
   const zoneId = optionValue(config.cfZoneId);
@@ -69,7 +68,6 @@ export const makeWorkerLayer = (config: WorkerConfig) => {
     jobsLive,
     deadLetterStoreLive,
     httpLive,
-    ProviderCredentialsVault.live(secrets),
     SymmetricCrypto.live(secrets),
     emailBackendLive,
     managedDnsLive,

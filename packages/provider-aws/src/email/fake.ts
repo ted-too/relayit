@@ -1,14 +1,11 @@
-import type {
-  EmailProviderAdapter,
-  EmailProviderFactory,
-} from "@repo/channels/email/provider-adapter";
-import type { ProviderEmailMessage } from "@repo/channels/email/provider-message";
-import type { NormalizedDeliveryEvent } from "@repo/channels/email/provider-webhook";
-import { ingestDeliveryEvents } from "@repo/channels/email/deliverability";
+import type { EmailBackendService, OutboundEmail } from "@repo/channels/email/backend";
+import {
+  ingestDeliveryEvents,
+  type NormalizedDeliveryEvent,
+} from "@repo/channels/email/deliverability";
 import { Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { Data, Effect, Schedule } from "effect";
-import { awsSesProviderDefinition } from "../client";
 import { normalizeSesNotification } from "./webhooks";
 
 /**
@@ -41,7 +38,7 @@ const simulatedOutcome = (address: string): SimulatedOutcome => {
  */
 export const simulatedSesNotifications = (
   providerMessageId: string,
-  message: Pick<ProviderEmailMessage, "bcc" | "cc" | "to">,
+  message: Pick<OutboundEmail, "bcc" | "cc" | "to">,
 ): readonly NormalizedDeliveryEvent[] => {
   const destination = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
   const mail = { destination, messageId: providerMessageId, source: "fake" };
@@ -86,86 +83,90 @@ class FakeDeliveryNotRecorded extends Data.TaggedError("FakeDeliveryNotRecorded"
 /**
  * An SES stand-in for local development: accepts every send without contacting AWS and,
  * once the Delivery records the returned id, reports outcomes through the same ingest SES
- * notifications reach. Identities verify at once and there is no infrastructure to make.
- * Chosen only through `selectEmailBackend`, which refuses it under NODE_ENV=production.
+ * notifications reach. Identities verify at once in any region and there is no
+ * infrastructure to make. Chosen only through `selectEmailBackend`, which refuses it
+ * under NODE_ENV=production.
  */
-export const makeFakeSesProviderFactory = Effect.gen(function* () {
-  const db = yield* DB;
-  // Outcomes enqueue Webhook Events, after the send that started them has returned.
-  const jobs = yield* Jobs;
-  const scope = yield* Effect.scope;
+export const makeFakeEmailBackend = (defaultRegion: string) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    // Outcomes enqueue Webhook Events, after the send that started them has returned.
+    const jobs = yield* Jobs;
+    const scope = yield* Effect.scope;
 
-  // Ingest finds a Delivery by its provider message id, which the worker writes only after
-  // send returns; SES's notifications arrive after that too.
-  const reportOutcomes = (providerMessageId: string, events: readonly NormalizedDeliveryEvent[]) =>
-    db.query.emailDelivery.findFirst({ columns: { id: true }, where: { providerMessageId } }).pipe(
-      Effect.flatMap((row) =>
-        row ? Effect.void : Effect.fail(new FakeDeliveryNotRecorded({ providerMessageId })),
-      ),
-      Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 150 }),
-      Effect.andThen(ingestDeliveryEvents(db, { events })),
-      Effect.tap(() =>
-        Effect.logInfo("Fake email backend reported simulated outcomes", {
-          outcomes: events.map((event) => `${event.kind}: ${event.recipients.join(", ")}`),
-          providerMessageId,
-        }),
-      ),
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Fake email backend could not report outcomes", {
-          cause,
-          providerMessageId,
-        }),
-      ),
-      Effect.provideService(Jobs, jobs),
-    );
-
-  const adapter = {
-    checkConnection: Effect.succeed(true),
-    createIdentity: ({ dkimSelector, fqdn }) =>
-      Effect.succeed({
-        mailFrom: {
-          domain: `send.${fqdn}`,
-          records: [
-            {
-              name: `send.${fqdn}`,
-              priority: 10,
-              purpose: "mail_from_mx",
-              recordType: "MX",
-              value: "feedback-smtp.fake.amazonses.com",
-            },
-            {
-              name: `send.${fqdn}`,
-              priority: null,
-              purpose: "mail_from_spf",
-              recordType: "TXT",
-              value: '"v=spf1 include:amazonses.com ~all"',
-            },
-          ],
-        },
-        providerData: { dkimSelector, fake: true },
-      }),
-    definition: awsSesProviderDefinition,
-    deleteIdentity: () => Effect.void,
-    getIdentityStatus: () => Effect.succeed({ dkimVerified: true, verified: true }),
-    send: (message) =>
-      Effect.gen(function* () {
-        const providerMessageId = `fake-${crypto.randomUUID()}`;
-        yield* Effect.logInfo("Fake email backend accepted a send; nothing left this machine", {
-          from: message.from.normalized,
-          providerMessageId,
-          subject: message.subject,
-          to: message.to,
-        });
-        yield* Effect.forkIn(
-          reportOutcomes(providerMessageId, simulatedSesNotifications(providerMessageId, message)),
-          scope,
+    // Ingest finds a Delivery by its provider message id, which the worker writes only after
+    // send returns; SES's notifications arrive after that too.
+    const reportOutcomes = (
+      providerMessageId: string,
+      events: readonly NormalizedDeliveryEvent[],
+    ) =>
+      db.query.emailDelivery
+        .findFirst({ columns: { id: true }, where: { providerMessageId } })
+        .pipe(
+          Effect.flatMap((row) =>
+            row ? Effect.void : Effect.fail(new FakeDeliveryNotRecorded({ providerMessageId })),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 150 }),
+          Effect.andThen(ingestDeliveryEvents(db, { events })),
+          Effect.tap(() =>
+            Effect.logInfo("Fake email backend reported simulated outcomes", {
+              outcomes: events.map((event) => `${event.kind}: ${event.recipients.join(", ")}`),
+              providerMessageId,
+            }),
+          ),
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Fake email backend could not report outcomes", {
+              cause,
+              providerMessageId,
+            }),
+          ),
+          Effect.provideService(Jobs, jobs),
         );
-        return { providerMessageId };
-      }),
-  } satisfies EmailProviderAdapter;
 
-  return {
-    create: () => Effect.succeed(adapter),
-    definition: awsSesProviderDefinition,
-  } satisfies EmailProviderFactory;
-});
+    return {
+      createIdentity: ({ fqdn }) =>
+        Effect.succeed({
+          mailFrom: {
+            domain: `send.${fqdn}`,
+            records: [
+              {
+                name: `send.${fqdn}`,
+                priority: 10,
+                purpose: "mail_from_mx",
+                recordType: "MX",
+                value: "feedback-smtp.fake.amazonses.com",
+              },
+              {
+                name: `send.${fqdn}`,
+                priority: null,
+                purpose: "mail_from_spf",
+                recordType: "TXT",
+                value: '"v=spf1 include:amazonses.com ~all"',
+              },
+            ],
+          },
+        }),
+      defaultRegion,
+      deleteIdentity: () => Effect.void,
+      ensureInfrastructure: () => Effect.void,
+      getIdentityStatus: () => Effect.succeed({ dkimVerified: true, verified: true }),
+      send: ({ message }) =>
+        Effect.gen(function* () {
+          const providerMessageId = `fake-${crypto.randomUUID()}`;
+          yield* Effect.logInfo("Fake email backend accepted a send; nothing left this machine", {
+            from: message.from.normalized,
+            providerMessageId,
+            subject: message.subject,
+            to: message.to,
+          });
+          yield* Effect.forkIn(
+            reportOutcomes(
+              providerMessageId,
+              simulatedSesNotifications(providerMessageId, message),
+            ),
+            scope,
+          );
+          return { providerMessageId };
+        }),
+    } satisfies EmailBackendService;
+  });

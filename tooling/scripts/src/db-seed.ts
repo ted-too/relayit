@@ -6,17 +6,16 @@
  */
 import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
-import { verifyCustomDomainProviderIdentity } from "@repo/channels/email/verification/custom-identity";
+import { verifyCustomDomainRegistration } from "@repo/channels/email/verification/custom-identity";
 import { JobsLive } from "@repo/jobs";
 import { syncSessionUserLimits } from "@repo/persistence/auth/plans";
 import { createAuth } from "@repo/persistence/auth/server";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import { createPromiseDb } from "@repo/persistence/db/promise";
-import { organization, provider, user } from "@repo/persistence/db/schema";
-import { emailBackendLayer } from "@repo/provider-aws/email/backend";
+import { organization, user } from "@repo/persistence/db/schema";
+import { emailBackendConfig, emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisClient, makeRedisLive } from "@repo/redis";
 import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
@@ -87,55 +86,36 @@ try {
     Layer.provide(makeRedisLive({ keyPrefix: redisKeyPrefix, url: redisUrl })),
   );
   // The fake backend, whatever EMAIL_BACKEND says: the seed never reaches AWS or DNS.
+  const fake = await Effect.runPromise(
+    emailBackendConfig({
+      accessKeyId: undefined,
+      kind: "fake",
+      regions: env.SES_REGIONS,
+      secretAccessKey: undefined,
+    }),
+  );
   const domainLayer = Layer.mergeAll(
-    emailBackendLayer("fake"),
+    emailBackendLayer(fake),
     EmailManagedDns.noop(),
-    ProviderCredentialsVault.live(secrets),
     SymmetricCrypto.live(secrets),
   ).pipe(Layer.provideMerge(Layer.mergeAll(dbLive, jobsLive)));
 
   await Effect.runPromise(
     Effect.gen(function* () {
       const effectDb = yield* DB;
-      const vault = yield* ProviderCredentialsVault;
-      const managed =
-        (yield* effectDb.query.provider.findFirst({
-          where: { channelType: "email", isDefault: true },
-        })) ??
-        (yield* effectDb
-          .insert(provider)
-          .values({
-            channelType: "email",
-            credentials: yield* vault.seal({
-              encrypted: { accessKeyId: "fake", secretAccessKey: "fake" },
-              unencrypted: { region: "us-east-1" },
-            }),
-            isDefault: true,
-            name: "Local SES (placeholder credentials)",
-            productId: "ses",
-            vendorId: "aws",
-          })
-          .returning()
-          .pipe(Effect.map(([row]) => row)));
-      if (!managed) {
-        return yield* Effect.die("Inserting the managed Provider returned nothing.");
-      }
-
       const { customDomainId } = yield* createCustomDomain({
         fqdn: SEED.domain,
         organizationId: project.id,
-        provider: managed,
       });
-      const identities = yield* effectDb.query.emailDomainProviderIdentity.findMany({
-        where: { customDomainId },
+      const domain = yield* effectDb.query.customDomain.findFirst({
+        where: { id: customDomainId },
+        with: { registration: true },
       });
-      for (const identity of identities) {
-        yield* verifyCustomDomainProviderIdentity({
-          customDomainId,
+      if (domain?.registration) {
+        yield* verifyCustomDomainRegistration({
           db: effectDb,
-          fqdn: SEED.domain,
-          identity,
-          provider: managed,
+          domain,
+          registration: domain.registration,
         });
       }
     }).pipe(Effect.provide(domainLayer)),

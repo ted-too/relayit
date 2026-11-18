@@ -42,7 +42,7 @@ export interface UserLimits extends ChannelLimits {
 }
 
 /**
- * The channel that a provider integration or message is sent through.
+ * The channel a message is sent through.
  */
 export const channelEnum = pgEnum("channel", AVAILABLE_CHANNELS);
 

@@ -57,7 +57,7 @@ docker compose logs -f
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, provider webhooks); applies migrations on start
+- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, SES notifications); applies migrations on start
 - `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port, never migrates
 - `ghcr.io/ted-too/relayit-web:<tag>` — dashboard and Better Auth
 - `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)
@@ -99,7 +99,6 @@ docker run -d \
   -p 3000:3000 \
   --env-file .env \
   -e VITE_BASE_URL="http://localhost:3000" \
-  -e API_URL="http://localhost:3005" \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
   ghcr.io/ted-too/relayit-web:alpha
@@ -125,25 +124,27 @@ Optional: `LOG_LEVEL`.
 
 Validated at process start (`apps/worker/src/env.ts`). Compose maps `WEB_URL` → `APP_URL`.
 
-| Variable                    | Description                                                    |
-| --------------------------- | -------------------------------------------------------------- |
-| `DATABASE_URL`, `REDIS_URL` | Same as api                                                    |
-| `API_URL`                   | Public API URL; Provider delivery notifications are sent to it |
-| `APP_URL`                   | Public web URL; used in unsubscribe links                      |
-| `BETTER_AUTH_SECRETS`       | Same versioned secrets as api                                  |
-| `S3_*`                      | Same as api                                                    |
+| Variable                                     | Description                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `REDIS_URL`                  | Same as api                                                                           |
+| `API_URL`                                    | Public API URL; SES notifications (through SNS) are pointed at it                     |
+| `APP_URL`                                    | Public web URL; used in unsubscribe links                                             |
+| `BETTER_AUTH_SECRETS`                        | Same versioned secrets as api                                                         |
+| `S3_*`                                       | Same as api                                                                           |
+| `SES_REGIONS`                                | SES regions to send through, comma-separated; new Domains are registered in the first |
+| `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | The SES account's IAM credentials                                                     |
 
 Optional: `LOG_LEVEL`; `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on Cloudflare.
 
 ### Required environment (web)
 
-| Variable              | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `VITE_BASE_URL`       | Public web URL (compose: from `WEB_URL`)                    |
-| `DATABASE_URL`        | Postgres connection string                                  |
-| `REDIS_URL`           | Redis connection string                                     |
-| `BETTER_AUTH_SECRETS` | Same versioned secrets as api                               |
-| `API_URL`             | Public API URL; used to scaffold Provider delivery webhooks |
+| Variable              | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `VITE_BASE_URL`       | Public web URL (compose: from `WEB_URL`)       |
+| `DATABASE_URL`        | Postgres connection string                     |
+| `REDIS_URL`           | Redis connection string                        |
+| `BETTER_AUTH_SECRETS` | Same versioned secrets as api                  |
+| `SES_*`               | Same as worker; web registers Domains with SES |
 
 `VITE_DEBUG` is optional. Stripe keys are optional; when they are absent, entitlements are unlimited (self-hosted). Template workspace Git ops also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`.
 
@@ -196,7 +197,7 @@ IMAGE_TAG=alpha
 BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
 ```
 
-Plus S3 (and other required) values from [env.example](env.example).
+Plus S3, SES (and other required) values from [env.example](env.example).
 
 ### Scaling
 
@@ -221,7 +222,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u ted-too --password-stdin
 docker pull ghcr.io/ted-too/relayit-api:alpha
 ```
 
-**Web pointing at the wrong origin** — restart web with updated `VITE_BASE_URL` / `API_URL` (no rebuild).
+**Web pointing at the wrong origin** — restart web with an updated `VITE_BASE_URL` (no rebuild).
 
 ## Contributing
 

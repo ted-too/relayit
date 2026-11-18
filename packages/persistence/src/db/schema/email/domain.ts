@@ -8,7 +8,7 @@ import * as z from "zod";
  * the other.
  *
  * Both flavours run the same DNS-backed verification loop: we publish/await DNS
- * records, poll the provider until it reports the identity can send, and track
+ * records, poll SES until it reports the identity can send, and track
  * progress with `verificationStatus`. `*_paused` state is orthogonal to
  * verification — a verified domain can still be paused for reputation/abuse.
  */

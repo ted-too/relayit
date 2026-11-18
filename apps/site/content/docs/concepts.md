@@ -1,6 +1,6 @@
 ---
 title: "Concepts"
-description: "How Projects, Domains, Providers, Templates, Contacts, Messages, and Plans fit together in Relayit."
+description: "How Projects, Domains, Templates, Contacts, Messages, and Plans fit together in Relayit."
 ---
 
 ## Projects
@@ -40,11 +40,9 @@ To send email you need a sending identity. Relayit has two kinds.
 
 See [Domains](/docs/domains) for the setup flow.
 
-## Providers
+## Amazon SES
 
-A Provider is the upstream email vendor that delivers your mail (for example Amazon SES). Relayit runs its Providers; you never handle vendor credentials. Every Domain uses the default Provider unless you pick another one when you add the Domain.
-
-Each Domain has one active Provider. Relayit sets up the DNS records needed for that Provider pairing, so the records you see depend on which Provider the Domain uses.
+Relayit sends email through Amazon SES, on an SES account it runs; you never handle SES credentials. When you add a Domain, Relayit registers it with SES and shows you the DNS records SES needs. Each Project's sending reputation is kept apart on that account, so another Project's bounces and complaints never pause your mail.
 
 ## Templates
 
@@ -64,7 +62,7 @@ A Contact is a recipient address that Relayit tracks inside a Project (or inside
 What exists today:
 
 - **Contacts are created from sends.** When you send to a recipient, Relayit creates or updates the Contact. If you pass a Contact object, its `first_name`, `last_name`, and `properties` are stored.
-- **Automatic suppression.** When the Provider reports a hard bounce or a complaint, Relayit suppresses that address. Hard bounces suppress the address for all mail. Complaints suppress it for marketing mail.
+- **Automatic suppression.** When SES reports a hard bounce or a complaint, Relayit suppresses that address. Hard bounces suppress the address for all mail. Complaints suppress it for marketing mail.
 - **Suppressed recipients are stripped.** On a transactional send, any recipient suppressed for all mail is removed and listed in the `stripped` array of the response. If every recipient is suppressed, the send fails with `all_recipients_suppressed`.
 
 Coming soon: a Contacts screen in the dashboard, manual suppression management, Topics for marketing consent, and Segments for targeting.
@@ -74,7 +72,7 @@ Coming soon: a Contacts screen in the dashboard, manual suppression management, 
 Every accepted `POST /messages/email` request creates:
 
 - A **Message** with an id like `msg_...`. This is the id returned in the response.
-- One email **Delivery** that carries the Message to the Provider. One Delivery covers all recipients of that request.
+- One email **Delivery** that carries the Message to SES. One Delivery covers all recipients of that request.
 
 Messages created through `/messages/email` are always transactional. Marketing sends will go through Campaigns, which are coming soon.
 

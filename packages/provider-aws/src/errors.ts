@@ -1,16 +1,13 @@
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
-import type {
-  ProviderInstanceErrorContext,
-  ProviderOperationError,
-} from "@repo/channels/provider-errors";
 import {
-  ProviderAuthenticationError,
-  ProviderConfigurationError,
-  ProviderRateLimited,
-  ProviderRejected,
-  ProviderUnavailable,
-} from "@repo/channels/provider-errors";
+  EmailBackendAuthenticationError,
+  EmailBackendConfigurationError,
+  type EmailBackendError,
+  EmailBackendRateLimited,
+  EmailBackendRejected,
+  EmailBackendUnavailable,
+} from "@repo/channels/email/backend";
 import { Data, type Effect } from "effect";
 
 export class AwsUnexpectedResponseError extends Data.TaggedError("AwsUnexpectedResponseError")<{
@@ -50,10 +47,8 @@ type SesOperation =
   | "createEmailIdentity"
   | "createTenant"
   | "createTenantResourceAssociation"
-  | "deleteConfigurationSetEventDestination"
   | "deleteEmailIdentity"
   | "deleteTenantResourceAssociation"
-  | "getAccount"
   | "getEmailIdentity"
   | "getTenant"
   | "listResourceTenants"
@@ -63,88 +58,82 @@ type SesOperation =
   | "sendEmail"
   | "updateConfigurationSetEventDestination";
 
-type SnsOperation =
-  | "createTopic"
-  | "deleteTopic"
-  | "listSubscriptionsByTopic"
-  | "listTopics"
-  | "subscribe"
-  | "unsubscribe";
+type SnsOperation = "createTopic" | "listSubscriptionsByTopic" | "subscribe";
 
-type AwsProviderError =
+type AwsError =
   | AwsUnexpectedResponseError
   | EffectError<ReturnType<SESv2.Type[SesOperation]>>
   | EffectError<ReturnType<SNS.Type[SnsOperation]>>
-  | ProviderOperationError;
+  | EmailBackendError;
 
+/** Maps an SES or SNS failure in one region onto the email backend's errors. */
 export const createAwsErrorMapper =
-  (context: ProviderInstanceErrorContext) =>
-  (error: AwsProviderError): ProviderOperationError => {
+  (context: { readonly region: string }) =>
+  (error: AwsError): EmailBackendError => {
     switch (error._tag) {
-      case "ProviderAuthenticationError":
-      case "ProviderConfigurationError":
-      case "ProviderMessageError":
-      case "ProviderRateLimited":
-      case "ProviderRejected":
-      case "ProviderUnavailable":
+      case "EmailBackendAuthenticationError":
+      case "EmailBackendConfigurationError":
+      case "EmailBackendMessageError":
+      case "EmailBackendRateLimited":
+      case "EmailBackendRejected":
+      case "EmailBackendUnavailable":
         return error;
       case "AuthorizationErrorException":
       case "InvalidSecurityException":
-        return new ProviderAuthenticationError({ ...context, cause: error });
+        return new EmailBackendAuthenticationError({ ...context, cause: error });
       case "FilterPolicyLimitExceededException":
       case "LimitExceededException":
       case "ReplayLimitExceededException":
       case "SubscriptionLimitExceededException":
       case "TooManyRequestsException":
       case "TopicLimitExceededException":
-        return new ProviderRateLimited(context);
+        return new EmailBackendRateLimited(context);
       case "AccountSuspendedException":
-        return new ProviderRejected({
+        return new EmailBackendRejected({
           ...context,
           cause: error,
           reason: "account_suspended",
         });
       case "MailFromDomainNotVerifiedException":
-        return new ProviderRejected({
+        return new EmailBackendRejected({
           ...context,
           cause: error,
           reason: "mail_from_domain_not_verified",
         });
       case "MessageRejected":
-        return new ProviderRejected({
+        return new EmailBackendRejected({
           ...context,
           cause: error,
           reason: "message_rejected",
         });
       case "SendingPausedException":
-        return new ProviderRejected({
+        return new EmailBackendRejected({
           ...context,
           cause: error,
           reason: "sending_paused",
         });
       case "BadRequestException":
       case "InvalidParameterException":
-        return new ProviderConfigurationError({
+        return new EmailBackendConfigurationError({
           ...context,
           cause: error,
-          code: "provider_configuration_rejected",
+          code: "configuration_rejected",
         });
       case "AlreadyExistsException":
       case "AwsUnexpectedResponseError":
       case "ConcurrentAccessException":
       case "ConcurrentModificationException":
       case "InternalErrorException":
-      case "InvalidStateException":
       case "NotFoundException":
       case "SdkError":
       case "StaleTagException":
       case "TagLimitExceededException":
       case "TagPolicyException":
       case "TimeoutError":
-        return new ProviderUnavailable({ ...context, cause: error });
+        return new EmailBackendUnavailable({ ...context, cause: error });
       default: {
         const unhandledError: never = error;
-        return new ProviderUnavailable({ ...context, cause: unhandledError });
+        return new EmailBackendUnavailable({ ...context, cause: unhandledError });
       }
     }
   };

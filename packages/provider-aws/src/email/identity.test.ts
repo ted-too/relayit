@@ -107,10 +107,7 @@ describe("ensureSesDomainIdentity", () => {
 
     const result = await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
 
-    expect(result).toEqual({
-      mailFrom,
-      providerData: { dkimSelector: "relayitabc123" },
-    });
+    expect(result).toEqual({ mailFrom });
     expect(fake.origin).toBe("EXTERNAL");
     expect(fake.deleted).toBe(false);
   });

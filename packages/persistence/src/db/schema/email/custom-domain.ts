@@ -48,8 +48,8 @@ export type DomainProvider = (typeof DOMAIN_PROVIDERS)[number];
  * A user's own sending domain (e.g. `acme.com`).
  *
  * Owns the shared BYODKIM keypair and rollup verification state. One row per
- * fqdn; projects attach via `organizationDomain`. Provider registrations live
- * in `emailDomainProviderIdentity`.
+ * fqdn; projects attach via `organizationDomain`. Its SES registration lives in
+ * `emailDomainRegistration`.
  */
 export const customDomain = pgTable(
   "custom_domain",
@@ -110,12 +110,6 @@ export const organizationDomain = pgTable(
       .notNull()
       .default("not_verified"),
     ownershipToken: text("ownership_token").notNull(),
-    /**
-     * Set while this link is a pending claim: Provider the destination chose
-     * at create. On successful ownership verify, keep that pairing (and DNS if
-     * it matches the source’s managed backend) and tear down other pairings.
-     */
-    pendingProviderId: text("pending_provider_id"),
     ownershipLastCheckedAt: timestamp("ownership_last_checked_at"),
     ownershipEverVerifiedAt: timestamp("ownership_ever_verified_at"),
     ownershipNextVerifyAt: timestamp("ownership_next_verify_at"),

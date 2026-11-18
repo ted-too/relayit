@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, jsonb, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
-import { provider } from "../provider";
 import { customDomain } from "./custom-domain";
 import { emailDelivery } from "./delivery";
 import { sandboxDomain } from "./sandbox-domain";
@@ -25,7 +24,7 @@ export const emailDeliveryEventKindEnum = pgEnum(
 );
 
 /**
- * Provider-reported outcome for an email Delivery (Deliverability ingest).
+ * SES-reported outcome for an email Delivery (Deliverability ingest).
  * Sender FKs are denormalized for reputation range scans by Domain / Sandbox.
  */
 export const emailDeliveryEvent = pgTable(
@@ -42,9 +41,6 @@ export const emailDeliveryEvent = pgTable(
     }),
     sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
       onDelete: "cascade",
-    }),
-    providerId: text("provider_id").references(() => provider.id, {
-      onDelete: "set null",
     }),
     kind: emailDeliveryEventKindEnum("kind").notNull(),
     data: jsonb("data"),
@@ -67,7 +63,6 @@ export const emailDeliveryEvent = pgTable(
       t.kind,
       t.createdAt,
     ),
-    index("email_delivery_event_provider_kind_created_idx").on(t.providerId, t.kind, t.createdAt),
   ],
 );
 

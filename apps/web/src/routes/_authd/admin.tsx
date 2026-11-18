@@ -1,6 +1,6 @@
 import { SidebarInset, SidebarProvider } from "@repo/ui/components/ui/shad/sidebar";
 import { createFileRoute, notFound, Outlet, useLocation } from "@tanstack/react-router";
-import { Category2, Cloud, FolderOpen, Profile2User } from "iconsax-reactjs";
+import { Category2, FolderOpen, Profile2User } from "iconsax-reactjs";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar, type NavItemGroup } from "@/components/layout/app-sidebar";
 import { queries } from "@/lib/queries";
@@ -33,16 +33,6 @@ const NAV_ITEMS = [
         title: "Users",
         to: "/admin/users",
         icon: Profile2User,
-      },
-    ],
-  },
-  {
-    headerTitle: "Settings",
-    items: [
-      {
-        title: "Integrations",
-        to: "/admin/settings/integrations",
-        icon: Cloud,
       },
     ],
   },

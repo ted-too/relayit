@@ -1,14 +1,14 @@
 import * as NodeCrypto from "node:crypto";
 import { dkimRecordName, formatDkimTxtRecord } from "../dkim";
 import { formatTxtRecordContent, type ManagedDnsRecord } from "../managed-dns";
-import type { MailFromDnsRecord } from "../provider-adapter";
+import type { MailFromDnsRecord } from "../backend";
 
 const OWNERSHIP_PREFIX = "relayit-domain-verification=";
 
 export const customDomainRootDnsOwner = (customDomainId: string) => `custom:${customDomainId}:root`;
 
-export const customDomainIdentityDnsOwner = (customDomainId: string, providerId: string) =>
-  `custom:${customDomainId}:identity:${providerId}`;
+export const customDomainIdentityDnsOwner = (customDomainId: string) =>
+  `custom:${customDomainId}:identity`;
 
 /** Customer-published root records (DKIM + DMARC). No platform SPF / CF auto-manage. */
 export const buildCustomDomainRootDnsRecords = (input: {
@@ -34,7 +34,7 @@ export const buildCustomDomainRootDnsRecords = (input: {
   },
 ];
 
-/** Vendor MAIL FROM records verbatim for customer publish. */
+/** SES's MAIL FROM records verbatim for customer publish. */
 export const resolveCustomDomainMailFromRecords = (input: {
   readonly records: readonly MailFromDnsRecord[];
 }): readonly ManagedDnsRecord[] =>

@@ -1,17 +1,13 @@
-import { ProviderMessageError } from "@repo/channels/provider-errors";
+import { EmailBackendMessageError } from "@repo/channels/email/backend";
 import { describe, expect, it } from "bun:test";
-import { awsSesProviderDefinition } from "./client";
 import { AwsUnexpectedResponseError, createAwsErrorMapper } from "./errors";
 
-const context = {
-  providerId: "prv_test",
-  typeId: awsSesProviderDefinition.typeId,
-} as const;
+const context = { region: "eu-central-1" } as const;
 const mapAwsError = createAwsErrorMapper(context);
 
 describe("mapAwsError", () => {
-  it("preserves structured provider message errors", () => {
-    const error = new ProviderMessageError({
+  it("preserves structured message errors", () => {
+    const error = new EmailBackendMessageError({
       ...context,
       code: "invalid_attachment_encoding",
       filename: "invoice.pdf",
@@ -27,7 +23,7 @@ describe("mapAwsError", () => {
     });
 
     expect(mapAwsError(cause)).toMatchObject({
-      _tag: "ProviderUnavailable",
+      _tag: "EmailBackendUnavailable",
       cause,
       ...context,
     });

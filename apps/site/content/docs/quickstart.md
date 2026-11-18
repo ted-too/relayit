@@ -31,7 +31,7 @@ Use the Sandbox Domain to check that your integration works. Do not use it for r
 ### Option B: your own Domain
 
 1. Open **Settings > Domains** and select **Add Custom Domain**.
-2. Enter the domain you want to send from, for example `example.com`, and pick an email provider. The default managed provider is preselected.
+2. Enter the domain you want to send from, for example `example.com`.
 3. Select **Add Domain**, then open the Domain to see its DNS records.
 4. Add the records at your DNS host and select **Refresh** until the status is **Verified** and **Can Send** shows **Yes**.
 

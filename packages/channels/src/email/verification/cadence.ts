@@ -43,21 +43,21 @@ export const computeNextCheckAt = ({
 };
 
 export const mergeVerificationStatus = ({
-  providerVerified,
-  providerDkimVerified,
+  sesVerified,
+  sesDkimVerified,
   activeRecords,
   missingRecords,
 }: {
   activeRecords: number;
   missingRecords: number;
-  providerDkimVerified: boolean;
-  providerVerified: boolean;
+  sesDkimVerified: boolean;
+  sesVerified: boolean;
 }): DomainVerificationStatus => {
   let status: DomainVerificationStatus = "not_verified";
 
-  if (providerVerified && providerDkimVerified) {
+  if (sesVerified && sesDkimVerified) {
     status = "verified";
-  } else if (providerVerified || providerDkimVerified) {
+  } else if (sesVerified || sesDkimVerified) {
     status = "partially_verified";
   }
 
@@ -70,18 +70,4 @@ export const mergeVerificationStatus = ({
   }
 
   return status;
-};
-
-/**
- * Domain-level verify jobs must run at the sooner of Provider cadence and
- * DNS cadence. A verified Provider (12h) must not starve incomplete DNS (2m).
- */
-export const nextDomainVerifyAt = (input: {
-  readonly identityNextCheckAt: Date;
-  readonly nextCheckAt: Date | null;
-}): Date => {
-  if (input.nextCheckAt !== null && input.nextCheckAt < input.identityNextCheckAt) {
-    return input.nextCheckAt;
-  }
-  return input.identityNextCheckAt;
 };

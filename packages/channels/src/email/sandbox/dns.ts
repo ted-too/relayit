@@ -1,13 +1,13 @@
 import { dkimRecordName, formatDkimTxtRecord } from "../dkim";
 import { formatTxtRecordContent, type ManagedDnsRecord } from "../managed-dns";
-import type { MailFromDnsRecord } from "../provider-adapter";
+import type { MailFromDnsRecord } from "../backend";
 
 export { createDomainKeyMaterial, type DomainKeyMaterial } from "../dkim";
 
 export const sandboxRootDnsOwner = (sandboxDomainId: string) => `sandbox:${sandboxDomainId}:root`;
 
-export const sandboxIdentityDnsOwner = (sandboxDomainId: string, providerId: string) =>
-  `sandbox:${sandboxDomainId}:identity:${providerId}`;
+export const sandboxIdentityDnsOwner = (sandboxDomainId: string) =>
+  `sandbox:${sandboxDomainId}:identity`;
 
 export const buildSandboxRootDnsRecords = (input: {
   readonly dkimPublicKey: string;
@@ -33,7 +33,7 @@ export const buildSandboxRootDnsRecords = (input: {
 ];
 
 /**
- * Map Provider MAIL FROM records into managed DNS rows (vendor values verbatim).
+ * Map SES's MAIL FROM records into managed DNS rows (its values verbatim).
  */
 export const resolveSandboxMailFromRecords = (input: {
   readonly records: readonly MailFromDnsRecord[];

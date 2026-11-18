@@ -5,7 +5,6 @@ import {
   EmailAcceptInfrastructureError,
   EmailAcceptRejected,
 } from "@repo/channels/email/accept";
-import { EmailProviderRegistry } from "@repo/channels/email/provider-registry";
 import { Usage, UsageLimitExceeded, type UsageService } from "@repo/channels/usage";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
@@ -54,9 +53,6 @@ const makeTestLayer = () => {
     Layer.succeed(Jobs, jobs),
     Layer.succeed(ObjectStorage, storage),
     Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),
-    Layer.succeed(EmailProviderRegistry, {
-      get: () => Effect.die("unused"),
-    }),
   );
 };
 

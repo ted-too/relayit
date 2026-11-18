@@ -13,7 +13,6 @@ const delivery = {
     tags: null as Record<string, string> | null,
   },
   messageId: "msg_test",
-  providerId: "prov_test",
   providerMessageId: "provider-message-id",
   sandboxDomainId: null as string | null,
 };
@@ -103,7 +102,6 @@ describe("ingestDeliveryEvents", () => {
         data: { bounceType: "Permanent" },
         emailDeliveryId: "edlv_test",
         kind: "bounced",
-        providerId: "prov_test",
         sandboxDomainId: null,
       },
     ]);
@@ -138,7 +136,6 @@ describe("ingestDeliveryEvents", () => {
         data: { complaintFeedbackType: "abuse" },
         emailDeliveryId: "edlv_test",
         kind: "complained",
-        providerId: "prov_test",
         sandboxDomainId: null,
       },
     ]);

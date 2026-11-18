@@ -1,15 +1,25 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { Jobs, type JobsService } from "@repo/jobs";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
+import { EmailBackend, type EmailBackendService } from "../backend";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import { EmailProviderRegistry, type EmailProviderRegistryService } from "../provider-registry";
 import { stubResolverNs } from "../verification/resolver-test-stub";
 import { createCustomDomain, pauseCustomDomain, unpauseCustomDomain } from "./lifecycle";
 
 const unsupported = () => Effect.die("unused");
+
+const backend = (overrides: Partial<EmailBackendService> = {}) =>
+  Layer.succeed(EmailBackend, {
+    createIdentity: unsupported,
+    defaultRegion: "eu-central-1",
+    deleteIdentity: unsupported,
+    ensureInfrastructure: unsupported,
+    getIdentityStatus: unsupported,
+    send: unsupported,
+    ...overrides,
+  } satisfies EmailBackendService);
 
 const unusedCreateServices = Layer.mergeAll(
   Layer.succeed(EmailManagedDns, {
@@ -17,18 +27,12 @@ const unusedCreateServices = Layer.mergeAll(
     reconcile: unsupported,
     remove: unsupported,
   } satisfies EmailManagedDnsService),
-  Layer.succeed(EmailProviderRegistry, {
-    get: unsupported,
-  } satisfies EmailProviderRegistryService),
+  backend(),
   Layer.succeed(Jobs, {
     cancel: unsupported,
     enqueue: unsupported,
     schedule: unsupported,
   } satisfies JobsService),
-  Layer.succeed(ProviderCredentialsVault, {
-    open: unsupported,
-    seal: unsupported,
-  } as never),
   Layer.succeed(SymmetricCrypto, {
     decrypt: unsupported,
     encrypt: unsupported,
@@ -38,14 +42,6 @@ const unusedCreateServices = Layer.mergeAll(
 afterEach(() => {
   mock.restore();
 });
-
-const testEmailProvider = {
-  channelType: "email",
-  credentials: { ciphertext: "x", keyVersion: 1, nonce: "n" },
-  id: "prov_1",
-  productId: "ses",
-  vendorId: "aws",
-} as never;
 
 const stubCloudflareNs = () => {
   stubResolverNs({ "acme.test": ["ada.ns.cloudflare.com"] });
@@ -144,7 +140,7 @@ describe("createCustomDomain claim guard", () => {
                   ownershipVerificationStatus: "not_verified",
                 },
               ],
-              providerIdentities: [],
+              registration: null,
             }),
         },
       },
@@ -154,13 +150,6 @@ describe("createCustomDomain claim guard", () => {
       createCustomDomain({
         fqdn: "acme.test",
         organizationId: "org_claimant",
-        provider: {
-          channelType: "email",
-          credentials: { ciphertext: "x", keyVersion: 1, nonce: "n" },
-          id: "prov_1",
-          productId: "ses",
-          vendorId: "aws",
-        } as never,
       }).pipe(
         Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.flip,
@@ -189,7 +178,7 @@ describe("createCustomDomain claim guard", () => {
                   ownershipVerificationStatus: "verified",
                 },
               ],
-              providerIdentities: [],
+              registration: null,
             }),
         },
       },
@@ -199,11 +188,6 @@ describe("createCustomDomain claim guard", () => {
       createCustomDomain({
         fqdn: "acme.test",
         organizationId: "org_1",
-        provider: {
-          id: "prov_1",
-          productId: "ses",
-          vendorId: "aws",
-        } as never,
       }).pipe(
         Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.map((result) => {
@@ -232,7 +216,7 @@ describe("createCustomDomain claim guard", () => {
               id: "dom_1",
               organizations: [],
               provider: "unknown",
-              providerIdentities: [],
+              registration: null,
             }),
         },
       },
@@ -250,7 +234,6 @@ describe("createCustomDomain claim guard", () => {
       createCustomDomain({
         fqdn: "acme.test",
         organizationId: "org_1",
-        provider: testEmailProvider,
       }).pipe(
         Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
         Effect.map((result) => {
@@ -268,12 +251,16 @@ describe("createCustomDomain claim guard", () => {
   test("persists the detected DNS host on a new custom domain", () => {
     stubCloudflareNs();
     const domainInserts: Array<{ provider?: string }> = [];
+    const registrationInserts: Array<{ region?: string }> = [];
     const db: any = {
       insert: () => ({
-        values: (values: { provider?: string }) => {
+        values: (values: { provider?: string; region?: string }) => {
           const effect = Effect.succeed([{ id: "dom_new" }]);
           if (values.provider !== undefined) {
             domainInserts.push(values);
+          }
+          if (values.region !== undefined) {
+            registrationInserts.push(values);
           }
           return Object.assign(effect, {
             returning: () =>
@@ -283,7 +270,7 @@ describe("createCustomDomain claim guard", () => {
                   dkimPublicKey: "pub",
                   dkimSelector: "sel",
                   fqdn: "acme.test",
-                  id: values.provider === undefined ? "epid_1" : "dom_new",
+                  id: "dom_new",
                 },
               ]),
           });
@@ -292,9 +279,6 @@ describe("createCustomDomain claim guard", () => {
       query: {
         customDomain: {
           findFirst: () => Effect.succeed(null),
-        },
-        emailDomainProviderIdentity: {
-          findMany: () => Effect.succeed([]),
         },
       },
     };
@@ -305,28 +289,17 @@ describe("createCustomDomain claim guard", () => {
         reconcile: () => Effect.void,
         remove: unsupported,
       } satisfies EmailManagedDnsService),
-      Layer.succeed(EmailProviderRegistry, {
-        get: () =>
-          Effect.succeed({
-            create: () =>
-              Effect.succeed({
-                createIdentity: () =>
-                  Effect.succeed({
-                    mailFrom: { domain: "bounce.acme.test", records: [] },
-                    providerData: {},
-                  }),
-              }),
-          }),
-      } as never),
+      backend({
+        createIdentity: ({ region }) => {
+          expect(region).toBe("eu-central-1");
+          return Effect.succeed({ mailFrom: { domain: "send.acme.test", records: [] } });
+        },
+      }),
       Layer.succeed(Jobs, {
         cancel: unsupported,
         enqueue: unsupported,
         schedule: () => Effect.void,
       } satisfies JobsService),
-      Layer.succeed(ProviderCredentialsVault, {
-        open: () => Effect.succeed({ encrypted: {}, unencrypted: {} }),
-        seal: unsupported,
-      } as never),
       Layer.succeed(SymmetricCrypto, {
         decrypt: unsupported,
         encrypt: () => Effect.succeed("encrypted"),
@@ -337,7 +310,6 @@ describe("createCustomDomain claim guard", () => {
       createCustomDomain({
         fqdn: "acme.test",
         organizationId: "org_1",
-        provider: testEmailProvider,
       }).pipe(
         Effect.provide(Layer.merge(Layer.succeed(DB, db), createServices)),
         Effect.map((result) => {
@@ -346,6 +318,7 @@ describe("createCustomDomain claim guard", () => {
             kind: "created",
           });
           expect(domainInserts[0]?.provider).toBe("cloudflare");
+          expect(registrationInserts).toMatchObject([{ region: "eu-central-1" }]);
           return result;
         }),
       ),

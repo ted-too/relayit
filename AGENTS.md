@@ -1,6 +1,6 @@
 # Relayit
 
-Relayit is a multi-tenant messaging platform: a Project sends through Relayit's API, and Relayit delivers, retries, tracks bounces and complaints, and tells the Project what happened through its webhooks. Email through AWS SES is the only live channel. It runs as Relayit's cloud, metered against Stripe plans, or self-hosted from the published images with no limits.
+Relayit is a multi-tenant messaging platform: a Project sends through Relayit's API, and Relayit delivers, retries, tracks bounces and complaints, and tells the Project what happened through its webhooks. Email through AWS SES is the only channel, sent on the deployment's one SES account. It runs as Relayit's cloud, metered against Stripe plans, or self-hosted from the published images with no limits.
 
 ## Non-negotiables
 
@@ -21,37 +21,37 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 - **we**: Ted and you. **you**: the agent reading this.
 - **Project**: the tenant, and the boundary every customer-owned row hangs off. It is a better-auth organization, so code and routes say `organization`, `organizationId` and `orgSlug`; the product says Project. Members have roles; API keys belong to a Project.
 - **App Environment**: an optional `app` and `environment` named on a send, partitioning a Project's Contacts and Messages. A send that names neither uses the Project's default one.
-- **Message**: one logical send, transactional or marketing (its **purpose**). **Delivery**: a Message's attempt on one channel, holding the content, the From, the status and the Provider used. The Provider retries a soft bounce; Relayit never makes a new Delivery for it.
+- **Message**: one logical send, transactional or marketing (its **purpose**). **Delivery**: a Message's attempt on one channel, holding the content, the From, the status and SES's message id. SES retries a soft bounce; Relayit never makes a new Delivery for it.
 - **accept**: the synchronous part of a send: validate, strip suppressed recipients, reserve Usage, then write the Message, its Delivery and the delivery job in one transaction. Everything after happens in the worker.
 - **Contact**: an address within an App Environment, made or updated on every send to it. Deleting one is soft, so its Suppression and unsubscribes survive.
 - **Suppression**: a Contact Relayit must not send to, from a hard bounce, a complaint or by hand. Severity `all` stops every send to it, `marketing` only marketing.
 - **Topic**: a Project's marketing consent category. **Unsubscribe**: a Contact opting out of one Topic or of all marketing; never of transactional mail. **Segment**: a static list of Contacts a Campaign targets; leaving it is not unsubscribing.
 - **Campaign**: a marketing send's definition: a Topic, a Template and a From per channel. Modelled, not sent yet.
 - **Template**: a Project's catalog entry for send content, with a variant per channel. An email variant is either primitive (subject, HTML, text, simple variables) or links a **Workspace Entry**: one email in an **Email Workspace**, a Project's React Email source. **Publish** builds the workspace and seals each Entry into the artifact sends render.
-- **Provider**: the platform's credentials for an upstream vendor product, wired by ops in the admin UI (which calls them integrations); today only AWS SES. One is the default. Projects never own one.
-- **Domain**: a customer's sending FQDN, held by one Project at a time; another Project takes it over by proving DNS ownership (a **claim**). Relayit generates its DKIM key and gives the DNS records to publish. Its registration on a Provider is a **provider identity**: one active, others failover-eligible.
+- **SES account**: the one AWS account a deployment sends through, configured by ops in the environment (`SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`, `SES_REGIONS`), never in the database. It may span several **regions**; the first in `SES_REGIONS` is the **default region**. Code reaches it through the `EmailBackend` service, which `EMAIL_BACKEND=fake` replaces.
+- **Domain**: a customer's sending FQDN, held by one Project at a time; another Project takes it over by proving DNS ownership (a **claim**). Relayit generates its DKIM key and gives the DNS records to publish. Its **registration** is its SES identity in one region, recorded when it is added (none recorded means the default region); it always sends through that region.
 - **Sandbox Domain**: the platform's shared sending root on Relayit's Cloudflare zone. A new Project is given it so it can send before verifying a Domain, to its own members only.
-- **paused Domain**: a Domain that may not send, for its reputation or by hand. New sends from it are rejected and queued ones fail; they are never held. **Project Sending Pause**: SES pausing one Project's tenant for its reputation. A send that hits one fails for good (no retry, no failover) and pauses the Domain; other Projects keep sending.
-- **Usage**: one Delivery counted against the Plan limits of the Project's **Billing User** (the owner unless reassigned), split by purpose. Reserved at accept, released if the accept fails. **Plan**: `free`, `signal` or `broadcast`, from Stripe; without Stripe keys every limit is unlimited.
-- **Webhook Endpoint**: a Project's URL that receives the **Webhook Events** it subscribes to (`message.sent`, `delivery.skipped`, `domain.updated`, …), signed, at least once. Not to be confused with **provider notifications**: SES's bounce, complaint and delivery reports arriving at `/webhooks/providers/...`.
+- **paused Domain**: a Domain that may not send, for its reputation or by hand. New sends from it are rejected and queued ones fail; they are never held. **Project Sending Pause**: SES pausing one Project's tenant for its reputation. A send that hits one fails for good (no retry) and pauses the Domain; other Projects keep sending.
+- **Usage**: one Delivery counted against the Plan limits of the Project's **Billing User** (the owner unless reassigned), separately for each purpose. Reserved at accept, released if the accept fails. **Plan**: `free`, `signal` or `broadcast`, from Stripe; without Stripe keys every limit is unlimited.
+- **Webhook Endpoint**: a Project's URL that receives the **Webhook Events** it subscribes to (`message.sent`, `delivery.skipped`, `domain.updated`, …), signed, at least once. Not to be confused with **SES notifications**: SES's bounce, complaint and delivery reports, which SNS posts to the api at `/webhooks/providers/aws/ses`.
 - **job**: a typed unit of background work defined with `defineJob` in its domain package. Web and the api enqueue jobs; `apps/worker` runs every handler.
-- **admin**: a platform operator (better-auth's admin role), with the `/admin` pages: managed Providers, users, Projects.
+- **admin**: a platform operator (better-auth's admin role), with the `/admin` pages: users and Projects.
 
 ## Ways to hurt yourself
 
 1. **Production data and real cloud accounts.** Production's database holds customers' Projects, credentials and send history; AWS and Cloudflare hold live sending infrastructure. Never point a dev server, script, migration or test at them, or call their APIs, without Ted's permission for that task.
 2. **Starting an app.** The api, web and builder migrate their `DATABASE_URL` as they start, and the worker sends whatever is queued. What else it reaches depends on the root `.env`:
    - **Safe:** a `.env` written by `bun run worktree:setup`, or copied from `.env.example`. `EMAIL_BACKEND=fake` sends nothing and makes nothing in AWS, Domains verify without AWS or public DNS, objects stay in `temp/`, Redis keys carry the worktree's prefix, and with no `CF_*`, `STRIPE_*` or `GITHUB_*` nothing calls Cloudflare, Stripe or GitHub.
-   - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the worker decrypts every email Provider's AWS credentials, points SES and SNS at the api's `API_URL` and sends queued mail for real, and adding a Domain creates real SES identities. Don't start an app or `bun run dev` against one unless Ted asks for that run.
+   - **Not safe:** the main checkout's `.env`, or any `.env` with `EMAIL_BACKEND=ses`, a cloud key or a database you didn't make. With SES the worker uses the `SES_*` account, points SES and SNS at the api's `API_URL` in every region and sends queued mail for real, and adding a Domain in web creates a real SES identity. Don't start an app or `bun run dev` against one unless Ted asks for that run.
 3. **Killing by pattern.** Never `pkill -f`, `killall`, or kill a PID found by matching a name or path; other dev servers and agents run on this machine. Kill only a PID you started. Killing only the PID of a background `bun run dev` leaves its apps running, so kill every PID in its process tree.
 4. **Migrations.** Never hand-write or edit anything under `packages/persistence/drizzle/`. Change the schema (`packages/persistence/src/db/schema/`, plus the jobs tables in `packages/jobs/src/*-schema.ts`), then run `bun run db:generate` and read the SQL. If generate asks a question (rename or create) or fails for want of a TTY, stop and ask Ted to run it; never feed it keypresses or write the files yourself.
 5. **Secrets.** The main checkout's `.env` files hold real credentials. Never commit, print, paste, copy or edit them; name the variable instead. A worktree's `.env` holds only generated local secrets.
 
 ## How it works
 
-Four deployables share one Postgres and one Redis. `apps/web` is a TanStack Start app: the dashboard, better-auth at `/api/auth/*`, and every session-authenticated operation as a server function. `apps/api` is an Elysia server for API-key traffic (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`) and nothing else. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and SES infrastructure at startup; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only web calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
+Four deployables share one Postgres and one Redis. `apps/web` is a TanStack Start app: the dashboard, better-auth at `/api/auth/*`, and every session-authenticated operation as a server function. `apps/api` is an Elysia server for API-key traffic (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`) and nothing else. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only web calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
 
-The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, Providers and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
+The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, the `EmailBackend` contract and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
 
 Architecture, decisions and their reasons: [docs/internals/overview.md](docs/internals/overview.md).
 
@@ -63,11 +63,11 @@ apps/worker/              the job worker: every job handler, no HTTP
 apps/web/                 TanStack Start dashboard, better-auth, server functions
 apps/template-builder/    Email Workspace build and publish, Effect Rpc
 apps/site/                marketing site; public docs in content/
-packages/channels/        accept, delivery, Domains, Providers, Usage
+packages/channels/        accept, delivery, Domains, the EmailBackend contract, Usage
 packages/persistence/     Drizzle schema, migrations, DB layer, auth, credential sealing
 packages/jobs/            job contracts, worker, outbox, dead letters
 packages/webhooks/        Webhook Events, Endpoints, signed delivery
-packages/provider-aws/    the SES adapter
+packages/provider-aws/    the SES backend and its fake, SES notifications
 packages/templating/      Email Workspaces: Git in S3, publish, the builder's Rpc
 packages/template-render/ rendering primitive and sealed React Email templates
 packages/redis/, object-storage/, logging/, ui/   infrastructure and shared UI

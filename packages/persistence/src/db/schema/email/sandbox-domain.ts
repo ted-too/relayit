@@ -14,8 +14,8 @@ import { domainPausedReasonEnum, domainVerificationStatusEnum } from "./domain";
  * A platform-owned shared sandbox root domain (e.g. `relayit.fyi`).
  *
  * Owns the shared BYODKIM keypair; orgs send from a fixed platform local part
- * at this root (see `SANDBOX_FROM_LOCAL_PART`). Provider registrations live in
- * `emailDomainProviderIdentity`.
+ * at this root (see `SANDBOX_FROM_LOCAL_PART`). Its SES registration lives in
+ * `emailDomainRegistration`.
  */
 export const sandboxDomain = pgTable(
   "sandbox_domain",

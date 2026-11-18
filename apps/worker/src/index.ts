@@ -1,19 +1,20 @@
 import * as NodeOS from "node:os";
+import { EmailBackend } from "@repo/channels/email/backend";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
-import { ensureAllEmailProviderInfrastructure } from "@repo/channels/email/ensure-provider-infrastructure";
+import { ensureSandboxDomain } from "@repo/channels/email/sandbox";
 import {
   emailVerifyCustomDomainHandler,
   emailVerifyOwnershipHandler,
-  emailVerifyProviderIdentityHandler,
   emailVerifySandboxDomainHandler,
 } from "@repo/channels/email/verification";
 import { registerJobHandler, runJobWorker } from "@repo/jobs";
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
+import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { workerConfig } from "./env";
-import { makeWorkerLayer } from "./layers";
+import { cloudflareFromConfig, makeWorkerLayer } from "./layers";
 
 const TRAILING_SLASH = /\/$/;
 
@@ -24,14 +25,25 @@ const workerProgram = Effect.gen(function* () {
 
   const run = Effect.gen(function* () {
     // The fake backend has no infrastructure: nothing to point at the api.
-    if (config.emailBackend === "fake") {
+    if (config.emailBackend.kind === "fake") {
       yield* Effect.logInfo(
         "Email backend is fake: sends are simulated and never leave this machine",
       );
     } else {
-      yield* ensureAllEmailProviderInfrastructure(config.apiUrl.toString()).pipe(
-        Effect.catchCause(logEffectFailure("Failed to ensure email Provider infrastructure")),
-      );
+      const backend = yield* EmailBackend;
+      yield* backend
+        .ensureInfrastructure({
+          deliveryWebhookUrl: `${config.apiUrl.toString().replace(TRAILING_SLASH, "")}${SES_NOTIFICATIONS_PATH}`,
+        })
+        .pipe(Effect.catchCause(logEffectFailure("Failed to ensure SES infrastructure")));
+    }
+
+    const cloudflare = cloudflareFromConfig(config);
+    if (cloudflare) {
+      yield* ensureSandboxDomain({
+        cloudflareZoneId: cloudflare.zoneId,
+        rootDomain: cloudflare.rootDomain,
+      }).pipe(Effect.catchCause(logEffectFailure("Failed to ensure the Sandbox Domain")));
     }
 
     yield* Effect.logInfo("Relayit job worker started");
@@ -44,7 +56,6 @@ const workerProgram = Effect.gen(function* () {
           }),
         ),
         registerJobHandler(webhookDeliverHandler),
-        registerJobHandler(emailVerifyProviderIdentityHandler),
         registerJobHandler(emailVerifySandboxDomainHandler),
         registerJobHandler(emailVerifyCustomDomainHandler),
         registerJobHandler(emailVerifyOwnershipHandler),

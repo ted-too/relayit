@@ -1,66 +1,33 @@
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type DomainVerificationStatus,
-  type EmailDomainProviderIdentity,
+  type EmailDomainRegistration,
   emailDnsRecord,
-  emailDomainProviderIdentity,
-  type Provider,
+  emailDomainRegistration,
+  type SandboxDomain,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
 import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
-import { makeProviderTypeId } from "../../provider-type";
-import { EmailProviderRegistry } from "../provider-registry";
-import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
+import { EmailBackend } from "../backend";
 import { DnsLookups } from "../dns-lookups";
+import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
 
-export class VerifyIdentityError extends Data.TaggedError("VerifyIdentityError")<{
+export class VerifySandboxDomainError extends Data.TaggedError("VerifySandboxDomainError")<{
   readonly cause?: unknown;
-  readonly identityId?: string;
   /** Static human-readable summary — do not interpolate identifiers into this. */
   readonly message: string;
-  readonly operation: "dns" | "persist" | "provider" | "status";
+  readonly operation: "dns" | "persist" | "status";
   readonly sandboxDomainId?: string;
 }> {}
 
 export interface SandboxVerifyResult {
   readonly activeRecords: number;
-  readonly identityId: string;
-  readonly identityNextCheckAt: Date;
   readonly missingRecords: number;
-  readonly nextCheckAt: Date | null;
+  readonly nextCheckAt: Date;
   readonly sandboxDomainId: string;
   readonly verificationStatus: DomainVerificationStatus;
 }
-
-const rollupDomainVerificationStatus = (
-  identities: readonly Pick<EmailDomainProviderIdentity, "isActive" | "verificationStatus">[],
-  dns: { activeRecords: number; missingRecords: number },
-): DomainVerificationStatus => {
-  const activeIdentities = identities.filter((identity) => identity.isActive);
-  const anyVerified = activeIdentities.some(
-    (identity) => identity.verificationStatus === "verified",
-  );
-  const anyPartial = activeIdentities.some(
-    (identity) => identity.verificationStatus === "partially_verified",
-  );
-
-  let providerVerified = anyVerified;
-  let providerDkimVerified = anyVerified;
-
-  if (!anyVerified && anyPartial) {
-    providerVerified = true;
-    providerDkimVerified = false;
-  }
-
-  return mergeVerificationStatus({
-    activeRecords: dns.activeRecords,
-    missingRecords: dns.missingRecords,
-    providerDkimVerified,
-    providerVerified,
-  });
-};
 
 const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) =>
   Effect.gen(function* () {
@@ -76,7 +43,7 @@ const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) 
       .pipe(
         Effect.mapError(
           (cause) =>
-            new VerifyIdentityError({
+            new VerifySandboxDomainError({
               cause,
               message: "Failed to list sandbox DNS records.",
               operation: "dns",
@@ -88,7 +55,7 @@ const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) 
     for (const record of records) {
       const evaluation = yield* Effect.tryPromise({
         catch: (cause) =>
-          new VerifyIdentityError({
+          new VerifySandboxDomainError({
             cause,
             message: "Live DNS lookup failed.",
             operation: "dns",
@@ -123,7 +90,7 @@ const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) 
         .pipe(
           Effect.mapError(
             (cause) =>
-              new VerifyIdentityError({
+              new VerifySandboxDomainError({
                 cause,
                 message: "Failed to update DNS record status.",
                 operation: "persist",
@@ -136,190 +103,104 @@ const verifySandboxDnsRecords = (db: DatabaseExecutor, sandboxDomainId: string) 
     return { activeRecords, missingRecords };
   });
 
-export const verifySandboxProviderIdentity = (input: {
+/**
+ * Asks SES how the sandbox root's identity stands, checks its DNS records, and rolls both
+ * up into its status. It can be allocated to Projects only once both are verified.
+ */
+export const verifySandboxDomainRegistration = (input: {
   readonly db: DatabaseExecutor;
-  readonly fqdn: string;
-  readonly identity: EmailDomainProviderIdentity;
-  readonly provider: Provider;
-  readonly sandboxDomainId: string;
+  readonly registration: EmailDomainRegistration;
+  readonly sandboxDomain: Pick<SandboxDomain, "id" | "rootDomain" | "verifyBackoffLevel">;
 }) =>
   Effect.gen(function* () {
-    const credentialsVault = yield* ProviderCredentialsVault;
-    const providers = yield* EmailProviderRegistry;
+    const backend = yield* EmailBackend;
+    const sandboxDomainId = input.sandboxDomain.id;
 
-    const factory = yield* providers
-      .get(makeProviderTypeId(input.provider.vendorId, input.provider.productId))
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyIdentityError({
-              cause,
-              identityId: input.identity.id,
-              message: "Email provider type is not registered.",
-              operation: "provider",
-              sandboxDomainId: input.sandboxDomainId,
-            }),
-        ),
-      );
-
-    const credentials = yield* credentialsVault.open(input.provider.credentials).pipe(
-      Effect.mapError(
-        (cause) =>
-          new VerifyIdentityError({
-            cause,
-            identityId: input.identity.id,
-            message: "Failed to open provider credentials.",
-            operation: "provider",
-            sandboxDomainId: input.sandboxDomainId,
-          }),
-      ),
-    );
-
-    const adapter = yield* factory
-      .create({
-        credentials,
-        providerId: input.provider.id,
+    const identityStatus = yield* backend
+      .getIdentityStatus({
+        fqdn: input.sandboxDomain.rootDomain,
+        region: input.registration.region,
       })
       .pipe(
         Effect.mapError(
           (cause) =>
-            new VerifyIdentityError({
+            new VerifySandboxDomainError({
               cause,
-              identityId: input.identity.id,
-              message: "Failed to create email provider adapter.",
-              operation: "provider",
-              sandboxDomainId: input.sandboxDomainId,
+              message: "Failed to read the SES identity status.",
+              operation: "status",
+              sandboxDomainId,
             }),
         ),
       );
 
-    const identityStatus = yield* adapter.getIdentityStatus({ fqdn: input.fqdn }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new VerifyIdentityError({
-            cause,
-            identityId: input.identity.id,
-            message: "Failed to read provider identity status.",
-            operation: "status",
-            sandboxDomainId: input.sandboxDomainId,
-          }),
-      ),
-    );
-
-    const identityVerificationStatus = mergeVerificationStatus({
+    const registrationStatus = mergeVerificationStatus({
       activeRecords: identityStatus.verified ? 1 : 0,
       missingRecords: identityStatus.verified ? 0 : 1,
-      providerDkimVerified: identityStatus.dkimVerified,
-      providerVerified: identityStatus.verified,
-    });
-
-    const now = new Date();
-    const identityCadence = computeNextCheckAt({
-      backoffLevel: input.identity.verifyBackoffLevel,
-      config: defaultVerifyCadenceConfig,
-      from: now,
-      verificationStatus: identityVerificationStatus,
+      sesDkimVerified: identityStatus.dkimVerified,
+      sesVerified: identityStatus.verified,
     });
 
     yield* input.db
-      .update(emailDomainProviderIdentity)
-      .set({
-        lastCheckedAt: now,
-        nextVerifyAt: identityCadence.nextCheckAt,
-        verificationStatus: identityVerificationStatus,
-        verifyBackoffLevel: identityCadence.backoffLevel,
-      })
-      .where(eq(emailDomainProviderIdentity.id, input.identity.id))
+      .update(emailDomainRegistration)
+      .set({ verificationStatus: registrationStatus })
+      .where(eq(emailDomainRegistration.id, input.registration.id))
       .pipe(
         Effect.mapError(
           (cause) =>
-            new VerifyIdentityError({
+            new VerifySandboxDomainError({
               cause,
-              identityId: input.identity.id,
-              message: "Failed to update identity verification state.",
+              message: "Failed to update the registration's verification state.",
               operation: "persist",
-              sandboxDomainId: input.sandboxDomainId,
+              sandboxDomainId,
             }),
         ),
       );
 
-    const dns = yield* verifySandboxDnsRecords(input.db, input.sandboxDomainId);
-
-    const identities = yield* input.db.query.emailDomainProviderIdentity
-      .findMany({
-        where: { sandboxDomainId: input.sandboxDomainId },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyIdentityError({
-              cause,
-              message: "Failed to list sandbox identities for rollup.",
-              operation: "persist",
-              sandboxDomainId: input.sandboxDomainId,
-            }),
-        ),
-      );
-
-    const verificationStatus = rollupDomainVerificationStatus(identities, dns);
-
-    const sandbox = yield* input.db.query.sandboxDomain
-      .findFirst({
-        columns: { verifyBackoffLevel: true },
-        where: { id: input.sandboxDomainId },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyIdentityError({
-              cause,
-              message: "Failed to load sandbox domain backoff.",
-              operation: "persist",
-              sandboxDomainId: input.sandboxDomainId,
-            }),
-        ),
-      );
-
-    const domainCadence = computeNextCheckAt({
-      backoffLevel: sandbox?.verifyBackoffLevel ?? 0,
-      config: defaultVerifyCadenceConfig,
-      from: now,
-      verificationStatus,
+    const dns = yield* verifySandboxDnsRecords(input.db, sandboxDomainId);
+    const verificationStatus = mergeVerificationStatus({
+      activeRecords: dns.activeRecords,
+      missingRecords: dns.missingRecords,
+      sesDkimVerified: registrationStatus === "verified",
+      sesVerified: registrationStatus !== "not_verified",
     });
 
-    const isActive =
-      verificationStatus === "verified" &&
-      identities.some((row) => row.isActive && row.verificationStatus === "verified");
+    const now = new Date();
+    const cadence = computeNextCheckAt({
+      backoffLevel: input.sandboxDomain.verifyBackoffLevel,
+      config: defaultVerifyCadenceConfig,
+      from: now,
+      // SES can lag the DNS records: poll at the pace of whichever is further behind.
+      verificationStatus:
+        registrationStatus === "verified" ? verificationStatus : registrationStatus,
+    });
 
     yield* input.db
       .update(sandboxDomain)
       .set({
-        isActive,
+        isActive: verificationStatus === "verified" && registrationStatus === "verified",
         lastCheckedAt: now,
-        nextVerifyAt: domainCadence.nextCheckAt,
+        nextVerifyAt: cadence.nextCheckAt,
         verificationStatus,
-        verifyBackoffLevel: domainCadence.backoffLevel,
+        verifyBackoffLevel: cadence.backoffLevel,
       })
-      .where(eq(sandboxDomain.id, input.sandboxDomainId))
+      .where(eq(sandboxDomain.id, sandboxDomainId))
       .pipe(
         Effect.mapError(
           (cause) =>
-            new VerifyIdentityError({
+            new VerifySandboxDomainError({
               cause,
               message: "Failed to update sandbox verification state.",
               operation: "persist",
-              sandboxDomainId: input.sandboxDomainId,
+              sandboxDomainId,
             }),
         ),
       );
 
     return {
       activeRecords: dns.activeRecords,
-      identityId: input.identity.id,
-      identityNextCheckAt: identityCadence.nextCheckAt,
       missingRecords: dns.missingRecords,
-      nextCheckAt: domainCadence.nextCheckAt,
-      sandboxDomainId: input.sandboxDomainId,
+      nextCheckAt: cadence.nextCheckAt,
+      sandboxDomainId,
       verificationStatus,
     } satisfies SandboxVerifyResult;
   });

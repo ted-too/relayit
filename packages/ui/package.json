@@ -28,8 +28,7 @@
     "react": "catalog:",
     "react-day-picker": "^10.0.1",
     "sonner": "catalog:",
-    "tailwind-merge": "^3.5.0",
-    "zod": "catalog:"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@types/react": "catalog:",

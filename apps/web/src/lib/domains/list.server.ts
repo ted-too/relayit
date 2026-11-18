@@ -22,10 +22,9 @@ const ownershipStatusForLink = (link: {
   return "pending" as const;
 };
 
-const isPendingClaim = (link: {
-  ownershipVerificationStatus: string;
-  pendingProviderId: string | null;
-}) => link.ownershipVerificationStatus !== "verified" || link.pendingProviderId != null;
+/** A link starts unverified only as a claim on a Domain another Project holds. */
+const isPendingClaim = (link: { ownershipVerificationStatus: string }) =>
+  link.ownershipVerificationStatus !== "verified";
 
 export const listCustomDomainsForProject = (input: {
   readonly customDomainId?: string;
@@ -65,17 +64,6 @@ export const listCustomDomainsForProject = (input: {
                 },
                 orderBy: { priority: "asc" },
                 where: { role: "direct" },
-              },
-              providerIdentities: {
-                columns: {
-                  failoverEligible: true,
-                  failoverPriority: true,
-                  id: true,
-                  isActive: true,
-                  providerId: true,
-                  verificationStatus: true,
-                },
-                orderBy: { failoverPriority: "asc" },
               },
             },
           },
@@ -130,12 +118,10 @@ export const listCustomDomainsForProject = (input: {
           isPaused: customDomain.isPaused,
           lastCheckedAt: customDomain.lastCheckedAt,
           ownership: {
-            pendingProviderId: link.pendingProviderId,
             status: ownershipStatus,
           },
           pausedReason: customDomain.pausedReason,
           provider: customDomain.provider,
-          providerIdentities: customDomain.providerIdentities,
           verificationStatus: customDomain.verificationStatus,
         } satisfies ProjectDomainListItem,
       ];

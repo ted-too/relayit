@@ -13,10 +13,10 @@ customer's code ── x-api-key ──► apps/api (Elysia) ── POST /messag
                                    apps/worker (no HTTP): every job handler ◄─┘
                                         ├─► SES (packages/provider-aws) ─► recipient
                                         └─► customer's Webhook Endpoints
-SES ── SNS ──► apps/api /webhooks/providers/... ─► bounces, complaints, Suppression
+SES ── SNS ──► apps/api /webhooks/providers/aws/ses ─► bounces, complaints, Suppression
 
 browser ──► apps/web (TanStack Start) ── server functions, better-auth
-                │                          └─► Postgres, Redis, SES, Cloudflare DNS
+                │                          └─► Postgres, Redis, SES
                 └── Effect Rpc + shared secret ──► apps/template-builder ─► S3 (Git objects, artifacts)
 
 apps/site: marketing site and public docs
@@ -32,7 +32,7 @@ Template building installs npm packages and runs builds, so it has its own proce
 
 The api runs one process per replica and scales with replicas, not by forking: its `node:cluster` mode existed to keep the worker on one primary, never ran in production (it needed `NODE_ENV=production`, which the images don't set), and went with the worker. Several workers are safe: they share one Redis consumer group, and a dead one's claims are reclaimed after a minute.
 
-Everything a signed-in user does (Projects, members, API keys, Domains, Providers, Templates) is a web server function, so the api has no session surface at all: it authenticates API keys only, and each key resolves to one Project.
+Everything a signed-in user does (Projects, members, API keys, Domains, Templates) is a web server function, so the api has no session surface at all: it authenticates API keys only, and each key resolves to one Project.
 
 All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api, web and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
 
@@ -54,7 +54,7 @@ The worker checks suppression again before sending, since a bounce may have land
 
 ### SES tenant per Project
 
-All Projects on the platform's SES account share that account's bounce and complaint rates, so one Project mailing a stale list could get the account paused and stop everyone's mail. Sends therefore go through an SES tenant per Project (`relayit-<projectId>`, derived, not stored), with SES's Standard reputation policy pausing only that tenant. The worker ensures the tenant on a Project's first send in each process: it creates the tenant and associates the Domain identity and the shared configuration set. A Domain identity is detached from its tenants before it is deleted, since SES refuses to delete an associated one.
+All Projects on the platform's SES account share that account's bounce and complaint rates, so one Project mailing a stale list could get the account paused and stop everyone's mail. Sends therefore go through an SES tenant per Project (`relayit-<projectId>`, derived, not stored), with SES's Standard reputation policy pausing only that tenant. The worker ensures the tenant on a Project's first send from a region in each process: it creates the tenant there and associates the Domain identity and the shared configuration set. A Domain identity is detached from its tenants before it is deleted, since SES refuses to delete an associated one.
 
 Ensuring the tenant fails open: if it fails (IAM lacking `ses:*Tenant*`, say), the send goes out untenanted and the next send tries again. A `SendingPausedException` is a Project Sending Pause only when `GetTenant` reports the tenant `DISABLED`; otherwise it is the whole account paused. Unpausing a tenant in SES does not yet unpause the Domain.
 
@@ -64,9 +64,17 @@ Per-Project configuration sets were rejected because they give metrics but no en
 
 Relayit helps a Project finish the setup a vendor needs before it can send, and stops there; it does not proxy the vendor's control plane, which was too much work for what customers need. For email that means Relayit generates the Domain's DKIM key (BYODKIM), registers it with SES, and lists the DNS records the customer publishes, then polls until they verify. The Sandbox Domain's records are on Relayit's own Cloudflare zone, so Relayit publishes them itself.
 
-### Provider credentials and DKIM keys are sealed
+### One SES account, configured by ops
 
-Provider credentials and DKIM private keys are encrypted at rest with `BETTER_AUTH_SECRETS`, the same versioned secrets better-auth signs with. The list form (`2:new,1:old`) seals with the first and opens with any, so a secret can be rotated without re-encrypting every row first.
+A deployment sends through one SES account, named in the environment of web and the worker (`SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`, `SES_REGIONS`); the database holds no vendor credentials and customers bring none. Code sends and registers through the `EmailBackend` service (`packages/channels/src/email/backend.ts`), implemented for SES and for the fake in `packages/provider-aws`. Pluggable providers, Project-owned credentials and Domains paired with several providers were removed: each multiplied the paths a send could take for customers who never asked for them.
+
+The account can span several regions, so a later channel can route by destination without the customer choosing; email uses that only to place Domains. A Domain is registered in one region, the first of `SES_REGIONS` when it is added, recorded on its registration (`email_domain_provider_identity`, a name kept so its rows did not have to move), and always sent through that region: there is no failover between regions. A registration with no recorded region predates regions and is in the default one, so the first entry of `SES_REGIONS` must stay the region those Domains were registered in. A send SES refuses for any reason but a Project Sending Pause is retried with backoff; when the retries run out the Delivery fails with that reason.
+
+At startup the worker creates, in every region, the configuration set each send names and an SNS topic subscribed to the api's SES notification URL. The resources are named after that URL, so a restart with the same URL finds them and changes nothing; that is also why the URL keeps its old `/webhooks/providers/aws/ses` shape.
+
+### DKIM keys are sealed
+
+DKIM private keys are encrypted at rest with `BETTER_AUTH_SECRETS`, the same versioned secrets better-auth signs with. The list form (`2:new,1:old`) seals with the first and opens with any, so a secret can be rotated without re-encrypting every row first.
 
 ### Outbound webhooks
 
@@ -89,7 +97,7 @@ Plans and Usage limits come from Stripe through better-auth's Stripe plugin. Wit
 
 ### Development runs with nothing real behind it
 
-`EMAIL_BACKEND=fake` replaces SES with a stand-in (`packages/provider-aws/src/email/fake.ts`): it accepts sends, verifies identities and Domain records at once without AWS or public DNS, and reports outcomes for SES's mailbox simulator addresses through the same ingest SES notifications reach, so suppression and Webhook Events behave as they would. It is chosen by environment rather than by Provider rows, because the Provider table is going (below) and the choice has to outlive it. `OBJECT_STORAGE=local` keeps objects under the checkout's `temp/`, and `REDIS_KEY_PREFIX` puts every Redis key under a prefix, better-auth's sessions included, so checkouts sharing one Redis never take each other's jobs.
+`EMAIL_BACKEND=fake` replaces SES with a stand-in (`packages/provider-aws/src/email/fake.ts`): it accepts sends, verifies identities and Domain records at once without AWS or public DNS, and reports outcomes for SES's mailbox simulator addresses through the same ingest SES notifications reach, so suppression and Webhook Events behave as they would. It needs none of the `SES_*` variables. `OBJECT_STORAGE=local` keeps objects under the checkout's `temp/`, and `REDIS_KEY_PREFIX` puts every Redis key under a prefix, better-auth's sessions included, so checkouts sharing one Redis never take each other's jobs.
 
 Left unset, the fake and local storage are chosen only when `NODE_ENV` is `development` or `test`. The api, worker and builder images set no `NODE_ENV`, so an unset one has to keep meaning SES and S3; the fake and local storage refuse to start under `production`.
 
@@ -105,6 +113,4 @@ Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it 
 
 Ted has decided these go. They are still in the code; don't build on them.
 
-- **Pluggable providers.** SES is the only email vendor; the provider registry and the `vendor.product` type ids (`aws.ses`, the `:vendorId/:productId` webhook path) go.
-- **Multi-provider Domains.** A Domain belongs to exactly one backend: pairings with several Providers, failover between them, the provider circuit and switching a Domain's Provider go, as does choosing a Provider when creating a Domain.
 - **`bun test`.** Tests move to Vitest and `@effect/vitest`, once Effect is on 4.0.2.

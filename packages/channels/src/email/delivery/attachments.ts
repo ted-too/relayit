@@ -1,7 +1,7 @@
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
 import { emailAttachmentsBucket } from "../accept/attachments";
-import type { ProviderEmailAttachment } from "../provider-message";
+import type { OutboundEmailAttachment } from "../backend";
 import { EmailDeliveryPersistenceError } from "./errors";
 
 export const loadEmailAttachmentsForSend = (db: DatabaseExecutor, deliveryId: string) =>
@@ -22,7 +22,7 @@ export const loadEmailAttachmentsForSend = (db: DatabaseExecutor, deliveryId: st
       );
 
     if (rows.length === 0) {
-      return [] as readonly ProviderEmailAttachment[];
+      return [] as readonly OutboundEmailAttachment[];
     }
 
     return yield* Effect.forEach(
@@ -51,7 +51,7 @@ export const loadEmailAttachmentsForSend = (db: DatabaseExecutor, deliveryId: st
               row.contentDisposition === "inline" ? (row.contentId ?? undefined) : undefined,
             contentType: row.contentType ?? undefined,
             filename: row.filename,
-          } satisfies ProviderEmailAttachment;
+          } satisfies OutboundEmailAttachment;
         }),
       { concurrency: 1 },
     );

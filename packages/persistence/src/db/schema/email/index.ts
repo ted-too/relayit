@@ -5,5 +5,5 @@ export * from "./delivery-event";
 export * from "./dmarc";
 export * from "./dns-record";
 export * from "./domain";
-export * from "./provider-identity";
+export * from "./registration";
 export * from "./sandbox-domain";

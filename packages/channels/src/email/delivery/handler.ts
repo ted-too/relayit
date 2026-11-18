@@ -1,43 +1,26 @@
 import { defineJobHandler } from "@repo/jobs";
-import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import { customDomain, emailDelivery } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
   MessageDeliveryRetryableError,
   MessageDeliveryTerminalError,
-  providerCircuitAllow,
-  providerCircuitRecordFailure,
-  providerCircuitRecordSuccess,
 } from "../../messages/delivery";
 import { filterSuppressedContacts } from "../../messages/suppressions";
-import { makeProviderTypeId } from "../../provider-type";
 import { Usage } from "../../usage";
+import { EmailBackend, type EmailBackendRejected } from "../backend";
 import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
-import type { ProviderEmailAttachment, ProviderEmailSender } from "../provider-message";
-import { EmailProviderRegistry } from "../provider-registry";
 import { loadEmailAttachmentsForSend } from "./attachments";
-import { EmailDeliveryPersistenceError, EmailDeliveryProviderError } from "./errors";
-import { listFailoverProviderIdentities, type RoutableEmailProviderIdentity } from "./identities";
+import { EmailDeliveryPersistenceError } from "./errors";
 import { emailDeliverJob } from "./job";
 
 export interface EmailDeliverHandlerOptions {
   readonly secret: string;
   readonly webOrigin: string;
-}
-
-interface SendableDelivery {
-  readonly from: (typeof emailDelivery.$inferSelect)["from"];
-  readonly headers: (typeof emailDelivery.$inferSelect)["headers"];
-  readonly html: string | null;
-  readonly id: string;
-  readonly replyTo: (typeof emailDelivery.$inferSelect)["replyTo"];
-  readonly subject: string;
-  readonly text: string | null;
 }
 
 const updateDelivery = (
@@ -67,7 +50,6 @@ const markSent = (
     readonly messageId: string;
     readonly messageTags: Record<string, string> | null;
     readonly organizationId: string;
-    readonly providerId: string;
     readonly providerMessageId: string;
   },
 ) =>
@@ -78,7 +60,6 @@ const markSent = (
       Effect.gen(function* () {
         yield* updateDelivery(tx, input.deliveryId, {
           completedAt: new Date(),
-          providerId: input.providerId,
           providerMessageId: input.providerMessageId,
           status: "sent",
         });
@@ -108,93 +89,6 @@ const markSent = (
     );
   });
 
-const trySendWithIdentity = (
-  identity: RoutableEmailProviderIdentity,
-  input: {
-    readonly attachments: readonly ProviderEmailAttachment[];
-    readonly bcc: readonly string[];
-    readonly cc: readonly string[];
-    readonly delivery: SendableDelivery;
-    readonly sender: ProviderEmailSender;
-    readonly to: readonly string[];
-  },
-) =>
-  Effect.gen(function* () {
-    const sendError = yield* Effect.gen(function* () {
-      const vault = yield* ProviderCredentialsVault;
-      const registry = yield* EmailProviderRegistry;
-      const factory = yield* registry.get(
-        makeProviderTypeId(identity.provider.vendorId, identity.provider.productId),
-      );
-      const credentials = yield* vault.open(identity.provider.credentials);
-      const adapter = yield* factory.create({
-        credentials,
-        providerId: identity.provider.id,
-      });
-      return yield* adapter.send({
-        attachments: input.attachments.length > 0 ? [...input.attachments] : undefined,
-        bcc: input.bcc.length > 0 ? [...input.bcc] : null,
-        cc: input.cc.length > 0 ? [...input.cc] : null,
-        from: input.delivery.from,
-        headers: input.delivery.headers,
-        html: input.delivery.html,
-        replyTo: input.delivery.replyTo,
-        sender: input.sender,
-        subject: input.delivery.subject,
-        text: input.delivery.text,
-        to: [...input.to],
-      });
-    }).pipe(
-      Effect.map((result) => ({ ok: true as const, result })),
-      Effect.catch((cause) =>
-        Effect.succeed({
-          cause,
-          ok: false as const,
-        }),
-      ),
-    );
-
-    if (!sendError.ok) {
-      // Project-level vendor pause (SES tenant): not a Provider fault, so the
-      // circuit stays closed for other Projects and failover must not bypass it.
-      const cause = sendError.cause;
-      if (cause._tag === "ProviderRejected" && cause.reason === "project_sending_paused") {
-        return {
-          error: new EmailDeliveryProviderError({
-            cause,
-            deliveryId: input.delivery.id,
-            leaveActive: true,
-            message: "Provider paused sending for this Project",
-            providerId: identity.provider.id,
-          }),
-          leaveActive: true,
-          ok: false as const,
-          projectSendingPaused: true,
-        };
-      }
-      yield* providerCircuitRecordFailure(identity.provider.id);
-      const allowed = yield* providerCircuitAllow(identity.provider.id);
-      return {
-        error: new EmailDeliveryProviderError({
-          cause: sendError.cause,
-          deliveryId: input.delivery.id,
-          leaveActive: !allowed,
-          message: "Provider send failed",
-          providerId: identity.provider.id,
-        }),
-        leaveActive: !allowed,
-        ok: false as const,
-      };
-    }
-
-    yield* providerCircuitRecordSuccess(identity.provider.id);
-    return {
-      ok: true as const,
-      providerId: identity.provider.id,
-      providerMessageId: sendError.result.providerMessageId,
-    };
-  });
-
 export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOptions) =>
   defineJobHandler({
     contract: emailDeliverJob,
@@ -207,10 +101,12 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             with: {
               customDomain: {
                 columns: { fqdn: true, id: true, isPaused: true },
+                with: { registration: true },
               },
               message: true,
               sandboxDomain: {
                 columns: { rootDomain: true },
+                with: { registration: true },
               },
             },
           })
@@ -373,25 +269,17 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
             message: "Email Delivery has no sender domain",
-            stage: "identities",
+            stage: "registration",
           });
         }
 
-        const identities = yield* listFailoverProviderIdentities(
-          db,
-          loaded.customDomainId
-            ? { customDomainId: loaded.customDomainId, kind: "custom-domain" }
-            : {
-                kind: "sandbox-domain",
-                sandboxDomainId: loaded.sandboxDomainId as string,
-              },
-          loaded.id,
-        );
-        if (identities.length === 0) {
+        const registration =
+          loaded.customDomain?.registration ?? loaded.sandboxDomain?.registration;
+        if (registration?.verificationStatus !== "verified") {
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
-            message: "No routable provider identity",
-            stage: "identities",
+            message: "Sending domain is not verified with SES",
+            stage: "registration",
           });
         }
 
@@ -470,25 +358,9 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           webOrigin: listUnsubscribe.webOrigin,
         });
 
-        const [primary, ...standby] = identities;
-        const sendInput = {
-          attachments,
-          bcc: bccEmails,
-          cc: ccEmails,
-          delivery: {
-            ...loaded,
-            headers: headers ?? loaded.headers,
-          },
-          sender: {
-            identityFqdn,
-            projectId: appEnvironment.organizationId,
-          },
-          to: toEmails,
-        };
-
-        const failProjectSendingPaused = (error: EmailDeliveryProviderError) =>
+        const failProjectSendingPaused = (error: EmailBackendRejected) =>
           Effect.gen(function* () {
-            const failureMessage = "Provider paused sending for this Project";
+            const failureMessage = "SES paused sending for this Project";
             yield* db.transaction((tx) =>
               Effect.gen(function* () {
                 if (loaded.customDomainId) {
@@ -544,99 +416,52 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             });
           });
 
-        if (primary && (yield* providerCircuitAllow(primary.provider.id))) {
-          const primaryResult = yield* trySendWithIdentity(primary, sendInput);
-          if (primaryResult.ok) {
-            yield* markSent(db, {
-              deliveryId: loaded.id,
-              messageId: loaded.messageId,
-              messageTags: message.tags,
-              organizationId: appEnvironment.organizationId,
-              providerId: primaryResult.providerId,
-              providerMessageId: primaryResult.providerMessageId,
-            });
-            return;
-          }
-          if (primaryResult.projectSendingPaused) {
-            return yield* failProjectSendingPaused(primaryResult.error);
-          }
-          if (!primaryResult.leaveActive) {
-            return yield* new MessageDeliveryRetryableError({
-              cause: primaryResult.error,
-              deliveryId: loaded.id,
-              message: primaryResult.error.message,
-              stage: "send",
-            });
-          }
-        }
+        const backend = yield* EmailBackend;
+        const sent = yield* backend
+          .send({
+            message: {
+              attachments: attachments.length > 0 ? [...attachments] : undefined,
+              bcc: bccEmails.length > 0 ? bccEmails : null,
+              cc: ccEmails.length > 0 ? ccEmails : null,
+              from: loaded.from,
+              headers: headers ?? loaded.headers,
+              html: loaded.html,
+              replyTo: loaded.replyTo,
+              sender: { identityFqdn, projectId: appEnvironment.organizationId },
+              subject: loaded.subject,
+              text: loaded.text,
+              to: toEmails,
+            },
+            region: registration.region,
+          })
+          .pipe(
+            Effect.catch((error) =>
+              // A Project Sending Pause is SES isolating this Project: retrying cannot get
+              // past it, and other Projects keep sending.
+              error._tag === "EmailBackendRejected" && error.reason === "project_sending_paused"
+                ? failProjectSendingPaused(error)
+                : Effect.fail(
+                    new MessageDeliveryRetryableError({
+                      cause: error,
+                      deliveryId: loaded.id,
+                      message: "SES send failed",
+                      stage: "send",
+                    }),
+                  ),
+            ),
+          );
 
-        let lastError: EmailDeliveryProviderError | undefined;
-        for (const identity of standby) {
-          if (!(yield* providerCircuitAllow(identity.provider.id))) {
-            continue;
-          }
-          const result = yield* trySendWithIdentity(identity, sendInput);
-          if (result.ok) {
-            yield* markSent(db, {
-              deliveryId: loaded.id,
-              messageId: loaded.messageId,
-              messageTags: message.tags,
-              organizationId: appEnvironment.organizationId,
-              providerId: result.providerId,
-              providerMessageId: result.providerMessageId,
-            });
-            return;
-          }
-          if (result.projectSendingPaused) {
-            return yield* failProjectSendingPaused(result.error);
-          }
-          lastError = result.error;
-        }
-
-        const failureMessage = lastError?.message ?? "All providers failed";
-        yield* db.transaction((tx) =>
-          Effect.gen(function* () {
-            yield* updateDelivery(tx, loaded.id, {
-              completedAt: new Date(),
-              error: { message: failureMessage, retryable: true },
-              status: "failed",
-            });
-            yield* emitWebhookEvent(tx, {
-              event: {
-                data: {
-                  delivery_id: loaded.id,
-                  error: failureMessage,
-                  message_id: loaded.messageId,
-                },
-                type: messageFailed.type,
-              },
-              messageTags: message.tags,
-              organizationId: appEnvironment.organizationId,
-            }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new MessageDeliveryRetryableError({
-                    cause,
-                    deliveryId: loaded.id,
-                    message: "Failed to emit message.failed",
-                    stage: "webhooks",
-                  }),
-              ),
-            );
-          }),
-        );
-
-        return yield* new MessageDeliveryRetryableError({
-          cause: lastError,
+        yield* markSent(db, {
           deliveryId: loaded.id,
-          message: failureMessage,
-          stage: "send",
+          messageId: loaded.messageId,
+          messageTags: message.tags,
+          organizationId: appEnvironment.organizationId,
+          providerMessageId: sent.providerMessageId,
         });
       }).pipe(
         Effect.mapError((error) => {
           switch (error._tag) {
             case "MessageDeliveryRetryableError":
-            case "MessageDeliveryInfrastructureError":
             case "EmailDeliveryPersistenceError":
             case "MessageDeliveryTerminalError":
               return error;
@@ -653,16 +478,69 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
     classifyFailure: (failure) => {
       switch (failure._tag) {
         case "MessageDeliveryRetryableError":
-        case "MessageDeliveryInfrastructureError":
         case "EmailDeliveryPersistenceError":
           return "retryable";
         default:
           return "terminal";
       }
     },
-    onDeadLetter: ({ deliveryId }) =>
+    // A Delivery that out-ran its retries, or stopped on an error that left it unfinished,
+    // ends failed here, so it is never left queued or sending and the Project hears of it.
+    onDeadLetter: ({ deliveryId }, _execution, failure) =>
       Effect.gen(function* () {
+        const db = yield* DB;
+        const failureMessage =
+          failure._tag === "EmailDeliveryPersistenceError"
+            ? "The Delivery could not be recorded"
+            : failure.message;
+        yield* db.transaction((tx) =>
+          Effect.gen(function* () {
+            const [failed] = yield* tx
+              .update(emailDelivery)
+              .set({
+                completedAt: new Date(),
+                error: { message: failureMessage, retryable: false },
+                status: "failed",
+              })
+              .where(
+                and(
+                  eq(emailDelivery.id, deliveryId),
+                  inArray(emailDelivery.status, ["queued", "sending"]),
+                ),
+              )
+              .returning({ messageId: emailDelivery.messageId });
+            if (!failed) {
+              return;
+            }
+            const message = yield* tx.query.message.findFirst({
+              columns: { tags: true },
+              where: { id: failed.messageId },
+              with: { appEnvironment: { columns: { organizationId: true } } },
+            });
+            if (!message?.appEnvironment) {
+              return;
+            }
+            yield* emitWebhookEvent(tx, {
+              event: {
+                data: {
+                  delivery_id: deliveryId,
+                  error: failureMessage,
+                  message_id: failed.messageId,
+                },
+                type: messageFailed.type,
+              },
+              messageTags: message.tags,
+              organizationId: message.appEnvironment.organizationId,
+            });
+          }),
+        );
         const usage = yield* Usage;
         yield* usage.release({ deliveryId });
-      }).pipe(Effect.ignore),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logError("Failed to record a dead-lettered Delivery", cause).pipe(
+            Effect.annotateLogs({ deliveryId }),
+          ),
+        ),
+      ),
   });

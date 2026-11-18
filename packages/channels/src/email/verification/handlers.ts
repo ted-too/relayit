@@ -5,25 +5,13 @@ import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { DnsLookups } from "../dns-lookups";
 import { sweepIfSandboxAllocatable } from "../sandbox/allocate";
-import { nextDomainVerifyAt } from "./cadence";
-import { verifyCustomDomainOwnership, verifyCustomDomainProviderIdentity } from "./custom-identity";
+import { verifyCustomDomainOwnership, verifyCustomDomainRegistration } from "./custom-identity";
 import {
   emailVerifyCustomDomainJob,
   emailVerifyOwnershipJob,
-  emailVerifyProviderIdentityJob,
   emailVerifySandboxDomainJob,
 } from "./jobs";
-import { verifySandboxProviderIdentity } from "./sandbox-identity";
-
-export class VerifyProviderIdentityHandlerError extends Data.TaggedError(
-  "VerifyProviderIdentityHandlerError",
-)<{
-  readonly cause?: unknown;
-  readonly identityId?: string;
-  /** Static human-readable summary — do not interpolate identifiers into this. */
-  readonly message: string;
-  readonly operation: "persist" | "schedule" | "verify";
-}> {}
+import { verifySandboxDomainRegistration } from "./sandbox-identity";
 
 export class VerifySandboxDomainHandlerError extends Data.TaggedError(
   "VerifySandboxDomainHandlerError",
@@ -54,206 +42,6 @@ export class VerifyOwnershipHandlerError extends Data.TaggedError("VerifyOwnersh
   readonly organizationId?: string;
 }> {}
 
-export const emailVerifyProviderIdentityHandler = defineJobHandler({
-  classifyFailure: () => "retryable",
-  contract: emailVerifyProviderIdentityJob,
-  handle: (payload) =>
-    Effect.gen(function* () {
-      const db = yield* DB;
-      const jobs = yield* Jobs;
-
-      const identity = yield* db.query.emailDomainProviderIdentity
-        .findFirst({
-          where: { id: payload.identityId },
-          with: {
-            customDomain: true,
-            provider: true,
-            sandboxDomain: true,
-          },
-        })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyProviderIdentityHandlerError({
-                cause,
-                identityId: payload.identityId,
-                message: "Failed to load provider identity for verify.",
-                operation: "persist",
-              }),
-          ),
-        );
-
-      if (!identity?.provider) {
-        return;
-      }
-
-      if (identity.sandboxDomain) {
-        const result = yield* verifySandboxProviderIdentity({
-          db,
-          fqdn: identity.sandboxDomain.rootDomain,
-          identity,
-          provider: identity.provider,
-          sandboxDomainId: identity.sandboxDomain.id,
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyProviderIdentityHandlerError({
-                cause,
-                identityId: payload.identityId,
-                message: "Failed to verify sandbox provider identity.",
-                operation: "verify",
-              }),
-          ),
-        );
-        yield* jobs
-          .schedule(
-            emailVerifySandboxDomainJob,
-            { sandboxDomainId: identity.sandboxDomain.id },
-            nextDomainVerifyAt(result).getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyProviderIdentityHandlerError({
-                  cause,
-                  identityId: payload.identityId,
-                  message: "Failed to schedule sandbox verify after identity.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      } else if (identity.customDomain) {
-        const result = yield* verifyCustomDomainProviderIdentity({
-          customDomainId: identity.customDomain.id,
-          db,
-          fqdn: identity.customDomain.fqdn,
-          identity,
-          provider: identity.provider,
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyProviderIdentityHandlerError({
-                cause,
-                identityId: payload.identityId,
-                message: "Failed to verify custom domain provider identity.",
-                operation: "verify",
-              }),
-          ),
-        );
-        yield* jobs
-          .schedule(
-            emailVerifyCustomDomainJob,
-            { customDomainId: identity.customDomain.id },
-            nextDomainVerifyAt(result).getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyProviderIdentityHandlerError({
-                  cause,
-                  identityId: payload.identityId,
-                  message: "Failed to schedule domain verify after identity.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      } else {
-        return;
-      }
-
-      const refreshed = yield* db.query.emailDomainProviderIdentity
-        .findFirst({
-          columns: { nextVerifyAt: true },
-          where: { id: payload.identityId },
-        })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyProviderIdentityHandlerError({
-                cause,
-                identityId: payload.identityId,
-                message: "Failed to reload identity after verify.",
-                operation: "persist",
-              }),
-          ),
-        );
-
-      if (refreshed?.nextVerifyAt) {
-        yield* jobs
-          .schedule(
-            emailVerifyProviderIdentityJob,
-            { identityId: payload.identityId },
-            new Date(refreshed.nextVerifyAt).getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyProviderIdentityHandlerError({
-                  cause,
-                  identityId: payload.identityId,
-                  message: "Failed to schedule next identity verify.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      } else {
-        yield* jobs
-          .cancel(emailVerifyProviderIdentityJob, {
-            identityId: payload.identityId,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyProviderIdentityHandlerError({
-                  cause,
-                  identityId: payload.identityId,
-                  message: "Failed to cancel identity verify job.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      }
-    }),
-  reconcile: Effect.gen(function* () {
-    const db = yield* DB;
-    const jobs = yield* Jobs;
-    const rows = yield* db.query.emailDomainProviderIdentity
-      .findMany({
-        columns: { id: true, nextVerifyAt: true },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyProviderIdentityHandlerError({
-              cause,
-              message: "Failed to list identities for reconcile.",
-              operation: "persist",
-            }),
-        ),
-      );
-
-    yield* Effect.forEach(
-      rows.filter((row) => row.nextVerifyAt !== null),
-      (row) =>
-        jobs.schedule(
-          emailVerifyProviderIdentityJob,
-          { identityId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime(),
-        ),
-      { concurrency: "unbounded" },
-    ).pipe(
-      Effect.mapError(
-        (cause) =>
-          new VerifyProviderIdentityHandlerError({
-            cause,
-            message: "Failed to schedule identity verify reconcile.",
-            operation: "schedule",
-          }),
-      ),
-    );
-  }),
-});
-
 export const emailVerifySandboxDomainHandler = defineJobHandler({
   classifyFailure: () => "retryable",
   contract: emailVerifySandboxDomainJob,
@@ -265,11 +53,7 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
       const sandbox = yield* db.query.sandboxDomain
         .findFirst({
           where: { id: payload.sandboxDomainId },
-          with: {
-            providerIdentities: {
-              with: { provider: true },
-            },
-          },
+          with: { registration: true },
         })
         .pipe(
           Effect.mapError(
@@ -283,60 +67,25 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
           ),
         );
 
-      if (!sandbox) {
+      if (!sandbox?.registration) {
         return;
       }
 
-      let earliestDomainCheckAt: Date | null = null;
-
-      for (const identity of sandbox.providerIdentities) {
-        if (!identity.provider) {
-          continue;
-        }
-
-        const result = yield* verifySandboxProviderIdentity({
-          db,
-          fqdn: sandbox.rootDomain,
-          identity,
-          provider: identity.provider,
-          sandboxDomainId: sandbox.id,
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifySandboxDomainHandlerError({
-                cause,
-                message: "Failed to verify sandbox provider identity.",
-                operation: "verify",
-                sandboxDomainId: sandbox.id,
-              }),
-          ),
-        );
-
-        const domainCheckAt = nextDomainVerifyAt(result);
-        if (!earliestDomainCheckAt || domainCheckAt < earliestDomainCheckAt) {
-          earliestDomainCheckAt = domainCheckAt;
-        }
-
-        // Schedule the identity's own cadence — do not enqueue an immediate
-        // re-verify after this sandbox pass already checked it.
-        yield* jobs
-          .schedule(
-            emailVerifyProviderIdentityJob,
-            { identityId: identity.id },
-            result.identityNextCheckAt.getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifySandboxDomainHandlerError({
-                  cause,
-                  message: "Failed to schedule identity verify after sandbox.",
-                  operation: "schedule",
-                  sandboxDomainId: sandbox.id,
-                }),
-            ),
-          );
-      }
+      const result = yield* verifySandboxDomainRegistration({
+        db,
+        registration: sandbox.registration,
+        sandboxDomain: sandbox,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new VerifySandboxDomainHandlerError({
+              cause,
+              message: "Failed to verify the sandbox domain's registration.",
+              operation: "verify",
+              sandboxDomainId: sandbox.id,
+            }),
+        ),
+      );
 
       yield* sweepIfSandboxAllocatable(sandbox.id).pipe(
         Effect.mapError(
@@ -350,41 +99,23 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
         ),
       );
 
-      if (earliestDomainCheckAt) {
-        yield* jobs
-          .schedule(
-            emailVerifySandboxDomainJob,
-            { sandboxDomainId: sandbox.id },
-            earliestDomainCheckAt.getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifySandboxDomainHandlerError({
-                  cause,
-                  message: "Failed to schedule next sandbox verify.",
-                  operation: "schedule",
-                  sandboxDomainId: sandbox.id,
-                }),
-            ),
-          );
-      } else {
-        yield* jobs
-          .cancel(emailVerifySandboxDomainJob, {
-            sandboxDomainId: sandbox.id,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifySandboxDomainHandlerError({
-                  cause,
-                  message: "Failed to cancel sandbox verify job.",
-                  operation: "schedule",
-                  sandboxDomainId: sandbox.id,
-                }),
-            ),
-          );
-      }
+      yield* jobs
+        .schedule(
+          emailVerifySandboxDomainJob,
+          { sandboxDomainId: sandbox.id },
+          result.nextCheckAt.getTime(),
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new VerifySandboxDomainHandlerError({
+                cause,
+                message: "Failed to schedule next sandbox verify.",
+                operation: "schedule",
+                sandboxDomainId: sandbox.id,
+              }),
+          ),
+        );
     }),
   reconcile: Effect.gen(function* () {
     const db = yield* DB;
@@ -437,11 +168,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
       const domain = yield* db.query.customDomain
         .findFirst({
           where: { id: payload.customDomainId },
-          with: {
-            providerIdentities: {
-              with: { provider: true },
-            },
-          },
+          with: { registration: true },
         })
         .pipe(
           Effect.mapError(
@@ -489,90 +216,53 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
           );
       }
 
-      let earliestDomainCheckAt: Date | null = null;
-
-      for (const identity of domain.providerIdentities) {
-        if (!identity.provider) {
-          continue;
-        }
-
-        const result = yield* verifyCustomDomainProviderIdentity({
-          customDomainId: domain.id,
-          db,
-          fqdn: domain.fqdn,
-          identity,
-          provider: identity.provider,
-        }).pipe(
+      if (!domain.registration) {
+        return yield* jobs.cancel(emailVerifyCustomDomainJob, { customDomainId: domain.id }).pipe(
           Effect.mapError(
             (cause) =>
               new VerifyCustomDomainHandlerError({
                 cause,
                 customDomainId: domain.id,
-                message: "Failed to verify custom domain provider identity.",
-                operation: "verify",
+                message: "Failed to cancel custom domain verify job.",
+                operation: "schedule",
               }),
           ),
         );
-
-        const domainCheckAt = nextDomainVerifyAt(result);
-        if (!earliestDomainCheckAt || domainCheckAt < earliestDomainCheckAt) {
-          earliestDomainCheckAt = domainCheckAt;
-        }
-
-        yield* jobs
-          .schedule(
-            emailVerifyProviderIdentityJob,
-            { identityId: identity.id },
-            result.identityNextCheckAt.getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyCustomDomainHandlerError({
-                  cause,
-                  customDomainId: domain.id,
-                  message: "Failed to schedule identity verify after domain.",
-                  operation: "schedule",
-                }),
-            ),
-          );
       }
 
-      if (earliestDomainCheckAt) {
-        yield* jobs
-          .schedule(
-            emailVerifyCustomDomainJob,
-            { customDomainId: domain.id },
-            earliestDomainCheckAt.getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyCustomDomainHandlerError({
-                  cause,
-                  customDomainId: domain.id,
-                  message: "Failed to schedule next custom domain verify.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      } else {
-        yield* jobs
-          .cancel(emailVerifyCustomDomainJob, {
-            customDomainId: domain.id,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyCustomDomainHandlerError({
-                  cause,
-                  customDomainId: domain.id,
-                  message: "Failed to cancel custom domain verify job.",
-                  operation: "schedule",
-                }),
-            ),
-          );
-      }
+      const result = yield* verifyCustomDomainRegistration({
+        db,
+        domain,
+        registration: domain.registration,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new VerifyCustomDomainHandlerError({
+              cause,
+              customDomainId: domain.id,
+              message: "Failed to verify the custom domain's registration.",
+              operation: "verify",
+            }),
+        ),
+      );
+
+      yield* jobs
+        .schedule(
+          emailVerifyCustomDomainJob,
+          { customDomainId: domain.id },
+          result.nextCheckAt.getTime(),
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new VerifyCustomDomainHandlerError({
+                cause,
+                customDomainId: domain.id,
+                message: "Failed to schedule next custom domain verify.",
+                operation: "schedule",
+              }),
+          ),
+        );
     }),
   reconcile: Effect.gen(function* () {
     const db = yield* DB;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { computeNextCheckAt, mergeVerificationStatus, nextDomainVerifyAt } from "./cadence";
+import { computeNextCheckAt, mergeVerificationStatus } from "./cadence";
 
 describe("computeNextCheckAt", () => {
   test("verified resets backoff and uses long interval", () => {
@@ -42,8 +42,8 @@ describe("mergeVerificationStatus", () => {
       mergeVerificationStatus({
         activeRecords: 0,
         missingRecords: 0,
-        providerDkimVerified: true,
-        providerVerified: true,
+        sesDkimVerified: true,
+        sesVerified: true,
       }),
     ).toBe("not_verified");
 
@@ -51,38 +51,9 @@ describe("mergeVerificationStatus", () => {
       mergeVerificationStatus({
         activeRecords: 2,
         missingRecords: 0,
-        providerDkimVerified: true,
-        providerVerified: true,
+        sesDkimVerified: true,
+        sesVerified: true,
       }),
     ).toBe("verified");
-  });
-});
-
-describe("nextDomainVerifyAt", () => {
-  test("keeps polling DNS when the Provider is already verified", () => {
-    expect(
-      nextDomainVerifyAt({
-        identityNextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
-        nextCheckAt: new Date("2026-01-01T00:02:00.000Z"),
-      }).toISOString(),
-    ).toBe("2026-01-01T00:02:00.000Z");
-  });
-
-  test("keeps polling the Provider when DNS is already verified", () => {
-    expect(
-      nextDomainVerifyAt({
-        identityNextCheckAt: new Date("2026-01-01T00:02:00.000Z"),
-        nextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
-      }).toISOString(),
-    ).toBe("2026-01-01T00:02:00.000Z");
-  });
-
-  test("falls back to Provider cadence when the Domain has no next check", () => {
-    expect(
-      nextDomainVerifyAt({
-        identityNextCheckAt: new Date("2026-01-01T12:00:00.000Z"),
-        nextCheckAt: null,
-      }).toISOString(),
-    ).toBe("2026-01-01T12:00:00.000Z");
   });
 });
