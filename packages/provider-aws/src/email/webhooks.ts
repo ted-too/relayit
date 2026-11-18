@@ -1,6 +1,6 @@
 import type { NormalizedDeliveryEvent } from "@repo/channels/email/deliverability";
 import { Effect, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import MessageValidator from "sns-validator";
 import {
   AwsSnsValidationError,

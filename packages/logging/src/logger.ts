@@ -13,5 +13,5 @@ export const loggingLive = (logLevel: LogLevel.LogLevel) =>
 // Reads only LOG_LEVEL, so the rest of an app's config fails inside its program, where it is
 // logged and exits non-zero, rather than while the logger is built, silently.
 export const LoggingLive = Layer.unwrap(
-  Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
+  Effect.map(Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
 );

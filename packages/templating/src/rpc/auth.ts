@@ -1,6 +1,6 @@
 import { Effect, Layer, Redacted } from "effect";
-import { RpcMiddleware } from "effect/unstable/rpc";
-import type { Request } from "effect/unstable/rpc/RpcMessage";
+import { RpcMiddleware } from "effect/rpc";
+import type { Request } from "effect/rpc/RpcMessage";
 import { BuilderUnauthorized } from "./errors";
 import { BuilderAuthMiddleware } from "./group";
 

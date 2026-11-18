@@ -2,7 +2,7 @@ import { subBucket } from "@repo/object-storage";
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { emailAttachment } from "@repo/persistence/db/schema";
 import { DateTime, Effect } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import { typeid } from "typeid-js";
 import { z } from "zod";
 import {

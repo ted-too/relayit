@@ -1,8 +1,8 @@
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
 import { Cause, Config, Effect, Layer, Redacted } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter, HttpServerResponse } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 import { templateBuilderConfig } from "./env";
 import { loggingLive, makeAppLayers } from "./layers";
 import { logEffectFailure } from "./log-failure";
@@ -78,7 +78,7 @@ Effect.runFork(
     // Only LOG_LEVEL here: the rest of the config fails inside the program, where it is logged.
     Effect.provide(
       Layer.unwrap(
-        Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
+        Effect.map(Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
       ),
     ),
   ),

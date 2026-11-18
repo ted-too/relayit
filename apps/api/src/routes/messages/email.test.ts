@@ -11,7 +11,7 @@ import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import type { Database } from "@repo/persistence/db/effect";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import { Elysia } from "elysia";
 import type { ApiAuth } from "../../lib/auth";
 import type { RunApiEffect } from "../../lib/effect";

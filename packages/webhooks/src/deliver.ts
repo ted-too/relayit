@@ -3,7 +3,7 @@ import { DB } from "@repo/persistence/db/effect";
 import { webhookEndpoint, webhookEvent, webhookEventDelivery } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import { typeid } from "typeid-js";
 import { WebhookDeliveryRetryableError, WebhookDeliveryTerminalError } from "./errors";
 import { signWebhookPayload } from "./signing";

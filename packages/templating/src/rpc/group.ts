@@ -1,4 +1,4 @@
-import { Rpc, RpcGroup, RpcMiddleware } from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcMiddleware } from "effect/rpc";
 import { BuilderUnauthorized, TemplatingBuilderError } from "./errors";
 import {
   BuilderCommitResult,
