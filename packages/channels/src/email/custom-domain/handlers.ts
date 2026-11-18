@@ -1,7 +1,7 @@
 import { defineJobHandler } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
-import { customDomain, emailDomainRegistration } from "@repo/persistence/db/schema";
-import { eq } from "drizzle-orm";
+import { customDomain, emailDomainRegistration, sandboxDomain } from "@repo/persistence/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emailDeleteDomainIdentityJob } from "./jobs";
@@ -37,6 +37,17 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
             // The FQDN was added again and registered before this ran: SES names the
             // identity by FQDN, so it is now that Domain's and stays.
             if (registered.some((now) => (now.region ?? backend.defaultRegion) === region)) {
+              return;
+            }
+            // A Sandbox Domain's identity is every Project's, and no custom Domain's removal
+            // may take it: `createCustomDomain` refuses such an FQDN, and this holds for a job
+            // queued before it did.
+            const [sandbox] = yield* tx
+              .select({ id: sandboxDomain.id })
+              .from(sandboxDomain)
+              .where(sql`lower(${sandboxDomain.rootDomain}) = lower(${payload.fqdn})`)
+              .limit(1);
+            if (sandbox) {
               return;
             }
             // A call that never answers would hold this connection and the FQDN's identity

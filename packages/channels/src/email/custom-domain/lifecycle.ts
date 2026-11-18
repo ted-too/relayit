@@ -19,6 +19,7 @@ import {
   type OrganizationDomainInsert,
   organizationAppEnvironment,
   organizationDomain,
+  sandboxDomain,
 } from "@repo/persistence/db/schema";
 import { and, count, eq, inArray, isNotNull, ne, not, notExists, type SQL, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
@@ -64,6 +65,12 @@ export interface CreateCustomDomainInput {
 
 export class CustomDomainNotFound extends Data.TaggedError("CustomDomainNotFound")<{
   readonly customDomainId: string;
+  readonly message: string;
+}> {}
+
+/** The FQDN is a Sandbox Domain's, or a name under one: Relayit's own, never a Project's. */
+export class CustomDomainReserved extends Data.TaggedError("CustomDomainReserved")<{
+  readonly fqdn: string;
   readonly message: string;
 }> {}
 
@@ -350,6 +357,37 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const dnsLookups = yield* DnsLookups;
+
+    // SES names an identity by its FQDN alone, so a custom Domain on a Sandbox Domain's root
+    // would take over the identity every Project's sandbox mail is signed with, and removing
+    // it would delete that identity. A name under the root is refused too: its DNS is
+    // Relayit's zone, so no Project can prove it. Checked before anything is read or written,
+    // so that an add, a claim and a retry are all refused alike.
+    const [reserved] = yield* db
+      .select({ id: sandboxDomain.id })
+      .from(sandboxDomain)
+      .where(
+        // `right`, not `like`: an underscore in a name is a wildcard to `like`.
+        sql`lower(${input.fqdn}) = lower(${sandboxDomain.rootDomain}) or right(lower(${input.fqdn}), length(${sandboxDomain.rootDomain}) + 1) = '.' || lower(${sandboxDomain.rootDomain})`,
+      )
+      .limit(1)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new CustomDomainError({
+              cause,
+              message: "Failed to check the FQDN against the Sandbox Domains.",
+              operation: "persist",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
+    if (reserved) {
+      return yield* new CustomDomainReserved({
+        fqdn: input.fqdn,
+        message: "This domain is Relayit's own and can't be added to a Project.",
+      });
+    }
 
     const existing = yield* db.query.customDomain
       .findFirst({

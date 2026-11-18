@@ -40,9 +40,15 @@ const unusedCreateServices = Layer.mergeAll(
   } as never),
 );
 
+// No Sandbox Domain has the FQDN: the first thing an add asks.
+const noSandboxDomain = () => ({
+  from: () => ({ where: () => ({ limit: () => Effect.succeed([]) }) }),
+});
+
 describe("createCustomDomain", () => {
   it.effect("returns existing when the Project is already linked", () => {
     const db: any = {
+      select: noSandboxDomain,
       query: {
         customDomain: {
           findFirst: () =>
@@ -89,6 +95,7 @@ describe("createCustomDomain", () => {
       registration: null,
     };
     const db: any = {
+      select: noSandboxDomain,
       query: { customDomain: { findFirst: () => Effect.succeed(domain) } },
       // The Domain is still there, unregistered, when registration takes its locks.
       transaction: (run: (tx: unknown) => Effect.Effect<unknown, unknown>) =>

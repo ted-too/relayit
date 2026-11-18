@@ -19,7 +19,11 @@ const db: any = {
     run({
       execute: () => Effect.void,
       select: () => ({
-        from: () => ({ innerJoin: () => ({ where: () => Effect.succeed([]) }) }),
+        // Not registered again, and no Sandbox Domain's FQDN.
+        from: () => ({
+          innerJoin: () => ({ where: () => Effect.succeed([]) }),
+          where: () => ({ limit: () => Effect.succeed([]) }),
+        }),
       }),
     }),
 };
