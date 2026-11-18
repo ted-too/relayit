@@ -17,6 +17,7 @@ const backend = (overrides: Partial<EmailBackendService> = {}) =>
     deleteIdentity: unsupported,
     ensureInfrastructure: unsupported,
     getIdentityStatus: unsupported,
+    getProjectSendingStatus: unsupported,
     send: unsupported,
     ...overrides,
   } satisfies EmailBackendService);

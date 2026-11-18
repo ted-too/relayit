@@ -101,6 +101,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           }),
         ensureInfrastructure: () => Effect.void,
         getIdentityStatus: () => Effect.die("unused"),
+        getProjectSendingStatus: () => Effect.die("unused"),
         send: () => Effect.die("unused"),
       }),
       Layer.succeed(DnsLookups, {

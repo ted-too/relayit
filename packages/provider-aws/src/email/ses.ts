@@ -1,3 +1,4 @@
+import { EventBridge } from "@effect-aws/client-eventbridge";
 import { SESv2 } from "@effect-aws/client-sesv2";
 import { SNS } from "@effect-aws/client-sns";
 import {
@@ -14,8 +15,9 @@ import {
   detachSesIdentityFromTenants,
   ensureSesTenant,
   isSesTenantPaused,
-  sesTenantNameFor,
+  sesTenantSendingStatus,
 } from "./tenant";
+import { sesTenantNameFor } from "./tenant-name";
 
 export interface SesConfig {
   readonly accessKeyId: string;
@@ -73,6 +75,7 @@ const ensuredTenants = new Set<string>();
 const clientsFor = (config: SesConfig, region: string) =>
   Effect.gen(function* () {
     return {
+      events: yield* EventBridge,
       // Only for SendEmail: a send the SDK retried after a reset or a 5xx could reach the
       // recipient twice. The delivery job decides what happens after an unanswered send.
       // Each send also opens its own connection. A kept-alive one that SES or the network
@@ -102,7 +105,8 @@ const clientsFor = (config: SesConfig, region: string) =>
     };
   }).pipe(
     Effect.provide(
-      Layer.merge(
+      Layer.mergeAll(
+        EventBridge.layer({ credentials: config, region }),
         SESv2.layer({ credentials: config, region }),
         SNS.layer({ credentials: config, region }),
       ),
@@ -198,8 +202,15 @@ export const makeSesEmailBackend = (config: SesConfig) =>
           config.regions,
           (region) =>
             Effect.gen(function* () {
-              const { mapAwsError, ses, sns } = yield* inRegion(region);
-              yield* ensureSesInfrastructure({ deliveryWebhookUrl, mapAwsError, region, ses, sns });
+              const { events, mapAwsError, ses, sns } = yield* inRegion(region);
+              yield* ensureSesInfrastructure({
+                deliveryWebhookUrl,
+                events,
+                mapAwsError,
+                region,
+                ses,
+                sns,
+              });
             }),
           { discard: true },
         ),
@@ -213,6 +224,13 @@ export const makeSesEmailBackend = (config: SesConfig) =>
             dkimVerified: identity.DkimAttributes?.Status === "SUCCESS",
             verified: identity.VerifiedForSendingStatus === true,
           };
+        }),
+      getProjectSendingStatus: ({ projectId, region }) =>
+        Effect.gen(function* () {
+          const { mapAwsError, ses } = yield* inRegion(region);
+          return yield* sesTenantSendingStatus(ses, sesTenantNameFor(projectId)).pipe(
+            Effect.mapError(mapAwsError),
+          );
         }),
       send: ({ message, region: recorded }) =>
         Effect.gen(function* () {

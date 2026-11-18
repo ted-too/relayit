@@ -20,9 +20,10 @@ import {
   organizationAppEnvironment,
   organizationDomain,
 } from "@repo/persistence/db/schema";
-import { and, eq, inArray, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, notExists, type SQL, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
+import { emitDomainUpdated } from "../deliverability/project-sending-pause";
 import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
 import { DnsLookups } from "../dns-lookups";
@@ -597,22 +598,71 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
   });
 
 /**
+ * Writes a Domain's pause or unpause where `changes` matches, and tells the Project that
+ * holds it (`domain.updated`) in the same transaction, only if a row changed. Claimants are
+ * not told: the Domain is not theirs yet. False when the Domain does not exist.
+ */
+const setDomainPause = (
+  tx: DatabaseTransaction,
+  customDomainId: string,
+  values: { readonly isPaused: boolean; readonly pausedReason: DomainPausedReason | null },
+  changes: SQL | undefined,
+) =>
+  Effect.gen(function* () {
+    const [changed] = yield* tx
+      .update(customDomain)
+      .set(values)
+      .where(and(eq(customDomain.id, customDomainId), changes))
+      .returning({
+        id: customDomain.id,
+        isPaused: customDomain.isPaused,
+        pausedReason: customDomain.pausedReason,
+        verificationStatus: customDomain.verificationStatus,
+      });
+    if (!changed) {
+      const [existing] = yield* tx
+        .select({ id: customDomain.id })
+        .from(customDomain)
+        .where(eq(customDomain.id, customDomainId));
+      return existing !== undefined;
+    }
+    const holders = yield* tx
+      .select({ organizationId: organizationDomain.organizationId })
+      .from(organizationDomain)
+      .where(
+        and(
+          eq(organizationDomain.customDomainId, customDomainId),
+          eq(organizationDomain.ownershipVerificationStatus, "verified"),
+        ),
+      );
+    yield* Effect.forEach(
+      holders,
+      ({ organizationId }) => emitDomainUpdated(tx, organizationId, changed),
+      { discard: true },
+    );
+    return true;
+  });
+
+/**
  * A pause is the platform's act on a Domain, not its Project's: it names the Domain alone
  * and asks nothing of who holds it, so the caller is what decides who may (the api keeps it
- * to platform admins).
+ * to platform admins). Pausing a Domain that is already paused changes its reason, which is
+ * how an admin takes over a pause Relayit made itself so that it is not lifted when SES
+ * restores the Project.
  */
 export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
 
-    const [paused] = yield* db
-      .update(customDomain)
-      .set({
-        isPaused: true,
-        pausedReason: input.reason,
-      })
-      .where(eq(customDomain.id, input.customDomainId))
-      .returning({ id: customDomain.id })
+    const found = yield* db
+      .transaction((tx) =>
+        setDomainPause(
+          tx,
+          input.customDomainId,
+          { isPaused: true, pausedReason: input.reason },
+          sql`(not ${customDomain.isPaused} or ${customDomain.pausedReason} is distinct from ${input.reason})`,
+        ),
+      )
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -624,7 +674,7 @@ export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
             }),
         ),
       );
-    if (!paused) {
+    if (!found) {
       return yield* new CustomDomainNotFound({
         customDomainId: input.customDomainId,
         message: "Domain not found.",
@@ -638,14 +688,15 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
 
-    const [unpaused] = yield* db
-      .update(customDomain)
-      .set({
-        isPaused: false,
-        pausedReason: null,
-      })
-      .where(eq(customDomain.id, input.customDomainId))
-      .returning({ id: customDomain.id })
+    const found = yield* db
+      .transaction((tx) =>
+        setDomainPause(
+          tx,
+          input.customDomainId,
+          { isPaused: false, pausedReason: null },
+          sql`${customDomain.isPaused}`,
+        ),
+      )
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -657,7 +708,7 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
             }),
         ),
       );
-    if (!unpaused) {
+    if (!found) {
       return yield* new CustomDomainNotFound({
         customDomainId: input.customDomainId,
         message: "Domain not found.",

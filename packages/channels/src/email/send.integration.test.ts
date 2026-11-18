@@ -30,7 +30,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { makeRedisLive, Redis } from "@repo/redis";
 import { webhookEventDefinitions } from "@repo/webhooks/events";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -73,6 +73,7 @@ const makeBackend = (
     deleteIdentity: unsupported,
     ensureInfrastructure: unsupported,
     getIdentityStatus: unsupported,
+    getProjectSendingStatus: unsupported,
     send: (input) =>
       Effect.suspend(() => {
         sends.push(input);
@@ -367,10 +368,8 @@ const seedProject = (options: { readonly dailySends?: number } = {}) =>
       channelType: "email",
       limits: {
         customDomains: null,
-        marketing: { managed: NO_LIMITS },
-        transactional: {
-          managed: { dailySends: options.dailySends ?? null, monthlySends: null },
-        },
+        marketing: NO_LIMITS,
+        transactional: { dailySends: options.dailySends ?? null, monthlySends: null },
       },
       userId,
     });
@@ -767,9 +766,30 @@ describe("an accepted email send", () => {
       const domain = yield* db.query.customDomain.findFirst({
         where: { id: project.customDomainId },
       });
-      expect(domain).toMatchObject({ isPaused: true, pausedReason: "bad_reputation" });
+      // The pause the api lifts again once SES reports the Project's sending restored.
+      expect(domain).toMatchObject({ isPaused: true, pausedReason: "project_sending_pause" });
       expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
         { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+      ]);
+      // Told of the Domain once, though the failure was written on a later run.
+      const domainEvents = yield* db
+        .select({ payload: webhookEvent.payload })
+        .from(webhookEvent)
+        .where(
+          and(
+            eq(webhookEvent.organizationId, project.organizationId),
+            eq(webhookEvent.type, "domain.updated"),
+          ),
+        );
+      expect(domainEvents).toEqual([
+        {
+          payload: {
+            domain_id: project.customDomainId,
+            paused: true,
+            paused_reason: "project_sending_pause",
+            status: "verified",
+          },
+        },
       ]);
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
@@ -1466,6 +1486,106 @@ describe("an accepted email send", () => {
       ).toEqual({ isPaused: false });
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
+
+  it.live(
+    "a send SES refuses for a Project Sending Pause pauses the Project's Domains in the region, whatever it was sent from",
+    () => {
+      const paused = new EmailBackendRejected({
+        reason: "project_sending_paused",
+        region: "eu-central-1",
+      });
+      let refusedFrom = "";
+      const backend = makeBackend((sender) =>
+        sender === refusedFrom ? Effect.fail(paused) : accept,
+      );
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const other = yield* seedProject();
+        // A second Domain of the Project's in the region, and one registered in another.
+        const held = (region: string) =>
+          Effect.gen(function* () {
+            const customDomainId = typeid("domn").toString();
+            yield* db.insert(customDomain).values({
+              dkimPrivateKey: "unused",
+              dkimPublicKey: "unused",
+              dkimSelector: "relayit",
+              fqdn: `${customDomainId}.relayit.test`,
+              id: customDomainId,
+              verificationStatus: "verified",
+            });
+            yield* db.insert(organizationDomain).values({
+              customDomainId,
+              organizationId: project.organizationId,
+              ownershipToken: Bun.randomUUIDv7(),
+              ownershipVerificationStatus: "verified",
+            });
+            yield* db
+              .insert(emailDomainRegistration)
+              .values({ customDomainId, region, verificationStatus: "verified" });
+            return customDomainId;
+          });
+        const second = yield* held("eu-central-1");
+        const elsewhere = yield* held("us-east-1");
+        // The send goes out from the Sandbox Domain, which other Projects share.
+        const sandboxDomainId = typeid("sbxd").toString();
+        const rootDomain = `${sandboxDomainId}.sandbox.relayit.test`;
+        yield* db.insert(sandboxDomain).values({
+          cloudflareZoneId: "unused",
+          dkimPrivateKey: "unused",
+          dkimPublicKey: "unused",
+          dkimSelector: "relayit",
+          id: sandboxDomainId,
+          isActive: true,
+          rootDomain,
+          verificationStatus: "verified",
+        });
+        yield* db.insert(emailDomainRegistration).values({
+          region: "eu-central-1",
+          sandboxDomainId,
+          verificationStatus: "verified",
+        });
+        yield* db
+          .update(organization)
+          .set({ sandboxDomainId })
+          .where(eq(organization.id, project.organizationId));
+        refusedFrom = rootDomain;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `${SANDBOX_FROM_LOCAL_PART}@${rootDomain}`, project.ownerEmail),
+        );
+
+        yield* runWorker;
+
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          error: { message: "SES paused sending for this Project" },
+          status: "failed",
+        });
+        const pauseOf = (id: string) =>
+          db.query.customDomain.findFirst({
+            columns: { isPaused: true, pausedReason: true },
+            where: { id },
+          });
+        for (const id of [project.customDomainId, second]) {
+          expect(yield* pauseOf(id)).toEqual({
+            isPaused: true,
+            pausedReason: "project_sending_pause",
+          });
+        }
+        expect(yield* pauseOf(elsewhere)).toEqual({ isPaused: false, pausedReason: null });
+        expect(yield* pauseOf(other.customDomainId)).toEqual({
+          isPaused: false,
+          pausedReason: null,
+        });
+        // The Sandbox Domain is every Project's: one Project's pause must not close it.
+        expect(
+          yield* db.query.sandboxDomain.findFirst({
+            columns: { isPaused: true, pausedReason: true },
+            where: { id: sandboxDomainId },
+          }),
+        ).toEqual({ isPaused: false, pausedReason: null });
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    },
+  );
 
   it.live("ends failed when its Sandbox Domain is paused after accept", () => {
     const backend = makeBackend();

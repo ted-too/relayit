@@ -7,12 +7,8 @@ export const FREE_LIMITS = {
   retention: 7,
   email: {
     customDomains: 1,
-    transactional: {
-      managed: { monthlySends: 2500, dailySends: 80 },
-    },
-    marketing: {
-      managed: { monthlySends: 500, dailySends: 20 },
-    },
+    transactional: { monthlySends: 2500, dailySends: 80 },
+    marketing: { monthlySends: 500, dailySends: 20 },
   },
 } satisfies UserLimits;
 
@@ -21,12 +17,8 @@ export const SIGNAL_LIMITS = {
   retention: 30,
   email: {
     customDomains: null,
-    transactional: {
-      managed: { monthlySends: 40_000, dailySends: null },
-    },
-    marketing: {
-      managed: { monthlySends: 10_000, dailySends: null },
-    },
+    transactional: { monthlySends: 40_000, dailySends: null },
+    marketing: { monthlySends: 10_000, dailySends: null },
   },
 } satisfies UserLimits;
 
@@ -35,12 +27,8 @@ export const BROADCAST_LIMITS = {
   retention: 90,
   email: {
     customDomains: null,
-    transactional: {
-      managed: { monthlySends: 200_000, dailySends: null },
-    },
-    marketing: {
-      managed: { monthlySends: 50_000, dailySends: null },
-    },
+    transactional: { monthlySends: 200_000, dailySends: null },
+    marketing: { monthlySends: 50_000, dailySends: null },
   },
 } satisfies UserLimits;
 
@@ -54,12 +42,8 @@ export const SELF_HOSTED_LIMITS = {
   retention: null,
   email: {
     customDomains: null,
-    transactional: {
-      managed: UNLIMITED_SENDS,
-    },
-    marketing: {
-      managed: UNLIMITED_SENDS,
-    },
+    transactional: UNLIMITED_SENDS,
+    marketing: UNLIMITED_SENDS,
   },
 } satisfies UserLimits;
 

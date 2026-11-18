@@ -10,7 +10,7 @@ import {
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { Redis } from "@repo/redis";
-import { and, eq, exists, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
@@ -20,7 +20,11 @@ import {
 import { filterSuppressedContacts, suppressedAmong } from "../../messages/suppressions";
 import { Usage } from "../../usage";
 import { EmailBackend, type EmailBackendRejected } from "../backend";
-import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
+import {
+  lockProjectDomains,
+  mergeListUnsubscribeHeadersForSend,
+  pauseProjectDomains,
+} from "../deliverability";
 import { loadEmailAttachmentsForSend } from "./attachments";
 import { EmailDeliveryPersistenceError } from "./errors";
 import { emailDeliverJob } from "./job";
@@ -605,30 +609,31 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             apiOrigin: listUnsubscribe.apiOrigin,
           });
 
+          const backend = yield* EmailBackend;
           const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
             Effect.gen(function* () {
               const failureMessage = "SES paused sending for this Project";
               yield* db.transaction((tx) =>
                 Effect.gen(function* () {
-                  // The Domain's row before the Delivery, as removing a Domain or taking it
-                  // by a claim locks them, so neither waits on this while this waits on it.
-                  if (loaded.customDomainId) {
-                    yield* tx
-                      .select({ id: customDomain.id })
-                      .from(customDomain)
-                      .where(eq(customDomain.id, loaded.customDomainId))
-                      .for("update")
-                      .pipe(
-                        Effect.mapError(
-                          (cause) =>
-                            new EmailDeliveryPersistenceError({
-                              cause,
-                              deliveryId: loaded.id,
-                              operation: "update_status",
-                            }),
-                        ),
-                      );
-                  }
+                  const paused = {
+                    defaultRegion: backend.defaultRegion,
+                    organizationId: appEnvironment.organizationId,
+                    region: registration.region ?? backend.defaultRegion,
+                  };
+                  // The Domains this will pause before the Delivery, as removing a Domain or
+                  // taking it by a claim locks them, so neither waits on this while this
+                  // waits on it; and all of them in one order, because SES refuses every
+                  // send of a paused Project at once, each from a Domain of its own.
+                  yield* lockProjectDomains(tx, paused).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new EmailDeliveryPersistenceError({
+                          cause,
+                          deliveryId: loaded.id,
+                          operation: "update_status",
+                        }),
+                    ),
+                  );
                   const failed = yield* updateDelivery(
                     tx,
                     { claimedAt, id: loaded.id },
@@ -641,43 +646,21 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   if (!failed) {
                     return;
                   }
-                  if (loaded.customDomainId) {
-                    // Only while the sending Project still holds it: the Domain this run
-                    // loaded may be another Project's by now, and its pause is not theirs.
-                    yield* tx
-                      .update(customDomain)
-                      .set({ isPaused: true, pausedReason: "bad_reputation" })
-                      .where(
-                        and(
-                          eq(customDomain.id, loaded.customDomainId),
-                          exists(
-                            tx
-                              .select({ organizationId: organizationDomain.organizationId })
-                              .from(organizationDomain)
-                              .where(
-                                and(
-                                  eq(organizationDomain.customDomainId, customDomain.id),
-                                  eq(
-                                    organizationDomain.organizationId,
-                                    appEnvironment.organizationId,
-                                  ),
-                                  eq(organizationDomain.ownershipVerificationStatus, "verified"),
-                                ),
-                              ),
-                          ),
-                        ),
-                      )
-                      .pipe(
-                        Effect.mapError(
-                          (cause) =>
-                            new EmailDeliveryPersistenceError({
-                              cause,
-                              deliveryId: loaded.id,
-                              operation: "update_status",
-                            }),
-                        ),
-                      );
-                  }
+                  // SES pauses the Project, not a Domain: every Domain it holds in this region
+                  // is refused from now on, and the same pause is what the api makes when SES
+                  // reports the tenant's status, so whichever comes first tells the Project
+                  // once. This one goes by the refusal, not by the status now: if SES restored
+                  // the tenant meanwhile, the recheck job lifts it.
+                  yield* pauseProjectDomains(tx, paused).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new EmailDeliveryPersistenceError({
+                          cause,
+                          deliveryId: loaded.id,
+                          operation: "update_status",
+                        }),
+                    ),
+                  );
                   yield* emitWebhookEvent(tx, {
                     event: {
                       data: {
@@ -710,7 +693,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               });
             });
 
-          const backend = yield* EmailBackend;
           const sendMessage = {
             attachments: attachments.length > 0 ? [...attachments] : undefined,
             bcc: bccEmails.length > 0 ? bccEmails : null,

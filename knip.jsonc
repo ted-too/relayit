@@ -18,7 +18,8 @@
       ],
     },
     "apps/api": {
-      "entry": ["src/index.ts"],
+      // The server, and the command an operator runs in its image.
+      "entry": ["src/index.ts", "src/platform-admin.ts"],
       // The bundle inlines better-auth through @repo/persistence; @opentelemetry/api is an
       // optional peer of @better-auth/core that this package provides for it.
       "ignoreDependencies": ["@opentelemetry/api", "better-auth"],

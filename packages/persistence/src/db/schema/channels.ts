@@ -15,19 +15,10 @@ export interface BucketSendLimits {
   monthlySends: number | null;
 }
 
-/**
- * One purpose's caps. Still keyed `managed`, from when sends were also split by BYO
- * Provider: every `user_channel.limits` row already has that shape, and dropping the key
- * means rewriting those rows first (#34).
- */
-export interface PurposeLimits {
-  managed: BucketSendLimits;
-}
-
 export interface EmailLimits {
   customDomains: number | null;
-  marketing: PurposeLimits;
-  transactional: PurposeLimits;
+  marketing: BucketSendLimits;
+  transactional: BucketSendLimits;
 }
 
 export interface ChannelLimits {
