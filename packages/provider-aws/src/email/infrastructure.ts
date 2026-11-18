@@ -1,6 +1,7 @@
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
 import { EmailBackendConfigurationError } from "@repo/channels/email/backend";
+import { UNRECORDED_SEND_GRACE_SECONDS } from "@repo/channels/email/deliverability";
 import { Effect } from "effect";
 import { type AwsErrorMapper, AwsUnexpectedResponseError } from "../errors";
 
@@ -58,6 +59,39 @@ const validateWebhookUrl = (value: string, region: string) =>
     ),
   );
 
+const QUICK_RETRIES = 6;
+const QUICK_DELAY_SECONDS = 5;
+const SLOW_DELAY_SECONDS = 60;
+
+/**
+ * How SNS retries a notification the api answered with a 5xx, as the topic's `DeliveryPolicy`.
+ * SNS's default for HTTP/S is three retries twenty seconds apart, after which the message is
+ * discarded; the api refuses a notification that beat its Delivery's `sent` write for
+ * `graceSeconds`, so the retries have to last that long: a few quick ones for the usual race
+ * of a moment, then one a minute until the grace is spent. Only the phases with a fixed
+ * delay are used (none in the backoff phase), so the total is plain arithmetic and never
+ * passes the 3,600 seconds SNS allows.
+ */
+export const sesNotificationDeliveryPolicy = (graceSeconds: number) => {
+  const slowRetries = Math.floor(
+    (graceSeconds - QUICK_RETRIES * QUICK_DELAY_SECONDS) / SLOW_DELAY_SECONDS,
+  );
+  return {
+    http: {
+      defaultHealthyRetryPolicy: {
+        backoffFunction: "linear",
+        maxDelayTarget: SLOW_DELAY_SECONDS,
+        minDelayTarget: QUICK_DELAY_SECONDS,
+        numMaxDelayRetries: slowRetries,
+        numMinDelayRetries: QUICK_RETRIES,
+        numNoDelayRetries: 0,
+        numRetries: QUICK_RETRIES + slowRetries,
+      },
+      disableSubscriptionOverrides: false,
+    },
+  };
+};
+
 const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl: string) =>
   Effect.gen(function* () {
     const topic = yield* sns.createTopic({ Name: topicName });
@@ -68,6 +102,27 @@ const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl
         operation: "CreateTopic",
       });
     }
+
+    // On the topic, not the subscription: it is set on every start whatever state the
+    // subscription is in, and outlives one that is made again. Setting it is not what
+    // sending depends on, so a deployment whose IAM policy predates `sns:SetTopicAttributes`
+    // keeps SNS's default and is told so, and the rest is still ensured.
+    yield* sns
+      .setTopicAttributes({
+        AttributeName: "DeliveryPolicy",
+        AttributeValue: JSON.stringify(
+          sesNotificationDeliveryPolicy(UNRECORDED_SEND_GRACE_SECONDS),
+        ),
+        TopicArn: topicArn,
+      })
+      .pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning(
+            "Failed to set the SES notification topic's retry policy; SNS retries a refused notification for about a minute only",
+            { cause, topicArn },
+          ),
+        ),
+      );
 
     const subscriptions = yield* sns.listSubscriptionsByTopic({
       TopicArn: topicArn,

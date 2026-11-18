@@ -75,11 +75,27 @@ const clientsFor = (config: SesConfig, region: string) =>
     return {
       // Only for SendEmail: a send the SDK retried after a reset or a 5xx could reach the
       // recipient twice. The delivery job decides what happens after an unanswered send.
+      // Each send also opens its own connection. A kept-alive one that SES or the network
+      // dropped while idle fails the write with the same reset a send SES took and never
+      // answered does, and that outcome has to count as unknown; on a new connection a
+      // send that cannot reach SES fails at connect, which proves nothing went out.
       sendOnce: yield* Effect.gen(function* () {
         return yield* SESv2;
       }).pipe(
         // Fresh, or the client the layer below built (with the SDK's retries) is shared.
-        Effect.provide(Layer.fresh(SESv2.layer({ credentials: config, maxAttempts: 1, region }))),
+        Effect.provide(
+          Layer.fresh(
+            SESv2.layer({
+              credentials: config,
+              maxAttempts: 1,
+              region,
+              requestHandler: {
+                httpAgent: { keepAlive: false },
+                httpsAgent: { keepAlive: false },
+              },
+            }),
+          ),
+        ),
       ),
       ses: yield* SESv2,
       sns: yield* SNS,

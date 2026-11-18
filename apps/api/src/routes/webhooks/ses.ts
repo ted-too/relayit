@@ -10,8 +10,8 @@ import { Api, SesNotificationFailed, SesNotificationRejected } from "../../api";
  * SES's bounce, complaint and delivery notifications, as SNS posts them: `text/plain`
  * holding JSON, so the raw body is read whatever the content type. A notification that
  * fails SNS's checks, or comes from a topic this deployment did not subscribe, is a 400,
- * which SNS does not retry; one we could not check, confirm or record is a 500, which it
- * retries. `handle` is the real one unless a test swaps it.
+ * which SNS does not retry; one we could not check, confirm or record, or whose Delivery
+ * the worker has not recorded yet, is a 500, which it retries. `handle` is the real one unless a test swaps it.
  */
 export const sesNotificationHandlers = (handle = handleSesNotification) =>
   HttpApiBuilder.group(Api, "sesNotifications", (handlers) =>
@@ -39,7 +39,21 @@ export const sesNotificationHandlers = (handle = handleSesNotification) =>
             }
             if (notification.success.type === "events") {
               const db = yield* DB;
-              yield* ingestDeliveryEvents(db, { events: notification.success.events });
+              const early = yield* ingestDeliveryEvents(db, {
+                events: notification.success.events,
+              }).pipe(
+                Effect.as(undefined),
+                Effect.catchTags({ DeliveryNotRecordedYet: (error) => Effect.succeed(error) }),
+              );
+              if (early) {
+                // Expected, not a fault: SES can report on a send before the worker has
+                // recorded it. Answered as a failure so that SNS sends it again.
+                yield* Effect.logInfo(
+                  "SES notification arrived before its Delivery was recorded; SNS will send it again",
+                  { providerMessageId: early.providerMessageId },
+                );
+                return "not_recorded_yet" as const;
+              }
             }
             return "recorded" as const;
           }).pipe(
@@ -59,6 +73,12 @@ export const sesNotificationHandlers = (handle = handleSesNotification) =>
           if (outcome === "rejected") {
             return yield* new SesNotificationRejected({
               code: "bad_request",
+              message: "SES notification handling failed",
+            });
+          }
+          if (outcome === "not_recorded_yet") {
+            return yield* new SesNotificationFailed({
+              code: "internal_server_error",
               message: "SES notification handling failed",
             });
           }

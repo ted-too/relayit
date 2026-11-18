@@ -23,13 +23,9 @@ const baseDelivery = {
   completedAt: null,
   customDomain: {
     fqdn: "example.com",
-    id: "dom_test",
-    isPaused: false,
     registration: verifiedRegistration as typeof verifiedRegistration | null,
   } as {
     fqdn: string;
-    id: string;
-    isPaused: boolean;
     registration: typeof verifiedRegistration | null;
   } | null,
   customDomainId: "dom_test",
@@ -65,8 +61,6 @@ const baseDelivery = {
 const makeDb = (overrides: {
   readonly contactId?: string;
   readonly delivery?: typeof baseDelivery | null;
-  /** Whether the sending Project's link to the Domain is ownership-verified. */
-  readonly holdsDomain?: boolean;
   /** Whether a conditional update (a claim, a dead-letter failure) finds its row. */
   readonly updateMatches?: boolean;
   readonly orgSlug?: string;
@@ -101,16 +95,6 @@ const makeDb = (overrides: {
           Effect.succeed({
             slug: overrides.orgSlug ?? "acme",
           }),
-      },
-      organizationDomain: {
-        findFirst: (query: { where: Record<string, unknown> }) =>
-          Effect.succeed(
-            (overrides.holdsDomain ?? true) &&
-              query.where.organizationId === "org_test" &&
-              query.where.ownershipVerificationStatus === "verified"
-              ? { organizationId: "org_test" }
-              : null,
-          ),
       },
     },
     select: () => ({
@@ -206,31 +190,12 @@ const payload = {
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
 
 describe("emailDeliverHandler", () => {
-  it.effect("fails, without sending, a Delivery whose Project no longer holds the Domain", () => {
-    // A claim proven between accept and send moved the Domain to another Project.
-    const { db } = makeDb({ holdsDomain: false });
-    return emailDeliverHandler.handle(payload, execution).pipe(
-      Effect.provide(testLayer(db, { send: () => Effect.die("sent on another Project's Domain") })),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          _tag: "MessageDeliveryTerminalError",
-          message: "The Project no longer holds the sending Domain",
-          stage: "domain",
-        });
-        return error;
-      }),
-    );
-  });
-
   it.effect("stops when the sending domain is not verified with SES", () => {
     const { db } = makeDb({
       delivery: {
         ...baseDelivery,
         customDomain: {
           fqdn: "example.com",
-          id: "dom_test",
-          isPaused: false,
           registration: { ...verifiedRegistration, verificationStatus: "not_verified" },
         },
       },
@@ -289,8 +254,6 @@ describe("emailDeliverHandler", () => {
         ...baseDelivery,
         customDomain: {
           fqdn: "example.com",
-          id: "dom_test",
-          isPaused: false,
           registration: { ...verifiedRegistration, region: null },
         },
       },

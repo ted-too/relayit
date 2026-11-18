@@ -676,6 +676,31 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("answers every first read of a new Project's Email Workspace", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("opener");
+        const project = yield* createProject(owner, `Opener ${run}`);
+
+        // The page's reads arrive together, each finding no workspace row yet.
+        const reads = yield* Effect.all(
+          Array.from({ length: 8 }, () =>
+            call("GET", `/projects/${project.slug}/workspaces/reactEmail/entries`, { as: owner }),
+          ),
+          { concurrency: "unbounded" },
+        );
+
+        expect(reads.map((read) => read.status)).toEqual(reads.map(() => 200));
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        const rows = yield* Effect.promise(() =>
+          db
+            .select()
+            .from(templatingWorkspace)
+            .where(eq(templatingWorkspace.organizationId, project.id)),
+        );
+        expect(rows).toHaveLength(1);
+      }),
+    );
+
     it.effect("signs in only from the dashboard's origin, and grants CORS to it alone", () =>
       Effect.gen(function* () {
         yield* signUp("cors");

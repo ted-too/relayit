@@ -538,6 +538,77 @@ describe("job execution", () => {
     });
   });
 
+  it.live("retries a job whose handler dies without interrupting the rest of its batch", () => {
+    const deadLetters = makeDeadLetterRecorder();
+    const finished: string[] = [];
+    const handler = defineJobHandler({
+      classifyFailure: () => "terminal",
+      contract: deliverEmail,
+      handle: ({ deliveryId }) =>
+        deliveryId === "dies"
+          ? Effect.die(new TypeError("undefined is not a function"))
+          : Effect.sleep("50 millis").pipe(
+              Effect.andThen(Effect.sync(() => finished.push(deliveryId))),
+            ),
+    });
+
+    return Effect.gen(function* () {
+      const stream = "relayit:jobs:email.deliver:ready";
+      const dies = yield* encodeJob(deliverEmail, { deliveryId: "dies" }, 1000);
+      const slow = yield* encodeJob(deliverEmail, { deliveryId: "slow" }, 1000);
+      const redis = makeRedisRecorder([
+        { fields: [REDIS_PAYLOAD_FIELD, dies], id: "17-0", stream },
+        { fields: [REDIS_PAYLOAD_FIELD, slow], id: "17-1", stream },
+      ]);
+
+      yield* processJobBatch([registerJobHandler(handler)], {
+        blockMs: 5000,
+        concurrency: 4,
+        consumer: "api-1",
+        count: 10,
+      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+
+      expect(finished).toEqual(["slow"]);
+      expect(redis.acknowledged).toEqual(["17-0", "17-1"]);
+      // The job that died waits for its next attempt; it is not dead yet.
+      const retry = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
+        redis.delayed[0]?.member ?? "",
+      );
+      expect(retry.attempts).toBe(1);
+      expect(deadLetters.records).toEqual([]);
+    });
+  });
+
+  it.live("dead-letters a job whose handler died on its last attempt, with its cleanup", () => {
+    const redis = makeRedisRecorder();
+    const deadLetters = makeDeadLetterRecorder();
+    const cleanedUp: unknown[] = [];
+    const handler = defineJobHandler({
+      classifyFailure: () => "retryable",
+      contract: deliverEmail,
+      handle: () => Effect.die(new TypeError("undefined is not a function")),
+      onDeadLetter: (_payload, _execution, failure) =>
+        Effect.sync(() => void cleanedUp.push(failure)),
+    });
+
+    return Effect.gen(function* () {
+      const codec = makeSchemaJsonCodec(jobEnvelopeSchema);
+      const first = yield* codec.decode(
+        yield* encodeJob(deliverEmail, { deliveryId: "delivery_dies" }, 1000),
+      );
+      const last = yield* codec.encode({ ...first, attempts: 2 });
+
+      yield* processJob(handler, { fields: [REDIS_PAYLOAD_FIELD, last], id: "18-0" });
+
+      expect(cleanedUp).toMatchObject([{ _tag: "JobHandlerDefect" }]);
+      expect(deadLetters.records).toMatchObject([
+        { attempts: 3, failure: { name: "JobHandlerDefect" }, originalStreamId: "18-0" },
+      ]);
+      expect(redis.delayed).toEqual([]);
+      expect(redis.acknowledged).toEqual(["18-0"]);
+    }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+  });
+
   it.live("promotes due delayed jobs for every registered stream", () => {
     const redis = makeRedisRecorder();
     const handler = defineJobHandler({
