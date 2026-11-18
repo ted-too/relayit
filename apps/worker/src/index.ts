@@ -1,6 +1,7 @@
 import * as NodeOS from "node:os";
 import { EmailBackend } from "@repo/channels/email/backend";
 import {
+  detachStrayDeliveries,
   emailDeleteDomainIdentityHandler,
   removeUnlinkedDomains,
 } from "@repo/channels/email/custom-domain";
@@ -53,6 +54,13 @@ const workerProgram = Effect.gen(function* () {
     // deleted as the api stopped, or deleted in the database.
     yield* removeUnlinkedDomains().pipe(
       Effect.catchCause(logEffectFailure("Failed to remove Domains without a link")),
+    );
+
+    // Deliveries from before a Project's were detached as it lost a Domain to a claim.
+    yield* detachStrayDeliveries.pipe(
+      Effect.catchCause(
+        logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
+      ),
     );
 
     yield* Effect.logInfo("Relayit job worker started");

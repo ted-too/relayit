@@ -22,7 +22,7 @@ import {
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, or, sql } from "drizzle-orm";
 import { Effect, Layer, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
@@ -38,6 +38,7 @@ import {
   CLAIM_TTL_MS,
   createCustomDomain,
   deleteCustomDomain,
+  detachStrayDeliveries,
   removeDeletedProjectDomains,
   removeUnlinkedDomains,
 } from "./lifecycle";
@@ -1215,6 +1216,69 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  it.live(
+    "a Project with more Deliveries on a Domain than one query can name is detached whole",
+    () => {
+      const { layer } = boundaries();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const { customDomainId, fqdn, holderId } = yield* claimedDomain(1);
+        const first = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        // Past the 65,535 parameters Postgres takes in one query, each with an event.
+        const more = 70_000;
+        const prefix = Bun.randomUUIDv7().replaceAll("-", "");
+        yield* db.execute(sql`
+          with numbered as (select g from generate_series(1, ${more}) g),
+          messages as (
+            insert into message (id, organization_app_environment_id, purpose)
+            select 'msg_' || ${prefix} || g, (select organization_app_environment_id from message where id = ${first.messageId}), 'transactional'
+            from numbered
+          ),
+          deliveries as (
+            insert into email_delivery (id, message_id, custom_domain_id, status, "from", "to", subject, text)
+            select 'edlv_' || ${prefix} || g, 'msg_' || ${prefix} || g, ${customDomainId}, 'sent',
+              ${JSON.stringify({ address: `hello@${fqdn}`, normalized: `hello@${fqdn}` })}::jsonb,
+              '["to@example.com"]'::jsonb, 'Hi', 'Hi'
+            from numbered
+          )
+          insert into email_delivery_event (id, email_delivery_id, custom_domain_id, kind)
+          select 'edev_' || ${prefix} || g, 'edlv_' || ${prefix} || g, ${customDomainId}, 'delivered'
+          from numbered`);
+        const counts = Effect.gen(function* () {
+          const [deliveries] = yield* db
+            .select({ naming: count(emailDelivery.customDomainId), total: count() })
+            .from(emailDelivery)
+            .where(
+              or(
+                eq(emailDelivery.customDomainId, customDomainId),
+                eq(emailDelivery.removedDomainFqdn, fqdn),
+              ),
+            );
+          const [events] = yield* db
+            .select({ naming: count() })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.customDomainId, customDomainId));
+          return { deliveries, events };
+        });
+        expect(yield* counts).toEqual({
+          deliveries: { naming: more + 1, total: more + 1 },
+          events: { naming: more + 1 },
+        });
+
+        // The row stays for the claim on it.
+        expect(yield* deleteCustomDomain({ customDomainId, organizationId: holderId })).toEqual({
+          deleted: false,
+        });
+
+        expect(yield* counts).toEqual({
+          deliveries: { naming: 0, total: more + 1 },
+          events: { naming: 0 },
+        });
+      }).pipe(Effect.provide(layer));
+    },
+    60_000,
+  );
+
   it.live("a Delivery can't be written, or left, naming no Domain at all", () => {
     const { layer } = boundaries();
     return Effect.gen(function* () {
@@ -1497,26 +1561,165 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  /**
+   * A database of its own, created, migrated and dropped around `use`: for what reads every
+   * Domain or every Delivery, which in the shared one would take what other tests are using.
+   */
+  const ownDatabase = () => {
+    const name = `own_${Bun.randomUUIDv7().replaceAll("-", "")}`;
+    const url = new URL(testDatabaseUrl);
+    url.pathname = `/${name}`;
+    const admin = (statement: string) =>
+      Effect.promise(async () => {
+        const sql = new Bun.SQL(testDatabaseUrl);
+        try {
+          await sql.unsafe(statement);
+        } finally {
+          await sql.close();
+        }
+      });
+    return {
+      url: url.href,
+      // Migrated inside, so a migration that fails still has the database dropped. The
+      // layer's pool is closed before it is.
+      within: <A, E>(use: Effect.Effect<A, E>) =>
+        Effect.acquireUseRelease(
+          admin(`create database "${name}"`),
+          () => Effect.promise(() => migrateOnStartup(url.href)).pipe(Effect.andThen(use)),
+          () => admin(`drop database "${name}" with (force)`),
+        ),
+    };
+  };
+
+  it.live(
+    "Deliveries naming a Domain their Project lost before they were detached are detached at start",
+    () => {
+      const database = ownDatabase();
+      const { layer, published } = boundaries({ databaseUrl: database.url });
+      const backfill = Effect.gen(function* () {
+        const db = yield* DB;
+        // As a proven claim left things before it detached anything: the claimant holds the
+        // Domain, the old holder's link is gone, and its Deliveries and events name the row.
+        const takenBefore = Effect.fn(function* (deliveries: number) {
+          const {
+            claimantIds: [claimantId],
+            customDomainId,
+            fqdn,
+            holderId,
+          } = yield* claimedDomain(1);
+          if (!claimantId) {
+            return yield* Effect.die("A claim was made");
+          }
+          const first = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+          const prefix = Bun.randomUUIDv7().replaceAll("-", "");
+          yield* db.execute(sql`
+            with numbered as (select g from generate_series(2, ${deliveries}) g),
+            messages as (
+              insert into message (id, organization_app_environment_id, purpose)
+              select 'msg_' || ${prefix} || g,
+                (select organization_app_environment_id from message where id = ${first.messageId}),
+                'transactional'
+              from numbered
+            ),
+            sent as (
+              insert into email_delivery (id, message_id, custom_domain_id, status, "from", "to", subject, text)
+              select 'edlv_' || ${prefix} || g, 'msg_' || ${prefix} || g, ${customDomainId}, 'sent',
+                ${JSON.stringify({ address: `hello@${fqdn}`, normalized: `hello@${fqdn}` })}::jsonb,
+                '["to@example.com"]'::jsonb, 'Hi', 'Hi'
+              from numbered
+            )
+            insert into email_delivery_event (id, email_delivery_id, custom_domain_id, kind)
+            select 'edev_' || ${prefix} || g, 'edlv_' || ${prefix} || g, ${customDomainId}, 'delivered'
+            from numbered`);
+          yield* db
+            .update(organizationDomain)
+            .set({ ownershipVerificationStatus: "verified" })
+            .where(
+              and(
+                eq(organizationDomain.customDomainId, customDomainId),
+                eq(organizationDomain.organizationId, claimantId),
+              ),
+            );
+          yield* db
+            .delete(organizationDomain)
+            .where(
+              and(
+                eq(organizationDomain.customDomainId, customDomainId),
+                eq(organizationDomain.organizationId, holderId),
+              ),
+            );
+          return { claimantId, customDomainId, fqdn, holderId };
+        });
+        /** A Project's Deliveries and events: how many, and how many name `customDomainId`. */
+        const stateOf = Effect.fn(function* (organizationId: string, customDomainId: string) {
+          const history = yield* historyOf(organizationId);
+          return {
+            deliveries: history.length,
+            detached: history.filter(({ delivery }) => delivery.removedDomainFqdn !== null).length,
+            naming: history.filter(({ delivery }) => delivery.customDomainId === customDomainId)
+              .length,
+            namingEvents: history.filter(({ event }) => event?.customDomainId === customDomainId)
+              .length,
+          };
+        });
+
+        // More than two batches' worth for one old holder.
+        const large = yield* takenBefore(2500);
+        // An old holder that has since claimed the Domain back, unproven: still not its holder.
+        const reclaiming = yield* takenBefore(3);
+        yield* createCustomDomain({ fqdn: reclaiming.fqdn, organizationId: reclaiming.holderId });
+        // Never strays: a holder's own, with a claim pending on its Domain, and what the new
+        // holder of a taken Domain sent from it since.
+        const held = yield* claimedDomain(1);
+        yield* sentFrom({ ...held, organizationId: held.holderId });
+        yield* sentFrom({
+          customDomainId: large.customDomainId,
+          fqdn: large.fqdn,
+          organizationId: large.claimantId,
+        });
+        const kept = { deliveries: 1, detached: 0, naming: 1, namingEvents: 1 };
+
+        yield* detachStrayDeliveries;
+
+        const after = Effect.gen(function* () {
+          return {
+            held: yield* stateOf(held.holderId, held.customDomainId),
+            large: yield* stateOf(large.holderId, large.customDomainId),
+            newHolder: yield* stateOf(large.claimantId, large.customDomainId),
+            reclaiming: yield* stateOf(reclaiming.holderId, reclaiming.customDomainId),
+          };
+        });
+        const detached = yield* after;
+        expect(detached).toEqual({
+          held: kept,
+          large: { deliveries: 2500, detached: 2500, naming: 0, namingEvents: 0 },
+          newHolder: kept,
+          reclaiming: { deliveries: 3, detached: 3, naming: 0, namingEvents: 0 },
+        });
+        expect((yield* historyOf(large.holderId))[0]?.delivery).toMatchObject({
+          from: { address: `hello@${large.fqdn}` },
+          removedDomainFqdn: large.fqdn,
+        });
+
+        // Nothing is left for a second run, and it moves nothing: the old holder that proves
+        // its claim again holds a Domain none of its earlier Deliveries name.
+        yield* publishProof(published, reclaiming.customDomainId, reclaiming.holderId);
+        yield* checkOwnership(reclaiming.customDomainId, reclaiming.holderId);
+        yield* detachStrayDeliveries;
+        expect(yield* after).toEqual(detached);
+      });
+      return database.within(backfill.pipe(Effect.provide(layer)));
+    },
+    60_000,
+  );
+
   it.live(
     "the sweep of every Domain removes those without a link, and only those",
     () => {
-      // A database of its own: the sweep reads every Domain, and in the shared one it would
-      // take the Domains other tests have yet to link.
-      const name = `sweep_${Bun.randomUUIDv7().replaceAll("-", "")}`;
-      const url = new URL(testDatabaseUrl);
-      url.pathname = `/${name}`;
-      const admin = (statement: string) =>
-        Effect.promise(async () => {
-          const sql = new Bun.SQL(testDatabaseUrl);
-          try {
-            await sql.unsafe(statement);
-          } finally {
-            await sql.close();
-          }
-        });
+      const database = ownDatabase();
       let refused: string | undefined;
       const { deletedIdentities, enqueued, layer } = boundaries({
-        databaseUrl: url.href,
+        databaseUrl: database.url,
         failEnqueueFor: () => refused,
       });
 
@@ -1604,16 +1807,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         expect(deletedIdentities).toEqual([]);
       });
 
-      return Effect.acquireUseRelease(
-        admin(`create database "${name}"`),
-        // Migrated here, so a migration that fails still has the database dropped. The
-        // layer's pool is closed before it is.
-        () =>
-          Effect.promise(() => migrateOnStartup(url.href)).pipe(
-            Effect.andThen(sweeps.pipe(Effect.provide(layer))),
-          ),
-        () => admin(`drop database "${name}" with (force)`),
-      );
+      return database.within(sweeps.pipe(Effect.provide(layer)));
     },
     30_000,
   );

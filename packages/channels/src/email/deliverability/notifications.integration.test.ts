@@ -425,7 +425,8 @@ describe("ingestDeliveryEvents", () => {
           const session = await sql.reserve();
           await session`begin`;
           await session`select id from custom_domain where id = ${domain.id} for update`;
-          return session;
+          const [backend] = await session`select pg_backend_pid() as pid`;
+          return Object.assign(session, { pid: (backend as { readonly pid: number }).pid });
         });
         const bounce = yield* Effect.forkChild(
           ingest({
@@ -437,7 +438,24 @@ describe("ingestDeliveryEvents", () => {
           }),
         );
         yield* Effect.promise(async () => {
-          await Bun.sleep(400);
+          // Until the ingest is waiting on the Domain's row, asked of Postgres from a session
+          // of its own, so the detach always lands while it waits.
+          const watch = new Bun.SQL(testDatabaseUrl, { max: 1 });
+          try {
+            for (let tries = 0; ; tries += 1) {
+              const waiting = await watch`select 1 from pg_stat_activity
+                where wait_event_type = 'Lock' and ${taking.pid} = any(pg_blocking_pids(pid))`;
+              if (waiting.length > 0) {
+                break;
+              }
+              if (tries >= 400) {
+                throw new Error("The ingest never came to wait on the Domain's row");
+              }
+              await Bun.sleep(25);
+            }
+          } finally {
+            await watch.close();
+          }
           await taking`update email_delivery set custom_domain_id = null, removed_domain_fqdn = ${fqdn}
             where id = ${deliveryId}`;
           await taking`commit`;

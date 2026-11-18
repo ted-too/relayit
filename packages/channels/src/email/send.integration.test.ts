@@ -1296,8 +1296,28 @@ describe("an accepted email send", () => {
       const session = await sql.reserve();
       await session`begin`;
       await session`select id from custom_domain where id = ${customDomainId} for update`;
+      const [backend] = await session`select pg_backend_pid() as pid`;
+      const { pid } = backend as { readonly pid: number };
       return {
         session,
+        // Until another backend is waiting on a lock this session holds, asked of Postgres
+        // from a session of its own, so what follows always finds the other side waiting.
+        blocksAnother: async () => {
+          const watch = new Bun.SQL(testDatabaseUrl, { max: 1 });
+          try {
+            for (let tries = 0; tries < 400; tries += 1) {
+              const waiting = await watch`select 1 from pg_stat_activity
+                where wait_event_type = 'Lock' and ${pid} = any(pg_blocking_pids(pid))`;
+              if (waiting.length > 0) {
+                return;
+              }
+              await Bun.sleep(25);
+            }
+            throw new Error("No backend came to wait on the Domain's row");
+          } finally {
+            await watch.close();
+          }
+        },
         end: async () => {
           await session`commit`;
           session.release();
@@ -1322,7 +1342,7 @@ describe("an accepted email send", () => {
         ),
       );
       const [link] = yield* Effect.promise(async () => {
-        await Bun.sleep(400);
+        await taking.blocksAnother();
         const links = await taking.session`delete from organization_domain
           where custom_domain_id = ${project.customDomainId} returning ownership_token`;
         await taking.end();
@@ -1420,6 +1440,92 @@ describe("an accepted email send", () => {
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
+  it.live("two sends of one Project refused for its pause at once both end failed", () => {
+    // SES pauses a Project and refuses everything of its in flight, each send from a Domain
+    // of its own: both answers arrive together, once both sends have been claimed.
+    let ours: readonly string[] = [];
+    let inFlight = 0;
+    let bothInFlight: (() => void) | undefined;
+    const together = new Promise<void>((resolve) => {
+      bothInFlight = resolve;
+    });
+    const backend = makeBackend((sender) => {
+      if (!ours.includes(sender)) {
+        return accept;
+      }
+      inFlight += 1;
+      if (inFlight === 2) {
+        bothInFlight?.();
+      }
+      return Effect.promise(() => together).pipe(
+        Effect.andThen(
+          Effect.fail(
+            new EmailBackendRejected({ reason: "project_sending_paused", region: "eu-central-1" }),
+          ),
+        ),
+      );
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const redis = yield* Redis;
+      const project = yield* seedProject();
+      const secondId = typeid("domn").toString();
+      const second = `${secondId}.relayit.test`;
+      yield* db.insert(customDomain).values({
+        dkimPrivateKey: "unused",
+        dkimPublicKey: "unused",
+        dkimSelector: "relayit",
+        fqdn: second,
+        id: secondId,
+        verificationStatus: "verified",
+      });
+      yield* db.insert(organizationDomain).values({
+        customDomainId: secondId,
+        organizationId: project.organizationId,
+        ownershipToken: Bun.randomUUIDv7(),
+        ownershipVerificationStatus: "verified",
+      });
+      yield* db.insert(emailDomainRegistration).values({
+        customDomainId: secondId,
+        region: "eu-central-1",
+        verificationStatus: "verified",
+      });
+      ours = [project.fqdn, second];
+      const accepted = yield* Effect.forEach(ours, (fqdn) =>
+        acceptTransactionalEmail(sendInput(project, `hello@${fqdn}`, "someone@example.com")),
+      );
+
+      // One pass of a worker running both at once.
+      yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: deliverer.stream });
+      yield* publishOutboxBatch({ batchSize: 1000, claimTtlMs: 30_000, concurrency: 1 });
+      yield* processJobBatch([deliverer], {
+        blockMs: 100,
+        concurrency: 2,
+        consumer: "test",
+        count: 10,
+      });
+
+      // Neither run was ended as a deadlock and left for a retry.
+      for (const { deliveryId } of accepted) {
+        expect(yield* deliveryOf(deliveryId)).toMatchObject({
+          error: { message: "SES paused sending for this Project" },
+          status: "failed",
+        });
+        expect(yield* eventsFor(project.organizationId, deliveryId)).toMatchObject([
+          { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+        ]);
+      }
+      for (const id of [project.customDomainId, secondId]) {
+        expect(
+          yield* db.query.customDomain.findFirst({
+            columns: { isPaused: true, pausedReason: true },
+            where: { id },
+          }),
+        ).toEqual({ isPaused: true, pausedReason: "project_sending_pause" });
+      }
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
   it.live("a Project Sending Pause and a removal of its Domain never deadlock", () => {
     let ours = "";
     let project: Effect.Success<ReturnType<typeof seedProject>> | undefined;
@@ -1433,7 +1539,7 @@ describe("an accepted email send", () => {
               Effect.sync(() => {
                 const { customDomainId, fqdn } = project ?? { customDomainId: "", fqdn: "" };
                 removal = (async () => {
-                  await Bun.sleep(400);
+                  await removing.blocksAnother();
                   await removing.session`delete from organization_domain
                     where custom_domain_id = ${customDomainId}`;
                   await removing.session`update email_delivery

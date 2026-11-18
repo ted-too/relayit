@@ -1240,6 +1240,12 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
     const database = (project: { readonly id: string } | undefined) => {
       const tx = {
         execute: () => Effect.succeed([]),
+        // The rows a pause or its lifting writes are locked first: none here.
+        select: () => ({
+          from: () => ({
+            where: () => ({ orderBy: () => ({ for: () => Effect.succeed([]) }) }),
+          }),
+        }),
         update: () => ({
           set: () => ({ where: () => ({ returning: () => Effect.succeed([]) }) }),
         }),

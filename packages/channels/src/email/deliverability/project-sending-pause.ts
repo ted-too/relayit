@@ -12,7 +12,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { domainUpdated } from "@repo/webhooks/events";
-import { and, eq, not, sql } from "drizzle-orm";
+import { and, eq, not, type SQL, sql } from "drizzle-orm";
 import { Clock, Data, Duration, Effect, Schema } from "effect";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 
@@ -95,22 +95,24 @@ const heldInRegion = ({ defaultRegion, organizationId, region }: ProjectInRegion
   );
 
 /**
- * Takes the rows of the Domains a Project holds in a region, in one order, before anything
- * pauses or unpauses them. A pause writes several Domains, and several run at once: SES
- * refuses every send of a paused Project together, and reports the pause to the api besides,
- * so each must take the rows in the same order or two wait on each other. The delivery
- * handler takes them before its Delivery, the order a removal or a claim transfer takes a
- * Domain and its Deliveries in.
+ * Takes the rows of Domains a Project holds in a region, in id order, before anything writes
+ * them: all of them, or those `among` picks. A pause or its lifting writes several Domains,
+ * and several run at once: SES refuses every send of a paused Project together, each from a
+ * Domain of its own, and reports the pause to the api besides. An update takes its rows in
+ * whatever order it finds them, so each writer takes them here first, in one order, or two
+ * wait on each other. The delivery handler takes all of them before its Delivery, the order
+ * a removal or a claim transfer takes a Domain and its Deliveries in.
  *
- * `NO KEY UPDATE` is what the pause's own update takes: it keeps out a removal or transfer,
- * which take the row `FOR UPDATE`, and lets through an accept or an SES notification, which
- * take it `KEY SHARE`.
+ * `NO KEY UPDATE` is what the update itself takes: it keeps out a removal or transfer, which
+ * take the row `FOR UPDATE`, and lets through an accept or an SES notification, which take
+ * it `KEY SHARE`. A row another transaction has written and not committed is judged as it
+ * was, as an update judges it, so lifting one pause never waits on another being made.
  */
-export const lockProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) =>
+export const lockProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion, among?: SQL) =>
   tx
     .select({ id: customDomain.id })
     .from(customDomain)
-    .where(heldInRegion(input))
+    .where(and(among, heldInRegion(input)))
     .orderBy(customDomain.id)
     .for("no key update")
     .pipe(
@@ -154,10 +156,12 @@ export const emitDomainUpdated = (
  */
 export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) =>
   Effect.gen(function* () {
+    const unpaused = not(customDomain.isPaused);
+    yield* lockProjectDomains(tx, input, unpaused);
     const paused = yield* tx
       .update(customDomain)
       .set({ isPaused: true, pausedReason: "project_sending_pause" })
-      .where(and(not(customDomain.isPaused), heldInRegion(input)))
+      .where(and(unpaused, heldInRegion(input)))
       .returning({
         id: customDomain.id,
         isPaused: customDomain.isPaused,
@@ -201,16 +205,15 @@ export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInReg
  */
 const unpauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) =>
   Effect.gen(function* () {
+    const pausedHere = and(
+      customDomain.isPaused,
+      eq(customDomain.pausedReason, "project_sending_pause"),
+    );
+    yield* lockProjectDomains(tx, input, pausedHere);
     const unpaused = yield* tx
       .update(customDomain)
       .set({ isPaused: false, pausedReason: null })
-      .where(
-        and(
-          customDomain.isPaused,
-          eq(customDomain.pausedReason, "project_sending_pause"),
-          heldInRegion(input),
-        ),
-      )
+      .where(and(pausedHere, heldInRegion(input)))
       .returning({
         id: customDomain.id,
         isPaused: customDomain.isPaused,
@@ -309,7 +312,6 @@ export const syncProjectSendingStatus = (
               orElse: () => Effect.fail(new EmailBackendUnavailable({ region: input.region })),
             }),
           );
-        yield* lockProjectDomains(tx, scope);
         switch (status) {
           case "paused":
             return { domains: yield* pauseProjectDomains(tx, scope), status };
