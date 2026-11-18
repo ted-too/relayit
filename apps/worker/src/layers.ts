@@ -9,7 +9,6 @@ import { makeDbLive } from "@repo/persistence/db/effect";
 import { emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { Layer, type Option, Redacted } from "effect";
-import { FetchHttpClient } from "effect/http";
 import type { WorkerConfig } from "./env";
 
 const optionValue = <A>(option: Option.Option<A>): A | undefined =>
@@ -45,13 +44,6 @@ export const makeWorkerLayer = (config: WorkerConfig) => {
   const usageLive = UsageLive.pipe(Layer.provide(Layer.merge(redisLive, usagePolicyLive)));
   const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
   const deadLetterStoreLive = DeadLetterStoreLive.pipe(Layer.provide(dbLive));
-  const httpLive = FetchHttpClient.layer.pipe(
-    Layer.provide(
-      Layer.succeed(FetchHttpClient.RequestInit, {
-        redirect: "error",
-      }),
-    ),
-  );
   const emailBackendLive = emailBackendLayer(config.emailBackend).pipe(
     Layer.provide(Layer.mergeAll(dbLive, jobsLive, logging)),
   );
@@ -67,7 +59,6 @@ export const makeWorkerLayer = (config: WorkerConfig) => {
     usageLive,
     jobsLive,
     deadLetterStoreLive,
-    httpLive,
     SymmetricCrypto.live(secrets),
     emailBackendLive,
     managedDnsLive,

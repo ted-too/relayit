@@ -28,6 +28,7 @@
         "@repo/object-storage": "workspace:*",
         "@repo/persistence": "workspace:*",
         "@repo/provider-aws": "workspace:*",
+        "@repo/public-url": "workspace:*",
         "@repo/redis": "workspace:*",
         "@repo/templating": "workspace:*",
         "better-auth": "catalog:",
@@ -149,12 +150,12 @@
         "@repo/jobs": "workspace:*",
         "@repo/object-storage": "workspace:*",
         "@repo/persistence": "workspace:*",
+        "@repo/public-url": "workspace:*",
         "@repo/redis": "workspace:*",
         "@repo/template-render": "workspace:*",
         "@repo/webhooks": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
-        "ipaddr.js": "^2.5.0",
         "typeid-js": "catalog:",
         "zod": "catalog:",
       },
@@ -257,6 +258,14 @@
         "vitest": "catalog:",
       },
     },
+    "packages/public-url": {
+      "name": "@repo/public-url",
+      "version": "0.0.0",
+      "dependencies": {
+        "effect": "catalog:",
+        "ipaddr.js": "^2.5.0",
+      },
+    },
     "packages/redis": {
       "name": "@repo/redis",
       "version": "0.0.0",
@@ -340,6 +349,7 @@
       "dependencies": {
         "@repo/jobs": "workspace:*",
         "@repo/persistence": "workspace:*",
+        "@repo/public-url": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "typeid-js": "catalog:",
@@ -859,6 +869,8 @@
     "@repo/persistence": ["@repo/persistence@workspace:packages/persistence"],
 
     "@repo/provider-aws": ["@repo/provider-aws@workspace:packages/provider-aws"],
+
+    "@repo/public-url": ["@repo/public-url@workspace:packages/public-url"],
 
     "@repo/redis": ["@repo/redis@workspace:packages/redis"],
 

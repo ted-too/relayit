@@ -19,6 +19,7 @@
     "@repo/object-storage": "workspace:*",
     "@repo/persistence": "workspace:*",
     "@repo/provider-aws": "workspace:*",
+    "@repo/public-url": "workspace:*",
     "@repo/redis": "workspace:*",
     "@repo/templating": "workspace:*",
     "better-auth": "catalog:",

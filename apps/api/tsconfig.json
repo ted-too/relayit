@@ -13,6 +13,7 @@
       "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
       "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
       "@repo/persistence/*": ["../../packages/persistence/src/*"],
+      "@repo/public-url": ["../../packages/public-url/src/index.ts"],
       "@repo/provider-aws/*": ["../../packages/provider-aws/src/*"],
       "@repo/redis": ["../../packages/redis/src/index.ts"],
       "@repo/redis/*": ["../../packages/redis/src/*"],

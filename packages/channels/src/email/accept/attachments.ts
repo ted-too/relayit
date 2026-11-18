@@ -1,11 +1,9 @@
 import { subBucket } from "@repo/object-storage";
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { emailAttachment } from "@repo/persistence/db/schema";
-import * as NodeDnsPromises from "node:dns/promises";
-import * as NodeNet from "node:net";
-import { Context, DateTime, Duration, Effect, Predicate, Result, Stream } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
-import ipaddr from "ipaddr.js";
+import { requestPublicUrl } from "@repo/public-url";
+import { DateTime, Duration, Effect, Predicate, Result, Stream } from "effect";
+import { HttpClientRequest } from "effect/http";
 import { typeid } from "typeid-js";
 import { z } from "zod";
 import {
@@ -50,22 +48,6 @@ const assertAttachmentFilename = (filename: string): Effect.Effect<void, EmailAc
         }),
       )
     : Effect.void;
-
-/** Every address a hosted attachment's host resolves to. Real DNS unless a test replaces it. */
-export const AttachmentHostLookup = Context.Reference<{
-  readonly resolve: (hostname: string) => Promise<readonly string[]>;
-}>("Channels/AttachmentHostLookup", {
-  defaultValue: () => ({
-    resolve: async (hostname) =>
-      (await NodeDnsPromises.lookup(hostname, { all: true, verbatim: true })).map(
-        (entry) => entry.address,
-      ),
-  }),
-});
-
-// IPv6 global unicast; everything outside it (loopback, IPv4-compatible `::/96`,
-// unique-local, link-local, multicast) is refused whatever its `range()`.
-const GLOBAL_UNICAST_V6 = ipaddr.parseCIDR("2000::/3");
 
 /**
  * Each attachment's bytes: base64 decoded, or downloaded from its `https:` URL. One send's
@@ -139,84 +121,12 @@ export const resolveEmailAttachments = (
             } satisfies ResolvedEmailAttachment;
           }
 
-          const parsed = URL.parse(attachment.source.url);
-          if (parsed?.protocol !== "https:") {
-            return yield* new EmailAcceptRejected({
-              code: "invalid_attachment",
-              details: { filename: attachment.filename, reason: "unsupported_url" },
-              message: "Attachment path must be an https URL.",
-            });
-          }
-          // The URL parser has already normalised IPv4 spellings; IPv6 keeps its brackets.
-          const hostname = parsed.hostname.replace(/^\[(.*)\]$/, "$1");
-          const literal = NodeNet.isIP(hostname) !== 0;
-          const hostLookup = yield* AttachmentHostLookup;
-
+          const { url } = attachment.source;
           // Downloaded from a public address, up to the size limit, within the send's
-          // deadline. The host is resolved once and every
-          // address checked; the request goes to one of those addresses, each in turn until
-          // one connects, with the hostname as `Host` and as the TLS server name the
-          // certificate is checked against, so another DNS answer can't steer it elsewhere.
-          // A redirect is not followed but refused. The client is built here, with its own
-          // `RequestInit`, rather than taken from the caller; only the `fetch` function it
-          // calls comes from the context (`FetchHttpClient.Fetch`), as a test's fake does.
+          // deadline: `requestPublicUrl` takes only an `https:` URL, checks every address
+          // its host resolves to and sends the request to one of them.
           return yield* Effect.gen(function* () {
-            const addresses = literal
-              ? [hostname]
-              : yield* Effect.tryPromise({
-                  catch: (cause) =>
-                    new EmailAcceptInfrastructureError({
-                      cause,
-                      operation: "attachments",
-                      organizationId,
-                    }),
-                  // A name with no address has no public one, and is refused as such below;
-                  // any other DNS failure is Relayit's.
-                  try: () =>
-                    hostLookup.resolve(hostname).catch((cause: unknown) => {
-                      switch (Predicate.hasProperty(cause, "code") ? cause.code : undefined) {
-                        case "ENODATA":
-                        case "ENOTFOUND":
-                          return [];
-                        default:
-                          throw cause;
-                      }
-                    }),
-                });
-            // Only plain public unicast. Loopback, private, link-local, unique-local, CGNAT,
-            // unspecified, multicast, reserved and the IPv6 ranges that embed an IPv4 address
-            // (6to4, NAT64, Teredo) all have another `range()`; an IPv4-mapped IPv6 address
-            // is judged as the IPv4 address it maps. One such address among public ones
-            // refuses the URL.
-            const isPublic = (candidate: string) => {
-              const ip = ipaddr.process(candidate);
-              return (
-                ip.range() === "unicast" && (ip.kind() === "ipv4" || ip.match(GLOBAL_UNICAST_V6))
-              );
-            };
-            if (addresses.length === 0 || !addresses.every(isPublic)) {
-              // One answer whether the name exists or not, so a key holder can't learn which
-              // internal names Relayit's resolver knows; the log keeps the difference.
-              yield* Effect.logInfo("Attachment host has no public address").pipe(
-                Effect.annotateLogs({ host: parsed.host, resolved: addresses.length > 0 }),
-              );
-              return yield* new EmailAcceptRejected({
-                code: "invalid_attachment",
-                details: { filename: attachment.filename, reason: "blocked_address" },
-                message: "Attachment URL's host has no public address.",
-              });
-            }
-
-            const http = yield* HttpClient.HttpClient;
-            // `get` fails only before a response arrives, so the next address is tried only
-            // when this one gave none.
-            const response = yield* Effect.firstSuccessOf(
-              addresses.map((address) => {
-                const pinned = new URL(parsed);
-                pinned.hostname = NodeNet.isIP(address) === 6 ? `[${address}]` : address;
-                return http.get(pinned, { headers: { host: parsed.host } });
-              }),
-            );
+            const response = yield* requestPublicUrl(url, HttpClientRequest.get);
             if (response.status >= 300 && response.status < 400) {
               return yield* new EmailAcceptRejected({
                 code: "invalid_attachment",
@@ -293,14 +203,44 @@ export const resolveEmailAttachments = (
               filename: attachment.filename,
             } satisfies ResolvedEmailAttachment;
           }).pipe(
-            Effect.provideService(FetchHttpClient.RequestInit, {
-              redirect: "manual",
-              ...(literal ? {} : { tls: { serverName: hostname } }),
-            } satisfies BunFetchRequestInit),
-            Effect.provide(FetchHttpClient.layer),
             // What failed is the customer's URL: no address connected, or the body broke
-            // off. A request this code couldn't build is ours.
+            // off. A request this code couldn't build, or a lookup that failed, is ours.
             Effect.catchTags({
+              PublicHostLookupFailed: ({ cause }) =>
+                Effect.fail(
+                  new EmailAcceptInfrastructureError({
+                    cause,
+                    operation: "attachments",
+                    organizationId,
+                  }),
+                ),
+              PublicUrlRefused: (refused) => {
+                if (refused.reason === "unsupported_url") {
+                  return Effect.fail(
+                    new EmailAcceptRejected({
+                      code: "invalid_attachment",
+                      details: { filename: attachment.filename, reason: "unsupported_url" },
+                      message: "Attachment path must be an https URL.",
+                    }),
+                  );
+                }
+                const blocked = Effect.fail(
+                  new EmailAcceptRejected({
+                    code: "invalid_attachment",
+                    details: { filename: attachment.filename, reason: "blocked_address" },
+                    message: "Attachment URL's host has no public address.",
+                  }),
+                );
+                // One answer whether the name exists or not, so a key holder can't learn
+                // which internal names Relayit's resolver knows; the log keeps the
+                // difference. A hostname too long to exist is not logged: nothing bounds it.
+                return refused.reason === "hostname_too_long"
+                  ? blocked
+                  : Effect.logInfo("Attachment host has no public address").pipe(
+                      Effect.annotateLogs({ host: refused.host, resolved: refused.resolved }),
+                      Effect.andThen(blocked),
+                    );
+              },
               HttpClientError: (cause) => {
                 switch (cause.reason._tag) {
                   case "DecodeError":
@@ -313,7 +253,7 @@ export const resolveEmailAttachments = (
                       Effect.annotateLogs({
                         code: Predicate.hasProperty(failure, "code") ? String(failure.code) : "",
                         failure: cause.reason._tag,
-                        host: parsed.host,
+                        host: new URL(url).host,
                         name: Predicate.hasProperty(failure, "name") ? String(failure.name) : "",
                       }),
                       Effect.andThen(
