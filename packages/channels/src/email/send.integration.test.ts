@@ -1018,6 +1018,44 @@ describe("an accepted email send", () => {
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
+  it.live("ends failed, unsent, when its Project loses the Domain after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so the failed send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Another Project's claim proven, or this Project removing the Domain, ends its link.
+      const [link] = yield* db
+        .delete(organizationDomain)
+        .where(eq(organizationDomain.customDomainId, project.customDomainId))
+        .returning();
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "The Project no longer holds the sending Domain" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+      // Given the Domain back, the Project can send again: the failed send's Usage was freed.
+      if (link) {
+        yield* db.insert(organizationDomain).values(link);
+      }
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
   it.live("ends failed when its Sandbox Domain is paused after accept", () => {
     const backend = makeBackend();
     return Effect.gen(function* () {
