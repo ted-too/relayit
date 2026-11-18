@@ -558,6 +558,42 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("removes a deleted Project's Domain and queues the delete of its SES identity", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("deleter");
+        const project = yield* createProject(owner, `Deleted ${run.slice(-8)}`);
+        const fqdn = `${run}.deleted.example.test`;
+        const added = yield* call("POST", `/projects/${project.slug}/domains`, {
+          as: owner,
+          body: { fqdn },
+        });
+        expect(added.status).toBe(200);
+
+        expect(
+          (yield* call("POST", "/auth/organization/delete", {
+            as: owner,
+            body: { organizationId: project.id },
+          })).status,
+        ).toBe(200);
+
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        expect(
+          yield* Effect.promise(() =>
+            db.query.customDomain.findFirst({ columns: { id: true }, where: { fqdn } }),
+          ),
+        ).toBeUndefined();
+        // The worker deletes the identity; the job is in the outbox for it, naming the FQDN.
+        const queued = yield* Effect.promise(() =>
+          db.$client.query(
+            "select 1 from job_outbox where job_name = 'email.delete-domain-identity' and position($1 in payload) > 0",
+            [fqdn],
+          ),
+        );
+        expect(queued.rows).toHaveLength(1);
+        yield* Effect.promise(() => db.$client.end());
+      }),
+    );
+
     it.effect("lets an owner run each operation, and answers 503 for the missing builder", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("owner");

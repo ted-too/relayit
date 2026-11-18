@@ -97,7 +97,7 @@ Pausing and unpausing are not available as dashboard actions yet. Contact suppor
 
 ## Claiming a domain from another Project
 
-If you add a domain that was already added to Relayit, by another Project or by one that no longer exists, Relayit starts a claim instead of failing:
+If you add a domain that another Project already added to Relayit, Relayit starts a claim instead of failing:
 
 1. The Domain appears in your list with a `claim pending` badge.
 2. The Domain page shows an **Ownership** table with a `_relayit-challenge` TXT record.
@@ -110,3 +110,5 @@ When ownership verifies, the domain moves to your Project and the other Project 
 ## Delete a Domain
 
 Open the Domain menu and choose **Delete Domain**, then type the domain name to confirm. Deleting frees the domain so it can be added again. Emails already queued from it fail at send time. Past Messages keep their original `from`.
+
+A domain that has sent Messages keeps its DKIM key while those Messages exist. Adding it again, from any Project, starts a claim: publish the `_relayit-challenge` TXT record to prove ownership, as in [Claiming a domain from another Project](#claiming-a-domain-from-another-project). A domain that never sent is added again as new, with new DNS records.
