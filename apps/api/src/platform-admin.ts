@@ -8,8 +8,8 @@
  * it reaches the api's sessions and rewrites them in the shape the api stores.
  *
  * Exit codes: 0 changed and confirmed, 2 usage, 3 no such user, 4 environment, 5 database,
- * 6 the sessions could not be confirmed, 7 the role was removed but the session store it
- * searched holds no session of anyone. The last line printed is the outcome: a failing
+ * 6 the sessions could not be confirmed, 7 the role was removed but no session of the user
+ * was found and the session store it searched holds no session of anyone. The last line printed is the outcome: a failing
  * Redis logs its reconnects, and better-auth its own errors, before it.
  */
 import { JobsLive } from "@repo/jobs";
