@@ -26,6 +26,10 @@ export const emailDeliveryEventKindEnum = pgEnum(
 /**
  * SES-reported outcome for an email Delivery (Deliverability ingest).
  * Sender FKs are denormalized for reputation range scans by Domain / Sandbox.
+ *
+ * An event belongs to its Delivery and outlives the Domain: removing a Domain clears
+ * `customDomainId` here, and an outcome reported after that is recorded naming no sender.
+ * Either way it counts toward no Domain, least of all one added later under the same FQDN.
  */
 export const emailDeliveryEvent = pgTable(
   "email_delivery_event",
@@ -37,7 +41,7 @@ export const emailDeliveryEvent = pgTable(
       .notNull()
       .references(() => emailDelivery.id, { onDelete: "cascade" }),
     customDomainId: text("custom_domain_id").references(() => customDomain.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
       onDelete: "cascade",
@@ -49,7 +53,7 @@ export const emailDeliveryEvent = pgTable(
   (t) => [
     check(
       "email_delivery_event_sender_kind_check",
-      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`,
+      sql`num_nonnulls(${t.customDomainId}, ${t.sandboxDomainId}) <= 1`,
     ),
     index("email_delivery_event_delivery_idx").on(t.emailDeliveryId),
     index("email_delivery_event_kind_idx").on(t.kind),

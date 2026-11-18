@@ -11,15 +11,19 @@ import {
   customDomain,
   type DomainPausedReason,
   emailDelivery,
+  emailDeliveryEvent,
   emailDnsRecord,
   emailDomainRegistration,
   type OrganizationDomain,
+  message,
   type OrganizationDomainInsert,
+  organizationAppEnvironment,
   organizationDomain,
 } from "@repo/persistence/db/schema";
-import { and, eq, exists, inArray, ne, notExists, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, ne, not, notExists, type SQL, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
+import { emitDomainUpdated } from "../deliverability/project-sending-pause";
 import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
 import { DnsLookups } from "../dns-lookups";
@@ -134,11 +138,9 @@ const registerCustomDomainIdentity = (input: {
     const region = backend.defaultRegion;
 
     // The identity and its registration land as one step against the Domain's removal.
-    // Holding the row keeps the Domain and its links until the registration is recorded,
-    // so a removal either came first and nothing is created, or comes after and deletes
-    // the identity. The row alone is not enough to go on: a Domain kept bare for its
-    // Deliveries outlives its last link, and registering it would leave an identity no
-    // Project is linked to.
+    // Holding the row keeps the Domain until the registration is recorded, so a removal
+    // either came first, the row is gone and nothing is created, or comes after and
+    // deletes the identity.
     yield* input.db
       .transaction((tx) =>
         Effect.gen(function* () {
@@ -148,20 +150,15 @@ const registerCustomDomainIdentity = (input: {
             .from(customDomain)
             .where(eq(customDomain.id, input.customDomainId))
             .for("key share");
-          const [linked] = yield* tx
-            .select({ organizationId: organizationDomain.organizationId })
-            .from(organizationDomain)
-            .where(eq(organizationDomain.customDomainId, input.customDomainId))
-            .limit(1);
-          if (!(held && linked)) {
+          if (!held) {
             return yield* new CustomDomainError({
               customDomainId: input.customDomainId,
               message: "Domain was removed before it was registered with SES.",
               operation: "register_identity",
             });
           }
-          // Another claim on the same unregistered Domain registered it while this one
-          // waited for the lock.
+          // Another add of the same unregistered Domain registered it while this one waited
+          // for the lock.
           const [registered] = yield* tx
             .select({ id: emailDomainRegistration.id })
             .from(emailDomainRegistration)
@@ -344,9 +341,10 @@ const createOrgDomainLink = (input: {
   });
 
 /**
- * Add a Domain to a Project. A new FQDN is the Project's at once. One already added, by
- * another Project or by none that still holds it, becomes a claim the Project proves with
- * a TXT record before it may send from or change the Domain.
+ * Add a Domain to a Project. A new FQDN is the Project's at once, and so is one that was
+ * removed: its row went with its last link, so it is added with a new DKIM key and nothing
+ * of what was sent from it before. One another Project is linked to becomes a claim the
+ * Project proves with a TXT record before it may send from or change the Domain.
  */
 export const createCustomDomain = (input: CreateCustomDomainInput) =>
   Effect.gen(function* () {
@@ -386,14 +384,10 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
             organizationId: input.organizationId,
           });
         }
-        // A first add that failed after writing the Domain left it unregistered or never
-        // checked, and a claim on an unregistered Domain whose registration failed left it
-        // unregistered; adding it again finishes the job.
-        if (
-          ownLink.ownershipVerificationStatus === "verified"
-            ? existing.lastCheckedAt === null
-            : !existing.registration
-        ) {
+        // An add that failed after writing the Domain or the claim left the Domain
+        // unregistered, or registered and never checked because its verification was not
+        // scheduled; adding it again finishes the job, for its holder and for a claimant.
+        if (!existing.registration || existing.lastCheckedAt === null) {
           if (!existing.registration) {
             yield* registerCustomDomainIdentity({
               customDomainId: existing.id,
@@ -441,14 +435,15 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       }
 
       // Proof is asked for even when no Project holds the Domain any more: one whose holder
-      // was deleted, or left while a claim was pending, is still someone's DNS and DKIM key.
-      // Claims run side by side: each has its own token, and the first proven takes the
-      // Domain from the rest, so one claim never blocks another.
+      // left while a claim was pending is still someone's DNS and DKIM key. Claims run side
+      // by side: each has its own token, and the first proven takes the Domain from the
+      // rest, so one claim never blocks another.
       //
       // The Domain may be going as this claim arrives: its last link was removed a moment
       // ago. Waiting on its row settles which came first. If the claim did, the Domain
-      // stays; if the removal did, the Domain is gone, or is left unregistered because
-      // Deliveries still name it, which is why its registration is read only now.
+      // stays; if the removal did, the Domain is gone and the FQDN is added as new. A held
+      // Domain can still be unregistered, when its holder's registration failed, so the
+      // claim reads that here and registers it.
       const claim = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -603,22 +598,71 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
   });
 
 /**
+ * Writes a Domain's pause or unpause where `changes` matches, and tells the Project that
+ * holds it (`domain.updated`) in the same transaction, only if a row changed. Claimants are
+ * not told: the Domain is not theirs yet. False when the Domain does not exist.
+ */
+const setDomainPause = (
+  tx: DatabaseTransaction,
+  customDomainId: string,
+  values: { readonly isPaused: boolean; readonly pausedReason: DomainPausedReason | null },
+  changes: SQL | undefined,
+) =>
+  Effect.gen(function* () {
+    const [changed] = yield* tx
+      .update(customDomain)
+      .set(values)
+      .where(and(eq(customDomain.id, customDomainId), changes))
+      .returning({
+        id: customDomain.id,
+        isPaused: customDomain.isPaused,
+        pausedReason: customDomain.pausedReason,
+        verificationStatus: customDomain.verificationStatus,
+      });
+    if (!changed) {
+      const [existing] = yield* tx
+        .select({ id: customDomain.id })
+        .from(customDomain)
+        .where(eq(customDomain.id, customDomainId));
+      return existing !== undefined;
+    }
+    const holders = yield* tx
+      .select({ organizationId: organizationDomain.organizationId })
+      .from(organizationDomain)
+      .where(
+        and(
+          eq(organizationDomain.customDomainId, customDomainId),
+          eq(organizationDomain.ownershipVerificationStatus, "verified"),
+        ),
+      );
+    yield* Effect.forEach(
+      holders,
+      ({ organizationId }) => emitDomainUpdated(tx, organizationId, changed),
+      { discard: true },
+    );
+    return true;
+  });
+
+/**
  * A pause is the platform's act on a Domain, not its Project's: it names the Domain alone
  * and asks nothing of who holds it, so the caller is what decides who may (the api keeps it
- * to platform admins).
+ * to platform admins). Pausing a Domain that is already paused changes its reason, which is
+ * how an admin takes over a pause Relayit made itself so that it is not lifted when SES
+ * restores the Project.
  */
 export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
 
-    const [paused] = yield* db
-      .update(customDomain)
-      .set({
-        isPaused: true,
-        pausedReason: input.reason,
-      })
-      .where(eq(customDomain.id, input.customDomainId))
-      .returning({ id: customDomain.id })
+    const found = yield* db
+      .transaction((tx) =>
+        setDomainPause(
+          tx,
+          input.customDomainId,
+          { isPaused: true, pausedReason: input.reason },
+          sql`(not ${customDomain.isPaused} or ${customDomain.pausedReason} is distinct from ${input.reason})`,
+        ),
+      )
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -630,7 +674,7 @@ export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
             }),
         ),
       );
-    if (!paused) {
+    if (!found) {
       return yield* new CustomDomainNotFound({
         customDomainId: input.customDomainId,
         message: "Domain not found.",
@@ -644,14 +688,15 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
 
-    const [unpaused] = yield* db
-      .update(customDomain)
-      .set({
-        isPaused: false,
-        pausedReason: null,
-      })
-      .where(eq(customDomain.id, input.customDomainId))
-      .returning({ id: customDomain.id })
+    const found = yield* db
+      .transaction((tx) =>
+        setDomainPause(
+          tx,
+          input.customDomainId,
+          { isPaused: false, pausedReason: null },
+          sql`${customDomain.isPaused}`,
+        ),
+      )
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -663,7 +708,7 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
             }),
         ),
       );
-    if (!unpaused) {
+    if (!found) {
       return yield* new CustomDomainNotFound({
         customDomainId: input.customDomainId,
         message: "Domain not found.",
@@ -674,11 +719,95 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   });
 
 /**
+ * Detaches what Projects sent from a Domain they no longer hold, in the caller's
+ * transaction, which holds the Domain's row. The row can outlive a Project's hold on it,
+ * for the Project that took the Domain by a claim or still has one pending, and what the
+ * leaving Project sent is not theirs: each of its Deliveries stops referring to the row and
+ * records the FQDN instead, and their events stop referring to it too. Found through the
+ * Delivery's Message and App Environment, so only these Projects' rows move.
+ *
+ * Each update finds its own rows in the database, through the Message and App Environment:
+ * a Project has more Deliveries than a query takes parameters, so their ids never come back
+ * here, and the events are not found through the Deliveries just moved, which Postgres joins
+ * badly when it has no statistics for them. `limit` moves that many events and that many
+ * Deliveries at most, for a caller that goes in batches. Answers how many of each it moved.
+ *
+ * Whoever writes a Delivery or an event naming a Domain takes its row first (`KEY SHARE`),
+ * so none is written behind this.
+ */
+const detachDeliveries = (
+  tx: DatabaseTransaction,
+  input: {
+    readonly customDomainId: string;
+    readonly fqdn: string;
+    readonly limit?: number;
+    readonly organizationIds: readonly string[];
+  },
+) =>
+  Effect.gen(function* () {
+    if (input.organizationIds.length === 0) {
+      return { deliveries: 0, events: 0 };
+    }
+    const theirs = inArray(organizationAppEnvironment.organizationId, input.organizationIds);
+    const events = tx
+      .select({ id: emailDeliveryEvent.id })
+      .from(emailDeliveryEvent)
+      .innerJoin(emailDelivery, eq(emailDelivery.id, emailDeliveryEvent.emailDeliveryId))
+      .innerJoin(message, eq(message.id, emailDelivery.messageId))
+      .innerJoin(
+        organizationAppEnvironment,
+        eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
+      )
+      .where(and(eq(emailDeliveryEvent.customDomainId, input.customDomainId), theirs));
+    const deliveries = tx
+      .select({ id: emailDelivery.id })
+      .from(emailDelivery)
+      .innerJoin(message, eq(message.id, emailDelivery.messageId))
+      .innerJoin(
+        organizationAppEnvironment,
+        eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
+      )
+      .where(and(eq(emailDelivery.customDomainId, input.customDomainId), theirs));
+
+    const clearedEvents = tx.$with("cleared_events").as(
+      tx
+        .update(emailDeliveryEvent)
+        .set({ customDomainId: null })
+        .where(
+          inArray(
+            emailDeliveryEvent.id,
+            input.limit === undefined ? events : events.limit(input.limit),
+          ),
+        )
+        .returning({ id: emailDeliveryEvent.id }),
+    );
+    const [clearedCount] = yield* tx
+      .with(clearedEvents)
+      .select({ rows: count() })
+      .from(clearedEvents);
+    const detached = tx.$with("detached").as(
+      tx
+        .update(emailDelivery)
+        .set({ customDomainId: null, removedDomainFqdn: input.fqdn })
+        .where(
+          inArray(
+            emailDelivery.id,
+            input.limit === undefined ? deliveries : deliveries.limit(input.limit),
+          ),
+        )
+        .returning({ id: emailDelivery.id }),
+    );
+    const [detachedCount] = yield* tx.with(detached).select({ rows: count() }).from(detached);
+    return { deliveries: detachedCount?.rows ?? 0, events: clearedCount?.rows ?? 0 };
+  });
+
+/**
  * A proven claim takes the Domain: its link is marked proven and every other Project's link
  * goes, in one transaction holding the Domain's row. A failure leaves the claim unproven to
  * be checked again, and of two claims proven at once the second finds its link gone. False
- * when it is: another claim took the Domain first. The SES registration and DNS records
- * stay, since they belong to the Domain, not the Project.
+ * when it is: another claim took the Domain first. The SES registration, DNS records and
+ * DKIM key stay, since they belong to the Domain, not the Project; what the Projects losing
+ * it sent from it does not, and is detached from it here.
  */
 export const completeDomainClaimTransfer = (input: {
   readonly customDomainId: string;
@@ -695,8 +824,8 @@ export const completeDomainClaimTransfer = (input: {
   input.db
     .transaction((tx) =>
       Effect.gen(function* () {
-        yield* tx
-          .select({ id: customDomain.id })
+        const [domain] = yield* tx
+          .select({ fqdn: customDomain.fqdn })
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
@@ -710,17 +839,30 @@ export const completeDomainClaimTransfer = (input: {
             ),
           )
           .returning({ organizationId: organizationDomain.organizationId });
-        if (!proven) {
+        if (!(proven && domain)) {
           return false;
         }
-        yield* tx
+        const lost = yield* tx
           .delete(organizationDomain)
           .where(
             and(
               eq(organizationDomain.customDomainId, input.customDomainId),
               ne(organizationDomain.organizationId, input.organizationId),
             ),
-          );
+          )
+          .returning({
+            held: organizationDomain.ownershipVerificationStatus,
+            organizationId: organizationDomain.organizationId,
+          });
+        // Only a Project that held the Domain has sent from it: another claim that was
+        // never proven has nothing on it to look for.
+        yield* detachDeliveries(tx, {
+          customDomainId: input.customDomainId,
+          fqdn: domain.fqdn,
+          organizationIds: lost
+            .filter(({ held }) => held === "verified")
+            .map(({ organizationId }) => organizationId),
+        });
         return true;
       }),
     )
@@ -743,9 +885,11 @@ export const completeDomainClaimTransfer = (input: {
  * Project is linked, so a claim that arrived first keeps the Domain; the row is held, so
  * one arriving now waits for this to commit.
  *
- * A Delivery keeps naming the Domain it was sent from and the database refuses to drop a
- * Domain one names (#70). Such a Domain is left as its bare row, unregistered and unverified, and
- * goes once its Deliveries do. Adding its FQDN meanwhile is a claim that registers it again.
+ * What was sent from the Domain stays with the Project that sent it, so the FQDN added
+ * again is a new Domain with none of this history. A Project's Deliveries are detached as
+ * its link goes (`detachDeliveries`); the update here takes any still naming the row, of a
+ * Project whose link went where no code saw it, and their events lose the reference by
+ * their foreign key.
  */
 const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =>
   Effect.gen(function* () {
@@ -781,31 +925,22 @@ const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =
     // A Domain's records are the customer's to publish and exist only as these rows.
     yield* tx.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, customDomainId));
 
-    const [sent] = yield* tx
-      .select({ id: emailDelivery.id })
-      .from(emailDelivery)
-      .where(eq(emailDelivery.customDomainId, customDomainId))
-      .limit(1);
-    if (sent) {
-      yield* tx
-        .update(customDomain)
-        .set({
-          lastCheckedAt: null,
-          nextVerifyAt: null,
-          verificationStatus: "not_verified",
-          verifyBackoffLevel: 0,
-        })
-        .where(eq(customDomain.id, customDomainId));
-    } else {
-      yield* tx.delete(customDomain).where(eq(customDomain.id, customDomainId));
-    }
+    yield* tx
+      .update(emailDelivery)
+      .set({ customDomainId: null, removedDomainFqdn: domain.fqdn })
+      .where(eq(emailDelivery.customDomainId, customDomainId));
+    yield* tx.delete(customDomain).where(eq(customDomain.id, customDomainId));
     return true;
   });
 
 /**
  * Removes a Project's link to a Domain and, when it was the last, the Domain with it.
  * `unprovenOnly` leaves a link that has been proven. The Domain's row is taken before the
- * link, as a claim transfer takes them, so the two never wait on each other.
+ * link, as a claim transfer takes them, so the two never wait on each other. What the
+ * Project sent from the Domain is detached from it, whether or not the row stays for
+ * another Project's claim. A claim never proven has sent nothing from it: only the holder
+ * sends, and a holder that loses the Domain is detached then, so removing a claim does not
+ * go looking through the holder's Deliveries.
  */
 export const removeDomainLink = (input: {
   readonly customDomainId: string;
@@ -816,8 +951,8 @@ export const removeDomainLink = (input: {
   input.db
     .transaction((tx) =>
       Effect.gen(function* () {
-        yield* tx
-          .select({ id: customDomain.id })
+        const [domain] = yield* tx
+          .select({ fqdn: customDomain.fqdn })
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
@@ -832,10 +967,15 @@ export const removeDomainLink = (input: {
                 : undefined,
             ),
           )
-          .returning({ organizationId: organizationDomain.organizationId });
-        if (!unlinked) {
+          .returning({ held: organizationDomain.ownershipVerificationStatus });
+        if (!(unlinked && domain)) {
           return { unlinked: false as const };
         }
+        yield* detachDeliveries(tx, {
+          customDomainId: input.customDomainId,
+          fqdn: domain.fqdn,
+          organizationIds: unlinked.held === "verified" ? [input.organizationId] : [],
+        });
         return {
           domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId),
           unlinked: true as const,
@@ -859,8 +999,7 @@ export const removeDomainLink = (input: {
  * Removes the Domains left without a link, among `among` or of them all. Deleting a Project
  * takes its links in the database, where no code sees the last one go, so this follows a
  * Project's deletion with the Domains it was linked to, and runs over every Domain when
- * the worker starts. A Domain kept only for its Deliveries is passed over until they go.
- * One that fails is logged and the rest still go.
+ * the worker starts. One that fails is logged and the rest still go.
  */
 export const removeUnlinkedDomains = (among?: readonly string[]) =>
   Effect.gen(function* () {
@@ -876,20 +1015,6 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
               .select({ organizationId: organizationDomain.organizationId })
               .from(organizationDomain)
               .where(eq(organizationDomain.customDomainId, customDomain.id)),
-          ),
-          or(
-            exists(
-              db
-                .select({ id: emailDomainRegistration.id })
-                .from(emailDomainRegistration)
-                .where(eq(emailDomainRegistration.customDomainId, customDomain.id)),
-            ),
-            notExists(
-              db
-                .select({ id: emailDelivery.id })
-                .from(emailDelivery)
-                .where(eq(emailDelivery.customDomainId, customDomain.id)),
-            ),
           ),
         ),
       )
@@ -921,6 +1046,112 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
       { discard: true },
     );
   });
+
+/** How many Deliveries, and how many events, one transaction of `detachStrayDeliveries` moves. */
+const STRAY_BATCH = 1000;
+
+/**
+ * Detaches every Delivery that names a Domain its own Project does not hold, with its
+ * events. None is left that way now: a Project's Deliveries are detached as it loses the
+ * Domain. This is for the ones from before that was so, where a claim was proven and the old
+ * holder's Deliveries went on naming the new holder's Domain; it runs as the worker starts
+ * and finds nothing once they are gone. A Delivery of the Project that holds the Domain is
+ * never a stray, whatever claims are pending on it.
+ *
+ * Finding the strays reads every Delivery that names a Domain, without a lock. Each batch
+ * then takes its Domain's row, reads again that the Project does not hold it (a claim of its
+ * own may have been proven since) and moves at most `STRAY_BATCH` Deliveries and as many
+ * events, so sends from the Domain wait for one batch at a time, never for the whole of a
+ * long history. One Domain that fails is logged and the rest still go.
+ */
+export const detachStrayDeliveries = Effect.gen(function* () {
+  const db = yield* DB;
+  const holds = (organizationId: SQL | string, customDomainId: SQL | string) =>
+    sql`exists (
+      select 1 from ${organizationDomain}
+      where ${organizationDomain.customDomainId} = ${customDomainId}
+        and ${organizationDomain.organizationId} = ${organizationId}
+        and ${organizationDomain.ownershipVerificationStatus} = 'verified')`;
+  const strays = yield* db
+    .selectDistinct({
+      customDomainId: emailDelivery.customDomainId,
+      organizationId: organizationAppEnvironment.organizationId,
+    })
+    .from(emailDelivery)
+    .innerJoin(message, eq(message.id, emailDelivery.messageId))
+    .innerJoin(
+      organizationAppEnvironment,
+      eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
+    )
+    .where(
+      and(
+        isNotNull(emailDelivery.customDomainId),
+        not(
+          holds(
+            sql`${organizationAppEnvironment.organizationId}`,
+            sql`${emailDelivery.customDomainId}`,
+          ),
+        ),
+      ),
+    )
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new CustomDomainError({
+            cause,
+            message: "Failed to list Deliveries naming a Domain their Project does not hold.",
+            operation: "delete",
+          }),
+      ),
+    );
+
+  yield* Effect.forEach(
+    strays,
+    ({ customDomainId, organizationId }) =>
+      Effect.gen(function* () {
+        if (!customDomainId) {
+          return;
+        }
+        let more = true;
+        while (more) {
+          more = yield* db.transaction((tx) =>
+            Effect.gen(function* () {
+              const [domain] = yield* tx
+                .select({ fqdn: customDomain.fqdn })
+                .from(customDomain)
+                .where(eq(customDomain.id, customDomainId))
+                .for("update");
+              const [held] = yield* tx
+                .select({ id: customDomain.id })
+                .from(customDomain)
+                .where(
+                  and(eq(customDomain.id, customDomainId), holds(organizationId, customDomainId)),
+                );
+              if (!domain || held) {
+                return false;
+              }
+              const moved = yield* detachDeliveries(tx, {
+                customDomainId,
+                fqdn: domain.fqdn,
+                limit: STRAY_BATCH,
+                organizationIds: [organizationId],
+              });
+              return moved.deliveries === STRAY_BATCH || moved.events === STRAY_BATCH;
+            }),
+          );
+        }
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("Failed to detach Deliveries from a Domain their Project lost", {
+            cause,
+            customDomainId,
+            organizationId,
+          }),
+        ),
+      ),
+    { discard: true },
+  );
+});
 
 /**
  * Stops the ownership check of a link that has been removed. The removal has happened by

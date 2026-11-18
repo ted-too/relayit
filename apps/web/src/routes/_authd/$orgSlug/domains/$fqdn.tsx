@@ -91,7 +91,10 @@ function RouteComponent() {
               <p>
                 {domain.pausedReason && `${PAUSED_REASONS[domain.pausedReason].description} `}
                 New sends from it are rejected and Deliveries already queued from it fail; none are
-                held to send later. It stays paused until Relayit's operators unpause it.
+                held to send later.{" "}
+                {domain.pausedReason && PAUSED_REASONS[domain.pausedReason].liftedBy === "relayit"
+                  ? "It is unpaused automatically once the Project's sending is restored."
+                  : "It stays paused until Relayit's operators unpause it."}
               </p>
             </AlertDescription>
           </Alert>

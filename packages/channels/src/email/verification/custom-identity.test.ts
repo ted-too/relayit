@@ -59,6 +59,7 @@ const verify = (identity: { readonly dkimVerified: boolean; readonly verified: b
             asked.push(input);
             return Effect.succeed(identity);
           },
+          getProjectSendingStatus: unsupported,
           send: unsupported,
         } satisfies EmailBackendService),
       ),

@@ -22,27 +22,37 @@ import { queries } from "@/lib/queries";
 
 type AdminDomain = AdminProject["domains"][number];
 
+/** What an admin should know before lifting a pause that SES may put straight back. */
+const UNPAUSE_WARNINGS: Partial<Record<NonNullable<AdminDomain["pausedReason"]>, string>> = {
+  bad_reputation:
+    "An admin paused this Domain for its Project's sending reputation, or Relayit did before its own pauses were recorded apart. Unpausing it does not restore the Project's sending in SES: if SES still pauses the Project's tenant, the next send is accepted, fails for good and pauses the Domain again.",
+  project_sending_pause:
+    "Relayit paused this Domain because SES paused its Project's sending, and unpauses it by itself when SES restores that. Restore the Project's tenant in SES instead of unpausing here: while SES still pauses it, the next send is accepted, fails for good and pauses the Domain again.",
+};
+
 /**
- * A platform admin pauses or unpauses a Domain, whichever its state calls for: a pause asks
- * for its reason, an unpause confirms. Either closes as the Domain's new state lands in the
- * admin's list, so its badge changes without a reload.
+ * A platform admin pauses or unpauses a Domain: a pause asks for its reason, an unpause
+ * confirms. A Domain that is already paused can be paused again, which only changes the
+ * reason: that is how an admin keeps a Domain paused that Relayit paused itself and would
+ * unpause when SES restores the Project, without unpausing it first. Either
+ * closes as the Domain's new state lands in the admin's list, so its badge changes without
+ * a reload.
  */
 export function DomainPause({
+  action,
+  close,
   domain,
-  open,
-  setOpen,
 }: {
+  action: "pause" | "unpause" | null;
+  close: () => void;
   domain: AdminDomain;
-  open: boolean;
-  setOpen: (open: boolean) => void;
 }) {
   const params = { domainId: domain.id };
   const landed = async (
     client: QueryClient,
     state: Pick<AdminDomain, "isPaused" | "pausedReason">,
   ) => {
-    // Closed in the same render as the state changes, or the other dialog would flash.
-    setOpen(false);
+    close();
     client.setQueryData(
       queries.admin.listProjects.queryKey,
       (old: readonly AdminProject[] | undefined) =>
@@ -100,10 +110,10 @@ export function DomainPause({
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             form.reset();
+            close();
           }
-          setOpen(nextOpen);
         }}
-        open={open && !domain.isPaused}
+        open={action === "pause"}
       >
         <DialogPopup
           render={
@@ -116,11 +126,15 @@ export function DomainPause({
           }
         >
           <DialogHeader>
-            <DialogTitle>Pause {domain.fqdn}</DialogTitle>
+            <DialogTitle>
+              {domain.isPaused ? `Keep ${domain.fqdn} paused` : `Pause ${domain.fqdn}`}
+            </DialogTitle>
             <DialogDescription>
-              While it is paused, new sends from this Domain are rejected and Deliveries already
-              queued from it fail. Nothing is held to send later. Its Project's members see the
-              pause and its reason, and cannot lift it: it stays paused until an admin unpauses it.
+              {domain.isPaused
+                ? "This Domain is paused already. Giving it a reason of your own makes the pause yours, without unpausing it: Relayit no longer unpauses it when SES restores the Project's sending. If Relayit has just unpaused it, this pauses it again. "
+                : "While it is paused, new sends from this Domain are rejected and Deliveries already queued from it fail. Nothing is held to send later. "}
+              Its Project's members see the pause and its reason, and cannot lift it: it stays
+              paused until an admin unpauses it.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -143,7 +157,7 @@ export function DomainPause({
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
             <form.AppForm>
               <form.SubmitButton hasDefaults variant="destructive">
-                Pause Domain
+                {domain.isPaused ? "Keep Paused" : "Pause Domain"}
               </form.SubmitButton>
             </form.AppForm>
           </DialogFooter>
@@ -152,16 +166,19 @@ export function DomainPause({
       <ConfirmAction
         confirm={{ text: "Unpause Domain", variant: "default" }}
         description={
-          domain.pausedReason === "bad_reputation"
-            ? "This Domain was paused for its Project's sending reputation, by an admin or by Relayit itself when SES paused the Project's sending. Unpausing it here does not restore that: check the Project's tenant in SES and restore its sending there first, or the next send is accepted, fails for good and pauses the Domain again."
-            : "Sends from this Domain are accepted and delivered again straight away."
+          (domain.pausedReason && UNPAUSE_WARNINGS[domain.pausedReason]) ??
+          "Sends from this Domain are accepted and delivered again straight away."
         }
         // The mutation closes it on success and toasts on failure, which leaves it open.
         execute={() => unpauseDomain().then(() => undefined)}
         isLoading={isUnpausing}
         onError={() => undefined}
-        open={open && domain.isPaused}
-        setOpen={setOpen}
+        open={action === "unpause"}
+        setOpen={(nextOpen) => {
+          if (!nextOpen) {
+            close();
+          }
+        }}
         title={`Unpause ${domain.fqdn}`}
       />
     </>

@@ -8,15 +8,11 @@ export type SesTenantClient = Pick<
   | "createTenant"
   | "createTenantResourceAssociation"
   | "deleteTenantResourceAssociation"
+  | "getReputationEntity"
   | "getTenant"
   | "listResourceTenants"
   | "listTenants"
 >;
-
-const TENANT_PREFIX = "relayit-";
-
-/** One SES tenant per Project. Project ids are typeids (≤ 64 chars with prefix). */
-export const sesTenantNameFor = (projectId: string) => `${TENANT_PREFIX}${projectId}`;
 
 /** `arn:aws:ses:{region}:{account}:tenant/...` → account id. */
 const accountIdFromArn = (arn: string) => arn.split(":")[4];
@@ -103,6 +99,48 @@ export const isSesTenantPaused = (ses: SesTenantClient, tenantName: string) =>
   ses
     .getTenant({ TenantName: tenantName })
     .pipe(Effect.map((response) => response.Tenant?.SendingStatus === "DISABLED"));
+
+/**
+ * Whether SES lets the tenant send right now. A tenant has two statuses, its owner's and
+ * SES's own, and cannot send while either is `DISABLED`; `SendingStatusAggregate` is the two
+ * combined, which `GetTenant` does not promise. `REINSTATED` is sending restored while
+ * findings are still open. `absent` is a Project that has not sent from this region.
+ */
+export const sesTenantSendingStatus = (ses: SesTenantClient, tenantName: string) =>
+  Effect.gen(function* () {
+    const tenantArn = yield* ses.getTenant({ TenantName: tenantName }).pipe(
+      Effect.map((response) => response.Tenant?.TenantArn),
+      Effect.catchTags({ NotFoundException: () => Effect.succeed(undefined) }),
+    );
+    if (!tenantArn) {
+      return "absent" as const;
+    }
+    const entity = yield* ses
+      .getReputationEntity({
+        ReputationEntityReference: tenantArn,
+        ReputationEntityType: "RESOURCE",
+      })
+      .pipe(
+        Effect.map((response) => response.ReputationEntity),
+        Effect.catchTags({ NotFoundException: () => Effect.succeed(undefined) }),
+      );
+    if (!entity) {
+      return "absent" as const;
+    }
+    switch (entity.SendingStatusAggregate) {
+      case "DISABLED":
+        return "paused" as const;
+      case "ENABLED":
+      case "REINSTATED":
+        return "enabled" as const;
+      default:
+        // A status this code does not know must neither pause nor unpause anything.
+        return yield* new AwsUnexpectedResponseError({
+          missingField: "SendingStatusAggregate",
+          operation: "GetReputationEntity",
+        });
+    }
+  });
 
 /**
  * SES refuses to delete an identity that is still associated with a tenant.

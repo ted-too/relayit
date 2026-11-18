@@ -99,8 +99,12 @@ const makeDb = (overrides: {
     },
     select: () => ({
       from: () => ({
-        // No recipient is suppressed; send.integration.test.ts checks suppression as SQL.
-        where: () => Effect.succeed([]),
+        // No recipient is suppressed; send.integration.test.ts checks suppression as SQL,
+        // and that the Domains' rows are locked in an order that can't deadlock.
+        where: () =>
+          Object.assign(Effect.succeed([]), {
+            orderBy: () => ({ for: () => Effect.succeed([]) }),
+          }),
       }),
     }),
     transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),
@@ -171,6 +175,7 @@ const testLayer = (
       deleteIdentity: unsupported,
       ensureInfrastructure: unsupported,
       getIdentityStatus: unsupported,
+      getProjectSendingStatus: unsupported,
       send: options.send ?? unsupported,
     } satisfies EmailBackendService),
   );
@@ -277,7 +282,7 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  it.effect("a Project Sending Pause pauses the Domain and fails terminally", () => {
+  it.effect("a Project Sending Pause pauses the Project's Domains and fails terminally", () => {
     const { db, updates } = makeDb({});
 
     return emailDeliverHandler.handle(payload, execution).pipe(
@@ -301,7 +306,7 @@ describe("emailDeliverHandler", () => {
         expect(emailDeliverHandler.classifyFailure(error)).toBe("terminal");
         expect(updates).toContainEqual({
           isPaused: true,
-          pausedReason: "bad_reputation",
+          pausedReason: "project_sending_pause",
         });
         expect(updates).toContainEqual(
           expect.objectContaining({

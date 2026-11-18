@@ -127,7 +127,10 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
           Effect.provideService(Jobs, jobs),
         );
 
-    return {
+    // Nothing pauses a Project here by itself: `setProjectSendingPaused` is the SES console.
+    const pausedProjects = new Set<string>();
+
+    const backend = {
       createIdentity: ({ fqdn }) =>
         Effect.succeed({
           mailFrom: {
@@ -154,6 +157,8 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
       deleteIdentity: () => Effect.void,
       ensureInfrastructure: () => Effect.void,
       getIdentityStatus: () => Effect.succeed({ dkimVerified: true, verified: true }),
+      getProjectSendingStatus: ({ projectId }) =>
+        Effect.sync(() => (pausedProjects.has(projectId) ? "paused" : "enabled")),
       send: ({ message }) =>
         Effect.gen(function* () {
           const providerMessageId = `fake-${crypto.randomUUID()}`;
@@ -173,4 +178,17 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
           return { providerMessageId };
         }),
     } satisfies EmailBackendService;
+
+    return {
+      ...backend,
+      /** What SES's reputation policy, or a person in its console, does to a Project's tenant. */
+      setProjectSendingPaused: (projectId: string, paused: boolean) =>
+        Effect.sync(() => {
+          if (paused) {
+            pausedProjects.add(projectId);
+          } else {
+            pausedProjects.delete(projectId);
+          }
+        }),
+    };
   });

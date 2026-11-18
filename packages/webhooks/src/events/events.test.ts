@@ -118,7 +118,7 @@ describe("Contact Webhook Events", () => {
 });
 
 describe("Domain Webhook Events", () => {
-  test("decodes minimal created and updated payloads", () => {
+  test("decodes created and updated payloads", () => {
     expect(
       Schema.decodeSync(domainCreated.payload)({
         domain_id: "domn_test",
@@ -128,6 +128,8 @@ describe("Domain Webhook Events", () => {
     expect(
       Schema.decodeSync(domainUpdated.payload)({
         domain_id: "domn_test",
+        paused: true,
+        paused_reason: "project_sending_pause",
         status: "verified",
       }).status,
     ).toBe("verified");

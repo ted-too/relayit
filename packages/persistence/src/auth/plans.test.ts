@@ -33,12 +33,8 @@ describe("limitsFor", () => {
       retention: null,
       email: {
         customDomains: null,
-        transactional: {
-          managed: { monthlySends: null, dailySends: null },
-        },
-        marketing: {
-          managed: { monthlySends: null, dailySends: null },
-        },
+        transactional: { monthlySends: null, dailySends: null },
+        marketing: { monthlySends: null, dailySends: null },
       },
     });
   });
@@ -215,12 +211,8 @@ describe("ensureUserLimits", () => {
         channelType: "email",
         limits: {
           customDomains: null,
-          transactional: {
-            managed: { monthlySends: null, dailySends: null },
-          },
-          marketing: {
-            managed: { monthlySends: null, dailySends: null },
-          },
+          transactional: { monthlySends: null, dailySends: null },
+          marketing: { monthlySends: null, dailySends: null },
         },
       },
     ]);

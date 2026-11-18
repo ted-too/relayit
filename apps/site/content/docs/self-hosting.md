@@ -76,6 +76,44 @@ Then open:
 
 Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/quickstart) using your own API URL instead of `https://api.relayit.io`.
 
+## Platform admins
+
+A platform admin is a user who operates the deployment. Nobody is one until you say so, and signing up first does not make you one.
+
+The role is full control over every account, so give it only to people you would trust with the database. A platform admin:
+
+- sees the dashboard's Admin pages, which list every Project, and pauses and unpauses Domains;
+- passes every admin endpoint of the sign-in service (better-auth's `/auth/admin/*`): listing, creating and removing users, setting any user's password, banning and unbanning, impersonating any user who is not an admin, and changing any user's role, their own included.
+
+Grant the role to a user who has signed up, and remove it, with the command in the api image:
+
+```bash
+docker compose exec api bun platform-admin.js grant you@your-domain.com
+docker compose exec api bun platform-admin.js remove you@your-domain.com
+```
+
+`exec` needs the api container running. To run the command in a one-off container instead, replace the image's entrypoint, which otherwise starts a second api and never runs the command:
+
+```bash
+docker compose run --rm --entrypoint bun api platform-admin.js grant you@your-domain.com
+docker run --rm --env-file api.env --entrypoint bun ghcr.io/ted-too/relayit-api:<tag> platform-admin.js grant you@your-domain.com
+```
+
+A one-off container needs the api's environment: all of it, `REDIS_KEY_PREFIX` included if you set one, since the command finds the user's sessions through it.
+
+Both take effect at once:
+
+- `grant` changes the role in the sessions the user already has open, so they don't sign in again.
+- `remove` ends every session the user has open. They are signed out, and when they sign in again they are not an admin. It signs the named user out even if they were not an admin, so check the email.
+
+The command prints how many open sessions it updated or ended; the last line it prints is the outcome. If it found none, it says so, names the Redis host and key prefix it searched, and does not claim the user was signed out: if that user is signed in, the command ran against a different Redis or `REDIS_KEY_PREFIX` than the api uses, and the change has not reached their sessions. It also warns when that Redis holds no session of any user, which on a deployment anyone is signed in to means the same thing.
+
+It exits non-zero without claiming success if it could not confirm the sessions. Exit codes: `2` wrong arguments, `3` no user with that email, `4` the environment is incomplete, `5` the database could not be reached, `6` the sessions could not be confirmed (Redis unreachable, or a session read back unchanged), `7` the role was removed but no session of the user was found and the session store it searched (`REDIS_URL`, `REDIS_KEY_PREFIX`) holds no session of any user. On a deployment anyone is signed in to, that means it looked in the wrong place: fix the two variables and run it again. If nobody is signed in to the deployment, the removal is complete and `7` can be ignored. The message says whether the role was changed in the database before it stopped. If it was, run the command again: until it succeeds, a removed admin's open sessions may still have platform admin access.
+
+An existing admin can also grant the role through better-auth's own `/auth/admin/set-role`, which updates the user's open sessions too. Use the command to remove the role: `set-role` does not sign the user out, and a session left open can keep the old role.
+
+Don't change the role by editing the `user` table. A signed-in user's sessions are kept in Redis, each with its own copy of the user and their role, and `/auth/admin/*` goes by that copy. A role removed in the database alone stays in those sessions until they end, and a session in use keeps renewing, so the user you demoted keeps those endpoints.
+
 ## Environment variables
 
 `env.example` mirrors what the services validate at startup. Compose passes `API_URL` to the api, the worker and web, `APP_URL` to the api, and builds `DATABASE_URL` from the `POSTGRES_*` values.
@@ -146,6 +184,8 @@ Then start the api, the worker and, if you run it, the template-builder. One sta
 
 Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releases).
 
+If your platform runs the old and new api side by side during an upgrade (Compose does not), then after upgrading past the release that flattened the send limits in `user_channel.limits`, run the `UPDATE` in its migration, [`20261118132136_flatten_user_channel_limits/migration.sql`](https://github.com/ted-too/relayit/blob/main/packages/persistence/drizzle/20261118132136_flatten_user_channel_limits/migration.sql), once more when the old api is gone (`psql` against the api's database, with that file). While both versions run, sends answer 500; and a sign-in the old api handled in the meantime stores that user's limits in the shape the new api refuses to send on, which the second run corrects.
+
 ## Production notes
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `APP_URL` to those URLs. Forward `X-Forwarded-For` to the api: sign-in is rate-limited per client address.
@@ -158,7 +198,7 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 - **No Plans, unlimited entitlements.** Without Stripe keys, every user gets unlimited Projects, Domains, retention, and sends.
 - **Email and password sign-in.** Social sign-in is not set up by default.
-- **Your own SES account.** Email goes through the SES account in `SES_*`. When the worker starts it creates the SES configuration set and SNS topic each region needs and subscribes `API_URL` to it, so the IAM user needs SES and SNS permissions. It also sets the topic's retry policy (`sns:SetTopicAttributes`), so that SNS keeps retrying a notification the api is not ready for; without that permission the worker logs a warning and SNS retries for about a minute only. Give the api the same `API_URL` and `SES_*` as the worker: it accepts SES's notifications only from the topics the worker made in that account, which it finds through STS (`GetCallerIdentity`, which needs no permission).
+- **Your own SES account.** Email goes through the SES account in `SES_*`. When the worker starts it creates the SES configuration set and SNS topic each region needs and subscribes `API_URL` to it, so the IAM user needs SES and SNS permissions. It also sets the topic's retry policy (`sns:SetTopicAttributes`), so that SNS keeps retrying a notification the api is not ready for; without that permission the worker logs a warning and SNS retries for about a minute only. So that a Project SES pauses for its reputation has its Domains paused and unpaused as SES pauses and restores it, the worker also creates an EventBridge rule in each region for SES's tenant sending-status events, targets the topic with it, and adds a statement to the topic's policy that lets EventBridge publish there (`events:PutRule`, `events:PutTargets`, `sns:GetTopicAttributes`), and the api and the worker read the tenant's status (`ses:GetTenant`, `ses:GetReputationEntity`); The two sets fail differently. Without the three for the rule and the topic, the worker logs a warning and no event arrives: a paused Project's Domains are paused only when a send fails, and unpaused within five minutes of SES restoring it, when the worker checks again. Without the two `ses:` reads nothing is unpaused: every check fails, and the Domains stay paused until an admin unpauses them. Give the api the same `API_URL` and `SES_*` as the worker: it accepts SES's notifications only from the topics the worker made in that account, which it finds through STS (`GetCallerIdentity`, which needs no permission).
 - **No Sandbox Domain by default.** It exists only if you give the worker a Cloudflare zone for it (`CF_*`).
 - **Template workspace is optional.** Without a template-builder service, sending with existing Templates works, but editing the React Email workspace does not.
 

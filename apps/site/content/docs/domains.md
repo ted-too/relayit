@@ -86,14 +86,19 @@ DNS changes can take a while to propagate. If a record stays pending, check that
 
 ## Paused Domains
 
-A Domain is paused by Relayit, not by its Project: automatically for the Project's sending reputation (too many bounces or complaints, from any of its Domains), or by one of Relayit's operators. A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**.
+A Domain is paused by Relayit, not by its Project, in one of two ways:
+
+- **Automatically**, when sending is paused for the whole Project because of its sending reputation (too many bounces or complaints, from any of its Domains). Every Domain the Project holds in that SES region is paused, with the reason **Project sending paused**, and is unpaused automatically once the Project's sending is restored.
+- **By one of Relayit's operators**, with the reason **Operator pause** or **Bad reputation**. It stays paused until an operator unpauses it.
+
+A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**. A Webhook Endpoint subscribed to `domain.updated` receives an event whenever a Domain is paused, unpaused, or paused for a different reason, by Relayit or by an operator, with `paused` and `paused_reason` (`project_sending_pause`, `manual_admin_pause`, `bad_reputation`, or `null` once unpaused) beside the Domain's `status`. It is sent to the Project that holds the Domain.
 
 While a Domain is paused:
 
 - New sends from it fail with `422 invalid_from_address`.
 - Emails that were already queued fail at send time. They are not held for later.
 
-A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. After a pause for the Project's sending reputation, restore the Project's sending in SES before unpausing the Domain: otherwise the next send fails and pauses it again.
+A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. An automatic pause needs no unpausing there: restore the Project's sending in SES (its tenant, `relayit-<project id>`) and Relayit unpauses the Domains when SES reports it, or within five minutes if the report is lost or never sent. To keep such a Domain paused whatever SES does, use **Keep paused** and give it a reason: it then stays paused until an admin unpauses it. Unpausing one by hand while SES still pauses the Project only lets the next send fail and pause it again.
 
 ## Claiming a domain from another Project
 
@@ -105,10 +110,10 @@ If you add a domain that another Project already added to Relayit, Relayit start
 
 Until ownership verifies, the Domain is not yours: you cannot send from it, and its page shows only the ownership record.
 
-When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
+When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. The Messages the other Project sent from the domain stay with that Project and are not attached to the domain in yours; bounces and complaints for them are still recorded for that Project. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 
 ## Delete a Domain
 
 Open the Domain menu and choose **Delete Domain**, then type the domain name to confirm. Deleting frees the domain so it can be added again. Emails already queued from it fail at send time. Past Messages keep their original `from`.
 
-A domain that has sent Messages keeps its DKIM key while those Messages exist. Adding it again, from any Project, starts a claim: publish the `_relayit-challenge` TXT record to prove ownership, as in [Claiming a domain from another Project](#claiming-a-domain-from-another-project). A domain that never sent is added again as new, with new DNS records.
+A deleted domain that no other Project is claiming is removed from Relayit. Adding it again then adds it as new, to any Project: it gets a new DKIM key and new DNS records to publish, whether or not it had sent Messages. If another Project had a claim pending when you deleted the domain, the domain stays for that claim with its DKIM key, and adding it again starts a claim of your own, as in [Claiming a domain from another Project](#claiming-a-domain-from-another-project). Either way, nothing you sent from the domain is attached to it afterwards: those Messages stay with your Project and keep their original `from`.

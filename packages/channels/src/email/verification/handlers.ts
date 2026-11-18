@@ -417,11 +417,12 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
         ),
       );
 
+    // Every unproven link, not only those a check has run for. A claim's first check is
+    // scheduled in Redis after its link commits, so it can fail or be lost, and the link
+    // records no next check until one has run: such a claim is due now, or it would never
+    // be proven or lapse.
     yield* Effect.forEach(
-      rows.filter(
-        (row) =>
-          row.ownershipVerificationStatus !== "verified" && row.ownershipNextVerifyAt !== null,
-      ),
+      rows.filter((row) => row.ownershipVerificationStatus !== "verified"),
       (row) =>
         jobs.schedule(
           emailVerifyOwnershipJob,
@@ -429,7 +430,9 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
             customDomainId: row.customDomainId,
             organizationId: row.organizationId,
           },
-          new Date(row.ownershipNextVerifyAt as Date | string).getTime(),
+          row.ownershipNextVerifyAt === null
+            ? Date.now()
+            : new Date(row.ownershipNextVerifyAt as Date | string).getTime(),
         ),
       { concurrency: "unbounded" },
     ).pipe(

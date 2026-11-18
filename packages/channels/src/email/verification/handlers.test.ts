@@ -55,6 +55,7 @@ describe("emailVerifyCustomDomainHandler", () => {
             deleteIdentity: unsupported,
             ensureInfrastructure: unsupported,
             getIdentityStatus: unsupported,
+            getProjectSendingStatus: unsupported,
             send: unsupported,
           } satisfies EmailBackendService),
         ),

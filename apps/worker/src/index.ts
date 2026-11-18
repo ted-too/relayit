@@ -1,9 +1,11 @@
 import * as NodeOS from "node:os";
 import { EmailBackend } from "@repo/channels/email/backend";
 import {
+  detachStrayDeliveries,
   emailDeleteDomainIdentityHandler,
   removeUnlinkedDomains,
 } from "@repo/channels/email/custom-domain";
+import { emailRecheckProjectSendingPauseHandler } from "@repo/channels/email/deliverability";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureSandboxDomain } from "@repo/channels/email/sandbox";
 import {
@@ -54,6 +56,18 @@ const workerProgram = Effect.gen(function* () {
       Effect.catchCause(logEffectFailure("Failed to remove Domains without a link")),
     );
 
+    // Deliveries from before a Project's were detached as it lost a Domain to a claim. Beside
+    // the jobs, not before them: on a long history the pass takes minutes, each batch
+    // re-checks under the Domain's row so nothing depends on it having finished, and no send
+    // should wait for it.
+    yield* Effect.forkChild(
+      detachStrayDeliveries.pipe(
+        Effect.catchCause(
+          logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
+        ),
+      ),
+    );
+
     yield* Effect.logInfo("Relayit job worker started");
     return yield* runJobWorker(
       [
@@ -68,6 +82,7 @@ const workerProgram = Effect.gen(function* () {
         registerJobHandler(emailVerifyCustomDomainHandler),
         registerJobHandler(emailVerifyOwnershipHandler),
         registerJobHandler(emailDeleteDomainIdentityHandler),
+        registerJobHandler(emailRecheckProjectSendingPauseHandler),
       ],
       {
         blockMs: 5000,

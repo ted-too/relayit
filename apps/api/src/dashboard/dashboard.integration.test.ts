@@ -6,6 +6,7 @@
  * another Project reaches nothing.
  */
 import { describe, expect, layer, test } from "@effect/vitest";
+import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
   emailDomainRegistration,
@@ -129,21 +130,12 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       return response.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
     });
 
-  /**
-   * A platform admin's session cookie. The role is set as the seed and an operator set it,
-   * on the user's row: better-auth has no first admin to grant it.
-   */
+  /** A platform admin's session cookie, the role granted as an operator grants it. */
   const signUpAdmin = (name: string) =>
     Effect.gen(function* () {
+      const { auth } = yield* ApiAuth;
       const cookie = yield* signUp(name);
-      const db = createPromiseDb({ databaseUrl: testDatabaseUrl ?? "" });
-      yield* Effect.promise(() =>
-        db
-          .update(user)
-          .set({ role: "admin" })
-          .where(eq(user.email, `${name}-${run}@example.test`)),
-      );
-      yield* Effect.promise(() => db.$client.end());
+      yield* setPlatformAdmin(auth, { admin: true, email: `${name}-${run}@example.test` });
       return cookie;
     });
 
@@ -694,6 +686,66 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         ]);
         expect((yield* send).status).toBe(201);
       }),
+    );
+
+    it.effect(
+      "grants the platform admin role in a user's open sessions, and removal ends them",
+      () =>
+        Effect.gen(function* () {
+          const { auth } = yield* ApiAuth;
+          const email = `role-changed-${run}@example.test`;
+          const signIn = Effect.gen(function* () {
+            const signedIn = yield* call("POST", "/auth/sign-in/email", {
+              body: { email, password: "a-long-password" },
+            });
+            expect(signedIn.status).toBe(200);
+            return signedIn.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
+          });
+          // Two sessions, both opened before the role changes.
+          const open = [yield* signUp("role-changed"), yield* signIn];
+          // Who each session is, then better-auth's own admin endpoints and the dashboard's.
+          const seen = (sessions: readonly string[]) =>
+            Effect.gen(function* () {
+              const all: unknown[] = [];
+              for (const as of sessions) {
+                const session = (yield* call("GET", "/auth/get-session", { as })).body as {
+                  readonly user: { readonly role: string };
+                } | null;
+                all.push([
+                  session?.user.role ?? null,
+                  (yield* call("GET", "/auth/admin/list-users", { as })).status,
+                  (yield* call("GET", "/admin/projects", { as })).status,
+                ]);
+              }
+              return all;
+            });
+
+          expect(yield* seen(open)).toEqual([
+            ["user", 403, 403],
+            ["user", 403, 403],
+          ]);
+          // Both sessions stay signed in and become an admin's.
+          expect(yield* setPlatformAdmin(auth, { admin: true, email })).toEqual({ sessions: 2 });
+          expect(yield* seen(open)).toEqual([
+            ["admin", 200, 200],
+            ["admin", 200, 200],
+          ]);
+
+          // Removal signs both out: no session, so 401 everywhere.
+          expect(yield* setPlatformAdmin(auth, { admin: false, email })).toEqual({ sessions: 2 });
+          expect(yield* seen(open)).toEqual([
+            [null, 401, 401],
+            [null, 401, 401],
+          ]);
+          // Signing in again gives a session that is no admin's.
+          expect(yield* seen([yield* signIn])).toEqual([["user", 403, 403]]);
+
+          expect(
+            yield* Effect.flip(
+              setPlatformAdmin(auth, { admin: true, email: `nobody-${run}@example.test` }),
+            ),
+          ).toMatchObject({ _tag: "PlatformAdminUserNotFound" });
+        }),
     );
 
     it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>

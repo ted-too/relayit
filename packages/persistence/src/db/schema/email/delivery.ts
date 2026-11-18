@@ -10,6 +10,12 @@ import { sandboxDomain } from "./sandbox-domain";
 /**
  * Email Delivery — per-channel attempt of a Message, owning email Channel Format
  * and Delivery status. SES retries a soft bounce itself (no new Delivery).
+ *
+ * A Delivery outlives the Domain it was sent from. Removing a Domain moves each of its
+ * Deliveries from `customDomainId` to `removedDomainFqdn` before deleting its row, so the
+ * sender check holds throughout and a Delivery can't be written naming no sender at all:
+ * accept never sets `removedDomainFqdn`. The foreign key stays `RESTRICT`, so a Domain can't
+ * be deleted from under Deliveries that were not moved first.
  */
 export const emailDelivery = pgTable(
   "email_delivery",
@@ -26,6 +32,12 @@ export const emailDelivery = pgTable(
     sandboxDomainId: text("sandbox_domain_id").references(() => sandboxDomain.id, {
       onDelete: "restrict",
     }),
+    /**
+     * The FQDN of the Domain this was sent from, once that Domain is removed. Text and not
+     * a reference on purpose: a Domain added later under the same FQDN is another Domain,
+     * with its own key and holder, and must never be joined to these Deliveries by name.
+     */
+    removedDomainFqdn: text("removed_domain_fqdn"),
     status: deliveryStatusEnum("status").notNull().default("queued"),
     from: jsonb("from").$type<EmailFrom>().notNull(),
     to: jsonb("to").$type<EmailAddressList>().notNull(),
@@ -46,7 +58,7 @@ export const emailDelivery = pgTable(
     check("email_delivery_body_present_check", sql`${t.html} IS NOT NULL OR ${t.text} IS NOT NULL`),
     check(
       "email_delivery_sender_kind_check",
-      sql`(${t.customDomainId} IS NOT NULL) <> (${t.sandboxDomainId} IS NOT NULL)`,
+      sql`num_nonnulls(${t.customDomainId}, ${t.sandboxDomainId}, ${t.removedDomainFqdn}) = 1`,
     ),
     index("email_delivery_message_idx").on(t.messageId),
     index("email_delivery_status_idx").on(t.status),

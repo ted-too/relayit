@@ -10,6 +10,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
 import { resolveEmailAttachments } from "@repo/channels/email/accept/attachments";
 import { ATTACHMENTS_DEADLINE_SECONDS } from "@repo/channels/email/attachment-policy";
+import { EmailBackendUnavailable } from "@repo/channels/email/backend";
 import { UsageLimitExceeded } from "@repo/channels/usage";
 import { PublicHostLookup } from "@repo/public-url";
 import {
@@ -1222,6 +1223,107 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
       );
     },
   );
+
+  describe("a report that SES changed a tenant's sending status", () => {
+    const changed = () =>
+      Effect.succeed({
+        projectId: "orgn_reported",
+        region: "eu-central-1",
+        type: "project_sending_status_changed" as const,
+      });
+    const post = (origin: string) =>
+      request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+        body: '{"Type":"Notification"}',
+        headers: { "content-type": "text/plain" },
+      });
+    /** Postgres holding the Project or not, with nothing of its paused or unpaused. */
+    const database = (project: { readonly id: string } | undefined) => {
+      const tx = {
+        execute: () => Effect.succeed([]),
+        // The rows a pause or its lifting writes are locked first: none here.
+        select: () => ({
+          from: () => ({
+            where: () => ({ orderBy: () => ({ for: () => Effect.succeed([]) }) }),
+          }),
+        }),
+        update: () => ({
+          set: () => ({ where: () => ({ returning: () => Effect.succeed([]) }) }),
+        }),
+      };
+      return {
+        query: { organization: { findFirst: () => Effect.succeed(project) } },
+        transaction: <A, E, R>(body: (transaction: typeof tx) => Effect.Effect<A, E, R>) =>
+          body(tx),
+      } as unknown as Database;
+    };
+
+    it.live("acknowledges one for a tenant that is no Project here, without asking SES", () =>
+      Effect.gen(function* () {
+        let asked = 0;
+        const origin = yield* serve(
+          stubs({
+            db: database(undefined),
+            emailBackend: {
+              defaultRegion: "eu-central-1",
+              getProjectSendingStatus: () => {
+                asked += 1;
+                return Effect.succeed("paused");
+              },
+            },
+            handleSes: changed,
+          }).stubs,
+        );
+
+        expect(yield* post(origin)).toEqual(respond(200, { ok: true }));
+        expect(asked).toBe(0);
+      }),
+    );
+
+    it.live("acknowledges one once the Project's Domains match what SES says now", () =>
+      Effect.gen(function* () {
+        const asked: unknown[] = [];
+        const origin = yield* serve(
+          stubs({
+            db: database({ id: "orgn_reported" }),
+            emailBackend: {
+              defaultRegion: "eu-central-1",
+              getProjectSendingStatus: (input) => {
+                asked.push(input);
+                return Effect.succeed("enabled");
+              },
+            },
+            handleSes: changed,
+          }).stubs,
+        );
+
+        expect(yield* post(origin)).toEqual(respond(200, { ok: true }));
+        expect(asked).toEqual([{ projectId: "orgn_reported", region: "eu-central-1" }]);
+      }),
+    );
+
+    it.live("answers 500 when SES cannot be asked, so SNS brings the report back", () =>
+      Effect.gen(function* () {
+        const origin = yield* serve(
+          stubs({
+            db: database({ id: "orgn_reported" }),
+            emailBackend: {
+              defaultRegion: "eu-central-1",
+              getProjectSendingStatus: () =>
+                Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" })),
+            },
+            handleSes: changed,
+          }).stubs,
+        );
+
+        expect(yield* post(origin)).toEqual(
+          respond(500, {
+            code: "internal_server_error",
+            message: "SES notification handling failed",
+          }),
+        );
+      }),
+    );
+  });
 
   it.live("answers 500 when it cannot record the outcome, so SNS retries", () =>
     Effect.gen(function* () {
