@@ -12,7 +12,7 @@ import { and, eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { ownershipChallengeHost, ownershipChallengeValue } from "../custom-domain/dns";
-import { completeDomainClaimTransfer } from "../custom-domain/lifecycle";
+import { completeDomainClaimTransfer, isLapsedClaim } from "../custom-domain/lifecycle";
 import { DnsLookups } from "../dns-lookups";
 import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
 
@@ -206,6 +206,10 @@ export const verifyCustomDomainRegistration = (input: {
     } satisfies CustomDomainVerifyResult;
   });
 
+/**
+ * Checks a claim's TXT record and, once it is published, gives the claiming Project the
+ * Domain. A link already proven stays proven: the holder may remove the record afterwards.
+ */
 export const verifyCustomDomainOwnership = (input: {
   readonly customDomain: CustomDomain;
   readonly db: DatabaseExecutor;
@@ -239,6 +243,42 @@ export const verifyCustomDomainOwnership = (input: {
         operation: "persist",
         organizationId: input.organizationId,
       });
+    }
+
+    if (link.ownershipVerificationStatus === "verified") {
+      return {
+        customDomainId: input.customDomain.id,
+        organizationId: input.organizationId,
+        ownershipVerificationStatus: "verified" as const,
+      };
+    }
+
+    if (isLapsedClaim(link, new Date())) {
+      yield* input.db
+        .delete(organizationDomain)
+        .where(
+          and(
+            eq(organizationDomain.organizationId, input.organizationId),
+            eq(organizationDomain.customDomainId, input.customDomain.id),
+          ),
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new VerifyCustomDomainError({
+                cause,
+                customDomainId: input.customDomain.id,
+                message: "Failed to remove a lapsed claim.",
+                operation: "claim",
+                organizationId: input.organizationId,
+              }),
+          ),
+        );
+      return {
+        customDomainId: input.customDomain.id,
+        organizationId: input.organizationId,
+        ownershipVerificationStatus: "lapsed" as const,
+      };
     }
 
     const dnsLookups = yield* DnsLookups;
@@ -303,7 +343,7 @@ export const verifyCustomDomainOwnership = (input: {
       );
 
     // A link starts unverified only as a claim, so proving it takes the Domain.
-    if (ownershipVerified && link.ownershipVerificationStatus !== "verified") {
+    if (ownershipVerified) {
       yield* completeDomainClaimTransfer({
         customDomain: input.customDomain,
         db: input.db,

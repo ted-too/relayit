@@ -77,11 +77,19 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
     ),
   );
 
-  /** One request, read whole. `as` is a session cookie; changes come from the dashboard. */
+  /**
+   * One request, read whole. `as` is a session cookie, `key` an API key; changes come from
+   * the dashboard.
+   */
   const call = (
     method: string,
     path: string,
-    options: { readonly as?: string; readonly body?: unknown; readonly origin?: string } = {},
+    options: {
+      readonly as?: string;
+      readonly body?: unknown;
+      readonly key?: string;
+      readonly origin?: string;
+    } = {},
   ) =>
     Effect.gen(function* () {
       const origin = yield* Origin;
@@ -91,6 +99,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           headers: {
             ...(options.body === undefined ? {} : { "content-type": "application/json" }),
             ...(options.as === undefined ? {} : { cookie: options.as }),
+            ...(options.key === undefined ? {} : { "x-api-key": options.key }),
             ...(method === "GET" ? {} : { origin: options.origin ?? APP }),
           },
           method,
@@ -341,6 +350,143 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           },
           status: 401,
         });
+      }),
+    );
+
+    it.effect("lets a claim send from, change or see the holder's Domain only once proven", () =>
+      Effect.gen(function* () {
+        const holder = yield* signUp("holder");
+        const claimant = yield* signUp("claimant");
+        const holderProject = yield* createProject(holder, `Holder ${run.slice(-8)}`);
+        const claimantProject = yield* createProject(claimant, `Claimant ${run.slice(-8)}`);
+        const h = `/projects/${holderProject.slug}`;
+        const c = `/projects/${claimantProject.slug}`;
+        const fqdn = `${run}.claimed.example.test`;
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        const domainRow = (id: string) =>
+          Effect.promise(() =>
+            db.query.customDomain.findFirst({
+              columns: { isPaused: true, lastCheckedAt: true, pausedReason: true },
+              where: { id },
+            }),
+          );
+        const keyFor = (as: string, path: string) =>
+          Effect.gen(function* () {
+            const created = yield* call("POST", `${path}/api-keys`, { as, body: { name: "K" } });
+            return (created.body as { key: string }).key;
+          });
+        const sendFrom = (key: string, from: string) =>
+          call("POST", "/messages/email", {
+            body: { from, subject: "Hi", text: "Hi", to: "someone@example.test" },
+            key,
+          });
+
+        // The holder adds the Domain and it verifies: the holder sends from it.
+        const added = yield* call("POST", `${h}/domains`, { as: holder, body: { fqdn } });
+        const domainId = (added.body as { id: string }).id;
+        expect(
+          yield* call("POST", `${h}/domains/${domainId}/refresh`, { as: holder }),
+        ).toMatchObject({ body: { verificationStatus: "verified" }, status: 200 });
+        const holderKey = yield* keyFor(holder, h);
+        expect((yield* sendFrom(holderKey, `hello@${fqdn}`)).status).toBe(201);
+        expect(
+          (yield* call("POST", `${h}/domains/${domainId}/pause`, {
+            as: holder,
+            body: { reason: "manual_admin_pause" },
+          })).status,
+        ).toBe(204);
+
+        // The claimant adds it too: a claim, which shows only how to prove it.
+        const claimView = {
+          dnsRecords: {
+            dkimAndSpf: [],
+            dmarc: [],
+            ownership: [{ purpose: "ownership", recordType: "TXT", status: "pending" }],
+          },
+          fqdn,
+          id: domainId,
+          isPaused: false,
+          lastCheckedAt: null,
+          ownership: { status: "pending" },
+          pausedReason: null,
+          verificationStatus: "not_verified",
+        };
+        expect(yield* call("POST", `${c}/domains`, { as: claimant, body: { fqdn } })).toMatchObject(
+          { body: claimView, status: 200 },
+        );
+        expect(yield* call("GET", `${c}/domains`, { as: claimant })).toMatchObject({
+          body: [claimView],
+          status: 200,
+        });
+
+        // It sends from the Domain neither through /messages/email nor the legacy path.
+        expect(
+          (yield* call("POST", `${h}/domains/${domainId}/unpause`, { as: holder })).status,
+        ).toBe(204);
+        const claimantKey = yield* keyFor(claimant, c);
+        expect(yield* sendFrom(claimantKey, `hello@${fqdn}`)).toMatchObject({
+          body: { code: "invalid_from_address" },
+          status: 422,
+        });
+        const legacyBody = { payload: { subject: "Hi", text: "Hi" }, to: "someone@example.test" };
+        expect(
+          yield* call("POST", `/send/${claimantProject.slug}/raw/email`, {
+            body: { ...legacyBody, from: `hello@${fqdn}` },
+            key: claimantKey,
+          }),
+        ).toMatchObject({ body: { details: ["invalid_from_address"] }, status: 400 });
+        // Nor is it the Project's default From for a legacy send that names none.
+        expect(
+          yield* call("POST", `/send/${claimantProject.slug}/raw/email`, {
+            body: legacyBody,
+            key: claimantKey,
+          }),
+        ).toMatchObject({
+          body: { message: "No sender identity available; pass from or provision Sandbox Domain" },
+          status: 400,
+        });
+        expect((yield* sendFrom(holderKey, `hello@${fqdn}`)).status).toBe(201);
+
+        // Nor does it pause or unpause the Domain.
+        yield* call("POST", `${h}/domains/${domainId}/pause`, {
+          as: holder,
+          body: { reason: "manual_admin_pause" },
+        });
+        for (const [path, body] of [
+          [`${c}/domains/${domainId}/pause`, { reason: "bad_reputation" }],
+          [`${c}/domains/${domainId}/unpause`],
+        ] as const) {
+          expect(yield* call("POST", path, { as: claimant, body })).toMatchObject({
+            body: { _tag: "Conflict" },
+            status: 409,
+          });
+        }
+        const before = yield* domainRow(domainId);
+        expect(before).toMatchObject({ isPaused: true, pausedReason: "manual_admin_pause" });
+
+        // Its refresh checks its own proof and nothing of the holder's Domain. The fake
+        // backend finds every record published, so the proof holds and the Domain moves.
+        expect(
+          yield* call("POST", `${c}/domains/${domainId}/refresh`, { as: claimant }),
+        ).toMatchObject({
+          body: {
+            isPaused: true,
+            ownership: { status: "active" },
+            pausedReason: "manual_admin_pause",
+          },
+          status: 200,
+        });
+        expect(yield* domainRow(domainId)).toEqual(before);
+        expect((yield* call("GET", `${h}/domains`, { as: holder })).body).toEqual([]);
+        expect(
+          (yield* call("POST", `${c}/domains/${domainId}/unpause`, { as: claimant })).status,
+        ).toBe(204);
+        expect((yield* sendFrom(claimantKey, `hello@${fqdn}`)).status).toBe(201);
+        expect(yield* sendFrom(holderKey, `hello@${fqdn}`)).toMatchObject({
+          body: { code: "invalid_from_address" },
+          status: 422,
+        });
+        yield* Effect.promise(() => db.$client.end());
       }),
     );
 

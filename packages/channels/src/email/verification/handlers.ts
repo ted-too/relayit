@@ -350,7 +350,8 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
         ),
       );
 
-      if (result.ownershipVerificationStatus === "verified") {
+      // A proven claim needs no more checks, and a lapsed one is gone.
+      if (result.ownershipVerificationStatus !== "not_verified") {
         yield* jobs
           .cancel(emailVerifyOwnershipJob, {
             customDomainId: payload.customDomainId,
@@ -371,29 +372,27 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
         return;
       }
 
-      if (result.nextCheckAt) {
-        yield* jobs
-          .schedule(
-            emailVerifyOwnershipJob,
-            {
-              customDomainId: payload.customDomainId,
-              organizationId: payload.organizationId,
-            },
-            result.nextCheckAt.getTime(),
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new VerifyOwnershipHandlerError({
-                  cause,
-                  customDomainId: payload.customDomainId,
-                  message: "Failed to schedule next ownership verify.",
-                  operation: "schedule",
-                  organizationId: payload.organizationId,
-                }),
-            ),
-          );
-      }
+      yield* jobs
+        .schedule(
+          emailVerifyOwnershipJob,
+          {
+            customDomainId: payload.customDomainId,
+            organizationId: payload.organizationId,
+          },
+          result.nextCheckAt.getTime(),
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new VerifyOwnershipHandlerError({
+                cause,
+                customDomainId: payload.customDomainId,
+                message: "Failed to schedule next ownership verify.",
+                operation: "schedule",
+                organizationId: payload.organizationId,
+              }),
+          ),
+        );
     }),
   reconcile: Effect.gen(function* () {
     const db = yield* DB;

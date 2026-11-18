@@ -174,6 +174,37 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           });
         }
 
+        // The Project held the Domain at accept, but a claim proven since, or the Project
+        // removing the Domain, ends that: it never sends on another Project's Domain.
+        if (loaded.customDomainId) {
+          const holding = yield* db.query.organizationDomain
+            .findFirst({
+              columns: { organizationId: true },
+              where: {
+                customDomainId: loaded.customDomainId,
+                organizationId: appEnvironment.organizationId,
+                ownershipVerificationStatus: "verified",
+              },
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new EmailDeliveryPersistenceError({
+                    cause,
+                    deliveryId: loaded.id,
+                    operation: "load_delivery",
+                  }),
+              ),
+            );
+          if (!holding) {
+            return yield* new MessageDeliveryTerminalError({
+              deliveryId: loaded.id,
+              message: "The Project no longer holds the sending Domain",
+              stage: "domain",
+            });
+          }
+        }
+
         const suppressionInput = {
           organizationAppEnvironmentId: message.organizationAppEnvironmentId,
           organizationId: appEnvironment.organizationId,

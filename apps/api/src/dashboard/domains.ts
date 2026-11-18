@@ -14,7 +14,6 @@ import {
   Conflict,
   DashboardApi,
   DashboardMember,
-  type DnsRecord,
   type Domain,
   NotFound,
   type OperationFailed,
@@ -57,7 +56,8 @@ const lifecycleFailure =
 
 /**
  * A Project's Domains as the dashboard lists them, or the one `customDomainId` names.
- * A claim on a Domain another Project holds also shows the TXT record that proves it.
+ * A claim shows only the TXT record that proves it: until it is proven the Domain's state
+ * (its pause, its records' status, its checks) is the holder's business.
  */
 const listDomains = (input: {
   readonly customDomainId?: string;
@@ -108,28 +108,40 @@ const listDomains = (input: {
       if (!customDomain) {
         return [];
       }
-      const ownershipStatus =
-        link.ownershipVerificationStatus === "verified"
-          ? ("active" as const)
-          : link.ownershipEverVerifiedAt
-            ? ("missing" as const)
-            : ("pending" as const);
-      // A link starts unverified only as a claim on a Domain another Project holds.
-      const ownership: DnsRecord[] =
-        link.ownershipVerificationStatus === "verified"
-          ? []
-          : [
-              {
-                lastCheckedAt: link.ownershipLastCheckedAt,
-                name: ownershipChallengeHost(customDomain.fqdn),
-                priority: null,
-                purpose: "ownership",
-                recordType: "TXT",
-                status: ownershipStatus,
-                value: ownershipChallengeValue(link.ownershipToken),
-                warnings: [],
-              },
-            ];
+      if (link.ownershipVerificationStatus !== "verified") {
+        const ownershipStatus = link.ownershipEverVerifiedAt
+          ? ("missing" as const)
+          : ("pending" as const);
+        return [
+          {
+            createdAt: link.createdAt,
+            dnsRecords: {
+              dkimAndSpf: [],
+              dmarc: [],
+              ownership: [
+                {
+                  lastCheckedAt: link.ownershipLastCheckedAt,
+                  name: ownershipChallengeHost(customDomain.fqdn),
+                  priority: null,
+                  purpose: "ownership",
+                  recordType: "TXT",
+                  status: ownershipStatus,
+                  value: ownershipChallengeValue(link.ownershipToken),
+                  warnings: [],
+                },
+              ],
+            },
+            fqdn: customDomain.fqdn,
+            id: customDomain.id,
+            isPaused: false,
+            lastCheckedAt: null,
+            ownership: { status: ownershipStatus },
+            pausedReason: null,
+            provider: customDomain.provider,
+            verificationStatus: "not_verified",
+          },
+        ];
+      }
       return [
         {
           createdAt: customDomain.createdAt,
@@ -138,13 +150,13 @@ const listDomains = (input: {
               DKIM_AND_SPF.has(record.purpose),
             ),
             dmarc: customDomain.dnsRecords.filter((record) => record.purpose === "dmarc"),
-            ownership,
+            ownership: [],
           },
           fqdn: customDomain.fqdn,
           id: customDomain.id,
           isPaused: customDomain.isPaused,
           lastCheckedAt: customDomain.lastCheckedAt,
-          ownership: { status: ownershipStatus },
+          ownership: { status: "active" },
           pausedReason: customDomain.pausedReason,
           provider: customDomain.provider,
           verificationStatus: customDomain.verificationStatus,
@@ -193,6 +205,13 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
             return yield* notLinked;
           }
           const domain = link.customDomain;
+          // A claim checks its own proof and nothing of the Domain it doesn't hold yet.
+          if (link.ownershipVerificationStatus !== "verified") {
+            yield* verifyCustomDomainOwnership({ customDomain: domain, db, organizationId }).pipe(
+              Effect.catch(operationFailed("Failed to refresh ownership verification.")),
+            );
+            return yield* listedDomain({ customDomainId: params.domainId, organizationId });
+          }
           if (!domain.registration) {
             return yield* operationFailed("Domain is not registered with SES.")(domain.id);
           }
@@ -201,12 +220,6 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
             domain,
             registration: domain.registration,
           }).pipe(Effect.catch(operationFailed("Failed to refresh Custom Domain verification.")));
-          // A link starts unverified only as a claim on a Domain another Project holds.
-          if (link.ownershipVerificationStatus !== "verified") {
-            yield* verifyCustomDomainOwnership({ customDomain: domain, db, organizationId }).pipe(
-              Effect.catch(operationFailed("Failed to refresh ownership verification.")),
-            );
-          }
           return yield* listedDomain({ customDomainId: params.domainId, organizationId });
         }),
       )

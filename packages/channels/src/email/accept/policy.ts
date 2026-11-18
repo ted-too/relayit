@@ -67,6 +67,8 @@ export const resolveEmailSender = (
       } satisfies ResolvedEmailSender;
     }
 
+    // Only the Domain's holder sends from it: a claim's link exists before the claim is
+    // proven, and the Domain's identity and DKIM key are the holder's until then.
     const [custom] = yield* db
       .select({ customDomainId: customDomain.id })
       .from(organizationDomain)
@@ -74,6 +76,7 @@ export const resolveEmailSender = (
       .where(
         and(
           eq(organizationDomain.organizationId, input.organizationId),
+          eq(organizationDomain.ownershipVerificationStatus, "verified"),
           eq(sql`lower(${customDomain.fqdn})`, fromDomain),
           eq(customDomain.verificationStatus, "verified"),
           eq(customDomain.isPaused, false),

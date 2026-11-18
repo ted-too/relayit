@@ -40,6 +40,8 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
     readonly createdAt: Date;
     readonly isPaused?: boolean;
     readonly organizationId: string;
+    /** `not_verified` is a claim on a Domain another Project holds. */
+    readonly ownership?: "not_verified" | "verified";
     readonly verificationStatus: "not_verified" | "verified";
   }) => {
     const id = typeid("domn").toString();
@@ -59,6 +61,7 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
       customDomainId: id,
       organizationId: input.organizationId,
       ownershipToken: `tok_${Bun.randomUUIDv7()}`,
+      ownershipVerificationStatus: input.ownership ?? "verified",
     });
     return fqdn;
   };
@@ -81,6 +84,13 @@ describe("resolveLegacyDefaultFromAddress (PostgreSQL)", () => {
     await linkDomain({
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       organizationId: otherOrganizationId,
+      verificationStatus: "verified",
+    });
+    // A sendable Domain the Project has only claimed is not its to send from.
+    await linkDomain({
+      createdAt: new Date("2026-01-02T12:00:00.000Z"),
+      organizationId,
+      ownership: "not_verified",
       verificationStatus: "verified",
     });
     const oldestSendable = await linkDomain({

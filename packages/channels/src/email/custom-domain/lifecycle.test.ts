@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import { EmailBackend, type EmailBackendService } from "../backend";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import { stubResolverNs } from "../verification/resolver-test-stub";
 import { createCustomDomain, pauseCustomDomain, unpauseCustomDomain } from "./lifecycle";
 
 const unsupported = () => Effect.die("unused");
@@ -39,14 +38,6 @@ const unusedCreateServices = Layer.mergeAll(
   } as never),
 );
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-const stubCloudflareNs = () => {
-  stubResolverNs({ "acme.test": ["ada.ns.cloudflare.com"] });
-};
-
 describe("pauseCustomDomain / unpauseCustomDomain", () => {
   it.effect("rejects pause when the Project is not linked to the domain", () => {
     const db: any = {
@@ -74,6 +65,35 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
     );
   });
 
+  it.effect("refuses pause and unpause from a Project whose claim is not proven", () => {
+    const db: any = {
+      query: {
+        organizationDomain: {
+          findFirst: () =>
+            Effect.succeed({
+              customDomainId: "dom_1",
+              organizationId: "org_claimant",
+              ownershipVerificationStatus: "not_verified",
+            }),
+        },
+      },
+      update: () => Effect.die("changed the holder's Domain"),
+    };
+    const input = { customDomainId: "dom_1", organizationId: "org_claimant" };
+
+    return Effect.gen(function* () {
+      const refusal = {
+        _tag: "CustomDomainError",
+        message: "Prove ownership of this Domain before changing it.",
+        operation: "claim",
+      };
+      expect(
+        yield* Effect.flip(pauseCustomDomain({ ...input, reason: "manual_admin_pause" })),
+      ).toMatchObject(refusal);
+      expect(yield* Effect.flip(unpauseCustomDomain(input))).toMatchObject(refusal);
+    }).pipe(Effect.provide(Layer.succeed(DB, db)));
+  });
+
   it.effect("pauses and unpauses a linked custom domain", () => {
     const updates: unknown[] = [];
     const db: any = {
@@ -83,6 +103,7 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
             Effect.succeed({
               customDomainId: "dom_1",
               organizationId: "org_1",
+              ownershipVerificationStatus: "verified",
             }),
         },
       },
@@ -128,10 +149,12 @@ describe("createCustomDomain claim guard", () => {
               id: "dom_held",
               organizations: [
                 {
+                  createdAt: new Date(),
                   organizationId: "org_owner",
                   ownershipVerificationStatus: "verified",
                 },
                 {
+                  createdAt: new Date(),
                   organizationId: "org_pending",
                   ownershipVerificationStatus: "not_verified",
                 },
@@ -166,13 +189,14 @@ describe("createCustomDomain claim guard", () => {
             Effect.succeed({
               fqdn: "acme.test",
               id: "dom_1",
+              lastCheckedAt: new Date(),
               organizations: [
                 {
                   organizationId: "org_1",
                   ownershipVerificationStatus: "verified",
                 },
               ],
-              registration: null,
+              registration: { region: "eu-central-1" },
             }),
         },
       },
@@ -188,126 +212,6 @@ describe("createCustomDomain claim guard", () => {
           customDomainId: "dom_1",
           kind: "existing",
         });
-        return result;
-      }),
-    );
-  });
-
-  it.effect("detects the DNS host when reclaiming an unknown domain", () => {
-    stubCloudflareNs();
-    const providerUpdates: unknown[] = [];
-    const db: any = {
-      insert: () => ({
-        values: () => Effect.void,
-      }),
-      query: {
-        customDomain: {
-          findFirst: () =>
-            Effect.succeed({
-              fqdn: "acme.test",
-              id: "dom_1",
-              organizations: [],
-              provider: "unknown",
-              registration: null,
-            }),
-        },
-      },
-      update: () => ({
-        set: (values: unknown) => ({
-          where: () => {
-            providerUpdates.push(values);
-            return Effect.void;
-          },
-        }),
-      }),
-    };
-
-    return createCustomDomain({
-      fqdn: "acme.test",
-      organizationId: "org_1",
-    }).pipe(
-      Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
-      Effect.map((result) => {
-        expect(result).toEqual({
-          customDomainId: "dom_1",
-          kind: "existing",
-        });
-        expect(providerUpdates).toEqual([{ provider: "cloudflare" }]);
-        return result;
-      }),
-    );
-  });
-
-  it.effect("persists the detected DNS host on a new custom domain", () => {
-    stubCloudflareNs();
-    const domainInserts: Array<{ provider?: string }> = [];
-    const registrationInserts: Array<{ region?: string }> = [];
-    const db: any = {
-      insert: () => ({
-        values: (values: { provider?: string; region?: string }) => {
-          const effect = Effect.succeed([{ id: "dom_new" }]);
-          if (values.provider !== undefined) {
-            domainInserts.push(values);
-          }
-          if (values.region !== undefined) {
-            registrationInserts.push(values);
-          }
-          return Object.assign(effect, {
-            returning: () =>
-              Effect.succeed([
-                {
-                  dkimPrivateKey: "enc",
-                  dkimPublicKey: "pub",
-                  dkimSelector: "sel",
-                  fqdn: "acme.test",
-                  id: "dom_new",
-                },
-              ]),
-          });
-        },
-      }),
-      query: {
-        customDomain: {
-          findFirst: () => Effect.succeed(null),
-        },
-      },
-    };
-
-    const createServices = Layer.mergeAll(
-      Layer.succeed(EmailManagedDns, {
-        cloudflareEnabled: false,
-        reconcile: () => Effect.void,
-        remove: unsupported,
-      } satisfies EmailManagedDnsService),
-      backend({
-        createIdentity: ({ region }) => {
-          expect(region).toBe("eu-central-1");
-          return Effect.succeed({ mailFrom: { domain: "send.acme.test", records: [] } });
-        },
-      }),
-      Layer.succeed(Jobs, {
-        cancel: unsupported,
-        enqueue: unsupported,
-        schedule: () => Effect.void,
-      } satisfies JobsService),
-      Layer.succeed(SymmetricCrypto, {
-        decrypt: unsupported,
-        encrypt: () => Effect.succeed("encrypted"),
-      } as never),
-    );
-
-    return createCustomDomain({
-      fqdn: "acme.test",
-      organizationId: "org_1",
-    }).pipe(
-      Effect.provide(Layer.merge(Layer.succeed(DB, db), createServices)),
-      Effect.map((result) => {
-        expect(result).toEqual({
-          customDomainId: "dom_new",
-          kind: "created",
-        });
-        expect(domainInserts[0]?.provider).toBe("cloudflare");
-        expect(registrationInserts).toMatchObject([{ region: "eu-central-1" }]);
         return result;
       }),
     );

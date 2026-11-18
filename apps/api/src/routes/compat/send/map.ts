@@ -183,6 +183,8 @@ export const resolveLegacyDefaultFromAddress = async (input: {
     where: {
       customDomain: { isPaused: false, verificationStatus: "verified" },
       organizationId: input.organizationId,
+      // A claim not yet proven is no sending Domain of the Project's.
+      ownershipVerificationStatus: "verified",
     },
     with: { customDomain: { columns: { fqdn: true } } },
   });
