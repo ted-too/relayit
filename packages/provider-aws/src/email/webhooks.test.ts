@@ -11,7 +11,11 @@ import { TestClock } from "effect/testing";
 import { createAwsErrorMapper } from "../errors";
 import { ensureSesInfrastructure } from "./infrastructure";
 import { sesTenantNameFor } from "./tenant-name";
-import { TENANT_STATUS_EVENTS, tenantStatusEventFor } from "./tenant-status.fixtures";
+import {
+  TENANT_STATUS_EVENTS,
+  TENANT_STATUS_SNS_DELIVERIES,
+  tenantStatusEventFor,
+} from "./tenant-status.fixtures";
 import {
   handleSesNotification,
   normalizeSesNotification,
@@ -344,6 +348,55 @@ describe("handleSesNotification", () => {
             snsBody({ Message: bounce, TopicArn: topicArn, Type: "Notification" }),
           ),
         ).toMatchObject({ events: [{ kind: "bounced" }], type: "events" });
+      }).pipe(Effect.provide(topics));
+    },
+  );
+
+  it.live(
+    "reads the Project from the events exactly as SNS delivered them from EventBridge",
+    () => {
+      const account = TENANT_STATUS_EVENTS.disabled.account;
+      const region = TENANT_STATUS_EVENTS.disabled.region;
+      const topics = sesNotificationTopicsInAccount({ apiUrl: API_URL, regions: [region] }).pipe(
+        Layer.provide(
+          Layer.succeed(STS, {
+            getCallerIdentity: () =>
+              Effect.succeed({ Account: account, Arn: `arn:aws:iam::${account}:user/relayit` }),
+          } as unknown as STS.Type),
+        ),
+      );
+      return Effect.gen(function* () {
+        const topicArn = yield* workerTopic(region, account);
+        expect(TENANT_STATUS_SNS_DELIVERIES).toHaveLength(2);
+        for (const delivery of TENANT_STATUS_SNS_DELIVERIES) {
+          const captured = JSON.parse(delivery) as Record<string, string>;
+          // An ordinary notification: nothing in the envelope marks it as EventBridge's.
+          expect(captured.Type).toBe("Notification");
+          expect(captured).not.toHaveProperty("Subject");
+          expect(typeof captured.Message).toBe("string");
+
+          // The captured signature cannot verify (the account id in what it signs was
+          // replaced) and the topic was a throwaway, so the captured `Message` is signed
+          // again as coming from the deployment's own topic; the message itself is untouched.
+          const result = yield* handleSesNotification(
+            snsBody({
+              Message: captured.Message ?? "",
+              MessageId: captured.MessageId ?? "",
+              TopicArn: topicArn,
+              Type: "Notification",
+            }),
+          );
+          expect(result).toEqual({
+            projectId: "evtest-1795009550",
+            region: "eu-central-1",
+            type: "project_sending_status_changed",
+          });
+
+          // As it arrived, signature and topic included, it is refused before it is read.
+          expect((yield* Effect.flip(handleSesNotification(delivery)))._tag).toBe(
+            "AwsSnsValidationError",
+          );
+        }
       }).pipe(Effect.provide(topics));
     },
   );

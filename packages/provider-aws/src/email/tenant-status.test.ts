@@ -249,9 +249,36 @@ describe("ensureSesTenantStatusEvents", () => {
     }),
   );
 
-  it.effect("does not replace a policy it cannot read", () =>
+  it.effect("keeps a policy's only statement when IAM's single-object form holds it", () =>
     Effect.gen(function* () {
-      for (const unreadable of [null, "", "not json", "[]"]) {
+      // Valid IAM: `Statement` may be one statement instead of a list of them.
+      const { ensure, policy, targets } = fakeAws(
+        JSON.stringify({ Statement: DEFAULT_STATEMENT, Version: "2012-10-17" }),
+      );
+      yield* ensure;
+
+      expect(policy().Statement).toEqual([
+        DEFAULT_STATEMENT,
+        expect.objectContaining({ Sid: "RelayitTenantStatusEvents" }),
+      ]);
+      expect(targets.size).toBe(1);
+    }),
+  );
+
+  it.effect("does not replace a policy it cannot read whole", () =>
+    Effect.gen(function* () {
+      for (const unreadable of [
+        null,
+        "",
+        "not json",
+        "[]",
+        // No statements, or statements that are not what IAM allows there.
+        JSON.stringify({ Version: "2012-10-17" }),
+        JSON.stringify({ Statement: "Allow" }),
+        JSON.stringify({ Statement: null }),
+        JSON.stringify({ Statement: [DEFAULT_STATEMENT, "Allow"] }),
+        JSON.stringify({ Statement: [[DEFAULT_STATEMENT]] }),
+      ]) {
         const { ensure, targets, written } = fakeAws(unreadable);
         yield* ensure;
         expect(written).toEqual([]);

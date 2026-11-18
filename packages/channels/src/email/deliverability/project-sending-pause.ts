@@ -1,4 +1,5 @@
-import type { Database, DatabaseTransaction } from "@repo/persistence/db/effect";
+import { defineJob, defineJobHandler, Jobs } from "@repo/jobs";
+import { type Database, type DatabaseTransaction, DB } from "@repo/persistence/db/effect";
 import {
   customDomain,
   emailDomainRegistration,
@@ -7,7 +8,7 @@ import {
 import { emitWebhookEvent } from "@repo/webhooks";
 import { domainUpdated } from "@repo/webhooks/events";
 import { and, eq, not, sql } from "drizzle-orm";
-import { Data, Duration, Effect } from "effect";
+import { Clock, Data, Duration, Effect, Schema } from "effect";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 
 /** Where a Project Sending Pause is: SES keeps a Project's sending status per region. */
@@ -22,9 +23,11 @@ export class ProjectSendingPauseError extends Data.TaggedError("ProjectSendingPa
   readonly cause: unknown;
   readonly operation:
     | "emit_webhook"
+    | "list_paused"
     | "load_project"
     | "lock"
     | "pause_domains"
+    | "schedule_recheck"
     | "unpause_domains";
   readonly organizationId: string;
 }> {}
@@ -34,6 +37,35 @@ export class ProjectSendingPauseError extends Data.TaggedError("ProjectSendingPa
  * runs inside a transaction, which a call that never answers must not hold.
  */
 const SENDING_STATUS_TIMEOUT = Duration.seconds(10);
+
+/**
+ * How long a sync waits for another of the same Project and region before it gives up, for
+ * SNS or the job to try again: a holder stuck on SES must not queue callers behind it, each
+ * holding a connection.
+ */
+const LOCK_WAIT = Duration.seconds(3);
+
+/**
+ * How often a Project Sending Pause that Relayit acted on is checked against SES again. A
+ * Domain left paused after SES restored the Project refuses every send from it, so this is
+ * how long that can last when no event says otherwise; each check is two SES calls for one
+ * Project in one region, so even hundreds of paused Projects stay far below one call a second.
+ */
+const RECHECK_EVERY = Duration.minutes(5);
+
+/**
+ * Asks SES again about one Project in one region for as long as Relayit holds a Domain of
+ * its paused for a Project Sending Pause. SES's events are what normally lift the pause, but
+ * one can be lost (dropped after SNS's hour of retries, or acknowledged by an api that could
+ * not act on it), and the delivery handler pauses from a refusal that SES may have taken back
+ * by the time the pause is written; nothing else would ever lift those.
+ */
+export const emailRecheckProjectSendingPauseJob = defineJob({
+  name: "email.recheck-project-sending-pause",
+  payload: Schema.Struct({ organizationId: Schema.String, region: Schema.String }),
+  recurrence: { identity: ({ organizationId, region }) => `${organizationId}:${region}` },
+  retry: { backoff: { baseDelayMs: 30_000, maxDelayMs: 5 * 60_000 }, maxAttempts: 3 },
+});
 
 /** The Domains a Project holds that send through the region. */
 const heldInRegion = ({ defaultRegion, organizationId, region }: ProjectInRegion) =>
@@ -49,7 +81,8 @@ const heldInRegion = ({ defaultRegion, organizationId, region }: ProjectInRegion
         and coalesce(${emailDomainRegistration.region}, ${defaultRegion}) = ${region})`,
   );
 
-const emitDomainUpdated = (
+/** Tells a Project that a Domain it holds was paused or unpaused, whoever did it. */
+export const emitDomainUpdated = (
   tx: DatabaseTransaction,
   organizationId: string,
   domain: Pick<
@@ -68,11 +101,7 @@ const emitDomainUpdated = (
       type: domainUpdated.type,
     },
     organizationId,
-  }).pipe(
-    Effect.mapError(
-      (cause) => new ProjectSendingPauseError({ cause, operation: "emit_webhook", organizationId }),
-    ),
-  );
+  });
 
 /**
  * Pauses the Domains a Project holds in a region where SES has paused the Project's sending,
@@ -102,9 +131,40 @@ export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInReg
             }),
         ),
       );
+    if (paused.length === 0) {
+      return 0;
+    }
     yield* Effect.forEach(paused, (domain) => emitDomainUpdated(tx, input.organizationId, domain), {
       discard: true,
-    });
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "emit_webhook",
+            organizationId: input.organizationId,
+          }),
+      ),
+    );
+    // From here the pause is rechecked until it is lifted. Scheduling is not part of the
+    // transaction: a recheck for a pause that rolled back finds nothing paused and stops.
+    const jobs = yield* Jobs;
+    yield* jobs
+      .schedule(
+        emailRecheckProjectSendingPauseJob,
+        { organizationId: input.organizationId, region: input.region },
+        (yield* Clock.currentTimeMillis) + Duration.toMillis(RECHECK_EVERY),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProjectSendingPauseError({
+              cause,
+              operation: "schedule_recheck",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
     return paused.length;
   });
 
@@ -144,6 +204,15 @@ const unpauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) 
       unpaused,
       (domain) => emitDomainUpdated(tx, input.organizationId, domain),
       { discard: true },
+    ).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "emit_webhook",
+            organizationId: input.organizationId,
+          }),
+      ),
     );
     return unpaused.length;
   });
@@ -187,11 +256,13 @@ export const syncProjectSendingStatus = (
     };
     return yield* db.transaction((tx) =>
       Effect.gen(function* () {
-        // Read and write as one step per Project and region: of two reports handled at once,
-        // the one that read the older status must not be the one that writes last.
+        // Read and write as one step per Project and region: of two syncs running at once,
+        // the one that read the older status must not be the one that writes last. The wait
+        // for the other is bounded, and so is every row lock taken after it.
         yield* tx
           .execute(
-            sql`select pg_advisory_xact_lock(hashtextextended(${`project-sending-status:${project.id}:${input.region}`}, 0))`,
+            sql`select set_config('lock_timeout', ${String(Duration.toMillis(LOCK_WAIT))}, true),
+              pg_advisory_xact_lock(hashtextextended(${`project-sending-status:${project.id}:${input.region}`}, 0))`,
           )
           .pipe(
             Effect.mapError(
@@ -223,3 +294,120 @@ export const syncProjectSendingStatus = (
       }),
     );
   });
+
+/** The Projects and regions that hold a Domain paused for a Project Sending Pause. */
+const pausedProjectsInRegions = (
+  db: Database,
+  input: { readonly defaultRegion: string; readonly organizationId?: string },
+) =>
+  db
+    .selectDistinct({
+      organizationId: organizationDomain.organizationId,
+      region: sql<string>`coalesce(${emailDomainRegistration.region}, ${input.defaultRegion})`,
+    })
+    .from(customDomain)
+    .innerJoin(organizationDomain, eq(organizationDomain.customDomainId, customDomain.id))
+    .innerJoin(emailDomainRegistration, eq(emailDomainRegistration.customDomainId, customDomain.id))
+    .where(
+      and(
+        customDomain.isPaused,
+        eq(customDomain.pausedReason, "project_sending_pause"),
+        eq(organizationDomain.ownershipVerificationStatus, "verified"),
+        input.organizationId
+          ? eq(organizationDomain.organizationId, input.organizationId)
+          : undefined,
+      ),
+    )
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "list_paused",
+            organizationId: input.organizationId ?? "",
+          }),
+      ),
+    );
+
+const scheduleRecheck = (
+  payload: { readonly organizationId: string; readonly region: string },
+  runAt: number,
+) =>
+  Effect.gen(function* () {
+    const jobs = yield* Jobs;
+    yield* jobs.schedule(emailRecheckProjectSendingPauseJob, payload, runAt).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "schedule_recheck",
+            organizationId: payload.organizationId,
+          }),
+      ),
+    );
+  });
+
+/**
+ * One recheck: the same locked sync an event starts, so it pauses and unpauses exactly as
+ * one would, and never a Domain an admin paused. The next recheck is scheduled before SES is
+ * asked, so a run that fails, or is dead-lettered, does not end the rechecks; it is dropped
+ * only once nothing of the Project's in the region is paused for a Project Sending Pause.
+ */
+export const emailRecheckProjectSendingPauseHandler = defineJobHandler({
+  classifyFailure: () => "retryable",
+  contract: emailRecheckProjectSendingPauseJob,
+  handle: (payload) =>
+    Effect.gen(function* () {
+      const db = yield* DB;
+      const backend = yield* EmailBackend;
+      const jobs = yield* Jobs;
+      const stillPaused = pausedProjectsInRegions(db, {
+        defaultRegion: backend.defaultRegion,
+        organizationId: payload.organizationId,
+      }).pipe(Effect.map((rows) => rows.some((row) => row.region === payload.region)));
+
+      // Nothing to recheck (the pause was lifted, or rolled back): no SES call, no next run.
+      if (!(yield* stillPaused)) {
+        return;
+      }
+      yield* scheduleRecheck(
+        payload,
+        (yield* Clock.currentTimeMillis) + Duration.toMillis(RECHECK_EVERY),
+      );
+      const synced = yield* syncProjectSendingStatus(db, {
+        projectId: payload.organizationId,
+        region: payload.region,
+      });
+      if (yield* stillPaused) {
+        return;
+      }
+      yield* jobs.cancel(emailRecheckProjectSendingPauseJob, payload).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProjectSendingPauseError({
+              cause,
+              operation: "schedule_recheck",
+              organizationId: payload.organizationId,
+            }),
+        ),
+      );
+      yield* Effect.logInfo("Lifted a Project Sending Pause that SES had already lifted", {
+        ...synced,
+        ...payload,
+      });
+    }),
+  // A worker that starts finds every pause a recheck, whatever became of its schedule; they
+  // are spread a second apart so a restart with many paused Projects does not ask SES about
+  // all of them at once.
+  reconcile: Effect.gen(function* () {
+    const db = yield* DB;
+    const backend = yield* EmailBackend;
+    const now = yield* Clock.currentTimeMillis;
+    const paused = yield* pausedProjectsInRegions(db, { defaultRegion: backend.defaultRegion });
+    yield* Effect.forEach(
+      paused,
+      (payload, index) => scheduleRecheck(payload, now + (index + 1) * 1000),
+      { discard: true },
+    );
+  }),
+});

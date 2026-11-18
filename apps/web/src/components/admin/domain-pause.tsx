@@ -31,26 +31,28 @@ const UNPAUSE_WARNINGS: Partial<Record<NonNullable<AdminDomain["pausedReason"]>,
 };
 
 /**
- * A platform admin pauses or unpauses a Domain, whichever its state calls for: a pause asks
- * for its reason, an unpause confirms. Either closes as the Domain's new state lands in the
- * admin's list, so its badge changes without a reload.
+ * A platform admin pauses or unpauses a Domain: a pause asks for its reason, an unpause
+ * confirms. A Domain that is already paused can be paused again, which only changes the
+ * reason: that is how an admin keeps a Domain paused that Relayit paused itself and would
+ * unpause when SES restores the Project, without a moment in which it can send. Either
+ * closes as the Domain's new state lands in the admin's list, so its badge changes without
+ * a reload.
  */
 export function DomainPause({
+  action,
+  close,
   domain,
-  open,
-  setOpen,
 }: {
+  action: "pause" | "unpause" | null;
+  close: () => void;
   domain: AdminDomain;
-  open: boolean;
-  setOpen: (open: boolean) => void;
 }) {
   const params = { domainId: domain.id };
   const landed = async (
     client: QueryClient,
     state: Pick<AdminDomain, "isPaused" | "pausedReason">,
   ) => {
-    // Closed in the same render as the state changes, or the other dialog would flash.
-    setOpen(false);
+    close();
     client.setQueryData(
       queries.admin.listProjects.queryKey,
       (old: readonly AdminProject[] | undefined) =>
@@ -108,10 +110,10 @@ export function DomainPause({
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             form.reset();
+            close();
           }
-          setOpen(nextOpen);
         }}
-        open={open && !domain.isPaused}
+        open={action === "pause"}
       >
         <DialogPopup
           render={
@@ -124,11 +126,15 @@ export function DomainPause({
           }
         >
           <DialogHeader>
-            <DialogTitle>Pause {domain.fqdn}</DialogTitle>
+            <DialogTitle>
+              {domain.isPaused ? `Keep ${domain.fqdn} paused` : `Pause ${domain.fqdn}`}
+            </DialogTitle>
             <DialogDescription>
-              While it is paused, new sends from this Domain are rejected and Deliveries already
-              queued from it fail. Nothing is held to send later. Its Project's members see the
-              pause and its reason, and cannot lift it: it stays paused until an admin unpauses it.
+              {domain.isPaused
+                ? "This Domain is paused already, and stays paused throughout. Giving it a reason of your own makes the pause yours: Relayit no longer unpauses it when SES restores the Project's sending. "
+                : "While it is paused, new sends from this Domain are rejected and Deliveries already queued from it fail. Nothing is held to send later. "}
+              Its Project's members see the pause and its reason, and cannot lift it: it stays
+              paused until an admin unpauses it.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -151,7 +157,7 @@ export function DomainPause({
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
             <form.AppForm>
               <form.SubmitButton hasDefaults variant="destructive">
-                Pause Domain
+                {domain.isPaused ? "Keep Paused" : "Pause Domain"}
               </form.SubmitButton>
             </form.AppForm>
           </DialogFooter>
@@ -167,8 +173,12 @@ export function DomainPause({
         execute={() => unpauseDomain().then(() => undefined)}
         isLoading={isUnpausing}
         onError={() => undefined}
-        open={open && domain.isPaused}
-        setOpen={setOpen}
+        open={action === "unpause"}
+        setOpen={(nextOpen) => {
+          if (!nextOpen) {
+            close();
+          }
+        }}
         title={`Unpause ${domain.fqdn}`}
       />
     </>

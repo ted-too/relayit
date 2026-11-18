@@ -209,6 +209,7 @@ export const ensureSesInfrastructure = ({
     const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, region);
     const { destinationName, tenantStatusRuleName, topicName } = namesFor(webhookUrl);
     const topicArn = yield* ensureTopicAndSubscription(sns, topicName, webhookUrl);
-    yield* ensureEventDestination(ses, destinationName, topicArn);
+    // Never fails, whatever the account refuses of it: what sending needs comes after.
     yield* ensureSesTenantStatusEvents({ events, sns, tenantStatusRuleName, topicArn });
+    yield* ensureEventDestination(ses, destinationName, topicArn);
   }).pipe(Effect.mapError(mapAwsError));

@@ -96,11 +96,13 @@ const decodeTopicPolicy = Schema.decodeEffect(
 );
 
 /**
- * The topic's policy with the statement that lets EventBridge publish this rule's events,
- * or nothing when it is already there. Every other statement is kept as it is: the default
- * one is what lets SES publish its notifications.
+ * The topic's policy with the statement that lets EventBridge publish this rule's events:
+ * `unchanged` when it is already there, `unreadable` when the policy's statements are not
+ * what IAM allows there (one statement, or a list of them). Every other statement is kept
+ * as it is: the default one is what lets SES publish its notifications, so a policy this
+ * cannot read whole is never written back.
  */
-export const withTenantStatusStatement = (
+const withTenantStatusStatement = (
   policy: Record<string, unknown>,
   input: { readonly ruleArn: string; readonly topicArn: string },
 ) => {
@@ -112,8 +114,13 @@ export const withTenantStatusStatement = (
     Resource: input.topicArn,
     Sid: POLICY_STATEMENT_SID,
   };
-  const statements = Array.isArray(policy.Statement) ? policy.Statement : [];
-  const current = statements.map(asRecord).find((item) => item?.Sid === POLICY_STATEMENT_SID);
+  const statements = (Array.isArray(policy.Statement) ? policy.Statement : [policy.Statement]).map(
+    (item: unknown) => (Array.isArray(item) ? undefined : asRecord(item)),
+  );
+  if (statements.includes(undefined)) {
+    return { kind: "unreadable" } as const;
+  }
+  const current = statements.find((item) => item?.Sid === POLICY_STATEMENT_SID);
   if (
     current &&
     current.Effect === statement.Effect &&
@@ -123,15 +130,15 @@ export const withTenantStatusStatement = (
     asRecord(current.Principal)?.Service === statement.Principal.Service &&
     asRecord(asRecord(current.Condition)?.ArnEquals)?.["aws:SourceArn"] === input.ruleArn
   ) {
-    return;
+    return { kind: "unchanged" } as const;
   }
   return {
-    ...policy,
-    Statement: [
-      ...statements.filter((item) => asRecord(item)?.Sid !== POLICY_STATEMENT_SID),
-      statement,
-    ],
-  };
+    kind: "changed",
+    policy: {
+      ...policy,
+      Statement: [...statements.filter((item) => item?.Sid !== POLICY_STATEMENT_SID), statement],
+    },
+  } as const;
 };
 
 /**
@@ -178,11 +185,14 @@ export const ensureSesTenantStatusEvents = ({
         (cause) => new AwsTenantStatusEventsError({ cause, reason: "topic_policy_unreadable" }),
       ),
     );
-    const policy = withTenantStatusStatement(current, { ruleArn: rule.RuleArn, topicArn });
-    if (policy) {
+    const merged = withTenantStatusStatement(current, { ruleArn: rule.RuleArn, topicArn });
+    if (merged.kind === "unreadable") {
+      return yield* new AwsTenantStatusEventsError({ reason: "topic_policy_unreadable" });
+    }
+    if (merged.kind === "changed") {
       yield* sns.setTopicAttributes({
         AttributeName: "Policy",
-        AttributeValue: JSON.stringify(policy),
+        AttributeValue: JSON.stringify(merged.policy),
         TopicArn: topicArn,
       });
     }

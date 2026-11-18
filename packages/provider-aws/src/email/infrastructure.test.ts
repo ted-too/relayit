@@ -2,33 +2,36 @@ import type { EventBridge } from "@effect-aws/client-eventbridge";
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Logger } from "effect";
 import { createAwsErrorMapper } from "../errors";
 import { UNRECORDED_SEND_GRACE_SECONDS } from "@repo/channels/email/deliverability";
 import { ensureSesInfrastructure, sesNotificationDeliveryPolicy } from "./infrastructure";
 
 const WEBHOOK_URL = "https://api.relayit.test/webhooks/providers/aws/ses";
 
+type Refusable = "deliveryPolicy" | "putRule" | "putTargets" | "topicPolicy";
+
+/** What AWS answers a call the deployment's IAM policy does not allow. */
+const DENIED = { _tag: "AuthorizationErrorException" };
+
 /**
  * SNS, SES and EventBridge in one region, holding one subscription to the api in the given
- * state. EventBridge takes the tenant status rule unless `putRule` says otherwise.
+ * state, and refusing the calls named in `refused`.
  */
-const fakeAws = (
-  subscriptionArn: string,
-  setTopicAttributes: () => Effect.Effect<unknown, unknown> = () => Effect.succeed({}),
-  putRule: () => Effect.Effect<{ RuleArn?: string }, unknown> = () =>
-    Effect.succeed({
-      RuleArn: "arn:aws:events:us-east-1:111122223333:rule/relayit-tenant-status-x",
-    }),
-) => {
+const fakeAws = (subscriptionArn: string, refused: readonly Refusable[] = []) => {
   const rules: string[] = [];
   const targets: { Arn: string; Rule: string }[] = [];
   const events = {
     putRule: ({ Name }: { Name: string }) => {
       rules.push(Name);
-      return putRule();
+      return refused.includes("putRule")
+        ? Effect.fail(DENIED)
+        : Effect.succeed({ RuleArn: `arn:aws:events:us-east-1:111122223333:rule/${Name}` });
     },
     putTargets: ({ Rule, Targets }: { Rule: string; Targets: { Arn: string }[] }) => {
+      if (refused.includes("putTargets")) {
+        return Effect.fail(DENIED);
+      }
       targets.push(...Targets.map(({ Arn }) => ({ Arn, Rule })));
       return Effect.succeed({ FailedEntryCount: 0 });
     },
@@ -48,8 +51,11 @@ const fakeAws = (
         ],
       }),
     setTopicAttributes: (input: (typeof attributes)[number]) => {
+      if (refused.includes(input.AttributeName === "Policy" ? "topicPolicy" : "deliveryPolicy")) {
+        return Effect.fail(DENIED);
+      }
       attributes.push(input);
-      return setTopicAttributes();
+      return Effect.succeed({});
     },
     subscribe: ({ Endpoint }: { Endpoint: string }) => {
       subscribed.push(Endpoint);
@@ -117,9 +123,9 @@ describe("ensureSesInfrastructure", () => {
   it.effect("still ensures the rest when it may not set the topic's retry policy", () =>
     Effect.gen(function* () {
       // An IAM policy from before `sns:SetTopicAttributes` was needed.
-      const { destinations, ensure, subscribed } = fakeAws("PendingConfirmation", () =>
-        Effect.fail({ _tag: "AuthorizationErrorException" }),
-      );
+      const { destinations, ensure, subscribed } = fakeAws("PendingConfirmation", [
+        "deliveryPolicy",
+      ]);
       yield* ensure;
       expect(subscribed).toEqual([WEBHOOK_URL]);
       expect(destinations).toHaveLength(1);
@@ -143,19 +149,42 @@ describe("ensureSesInfrastructure", () => {
     }),
   );
 
-  it.effect("still ensures what sending needs when it may not make the tenant status rule", () =>
-    Effect.gen(function* () {
-      // An IAM policy from before `events:PutRule` was needed.
-      const { destinations, ensure, subscribed, targets } = fakeAws(
-        "PendingConfirmation",
-        undefined,
-        () => Effect.fail({ _tag: "AccessDeniedException" }),
-      );
-      yield* ensure;
-      expect(subscribed).toEqual([WEBHOOK_URL]);
-      expect(destinations).toHaveLength(1);
-      expect(targets).toEqual([]);
-    }),
+  it.effect.each(["putRule", "topicPolicy", "putTargets"] as const)(
+    "starts, with what sending needs ensured afterwards, when the account refuses %s",
+    (step) =>
+      Effect.gen(function* () {
+        // An IAM policy from before the tenant status events needed these calls.
+        const { destinations, ensure, rules, subscribed, targets } = fakeAws(
+          "PendingConfirmation",
+          [step],
+        );
+        const logged: unknown[] = [];
+
+        // Succeeding is the worker starting: a failure here is what would stop it.
+        const exit = yield* ensure.pipe(
+          Effect.exit,
+          Effect.provide(
+            Logger.layer([
+              Logger.make(({ logLevel, message }) => {
+                if (logLevel === "Warn") {
+                  logged.push(message);
+                }
+              }),
+            ]),
+          ),
+        );
+
+        expect(exit._tag).toBe("Success");
+        // The refused step was reached, and the event destination, which is made after it
+        // and is what delivery notifications depend on, was still made.
+        expect(rules).toHaveLength(1);
+        expect(targets).toEqual([]);
+        expect(subscribed).toEqual([WEBHOOK_URL]);
+        expect(destinations).toHaveLength(1);
+        // The operator is told once, with the permissions to add.
+        expect(logged).toHaveLength(1);
+        expect(JSON.stringify(logged[0])).toContain("events:PutRule");
+      }),
   );
 
   it("retries a refused notification for as long as the api refuses it, within SNS's limits", () => {
