@@ -43,6 +43,10 @@ const program = Effect.scoped(
         Bun.serve({
           fetch: (request) => handler(request),
           hostname,
+          // An Rpc call answers nothing until it has finished, and Bun drops a connection
+          // idle for 10 seconds by default: a first read that waits out another's scaffold,
+          // or a publish that installs dependencies, runs longer. 255 is Bun's maximum.
+          idleTimeout: 255,
           port,
         }),
       ),
