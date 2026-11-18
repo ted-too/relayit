@@ -54,7 +54,7 @@ describe("POST /messages/email with attachments (PostgreSQL, Redis)", () => {
             dashboard: { billing: false, githubSignIn: false },
             hostname: "127.0.0.1",
             port: 0,
-            unsubscribeSecret: "test-secret",
+            unsubscribeSecrets: ["test-secret"],
           }),
         ),
         Layer.provideMerge(ApiAuth.layer({ ...config, rateLimit: false })),
@@ -140,6 +140,7 @@ describe("POST /messages/email with attachments (PostgreSQL, Redis)", () => {
         customDomainId: domainId,
         organizationId: id,
         ownershipToken: `tok_${run}`,
+        ownershipVerificationStatus: "verified",
       });
       await db.$client.end();
     });
