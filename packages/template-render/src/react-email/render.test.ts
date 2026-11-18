@@ -73,6 +73,20 @@ describe("renderSealedReactEmailArtifact", () => {
     expect(result.value.html).toContain("USD");
   });
 
+  it("gives the artifact the renderer's React, so its hooks work", async () => {
+    const result = await renderSealedReactEmailArtifact({
+      artifact: `
+import * as React from "react";
+export default function Email() {
+  return React.createElement("div", { id: React.useId() }, "Hooked");
+}
+`,
+      subject: "Hello",
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { text: "Hooked" } });
+  });
+
   it("fails when subject is missing", async () => {
     const result = await renderSealedReactEmailArtifact({
       artifact: ARTIFACT,

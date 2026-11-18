@@ -27,17 +27,21 @@ const projectWorkspace = (kind: "reactEmail") =>
   Effect.gen(function* () {
     const { organizationId } = yield* DashboardMember;
     const db = yield* DB;
-    const existing = yield* db.query.templatingWorkspace
+    const find = db.query.templatingWorkspace
       .findFirst({ where: { kind, organizationId, source: "hosted" } })
       .pipe(Effect.catch(operationFailed("Failed to load Email Workspace.")));
+    const existing = yield* find;
     if (existing) {
       return existing;
     }
-    const [created] = yield* db
+    // A page's first reads arrive together and all find no row. The unique index lets one
+    // insert win; the others do nothing, and every one reads the winner's row.
+    yield* db
       .insert(templatingWorkspace)
       .values({ kind, organizationId, source: "hosted", updatedAt: new Date() })
-      .returning()
+      .onConflictDoNothing()
       .pipe(Effect.catch(operationFailed("Failed to create Email Workspace.")));
+    const created = yield* find;
     if (!created) {
       return yield* operationFailed("Failed to create Email Workspace.")(organizationId);
     }

@@ -32,16 +32,24 @@ export async function renderSealedReactEmailArtifact(input: {
         : input.artifact;
     await NodeFSP.writeFile(artifactPath, bytes);
 
-    const runner = NodePath.join(
-      NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
-      "isolate-runner.ts",
-    );
+    const runnerDir = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
+    const runner = NodePath.join(runnerDir, "isolate-runner.ts");
+    // The artifact leaves react external and must share the runner's copy: hooks fail
+    // across two Reacts. With no node_modules above the temp directory Bun would instead
+    // auto-install one from its cache or the registry, so link the runner's beside it.
+    await NodeFSP.mkdir(NodePath.join(tempDir, "node_modules"));
+    for (const name of ["react", "react-dom"]) {
+      await NodeFSP.symlink(
+        NodePath.dirname(Bun.resolveSync(`${name}/package.json`, runnerDir)),
+        NodePath.join(tempDir, "node_modules", name),
+      );
+    }
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const subject = input.subject ?? input.subjectOverride ?? "";
     const args = [runner, artifactPath, JSON.stringify(input.props ?? {}), subject];
 
     const proc = Bun.spawn(["bun", ...args], {
-      cwd: NodePath.dirname(runner),
+      cwd: runnerDir,
       stdout: "pipe",
       stderr: "pipe",
       env: {

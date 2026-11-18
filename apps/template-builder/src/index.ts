@@ -1,11 +1,11 @@
+import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Config, Effect, Layer, Redacted } from "effect";
+import { Cause, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { templateBuilderConfig } from "./env";
-import { loggingLive, makeAppLayers } from "./layers";
-import { logEffectFailure } from "./log-failure";
+import { makeAppLayers } from "./layers";
 
 const program = Effect.scoped(
   Effect.gen(function* () {
@@ -72,14 +72,4 @@ const reportFailure = Effect.catchCause((cause) => {
   );
 });
 
-Effect.runFork(
-  program.pipe(
-    reportFailure,
-    // Only LOG_LEVEL here: the rest of the config fails inside the program, where it is logged.
-    Effect.provide(
-      Layer.unwrap(
-        Effect.map(Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
-      ),
-    ),
-  ),
-);
+Effect.runFork(program.pipe(reportFailure, Effect.provide(LoggingLive)));

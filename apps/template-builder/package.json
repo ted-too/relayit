@@ -11,6 +11,7 @@
     "start": "bun ./src/index.ts"
   },
   "dependencies": {
+    "@repo/logging": "workspace:*",
     "@repo/object-storage": "workspace:*",
     "@repo/persistence": "workspace:*",
     "@repo/redis": "workspace:*",
