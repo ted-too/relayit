@@ -1,6 +1,6 @@
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Effect, Layer, Redacted } from "effect";
+import { Cause, Config, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { templateBuilderConfig } from "./env";
@@ -75,6 +75,11 @@ const reportFailure = Effect.catchCause((cause) => {
 Effect.runFork(
   program.pipe(
     reportFailure,
-    Effect.provide(Layer.unwrap(Effect.map(templateBuilderConfig, loggingLive))),
+    // Only LOG_LEVEL here: the rest of the config fails inside the program, where it is logged.
+    Effect.provide(
+      Layer.unwrap(
+        Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
+      ),
+    ),
   ),
 );

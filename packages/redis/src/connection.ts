@@ -32,6 +32,11 @@ export class RedisResponseError extends Data.TaggedError("RedisResponseError")<{
 export type RedisError = RedisCommandError | RedisResponseError;
 
 export interface RedisLayerConfig {
+  /**
+   * Prepended to every key the `Redis` service sends, Lua `KEYS` included. Empty in
+   * production; a worktree sets its own so it never shares jobs or locks with another.
+   */
+  readonly keyPrefix?: string;
   readonly options?: RedisOptions;
   readonly url: string;
 }

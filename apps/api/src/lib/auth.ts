@@ -12,6 +12,7 @@ export interface ApiAuth {
 export const createAuth = (config: {
   readonly apiUrl: string;
   readonly databaseUrl: string;
+  readonly redisKeyPrefix: string;
   readonly redisUrl: string;
   /** Runs infrastructure log effects with the process logger. */
   readonly runLog: (effect: Effect.Effect<void>) => void;
@@ -42,6 +43,7 @@ export const createAuth = (config: {
     baseUrl: config.apiUrl,
     db,
     redis,
+    redisKeyPrefix: config.redisKeyPrefix,
   });
 
   return {

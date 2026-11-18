@@ -11,11 +11,14 @@
     "@effect-aws/client-sesv2": "2.0.0-beta.6",
     "@effect-aws/client-sns": "2.0.0-beta.4",
     "@repo/channels": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/persistence": "workspace:*",
     "effect": "catalog:",
     "sns-validator": "^0.3.5",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/sns-validator": "^0.3.3"
+    "@types/sns-validator": "^0.3.3",
+    "typeid-js": "catalog:"
   }
 }

@@ -16,6 +16,7 @@ import { Data, Effect } from "effect";
 import { makeProviderTypeId } from "../../provider-type";
 import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
+import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
 import { EmailProviderRegistry } from "../provider-registry";
 import {
@@ -30,7 +31,6 @@ import {
   customDomainRootDnsOwner,
   resolveCustomDomainMailFromRecords,
 } from "./dns";
-import { detectDnsProvider } from "./provider-detection";
 
 export class CustomDomainError extends Data.TaggedError("CustomDomainError")<{
   readonly cause?: unknown;
@@ -402,6 +402,7 @@ const createOrgDomainLink = (input: {
 export const createCustomDomain = (input: CreateCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
+    const dnsLookups = yield* DnsLookups;
 
     const existing = yield* db.query.customDomain
       .findFirst({
@@ -442,7 +443,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
               operation: "persist",
               organizationId: input.organizationId,
             }),
-          try: () => detectDnsProvider(existing.fqdn),
+          try: () => dnsLookups.detectProvider(existing.fqdn),
         });
 
         if (detected !== "unknown") {
@@ -557,7 +558,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
           organizationId: input.organizationId,
           providerId: input.provider.id,
         }),
-      try: () => detectDnsProvider(input.fqdn),
+      try: () => dnsLookups.detectProvider(input.fqdn),
     });
 
     const [row] = yield* db

@@ -1,17 +1,17 @@
-import { Config, type Effect } from "effect";
+import { objectStorageConfig } from "@repo/object-storage";
+import { Config, Effect } from "effect";
 
-export const templateBuilderConfig = Config.all({
-  databaseUrl: Config.redacted("DATABASE_URL"),
-  hostname: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
-  logLevel: Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")),
-  port: Config.port("PORT").pipe(Config.withDefault(3006)),
-  redisUrl: Config.redacted("REDIS_URL"),
-  s3AccessKeyId: Config.redacted("S3_ACCESS_KEY_ID"),
-  s3Bucket: Config.string("S3_BUCKET"),
-  s3Endpoint: Config.url("S3_ENDPOINT"),
-  s3Region: Config.string("S3_REGION").pipe(Config.withDefault("auto")),
-  s3SecretAccessKey: Config.redacted("S3_SECRET_ACCESS_KEY"),
-  templatingBuilderSecret: Config.redacted("TEMPLATING_BUILDER_SECRET"),
+export const templateBuilderConfig = Effect.gen(function* () {
+  const config = yield* Config.all({
+    databaseUrl: Config.redacted("DATABASE_URL"),
+    hostname: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+    logLevel: Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")),
+    port: Config.port("PORT").pipe(Config.withDefault(3006)),
+    redisKeyPrefix: Config.string("REDIS_KEY_PREFIX").pipe(Config.withDefault("")),
+    redisUrl: Config.redacted("REDIS_URL"),
+    templatingBuilderSecret: Config.redacted("TEMPLATING_BUILDER_SECRET"),
+  });
+  return { ...config, objectStorage: yield* objectStorageConfig };
 });
 
 export type TemplateBuilderConfig = Effect.Success<typeof templateBuilderConfig>;

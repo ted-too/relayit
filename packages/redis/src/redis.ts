@@ -59,6 +59,7 @@ export const makeRedisLive = (config: RedisLayerConfig) =>
   Layer.effect(
     Redis,
     Effect.gen(function* () {
+      const keyPrefix = config.keyPrefix ?? "";
       // Reconnects surface from promise land; run the log with the layer's
       // services so it reaches the configured logger.
       const services = yield* Effect.context<never>();
@@ -79,32 +80,35 @@ export const makeRedisLive = (config: RedisLayerConfig) =>
       yield* ping(connections.blocking, "Blocking Redis");
 
       return {
-        ...makeStreamCommands(connections),
+        ...makeStreamCommands(connections, keyPrefix),
+        // A script reaches only the keys passed in KEYS, so prefixing them here covers every
+        // key it touches; keys a script stores and reads back (Usage counters) carry it too.
         evaluateNumber: ({ args, keys, script }) =>
           execute(connections.commands, "evaluate", "EVAL", [
             script,
             String(keys.length),
-            ...keys,
+            ...keys.map((key) => keyPrefix + key),
             ...args,
           ]).pipe(Effect.flatMap((value) => expectNumber("evaluate", value))),
         evaluateString: ({ args, keys, script }) =>
           execute(connections.commands, "evaluate", "EVAL", [
             script,
             String(keys.length),
-            ...keys,
+            ...keys.map((key) => keyPrefix + key),
             ...args,
           ]).pipe(Effect.flatMap((value) => expectString("evaluate", value))),
         ping: healthcheck,
         sortedSetAdd: ({ key, member, score }) =>
           execute(connections.commands, "sorted-set-add", "ZADD", [
-            key,
+            keyPrefix + key,
             String(score),
             member,
           ]).pipe(Effect.flatMap((value) => expectNumber("sorted-set-add", value))),
         sortedSetRemove: ({ key, member }) =>
-          execute(connections.commands, "sorted-set-remove", "ZREM", [key, member]).pipe(
-            Effect.flatMap((value) => expectNumber("sorted-set-remove", value)),
-          ),
+          execute(connections.commands, "sorted-set-remove", "ZREM", [
+            keyPrefix + key,
+            member,
+          ]).pipe(Effect.flatMap((value) => expectNumber("sorted-set-remove", value))),
       } satisfies RedisService;
     }),
   );

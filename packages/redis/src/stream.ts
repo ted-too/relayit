@@ -166,18 +166,27 @@ export const decodeReadGroupEntries = (value: unknown) => {
   return Effect.succeed(entries);
 };
 
-export const makeStreamCommands = ({ blocking, commands }: RedisConnections): StreamCommands => ({
+/**
+ * `keyPrefix` namespaces every stream this service touches, so checkouts sharing one Redis
+ * never read each other's jobs. Stream names in replies come back without it.
+ */
+export const makeStreamCommands = (
+  { blocking, commands }: RedisConnections,
+  keyPrefix: string,
+): StreamCommands => ({
   acknowledge: ({ group, id, stream }) =>
-    execute(commands, "acknowledge", "XACK", [stream, group, id]).pipe(
+    execute(commands, "acknowledge", "XACK", [keyPrefix + stream, group, id]).pipe(
       Effect.flatMap((value) => expectNumber("acknowledge", value)),
     ),
   append: ({ fields, stream }) =>
-    execute(commands, "append", "XADD", [stream, "*", ...Object.entries(fields).flat()]).pipe(
-      Effect.flatMap((value) => expectString("append", value)),
-    ),
+    execute(commands, "append", "XADD", [
+      keyPrefix + stream,
+      "*",
+      ...Object.entries(fields).flat(),
+    ]).pipe(Effect.flatMap((value) => expectString("append", value))),
   autoClaim: ({ consumer, count, group, minIdleMs, start, stream }) =>
     execute(commands, "auto-claim", "XAUTOCLAIM", [
-      stream,
+      keyPrefix + stream,
       group,
       consumer,
       String(minIdleMs),
@@ -188,7 +197,7 @@ export const makeStreamCommands = ({ blocking, commands }: RedisConnections): St
   createConsumerGroup: ({ group, stream }) =>
     execute(commands, "create-consumer-group", "XGROUP", [
       "CREATE",
-      stream,
+      keyPrefix + stream,
       group,
       "0",
       "MKSTREAM",
@@ -211,7 +220,12 @@ export const makeStreamCommands = ({ blocking, commands }: RedisConnections): St
       "BLOCK",
       String(blockMs),
       "STREAMS",
-      ...streams,
+      ...streams.map((stream) => keyPrefix + stream),
       ...streams.map(() => ">"),
-    ]).pipe(Effect.flatMap(decodeReadGroupEntries)),
+    ]).pipe(
+      Effect.flatMap(decodeReadGroupEntries),
+      Effect.map((entries) =>
+        entries.map((entry) => ({ ...entry, stream: entry.stream.slice(keyPrefix.length) })),
+      ),
+    ),
 });
