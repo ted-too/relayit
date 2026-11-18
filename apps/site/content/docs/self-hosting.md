@@ -122,6 +122,8 @@ Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a 
 
 Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releases).
 
+If your platform runs the old and new api side by side during an upgrade (Compose does not), then after upgrading past the release that flattened the send limits in `user_channel.limits`, run the `UPDATE` in its migration, [`20261118132136_flatten_user_channel_limits/migration.sql`](https://github.com/ted-too/relayit/blob/main/packages/persistence/drizzle/20261118132136_flatten_user_channel_limits/migration.sql), once more when the old api is gone (`psql` against the api's database, with that file). While both versions run, sends answer 500; and a sign-in the old api handled in the meantime stores that user's limits in the shape the new api refuses to send on, which the second run corrects.
+
 ## Production notes
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `APP_URL` to those URLs. Forward `X-Forwarded-For` to the api: sign-in is rate-limited per client address.

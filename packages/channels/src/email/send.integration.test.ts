@@ -366,10 +366,8 @@ const seedProject = (options: { readonly dailySends?: number } = {}) =>
       channelType: "email",
       limits: {
         customDomains: null,
-        marketing: { managed: NO_LIMITS },
-        transactional: {
-          managed: { dailySends: options.dailySends ?? null, monthlySends: null },
-        },
+        marketing: NO_LIMITS,
+        transactional: { dailySends: options.dailySends ?? null, monthlySends: null },
       },
       userId,
     });
