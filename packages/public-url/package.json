@@ -1,0 +1,13 @@
+{
+  "name": "@repo/public-url",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "ipaddr.js": "^2.5.0"
+  }
+}

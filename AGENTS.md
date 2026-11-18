@@ -72,6 +72,7 @@ packages/webhooks/        Webhook Events, Endpoints, signed delivery
 packages/provider-aws/    the SES backend and its fake, SES notifications
 packages/templating/      Email Workspaces: Git in S3, publish, the builder's Rpc
 packages/template-render/ rendering primitive and sealed React Email templates
+packages/public-url/      the guard for requesting a URL a customer named: https, public addresses only
 packages/redis/, object-storage/, logging/, ui/   infrastructure and shared UI
 tooling/oxlint-plugin/    our lint rules, each with a test
 tooling/scripts/          dev env, worktree setup and prune, seed, the test runner

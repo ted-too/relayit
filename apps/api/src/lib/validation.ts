@@ -72,12 +72,50 @@ const toFailure = (on: "body" | "headers", error: Schema.SchemaError) => {
 };
 
 /**
- * Checks a request against its endpoint's schemas before its auth runs, as the api always
- * has: a body that isn't JSON is a bare `400 Bad Request`, a header or body that fails its
- * schema a `422`. A body sent without a JSON content type was never parsed, so it fails as
- * a missing object. The endpoint decodes them again afterwards, and they pass. First, a
- * body over `MAX_SEND_BODY_BYTES` is a `413`: by its `Content-Length` before any of it is
- * read, or, without one, once reading it passes the limit.
+ * Verifies a send's API key with `verify` before any of its body is read, so a client
+ * without a good key can't make the api hold a body. Only a body over
+ * `MAX_SEND_BODY_BYTES` by its `Content-Length` comes first, a `413` that needs no read.
+ * A request whose key fails is answered as it always was when nothing but its key was
+ * wrong, and a path or header that fails its schema still comes before the key's own
+ * failure: that is what answers `422` for a missing `x-api-key` on `/messages/email`.
+ * What such a request no longer gets is an answer about its body.
+ */
+export const beforeBody = <A, E, R>(endpoint: string, verify: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    if (Number(request.headers["content-length"] ?? 0) > MAX_SEND_BODY_BYTES) {
+      return yield* new PayloadTooLarge({
+        code: "payload_too_large",
+        message: "Request body exceeds the 50 MiB limit.",
+      });
+    }
+    return yield* verify.pipe(
+      Effect.catch((keyFailure) =>
+        Effect.gen(function* () {
+          const decode = decoders.get(endpoint);
+          if (decode?.params !== undefined) {
+            const params = decode.params(yield* HttpRouter.params);
+            if (Result.isFailure(params)) {
+              return yield* Effect.fail("NOT_FOUND" as const);
+            }
+          }
+          const headers = decode?.headers(request.headers);
+          if (headers !== undefined && Result.isFailure(headers)) {
+            return yield* toFailure("headers", headers.failure);
+          }
+          return yield* Effect.fail(keyFailure);
+        }),
+      ),
+    );
+  });
+
+/**
+ * Checks a request against its endpoint's schemas once its key has passed `beforeBody`,
+ * answering as the api always has: a body that isn't JSON is a bare `400 Bad Request`, a
+ * header or body that fails its schema a `422`. A body sent without a JSON content type
+ * was never parsed, so it fails as a missing object. The endpoint decodes them again
+ * afterwards, and they pass. A body without a `Content-Length` is a `413` once reading it
+ * passes `MAX_SEND_BODY_BYTES`.
  */
 export const RequestValidationLive = Layer.succeed(
   RequestValidation,
@@ -88,12 +126,6 @@ export const RequestValidationLive = Layer.succeed(
         return yield* httpEffect;
       }
       const request = yield* HttpServerRequest.HttpServerRequest;
-      if (Number(request.headers["content-length"] ?? 0) > MAX_SEND_BODY_BYTES) {
-        return yield* new PayloadTooLarge({
-          code: "payload_too_large",
-          message: "Request body exceeds the 50 MiB limit.",
-        });
-      }
       // In order: the body is parsed, then the path, headers and body are checked.
       let body: unknown;
       if (JSON_MEDIA_TYPE.test(request.headers["content-type"] ?? "")) {
