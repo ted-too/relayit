@@ -10,13 +10,11 @@ import {
 import { registerJobHandler, runJobWorker } from "@repo/jobs";
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
-import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
+import { sesNotificationsUrl } from "@repo/provider-aws/email/webhooks";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { workerConfig } from "./env";
 import { cloudflareFromConfig, makeWorkerLayer } from "./layers";
-
-const TRAILING_SLASH = /\/$/;
 
 // Never migrates: the api and builder apply migrations as they start, and this assumes
 // a current schema.
@@ -33,7 +31,7 @@ const workerProgram = Effect.gen(function* () {
       const backend = yield* EmailBackend;
       yield* backend
         .ensureInfrastructure({
-          deliveryWebhookUrl: `${config.apiUrl.toString().replace(TRAILING_SLASH, "")}${SES_NOTIFICATIONS_PATH}`,
+          deliveryWebhookUrl: sesNotificationsUrl(config.apiUrl),
         })
         .pipe(Effect.catchCause(logEffectFailure("Failed to ensure SES infrastructure")));
     }

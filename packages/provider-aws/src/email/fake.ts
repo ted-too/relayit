@@ -71,7 +71,11 @@ export const simulatedSesNotifications = (
   }
 
   return payloads.flatMap((payload) => {
-    const result = normalizeSesNotification(payload);
+    // One simulated notification per event type, as SES sends one per event.
+    const result = normalizeSesNotification(
+      payload,
+      `fake:${providerMessageId}:${String(payload.eventType)}`,
+    );
     return result.type === "events" ? result.events : [];
   });
 };

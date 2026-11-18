@@ -1,3 +1,4 @@
+import * as NodeCrypto from "node:crypto";
 import type { Database, DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type ContactSuppressionSeverity,
@@ -18,11 +19,14 @@ import {
 } from "@repo/webhooks/events";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
+import { TypeID } from "typeid-js";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 
 /** One outcome SES reported for a sent message, read from its notification. */
 export interface NormalizedDeliveryEvent {
   readonly kind: EmailDeliveryEventKind;
+  /** The SNS `MessageId` of the notification that carried it: one event per notification. */
+  readonly notificationId: string;
   readonly providerMessageId: string;
   readonly raw: unknown;
   readonly recipients: readonly string[];
@@ -154,8 +158,9 @@ const loadOrganizationId = (
 const suppressContacts = (
   db: DatabaseExecutor,
   input: {
-    readonly event: NormalizedDeliveryEvent;
     readonly organizationAppEnvironmentId: string;
+    readonly providerMessageId: string;
+    readonly recipients: readonly string[];
     readonly suppressionReason: "complaint" | "hard_bounce";
     readonly suppressionSeverity: ContactSuppressionSeverity;
   },
@@ -163,7 +168,7 @@ const suppressContacts = (
   const suppressedAt = new Date();
 
   return Effect.forEach(
-    input.event.recipients,
+    input.recipients,
     (recipient) => {
       const scope = and(
         eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
@@ -187,7 +192,7 @@ const suppressContacts = (
               new DeliveryEventIngestError({
                 cause,
                 operation: "suppress_contact",
-                providerMessageId: input.event.providerMessageId,
+                providerMessageId: input.providerMessageId,
               }),
           ),
         );
@@ -204,67 +209,89 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
       return;
     }
 
-    yield* db
-      .insert(emailDeliveryEvent)
-      .values({
-        customDomainId: delivery.customDomainId,
-        data: event.raw as Record<string, unknown>,
-        emailDeliveryId: delivery.id,
-        kind: event.kind,
-        sandboxDomainId: delivery.sandboxDomainId,
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new DeliveryEventIngestError({
-              cause,
-              operation: "insert_event",
-              providerMessageId: event.providerMessageId,
-            }),
-        ),
-      );
-
     const organizationId = yield* loadOrganizationId(db, {
       organizationAppEnvironmentId: message.organizationAppEnvironmentId,
       providerMessageId: event.providerMessageId,
     });
 
-    if (organizationId) {
-      yield* db
-        .transaction((tx) =>
-          emitWebhookEvent(tx, {
+    // Only the Delivery's own recipients: a notification naming any other address must not
+    // suppress it in this App Environment.
+    const deliveryRecipients = new Set(
+      [...delivery.to, ...(delivery.cc ?? []), ...(delivery.bcc ?? [])].map(normalizeContactEmail),
+    );
+    const suppressed = event.recipients.filter((recipient) =>
+      deliveryRecipients.has(normalizeContactEmail(recipient)),
+    );
+
+    yield* db.transaction((tx) =>
+      Effect.gen(function* () {
+        // The id is derived from the notification's SNS MessageId, so a redelivery, or a
+        // retry after this transaction committed, collides with the event it already
+        // recorded and adds no second Webhook Event or Suppression.
+        const recorded = yield* tx
+          .insert(emailDeliveryEvent)
+          .values({
+            customDomainId: delivery.customDomainId,
+            data: event.raw as Record<string, unknown>,
+            emailDeliveryId: delivery.id,
+            id: TypeID.fromUUIDBytes(
+              "edev",
+              NodeCrypto.createHash("sha256").update(event.notificationId).digest().subarray(0, 16),
+            ).toString(),
+            kind: event.kind,
+            sandboxDomainId: delivery.sandboxDomainId,
+          })
+          .onConflictDoNothing()
+          .returning({ id: emailDeliveryEvent.id })
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new DeliveryEventIngestError({
+                  cause,
+                  operation: "insert_event",
+                  providerMessageId: event.providerMessageId,
+                }),
+            ),
+          );
+        if (recorded.length === 0) {
+          return;
+        }
+
+        if (organizationId) {
+          yield* emitWebhookEvent(tx, {
             event: deliveryOutcomeEvent(event, {
               deliveryId: delivery.id,
               messageId: delivery.messageId,
             }),
             messageTags: message.tags,
             organizationId,
-          }),
-        )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new DeliveryEventIngestError({
-                cause,
-                operation: "emit_webhook",
-                providerMessageId: event.providerMessageId,
-              }),
-          ),
-        );
-    }
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new DeliveryEventIngestError({
+                  cause,
+                  operation: "emit_webhook",
+                  providerMessageId: event.providerMessageId,
+                }),
+            ),
+          );
+        }
 
-    if (
-      event.suppress &&
-      event.recipients.length > 0 &&
-      (event.kind === "bounced" || event.kind === "complained")
-    ) {
-      yield* suppressContacts(db, {
-        event,
-        organizationAppEnvironmentId: message.organizationAppEnvironmentId,
-        suppressionReason: event.kind === "complained" ? "complaint" : "hard_bounce",
-        suppressionSeverity: event.kind === "complained" ? "marketing" : "all",
-      });
-    }
+        if (
+          event.suppress &&
+          suppressed.length > 0 &&
+          (event.kind === "bounced" || event.kind === "complained")
+        ) {
+          yield* suppressContacts(tx, {
+            organizationAppEnvironmentId: message.organizationAppEnvironmentId,
+            providerMessageId: event.providerMessageId,
+            recipients: suppressed,
+            suppressionReason: event.kind === "complained" ? "complaint" : "hard_bounce",
+            suppressionSeverity: event.kind === "complained" ? "marketing" : "all",
+          });
+        }
+      }),
+    );
   });
 
 export const ingestDeliveryEvents = (

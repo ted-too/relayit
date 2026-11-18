@@ -11,8 +11,8 @@ import {
 import { Data, type Effect } from "effect";
 
 export class AwsUnexpectedResponseError extends Data.TaggedError("AwsUnexpectedResponseError")<{
-  readonly missingField: "MessageId" | "TenantArn" | "TopicArn";
-  readonly operation: "CreateTenant" | "CreateTopic" | "SendEmail";
+  readonly missingField: "Account" | "Arn" | "MessageId" | "TenantArn" | "TopicArn";
+  readonly operation: "CreateTenant" | "CreateTopic" | "GetCallerIdentity" | "SendEmail";
 }> {}
 
 export class AwsWebhookPayloadError extends Data.TaggedError("AwsWebhookPayloadError")<{
@@ -22,6 +22,16 @@ export class AwsWebhookPayloadError extends Data.TaggedError("AwsWebhookPayloadE
 
 export class AwsSnsValidationError extends Data.TaggedError("AwsSnsValidationError")<{
   readonly cause?: unknown;
+}> {}
+
+/** A validly signed SNS message from a topic this deployment did not subscribe the api to. */
+export class AwsSnsTopicRejected extends Data.TaggedError("AwsSnsTopicRejected")<{
+  readonly topicArn: unknown;
+}> {}
+
+/** The deployment's SES account could not be looked up, so no topic can be trusted yet. */
+export class AwsSnsTopicsUnavailable extends Data.TaggedError("AwsSnsTopicsUnavailable")<{
+  readonly cause: unknown;
 }> {}
 
 export class AwsSubscriptionConfirmationError extends Data.TaggedError(
@@ -35,6 +45,7 @@ export class AwsSubscriptionConfirmationError extends Data.TaggedError(
 }> {}
 
 export type AwsWebhookError =
+  | AwsSnsTopicRejected
   | AwsSnsValidationError
   | AwsSubscriptionConfirmationError
   | AwsWebhookPayloadError;

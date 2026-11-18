@@ -242,6 +242,7 @@
       "dependencies": {
         "@effect-aws/client-sesv2": "2.0.0",
         "@effect-aws/client-sns": "2.0.0",
+        "@effect-aws/client-sts": "2.0.0",
         "@repo/channels": "workspace:*",
         "@repo/jobs": "workspace:*",
         "@repo/persistence": "workspace:*",
@@ -432,6 +433,8 @@
 
     "@aws-sdk/client-sns": ["@aws-sdk/client-sns@3.1168.0", "", { "dependencies": { "@aws-sdk/core": "^3.981.0", "@aws-sdk/credential-provider-node": "^3.972.97", "@aws-sdk/types": "^3.975.1", "@smithy/core": "^3.40.0", "@smithy/fetch-http-handler": "^5.8.1", "@smithy/node-http-handler": "^4.14.2", "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-JXes5ppH9U3GUr/HQNoFrXh1V4eUGB1uyXNVxkm1Ackw0GOtuDlyVZcfOAT4W1vJQ1pMzaIIBwCOTi+OoP1fUw=="],
 
+    "@aws-sdk/client-sts": ["@aws-sdk/client-sts@3.1171.0", "", { "dependencies": { "@aws-sdk/core": "^3.981.0", "@aws-sdk/credential-provider-node": "^3.972.97", "@aws-sdk/signature-v4-multi-region": "^3.996.52", "@aws-sdk/types": "^3.975.1", "@smithy/core": "^3.40.0", "@smithy/fetch-http-handler": "^5.8.1", "@smithy/node-http-handler": "^4.14.2", "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-rMSkqzdVg6HJdC7CyeKMmdYu49AtqgwGQYq9a4VD7Zf5ejHicqiFBLMwDj0KnjRWs80xfiLOaR8Jz6L2I8+NYg=="],
+
     "@aws-sdk/core": ["@aws-sdk/core@3.981.0", "", { "dependencies": { "@aws-sdk/types": "^3.975.1", "@aws-sdk/xml-builder": "^3.972.43", "@aws/lambda-invoke-store": "^0.3.0", "@smithy/core": "^3.40.0", "@smithy/signature-v4": "^5.7.5", "@smithy/types": "^4.20.0", "bowser": "^2.11.0", "tslib": "^2.6.2" } }, "sha512-Mnu7gaDrC5UCdyH8uLxLfB2eWbjE/HbjKX1U1J2VQxG3TTATUDObW2wU3I8iH3e9YH5NN2CY6w1mlAIe2XJ3jg=="],
 
     "@aws-sdk/credential-provider-env": ["@aws-sdk/credential-provider-env@3.972.84", "", { "dependencies": { "@aws-sdk/core": "^3.981.0", "@aws-sdk/types": "^3.975.1", "@smithy/core": "^3.40.0", "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-akZJetiMVeLRHsKzYh3LamDCo74ZUCeo0XoyRKMEMZT5qP7ReM6LhpioBCyuqKP5Vav5gEOeCmaQV0VVQr1Meg=="],
@@ -555,6 +558,8 @@
     "@effect-aws/client-sesv2": ["@effect-aws/client-sesv2@2.0.0", "", { "dependencies": { "@aws-sdk/client-sesv2": "^3", "@effect-aws/commons": "^1.0.0" }, "peerDependencies": { "effect": ">=4.0.0-beta.66 <5.0.0" } }, "sha512-6PF3YwFbDeMtlFXjrOg/1NDfSM4ilWm98k9b+p+Y4P7Mf9sqQvT3FJd0GUQIhtuA+Y4SNFz/U7WyVsqc/55dHg=="],
 
     "@effect-aws/client-sns": ["@effect-aws/client-sns@2.0.0", "", { "dependencies": { "@aws-sdk/client-sns": "^3", "@effect-aws/commons": "^1.0.0" }, "peerDependencies": { "effect": ">=4.0.0-beta.66 <5.0.0" } }, "sha512-aRQ2TTrv5T0oi52IS5pGP2O+g/dWq4PKurmBXo4Ai5oGnctAq9oNZMIlWg1iL5A/MrtcwWTRFR5TMPLT5uvG0g=="],
+
+    "@effect-aws/client-sts": ["@effect-aws/client-sts@2.0.0", "", { "dependencies": { "@aws-sdk/client-sts": "^3", "@effect-aws/commons": "^1.0.0" }, "peerDependencies": { "effect": ">=4.0.0-beta.66 <5.0.0" } }, "sha512-84mNQHbjRb+bf2YShZ40cNpq+Ur6p8vT+knnWx1Uh2i1Jwv4Et95zhP5HcXGF9yUpREyw4MqjRuFv4WzmcNiWQ=="],
 
     "@effect-aws/commons": ["@effect-aws/commons@1.0.0", "", { "dependencies": { "@smithy/protocol-http": "^5.6.2", "@smithy/smithy-client": "^4.15.2", "@smithy/types": "^4.17.2" }, "peerDependencies": { "effect": ">=4.0.0-beta.66 <5.0.0" } }, "sha512-lxn1Cbyieo3rCAiovvQoJXZFpPYvLxHwYy0r8HFI65FeBiCvCrty822miSQKybItZdbqAcs2E34QQygX/Oialg=="],
 
@@ -2183,6 +2188,8 @@
     "@aws-sdk/client-sesv2/@aws-sdk/types": ["@aws-sdk/types@3.975.1", "", { "dependencies": { "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-7rGxUkCB2QPoQOeJmonmAICTN2zrH+fpmi1p4Iwu72lnxNaMhOgqcbpyddifnM1DBb19TWQ1u6z/XjkaFNEDWw=="],
 
     "@aws-sdk/client-sns/@aws-sdk/types": ["@aws-sdk/types@3.975.1", "", { "dependencies": { "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-7rGxUkCB2QPoQOeJmonmAICTN2zrH+fpmi1p4Iwu72lnxNaMhOgqcbpyddifnM1DBb19TWQ1u6z/XjkaFNEDWw=="],
+
+    "@aws-sdk/client-sts/@aws-sdk/types": ["@aws-sdk/types@3.975.1", "", { "dependencies": { "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-7rGxUkCB2QPoQOeJmonmAICTN2zrH+fpmi1p4Iwu72lnxNaMhOgqcbpyddifnM1DBb19TWQ1u6z/XjkaFNEDWw=="],
 
     "@aws-sdk/core/@aws-sdk/types": ["@aws-sdk/types@3.975.1", "", { "dependencies": { "@smithy/types": "^4.20.0", "tslib": "^2.6.2" } }, "sha512-7rGxUkCB2QPoQOeJmonmAICTN2zrH+fpmi1p4Iwu72lnxNaMhOgqcbpyddifnM1DBb19TWQ1u6z/XjkaFNEDWw=="],
 

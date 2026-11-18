@@ -9,7 +9,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
 import { UsageLimitExceeded } from "@repo/channels/usage";
-import { AwsSnsValidationError } from "@repo/provider-aws/errors";
+import {
+  AwsSnsTopicRejected,
+  AwsSnsTopicsUnavailable,
+  AwsSnsValidationError,
+} from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
 import { Effect } from "effect";
 import { GOOD_KEY, request, serve, stubs } from "./testing";
@@ -814,6 +818,46 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
           headers: { "content-type": "text/plain" },
         }),
       ).toEqual(respond(400, { code: "bad_request", message: "SES notification handling failed" }));
+    }),
+  );
+
+  it.live("answers 400 to a notification from a topic this deployment did not subscribe", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(
+        stubs({
+          handleSes: () => Effect.fail(new AwsSnsTopicRejected({ topicArn: "arn:aws:sns:x" })),
+        }).stubs,
+      );
+
+      expect(
+        yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+          body: '{"Type":"Notification"}',
+          headers: { "content-type": "text/plain" },
+        }),
+      ).toEqual(respond(400, { code: "bad_request", message: "SES notification handling failed" }));
+    }),
+  );
+
+  it.live("answers 500 when it cannot look up which topics to trust, so SNS retries", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(
+        stubs({
+          handleSes: () =>
+            Effect.fail(new AwsSnsTopicsUnavailable({ cause: new Error("STS unreachable") })),
+        }).stubs,
+      );
+
+      expect(
+        yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+          body: '{"Type":"Notification"}',
+          headers: { "content-type": "text/plain" },
+        }),
+      ).toEqual(
+        respond(500, {
+          code: "internal_server_error",
+          message: "SES notification handling failed",
+        }),
+      );
     }),
   );
 

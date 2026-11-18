@@ -1,13 +1,19 @@
+import { STS } from "@effect-aws/client-sts";
 import type { NormalizedDeliveryEvent } from "@repo/channels/email/deliverability";
-import { Effect, Schema } from "effect";
+import { Context, Duration, Effect, Exit, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import MessageValidator from "sns-validator";
 import {
+  AwsSnsTopicRejected,
+  AwsSnsTopicsUnavailable,
   AwsSnsValidationError,
   AwsSubscriptionConfirmationError,
+  AwsUnexpectedResponseError,
   type AwsWebhookError,
   AwsWebhookPayloadError,
 } from "../errors";
+import type { EmailBackendConfig } from "./backend";
+import { namesFor } from "./infrastructure";
 
 /**
  * Where the api receives SES's notifications, and where the worker subscribes SNS. The
@@ -15,6 +21,91 @@ import {
  * here, so changing it means re-subscribing every region.
  */
 export const SES_NOTIFICATIONS_PATH = "/webhooks/providers/aws/ses";
+
+const TRAILING_SLASH = /\/$/;
+
+/** The notifications URL of the api at `apiUrl`, as the worker subscribes it to SNS. */
+export const sesNotificationsUrl = (apiUrl: URL) =>
+  new URL(`${apiUrl.toString().replace(TRAILING_SLASH, "")}${SES_NOTIFICATIONS_PATH}`).toString();
+
+/**
+ * The SNS topics the worker subscribes the api to: one per region in `SES_REGIONS`, in the
+ * deployment's SES account. SNS signs every topic's messages alike, so without this check
+ * a topic in any AWS account could subscribe the api and report bounces it made up.
+ */
+export class SesNotificationTopics extends Context.Service<
+  SesNotificationTopics,
+  { readonly arns: Effect.Effect<ReadonlySet<string>, AwsSnsTopicsUnavailable> }
+>()("ProviderAws/SesNotificationTopics") {}
+
+/**
+ * The topics in the account `STS` signs in as, named as `ensureSesInfrastructure` names
+ * them. The account is looked up on the first notification, and again on each one after
+ * until a lookup succeeds, so the api starts without reaching AWS.
+ */
+export const sesNotificationTopicsInAccount = (input: {
+  readonly apiUrl: URL;
+  readonly regions: readonly string[];
+}) =>
+  Layer.effect(
+    SesNotificationTopics,
+    Effect.gen(function* () {
+      const sts = yield* STS;
+      const { topicName } = namesFor(sesNotificationsUrl(input.apiUrl));
+      const arns = yield* Effect.gen(function* () {
+        const identity = yield* sts.getCallerIdentity({});
+        // The caller's own ARN names the partition (aws, aws-cn, …) the topics are in.
+        const partition = identity.Arn?.split(":")[1];
+        if (!identity.Account) {
+          return yield* new AwsUnexpectedResponseError({
+            missingField: "Account",
+            operation: "GetCallerIdentity",
+          });
+        }
+        if (!partition) {
+          return yield* new AwsUnexpectedResponseError({
+            missingField: "Arn",
+            operation: "GetCallerIdentity",
+          });
+        }
+        const account = identity.Account;
+        const arns: ReadonlySet<string> = new Set(
+          input.regions.map((region) => `arn:${partition}:sns:${region}:${account}:${topicName}`),
+        );
+        return arns;
+      }).pipe(
+        Effect.mapError((cause) => new AwsSnsTopicsUnavailable({ cause })),
+        Effect.cachedWithTTL((exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)),
+      );
+      return { arns };
+    }),
+  );
+
+/**
+ * The topics for the backend's config. The fake makes none, so with it the api accepts no
+ * SNS message at all.
+ */
+export const sesNotificationTopicsLayer = (input: {
+  readonly apiUrl: URL;
+  readonly backend: EmailBackendConfig;
+}) => {
+  if (input.backend.kind === "fake") {
+    return Layer.succeed(SesNotificationTopics, {
+      arns: Effect.succeed(new Set<string>()),
+    });
+  }
+  const { accessKeyId, regions, secretAccessKey } = input.backend.ses;
+  return sesNotificationTopicsInAccount({ apiUrl: input.apiUrl, regions }).pipe(
+    Layer.provide(STS.layer({ credentials: { accessKeyId, secretAccessKey }, region: regions[0] })),
+  );
+};
+
+/**
+ * What SES publishes, as plain text, to a topic the worker makes an event destination
+ * (#53). It reports nothing about a send.
+ */
+const TOPIC_VALIDATION_MESSAGE =
+  /^Successfully validated SNS topic for Amazon SES event publishing\.?$/;
 
 export type SesNotificationResult =
   | { readonly events: readonly NormalizedDeliveryEvent[]; readonly type: "events" }
@@ -113,6 +204,7 @@ const eventKind = (notificationType: string): NormalizedDeliveryEvent["kind"] | 
 
 export const normalizeSesNotification = (
   payload: Record<string, unknown>,
+  notificationId: string,
 ): SesNotificationResult => {
   const notificationType = String(payload.eventType ?? payload.notificationType ?? "");
   const kind = eventKind(notificationType);
@@ -129,6 +221,7 @@ export const normalizeSesNotification = (
     events: [
       {
         kind,
+        notificationId,
         providerMessageId,
         raw: payload,
         recipients: recipientsFor(payload),
@@ -215,23 +308,37 @@ const confirmSubscription = (value: unknown) =>
 
 /**
  * Reads one SNS delivery to the notifications endpoint: confirms a subscription, or
- * normalizes the SES event it carries. Every message is checked against SNS's signature.
+ * normalizes the SES event it carries. Every message is checked against SNS's signature,
+ * then against the topics this deployment subscribed, before anything is confirmed or read.
  */
 export const handleSesNotification = (rawBody: string) =>
   Effect.gen(function* () {
     const body = yield* parseJson(rawBody, "sns_envelope");
     const message = yield* validateSnsMessage(body);
 
+    const topics = yield* SesNotificationTopics;
+    const trusted = yield* topics.arns;
+    if (typeof message.TopicArn !== "string" || !trusted.has(message.TopicArn)) {
+      return yield* new AwsSnsTopicRejected({ topicArn: message.TopicArn });
+    }
+
     if (message.Type === "SubscriptionConfirmation") {
       yield* confirmSubscription(message.SubscribeURL);
       return { type: "noop" } as const;
     }
 
-    if (message.Type !== "Notification" || typeof message.Message !== "string") {
+    if (
+      message.Type !== "Notification" ||
+      typeof message.Message !== "string" ||
+      typeof message.MessageId !== "string" ||
+      TOPIC_VALIDATION_MESSAGE.test(message.Message.trim())
+    ) {
       return { type: "noop" } as const;
     }
 
     const payload = yield* parseJson(message.Message, "ses_notification");
     const record = asRecord(payload);
-    return record ? normalizeSesNotification(record) : ({ type: "noop" } as const);
+    return record
+      ? normalizeSesNotification(record, message.MessageId)
+      : ({ type: "noop" } as const);
   });

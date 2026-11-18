@@ -96,6 +96,8 @@ The account can span several regions, so a later channel can route by destinatio
 
 At startup the worker creates, in every region, the configuration set each send names and an SNS topic subscribed to the api's SES notification URL. The resources are named after that URL, so a restart with the same URL finds them and changes nothing; that is also why the URL keeps its old `/webhooks/providers/aws/ses` shape.
 
+SNS signs every topic's messages alike, so a valid signature proves only that the message came through SNS, not from this deployment: anyone can subscribe the api to a topic in their own account and publish a bounce. The api therefore reads a message, or confirms a subscription, only from the topics the worker makes: it derives their names from its own `API_URL` and their account from STS with the `SES_*` credentials. The api and worker must share `API_URL`, `SES_*` and `SES_REGIONS`, or the api rejects every notification. Each notification's SNS `MessageId` becomes its Delivery Event's id, so a redelivery records nothing twice.
+
 ### DKIM keys are sealed
 
 DKIM private keys are encrypted at rest with `BETTER_AUTH_SECRETS`, the same versioned secrets better-auth signs with. The list form (`2:new,1:old`) seals with the first and opens with any, so a secret can be rotated without re-encrypting every row first.

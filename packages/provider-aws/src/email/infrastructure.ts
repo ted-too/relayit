@@ -27,7 +27,8 @@ const stableHash = (value: string) => {
   return hash.toString(16).padStart(8, "0");
 };
 
-const namesFor = (deliveryWebhookUrl: string) => {
+/** What the infrastructure for a webhook URL is called, the same in every region. */
+export const namesFor = (deliveryWebhookUrl: string) => {
   const hash = stableHash(deliveryWebhookUrl);
   return {
     destinationName: `${DESTINATION_PREFIX}${hash}`,
@@ -71,8 +72,13 @@ const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl
     const subscriptions = yield* sns.listSubscriptionsByTopic({
       TopicArn: topicArn,
     });
+    // A subscription whose confirmation never reached the api stays pending and delivers
+    // nothing; subscribing again makes SNS send a new confirmation.
     const exists = subscriptions.Subscriptions?.some(
-      (subscription) => subscription.Protocol === "https" && subscription.Endpoint === webhookUrl,
+      (subscription) =>
+        subscription.Protocol === "https" &&
+        subscription.Endpoint === webhookUrl &&
+        subscription.SubscriptionArn !== "PendingConfirmation",
     );
 
     if (!exists) {

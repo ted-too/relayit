@@ -7,6 +7,7 @@ import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { emailBackendLayer } from "@repo/provider-aws/email/backend";
+import { sesNotificationTopicsLayer } from "@repo/provider-aws/email/webhooks";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
 import { Layer, Option, Redacted } from "effect";
@@ -58,6 +59,8 @@ export const makeApiServices = (config: ApiConfig) => {
     httpLive,
     SymmetricCrypto.live(parseBetterAuthSecrets(Redacted.value(config.betterAuthSecrets))),
     emailBackendLive,
+    // The only topics whose SES notifications the api reads.
+    sesNotificationTopicsLayer({ apiUrl: config.apiUrl, backend: config.emailBackend }),
     managedDnsLive,
     templatingBuilderLive,
     logging,
