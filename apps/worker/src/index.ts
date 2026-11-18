@@ -56,10 +56,15 @@ const workerProgram = Effect.gen(function* () {
       Effect.catchCause(logEffectFailure("Failed to remove Domains without a link")),
     );
 
-    // Deliveries from before a Project's were detached as it lost a Domain to a claim.
-    yield* detachStrayDeliveries.pipe(
-      Effect.catchCause(
-        logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
+    // Deliveries from before a Project's were detached as it lost a Domain to a claim. Beside
+    // the jobs, not before them: on a long history the pass takes minutes, each batch
+    // re-checks under the Domain's row so nothing depends on it having finished, and no send
+    // should wait for it.
+    yield* Effect.forkChild(
+      detachStrayDeliveries.pipe(
+        Effect.catchCause(
+          logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
+        ),
       ),
     );
 
