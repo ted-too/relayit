@@ -4,8 +4,11 @@ export type EmailAcceptAttachmentReason =
   | "blocked_address"
   | "blocked_extension"
   | "exceeds_size_limit"
+  | "exceeds_total_size_limit"
   | "fetch_failed"
+  | "fetch_timeout"
   | "invalid_base64"
+  | "redirect_refused"
   | "unresolvable_host"
   | "unsupported_url";
 

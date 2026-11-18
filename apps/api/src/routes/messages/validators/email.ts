@@ -1,7 +1,9 @@
 import {
   BLOCKED_ATTACHMENT_FILENAME_MESSAGE,
   isBlockedAttachmentFilename,
+  MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
+  MAX_TOTAL_ATTACHMENT_BYTES,
 } from "@repo/channels/email/attachment-policy";
 import type { EmailFrom } from "@repo/persistence/db/validators/channels/email";
 import { Schema } from "effect";
@@ -133,10 +135,13 @@ const Attachment = Schema.Union([
     content: Schema.optionalKey(Schema.Never),
     path: UriString.annotate({
       description:
-        "HTTPS URL of a hosted file to attach, fetched when the send is accepted. Only `https:` URLs whose host resolves to a public address are fetched; redirects are not followed.",
+        "HTTPS URL of a hosted file to attach, fetched when the send is accepted, with 30 seconds for the lookup and download together. Only `https:` URLs whose host resolves to a public address are fetched, each address in turn until one connects; a redirect is refused, not followed.",
     }),
   }).annotate({ title: "Hosted attachment" }),
 ]).annotate({ identifier: "Attachment", title: "Attachment" });
+
+/** The attachment limits, for both send schemas' OpenAPI descriptions. */
+export const ATTACHMENTS_DESCRIPTION = `Files to attach, up to ${MAX_ATTACHMENTS}: each at most ${MAX_ATTACHMENT_BYTES} bytes once decoded or downloaded, and all together at most ${MAX_TOTAL_ATTACHMENT_BYTES} bytes, what fits in an email of SES's 40 MB maximum once base64 encoded.`;
 
 const tagToken = Schema.String.check(
   Schema.isMinLength(1),
@@ -175,7 +180,7 @@ export const SendEmailBody = Schema.Struct({
   attachments: Schema.optionalKey(
     Schema.Array(Attachment)
       .check(Schema.isMaxLength(MAX_ATTACHMENTS))
-      .annotate({ description: `Files to attach, up to ${MAX_ATTACHMENTS}.` }),
+      .annotate({ description: ATTACHMENTS_DESCRIPTION }),
   ),
   tags: Schema.optionalKey(
     Schema.Array(

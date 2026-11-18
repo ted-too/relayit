@@ -88,26 +88,29 @@ These have a `code` and mean the request was well-formed but Relayit could not a
 
 When present, `details` contains some of these fields:
 
-| Field       | Used by                                                       | Description                                                                     |
-| ----------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `filename`  | `invalid_attachment`                                          | The attachment that failed.                                                     |
-| `reason`    | `invalid_attachment`                                          | See [Attachment reasons](#attachment-reasons).                                  |
-| `max_bytes` | `invalid_attachment`                                          | The size limit in bytes (10485760) when `reason` is `exceeds_size_limit`.       |
-| `status`    | `invalid_attachment`                                          | The HTTP status returned by the attachment URL when `reason` is `fetch_failed`. |
-| `variable`  | `missing_variable`, `type_mismatch`, `undeclared_placeholder` | The variable name.                                                              |
-| `detail`    | `react_email_render_failed`                                   | The renderer's error message.                                                   |
+| Field       | Used by                                                       | Description                                                                                     |
+| ----------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `filename`  | `invalid_attachment`                                          | The attachment that failed; absent for `exceeds_total_size_limit`.                              |
+| `reason`    | `invalid_attachment`                                          | See [Attachment reasons](#attachment-reasons).                                                  |
+| `max_bytes` | `invalid_attachment`                                          | The limit in bytes: 10485760 for `exceeds_size_limit`, 29230769 for `exceeds_total_size_limit`. |
+| `status`    | `invalid_attachment`                                          | The HTTP status the attachment URL answered with, for `fetch_failed` and `redirect_refused`.    |
+| `variable`  | `missing_variable`, `type_mismatch`, `undeclared_placeholder` | The variable name.                                                                              |
+| `detail`    | `react_email_render_failed`                                   | The renderer's error message.                                                                   |
 
 ### Attachment reasons
 
-| `reason`             | Meaning                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------- |
-| `blocked_extension`  | The filename has a blocked extension.                                                             |
-| `exceeds_size_limit` | The attachment is over 10 MB after decoding or download.                                          |
-| `invalid_base64`     | `content` is not valid base64.                                                                    |
-| `unsupported_url`    | `path` is not an `https:` URL.                                                                    |
-| `unresolvable_host`  | The host in `path` has no DNS address.                                                            |
-| `blocked_address`    | The host in `path` is, or resolves to, a loopback, private, link-local or other internal address. |
-| `fetch_failed`       | The URL answered with a non-2xx status, given in `status`.                                        |
+| `reason`                   | Meaning                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `blocked_extension`        | The filename has a blocked extension.                                                                                                                        |
+| `exceeds_size_limit`       | The attachment is over 10 MiB after decoding or download.                                                                                                    |
+| `exceeds_total_size_limit` | The request's attachments together are over 29,230,769 bytes. `filename` is not set.                                                                         |
+| `invalid_base64`           | `content` is not valid base64.                                                                                                                               |
+| `unsupported_url`          | `path` is not an `https:` URL.                                                                                                                               |
+| `unresolvable_host`        | The host in `path` has no DNS address.                                                                                                                       |
+| `blocked_address`          | The host in `path` is, or resolves to, a loopback, private, link-local or other internal address.                                                            |
+| `fetch_failed`             | The URL answered with a non-2xx status, given in `status`; or, without `status`, no address connected (connection or TLS failure) or the download broke off. |
+| `redirect_refused`         | The URL answered with a redirect, its status in `status`. Link to the file itself.                                                                           |
+| `fetch_timeout`            | The DNS lookup and download took more than 30 seconds together.                                                                                              |
 
 Example:
 
@@ -138,7 +141,7 @@ Example:
 ## Retrying safely
 
 - Retry `500` responses and network errors with exponential backoff. Always send an `Idempotency-Key` so a retry never sends the email twice.
-- Do not retry `400`, `403`, `413`, or `422` without changing the request.
+- Do not retry `400`, `403`, `413`, or `422` without changing the request. An `invalid_attachment` with `reason` `fetch_failed` or `fetch_timeout` can succeed once the attachment's host is serving the file again.
 - For `429`, wait `retry_after_seconds`.
 
 ## Plan limits

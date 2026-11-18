@@ -181,10 +181,11 @@ Each attachment has a `filename` and exactly one source: base64 `content` or a h
 
 Limits and behavior:
 
-- Up to 20 attachments per request. Each can be at most 10 MB after decoding or download.
+- Up to 20 attachments per request. Each can be at most 10 MiB (10,485,760 bytes) after decoding or download, and together they can be at most 29,230,769 bytes (about 27.9 MiB), which is what fits in an email of SES's 40 MB maximum once base64 encoded. Over that, the request fails with `invalid_attachment` and `reason: "exceeds_total_size_limit"`.
 - The whole request body can be at most 50 MiB. A larger one fails with `413` and `payload_too_large`.
-- Hosted files are fetched once, with a 30 second timeout for the whole download. A non-2xx response fails the request with `invalid_attachment` and `reason: "fetch_failed"`.
-- Only `https:` URLs are fetched, and only from a public address: a host that resolves to a loopback, private, link-local or other internal address is refused. Redirects are not followed, so link to the file itself. See [Error details](/docs/errors-and-limits#error-details) for the `reason` each refusal carries.
+- Hosted files are fetched once, with 30 seconds for the DNS lookup and the whole download together. If the host has several addresses, each is tried in turn until one connects.
+- Only `https:` URLs are fetched, and only from a public address: a host that resolves to a loopback, private, link-local or other internal address is refused. Redirects are not followed, so link to the file itself.
+- A hosted file that can't be fetched fails the request with `422` and `invalid_attachment`, never `500`: a non-2xx or redirect response, a connection or TLS failure, or the time running out. `details.reason` says which; see [Attachment reasons](/docs/errors-and-limits#attachment-reasons).
 - Attachments are stored for 7 days after the later of the send time and `scheduled_at`.
 - Executable and script file types are blocked. A blocked filename fails with the message `This file type isn't allowed for security reasons.` The blocked extensions are:
 

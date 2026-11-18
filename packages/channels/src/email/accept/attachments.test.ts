@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
-import { MAX_ATTACHMENT_BYTES } from "../attachment-policy";
+import { MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "../attachment-policy";
 import { AttachmentHostLookup, resolveEmailAttachments } from "./attachments";
 
 interface FetchCall {
@@ -10,14 +10,14 @@ interface FetchCall {
   readonly url: string;
 }
 
-/** Outbound HTTP: records each request and answers it with `respond`. */
+/** Outbound HTTP: records each request and answers it with `respond`, which may throw. */
 const fakeFetch = (respond: (call: FetchCall) => Response | Promise<Response>) => {
   const calls: FetchCall[] = [];
   const fetch = Object.assign(
     (input: string | URL | Request, init?: BunFetchRequestInit) => {
       const call = { init: init ?? {}, url: String(input) };
       calls.push(call);
-      return Promise.resolve(respond(call));
+      return Promise.resolve().then(() => respond(call));
     },
     { preconnect: globalThis.fetch.preconnect },
   );
@@ -151,7 +151,7 @@ describe("resolveEmailAttachments, hosted", () => {
     }),
   );
 
-  it.effect("fetches from the address it resolved, naming the host and refusing redirects", () =>
+  it.effect("fetches from the address it resolved, naming the host and following no redirect", () =>
     Effect.gen(function* () {
       const { calls, fetch } = fakeFetch(
         () => new Response("%PDF", { headers: { "content-type": "application/pdf" } }),
@@ -173,7 +173,7 @@ describe("resolveEmailAttachments, hosted", () => {
         {
           init: {
             headers: { host: "files.example.com:8443" },
-            redirect: "error",
+            redirect: "manual",
             tls: { serverName: "files.example.com" },
           },
           url: "https://93.184.215.14:8443/a.pdf?sig=1",
@@ -181,7 +181,7 @@ describe("resolveEmailAttachments, hosted", () => {
         {
           init: {
             headers: { host: "v6.example.com" },
-            redirect: "error",
+            redirect: "manual",
             tls: { serverName: "v6.example.com" },
           },
           url: "https://[2606:4700::6810:84e5]/a.pdf",
@@ -246,9 +246,9 @@ describe("resolveEmailAttachments, hosted", () => {
         Effect.promise(() => Bun.sleep(1000)).pipe(Effect.as("still reading after the timeout")),
       );
       expect(error).toMatchObject({
-        _tag: "EmailAcceptInfrastructureError",
-        cause: { _tag: "TimeoutError" },
-        operation: "attachments",
+        _tag: "EmailAcceptRejected",
+        code: "invalid_attachment",
+        details: { filename: "file.pdf", reason: "fetch_timeout" },
       });
     }),
   );
@@ -278,6 +278,257 @@ describe("resolveEmailAttachments, hosted", () => {
       expect(calls).toHaveLength(20);
       expect(peak).toBeGreaterThan(1);
       expect(peak).toBeLessThanOrEqual(4);
+    }),
+  );
+
+  it.effect("refuses a redirect instead of following it", () =>
+    Effect.gen(function* () {
+      const { calls, fetch } = fakeFetch(
+        () => new Response(null, { headers: { location: "https://127.0.0.1/" }, status: 302 }),
+      );
+      const lookup = fakeLookup({ "files.example.com": ["93.184.215.14"] });
+      const error = yield* Effect.flip(
+        resolveOne("https://files.example.com/a.pdf", { fetch, lookup }),
+      );
+      expect(error).toMatchObject({
+        _tag: "EmailAcceptRejected",
+        code: "invalid_attachment",
+        details: { filename: "file.pdf", reason: "redirect_refused", status: 302 },
+      });
+      expect(calls).toMatchObject([{ init: { redirect: "manual" } }]);
+    }),
+  );
+
+  it.effect("tries each checked address in turn until one connects", () =>
+    Effect.gen(function* () {
+      const refused = () => {
+        throw Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" });
+      };
+      const { calls, fetch } = fakeFetch(({ url }) =>
+        url.includes("93.184.215.15") ? new Response("%PDF") : refused(),
+      );
+      const lookup = fakeLookup({
+        "dead.example.com": ["93.184.215.13", "2606:4700::1"],
+        "files.example.com": ["93.184.215.14", "93.184.215.15", "93.184.215.16"],
+      });
+
+      const [resolved] = yield* resolveOne("https://files.example.com/a.pdf", { fetch, lookup });
+      expect(resolved?.bytes.byteLength).toBe(4);
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://93.184.215.14/a.pdf",
+        "https://93.184.215.15/a.pdf",
+      ]);
+      expect(calls[1]?.init).toMatchObject({ tls: { serverName: "files.example.com" } });
+
+      // None connects: the customer's URL failed, not Relayit.
+      const error = yield* Effect.flip(
+        resolveOne("https://dead.example.com/a.pdf", { fetch, lookup }),
+      );
+      expect(error).toEqual(
+        expect.objectContaining({
+          _tag: "EmailAcceptRejected",
+          details: { filename: "file.pdf", reason: "fetch_failed" },
+        }),
+      );
+      expect(calls).toHaveLength(4);
+    }),
+  );
+
+  it.effect("stops at the first address that answers, whatever its status", () =>
+    Effect.gen(function* () {
+      const { calls, fetch } = fakeFetch(() => new Response("gone", { status: 404 }));
+      const lookup = fakeLookup({ "files.example.com": ["93.184.215.14", "93.184.215.15"] });
+      const error = yield* Effect.flip(
+        resolveOne("https://files.example.com/a.pdf", { fetch, lookup }),
+      );
+      expect(error).toMatchObject({ details: { reason: "fetch_failed", status: 404 } });
+      expect(calls).toHaveLength(1);
+    }),
+  );
+
+  it.effect("refuses a body that breaks off, and takes a response without one as empty", () =>
+    Effect.gen(function* () {
+      const lookup = fakeLookup({ "files.example.com": ["93.184.215.14"] });
+      const broken = fakeFetch(
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull: (controller) => {
+                controller.enqueue(new Uint8Array(10));
+                controller.error(new Error("connection reset"));
+              },
+            }),
+          ),
+      );
+      const error = yield* Effect.flip(
+        resolveOne("https://files.example.com/a.pdf", { fetch: broken.fetch, lookup }),
+      );
+      expect(error).toMatchObject({
+        _tag: "EmailAcceptRejected",
+        details: { filename: "file.pdf", reason: "fetch_failed" },
+      });
+
+      const empty = fakeFetch(() => new Response(null, { status: 204 }));
+      const [resolved] = yield* resolveOne("https://files.example.com/a.pdf", {
+        fetch: empty.fetch,
+        lookup,
+      });
+      expect(resolved?.bytes.byteLength).toBe(0);
+    }),
+  );
+
+  it.effect("times out a lookup that never answers", () =>
+    Effect.gen(function* () {
+      const { calls, fetch } = fakeFetch(() => new Response("file"));
+      const fiber = yield* resolveOne("https://files.example.com/a.pdf", {
+        fetch,
+        lookup: { resolve: () => new Promise<readonly string[]>(() => undefined) },
+      }).pipe(Effect.flip, Effect.forkChild);
+      yield* TestClock.adjust("31 seconds");
+      const error = yield* Effect.raceFirst(
+        Fiber.join(fiber),
+        Effect.promise(() => Bun.sleep(1000)).pipe(Effect.as("still resolving after the timeout")),
+      );
+      expect(error).toMatchObject({ details: { reason: "fetch_timeout" } });
+      expect(calls).toEqual([]);
+    }),
+  );
+
+  it.effect("keeps a DNS failure other than a missing name as Relayit's own", () =>
+    Effect.gen(function* () {
+      const { fetch } = fakeFetch(() => new Response("file"));
+      const error = yield* Effect.flip(
+        resolveOne("https://files.example.com/a.pdf", {
+          fetch,
+          lookup: {
+            resolve: () =>
+              Promise.reject(Object.assign(new Error("resolver down"), { code: "ECONNREFUSED" })),
+          },
+        }),
+      );
+      expect(error).toMatchObject({
+        _tag: "EmailAcceptInfrastructureError",
+        operation: "attachments",
+      });
+    }),
+  );
+});
+
+/** `bytes` of varied content, as base64. */
+const base64Of = (bytes: number) =>
+  Buffer.from(new Uint8Array(bytes).map((_, index) => (index * 31 + 7) & 255)).toString("base64");
+
+const inline = (content: string, filename = "file.pdf") => ({
+  filename,
+  source: { content, kind: "base64" as const },
+});
+
+describe("resolveEmailAttachments, inline and together", () => {
+  it.effect("decodes valid base64 up to the limit, past where a regex over it gives up", () =>
+    Effect.gen(function* () {
+      // 6 MiB is 2^23 characters of base64, where Bun's regex engine stopped matching.
+      for (const bytes of [6 * 1024 * 1024, MAX_ATTACHMENT_BYTES - 1]) {
+        const [resolved] = yield* resolveEmailAttachments([inline(base64Of(bytes))], "org_test");
+        expect(resolved?.bytes.byteLength).toBe(bytes);
+        expect(resolved?.bytes[bytes - 1]).toBe(((bytes - 1) * 31 + 7) & 255);
+      }
+      const [wrapped] = yield* resolveEmailAttachments([inline("QUJD\nQQ==")], "org_test");
+      expect(new TextDecoder().decode(wrapped?.bytes)).toBe("ABCA");
+    }),
+  );
+
+  it.effect("refuses base64 that is malformed or decodes over the limit", () =>
+    Effect.gen(function* () {
+      for (const content of ["QQ", "QQ=", "Q===", "QQ=A", "QQ==QQ==", "QU-D", "QU_D", "!!!!"]) {
+        const error = yield* Effect.flip(resolveEmailAttachments([inline(content)], "org_test"));
+        expect(error, content).toMatchObject({ details: { reason: "invalid_base64" } });
+      }
+      const error = yield* Effect.flip(
+        resolveEmailAttachments([inline(base64Of(MAX_ATTACHMENT_BYTES + 1))], "org_test").pipe(
+          Effect.as("resolved"),
+        ),
+      );
+      expect(error).toMatchObject({
+        details: { maxBytes: MAX_ATTACHMENT_BYTES, reason: "exceeds_size_limit" },
+      });
+    }),
+  );
+
+  it.effect("refuses inline attachments that together pass what SES can carry", () =>
+    Effect.gen(function* () {
+      const nine = base64Of(9 * 1024 * 1024);
+      const underTotal = resolveEmailAttachments(
+        [inline(nine, "1.pdf"), inline(nine, "2.pdf"), inline(nine, "3.pdf")],
+        "org_test",
+      );
+      // Each run counts afresh: a retried accept is not refused for the first attempt.
+      for (const _ of [1, 2]) {
+        const [first] = yield* underTotal;
+        expect(first?.bytes.byteLength).toBe(9 * 1024 * 1024);
+      }
+
+      const error = yield* Effect.flip(
+        resolveEmailAttachments(
+          ["1", "2", "3", "4"].map((name) => inline(nine, `${name}.pdf`)),
+          "org_test",
+        ).pipe(Effect.as("resolved")),
+      );
+      expect(error).toMatchObject({
+        _tag: "EmailAcceptRejected",
+        code: "invalid_attachment",
+        details: { maxBytes: MAX_TOTAL_ATTACHMENT_BYTES, reason: "exceeds_total_size_limit" },
+        message: "Attachments together exceed the size limit.",
+      });
+    }),
+  );
+
+  it.live("stops every download once the send's total passes the limit", () =>
+    Effect.gen(function* () {
+      const chunk = new Uint8Array(256 * 1024);
+      const each = 9 * 1024 * 1024;
+      let pulled = 0;
+      let canceled = 0;
+      const { fetch } = fakeFetch(() => {
+        let sent = 0;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            cancel: () => {
+              canceled += 1;
+            },
+            pull: async (controller) => {
+              await Bun.sleep(1);
+              if (sent >= each) {
+                controller.close();
+                return;
+              }
+              sent += chunk.byteLength;
+              pulled += chunk.byteLength;
+              controller.enqueue(chunk);
+            },
+          }),
+        );
+      });
+      const lookup = fakeLookup({ "files.example.com": ["93.184.215.14"] });
+      // One inline and three hosted of 9 MiB: 36 MiB together.
+      const error = yield* Effect.flip(
+        resolveEmailAttachments(
+          [
+            inline(base64Of(each), "inline.pdf"),
+            ...["1", "2", "3"].map((name) =>
+              hosted(`https://files.example.com/${name}.pdf`, `${name}.pdf`),
+            ),
+          ],
+          "org_test",
+        ).pipe(
+          Effect.as("resolved"),
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
+          Effect.provideService(AttachmentHostLookup, lookup),
+        ),
+      );
+      expect(error).toMatchObject({ details: { reason: "exceeds_total_size_limit" } });
+      // Downloads stopped near the limit, a few queued chunks aside, not at 27 MiB.
+      expect(each + pulled).toBeLessThan(MAX_TOTAL_ATTACHMENT_BYTES + 16 * chunk.byteLength);
+      expect(canceled).toBeGreaterThan(0);
     }),
   );
 });
