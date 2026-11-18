@@ -4,7 +4,7 @@ import { emailDelivery, message } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { contactUpdated, messageScheduled } from "@repo/webhooks/events";
 import { eq } from "drizzle-orm";
-import { Data, DateTime, Effect, Result, Schedule } from "effect";
+import { Cause, Data, DateTime, Effect, Result, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import {
   findMessageReplay,
@@ -14,7 +14,7 @@ import {
   upsertMessageContacts,
 } from "../../messages/accept";
 import { filterSuppressedContacts } from "../../messages/suppressions";
-import { Usage } from "../../usage";
+import { Usage, type UsagePolicyResult } from "../../usage";
 import { isBlockedAttachmentFilename } from "../attachment-policy";
 import { emailDeliverJob } from "../delivery/job";
 import {
@@ -236,143 +236,184 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     );
     const deliveryId = typeid("edlv").toString();
     const messageId = typeid("msg").toString();
-    const policy = yield* usage.reserve({
-      channel: "email",
-      deliveryId,
-      organizationId: input.organizationId,
-      purpose: "transactional",
-      reservedAt,
-    });
-
     let stagedAttachments: readonly StagedEmailAttachment[] = [];
-    const transaction = db.transaction((tx) =>
-      Effect.gen(function* () {
-        yield* tx
-          .insert(message)
-          .values({
-            id: messageId,
-            organizationAppEnvironmentId: appEnvironment.id,
-            purpose: "transactional",
-            scheduledAt: input.scheduledAt ? DateTime.toDate(input.scheduledAt) : null,
-            tags: input.tags,
-            templateId: content.templateId ?? null,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new EmailAcceptPersistenceError({
-                  cause,
-                  messageId,
-                  operation: "insert_message",
-                }),
-            ),
-          );
-        yield* tx
-          .insert(emailDelivery)
-          .values({
-            bcc: bcc.kept.map(({ email }) => email),
-            cc: cc.kept.map(({ email }) => email),
-            from: input.email.from,
-            headers: input.email.headers,
-            html: content.html ?? null,
-            id: deliveryId,
-            messageId,
-            replyTo: [...input.email.replyTo],
-            status: "queued",
-            subject: content.subject,
-            text: content.text ?? null,
-            to: to.kept.map(({ email }) => email),
-            ...(sender.kind === "custom"
-              ? { customDomainId: sender.customDomainId }
-              : { sandboxDomainId: sender.sandboxDomainId }),
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new EmailAcceptPersistenceError({
-                  cause,
-                  messageId,
-                  operation: "insert_email_delivery",
-                }),
-            ),
-          );
+    const transaction = (policy: UsagePolicyResult) =>
+      db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* tx
+            .insert(message)
+            .values({
+              id: messageId,
+              organizationAppEnvironmentId: appEnvironment.id,
+              purpose: "transactional",
+              scheduledAt: input.scheduledAt ? DateTime.toDate(input.scheduledAt) : null,
+              tags: input.tags,
+              templateId: content.templateId ?? null,
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new EmailAcceptPersistenceError({
+                    cause,
+                    messageId,
+                    operation: "insert_message",
+                  }),
+              ),
+            );
+          yield* tx
+            .insert(emailDelivery)
+            .values({
+              bcc: bcc.kept.map(({ email }) => email),
+              cc: cc.kept.map(({ email }) => email),
+              from: input.email.from,
+              headers: input.email.headers,
+              html: content.html ?? null,
+              id: deliveryId,
+              messageId,
+              replyTo: [...input.email.replyTo],
+              status: "queued",
+              subject: content.subject,
+              text: content.text ?? null,
+              to: to.kept.map(({ email }) => email),
+              ...(sender.kind === "custom"
+                ? { customDomainId: sender.customDomainId }
+                : { sandboxDomainId: sender.sandboxDomainId }),
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new EmailAcceptPersistenceError({
+                    cause,
+                    messageId,
+                    operation: "insert_email_delivery",
+                  }),
+              ),
+            );
 
-        stagedAttachments = yield* stageEmailAttachments(tx, {
-          attachments,
-          deliveryId,
-          now,
-          organizationId: input.organizationId,
-          scheduledAt: input.scheduledAt,
-        });
-        const contacts = mergeMessageContacts(recipients);
-        yield* upsertMessageContacts(tx, {
-          contacts,
-          now,
-          organizationAppEnvironmentId: appEnvironment.id,
-        });
-
-        if (input.idempotencyKey) {
-          const recorded = yield* recordMessageIdempotency(tx, {
-            key: input.idempotencyKey,
-            messageId,
+          stagedAttachments = yield* stageEmailAttachments(tx, {
+            attachments,
+            deliveryId,
             now,
             organizationId: input.organizationId,
+            scheduledAt: input.scheduledAt,
           });
-          if (recorded.kind === "replay") {
-            return yield* new ConcurrentEmailAcceptReplay({
-              messageId: recorded.messageId,
+          const contacts = mergeMessageContacts(recipients);
+          yield* upsertMessageContacts(tx, {
+            contacts,
+            now,
+            organizationAppEnvironmentId: appEnvironment.id,
+          });
+
+          if (input.idempotencyKey) {
+            const recorded = yield* recordMessageIdempotency(tx, {
+              key: input.idempotencyKey,
+              messageId,
+              now,
+              organizationId: input.organizationId,
             });
+            if (recorded.kind === "replay") {
+              return yield* new ConcurrentEmailAcceptReplay({
+                messageId: recorded.messageId,
+              });
+            }
           }
-        }
 
-        yield* jobs.enqueue(
-          emailDeliverJob,
-          {
-            billingUserId: policy.billingUserId,
-            deliveryId,
-            purpose: "transactional",
-            startDate: reservedAt,
-          },
-          tx,
-          input.scheduledAt ? { delayUntil: DateTime.toEpochMillis(input.scheduledAt) } : undefined,
-        );
-
-        if (input.scheduledAt) {
-          yield* emitWebhookEvent(tx, {
-            event: {
-              data: {
-                delivery_id: deliveryId,
-                message_id: messageId,
-                scheduled_at: DateTime.toDate(input.scheduledAt).toISOString(),
-              },
-              type: messageScheduled.type,
+          yield* jobs.enqueue(
+            emailDeliverJob,
+            {
+              billingUserId: policy.billingUserId,
+              deliveryId,
+              purpose: "transactional",
+              startDate: reservedAt,
             },
-            messageTags: input.tags,
-            organizationId: input.organizationId,
-          });
-        }
-        yield* Effect.forEach(
-          contacts,
-          (recipient) =>
-            emitWebhookEvent(tx, {
+            tx,
+            input.scheduledAt
+              ? { delayUntil: DateTime.toEpochMillis(input.scheduledAt) }
+              : undefined,
+          );
+
+          if (input.scheduledAt) {
+            yield* emitWebhookEvent(tx, {
               event: {
                 data: {
-                  email: recipient.email,
+                  delivery_id: deliveryId,
                   message_id: messageId,
-                  source: "message.accept",
+                  scheduled_at: DateTime.toDate(input.scheduledAt).toISOString(),
                 },
-                type: contactUpdated.type,
+                type: messageScheduled.type,
               },
+              messageTags: input.tags,
               organizationId: input.organizationId,
-            }),
-          { concurrency: 1, discard: true },
-        );
-      }),
-    );
+            });
+          }
+          yield* Effect.forEach(
+            contacts,
+            (recipient) =>
+              emitWebhookEvent(tx, {
+                event: {
+                  data: {
+                    email: recipient.email,
+                    message_id: messageId,
+                    source: "message.accept",
+                  },
+                  type: contactUpdated.type,
+                },
+                organizationId: input.organizationId,
+              }),
+            { concurrency: 1, discard: true },
+          );
+        }),
+      );
 
-    const result = yield* Effect.result(transaction);
+    // Usage is reserved before the transaction. If the accept then ends any way but success
+    // (a failure, a defect, the client disconnecting, even mid-COMMIT or with COMMIT's answer
+    // lost), whether the Message was written is read back once the transaction is over, and
+    // only a Message that was not written gives back its Usage and staged objects. If that
+    // read fails as well nothing is given back: a leaked reservation is the safe side of a
+    // committed send losing its attachments.
+    let reserved = false;
+    const result = yield* usage
+      .reserve({
+        channel: "email",
+        deliveryId,
+        organizationId: input.organizationId,
+        purpose: "transactional",
+        reservedAt,
+      })
+      .pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            reserved = true;
+          }),
+        ),
+        Effect.flatMap(transaction),
+        Effect.onError((cause) =>
+          // A reserve that failed made no reservation; an interrupted one may have.
+          !reserved && !Cause.hasInterrupts(cause)
+            ? Effect.void
+            : db
+                .select({ id: message.id })
+                .from(message)
+                .where(eq(message.id, messageId))
+                .limit(1)
+                .pipe(
+                  Effect.retry(compensationRetry),
+                  Effect.matchEffect({
+                    onFailure: (error) =>
+                      Effect.logError(
+                        "Could not tell whether an accept was written; keeping its Usage and attachments",
+                        error,
+                      ).pipe(Effect.annotateLogs({ deliveryId })),
+                    onSuccess: ([written]) =>
+                      written
+                        ? Effect.void
+                        : compensateAcceptFailure(usage, deliveryId, stagedAttachments),
+                  }),
+                ),
+        ),
+        Effect.result,
+      );
     if (Result.isFailure(result)) {
-      yield* compensateAcceptFailure(usage, deliveryId, stagedAttachments);
       if (result.failure instanceof ConcurrentEmailAcceptReplay) {
         const accepted = yield* findAcceptedEmailWithRetry(db, result.failure.messageId);
         if (accepted) {

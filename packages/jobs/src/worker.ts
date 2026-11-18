@@ -426,7 +426,13 @@ export const registerJobHandler = <
           scheduledKey: keys.scheduled,
         }
       : {}),
-    process: (entry: StreamReadEntry) => processJob(handler, entry),
+    // A job that fails here (a Redis blip on its acknowledge, say) stays pending and is
+    // reclaimed later. Failing the batch instead would interrupt every other job in it
+    // mid-handler and run them all again.
+    process: (entry: StreamReadEntry) =>
+      processJob(handler, entry).pipe(
+        Effect.catch((error) => Effect.logError("Job left pending for reclaim", error)),
+      ),
     reconcile: handler.reconcile,
     stream: keys.ready,
   };

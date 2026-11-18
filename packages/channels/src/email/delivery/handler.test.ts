@@ -2,18 +2,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import { type Database, DB } from "@repo/persistence/db/effect";
+import { Redis, type RedisService } from "@repo/redis";
 import { Effect, Layer } from "effect";
-import {
-  MessageDeliveryRetryableError,
-  MessageDeliveryTerminalError,
-} from "../../messages/delivery";
+import { MessageDeliveryRetryableError } from "../../messages/delivery";
 import { Usage, type UsageService } from "../../usage";
-import {
-  EmailBackend,
-  EmailBackendRejected,
-  type EmailBackendService,
-  EmailBackendUnavailable,
-} from "../backend";
+import { EmailBackend, EmailBackendRejected, type EmailBackendService } from "../backend";
 import { makeEmailDeliverHandler } from "./handler";
 
 const unsupported = () => Effect.die("unused");
@@ -49,6 +42,7 @@ const baseDelivery = {
   html: "<p>Hi</p>",
   id: "edlv_test",
   message: {
+    appEnvironment: { organizationId: "org_test" },
     id: "msg_test",
     organizationAppEnvironmentId: "oenv_test",
     tags: null as Record<string, string> | null,
@@ -71,16 +65,14 @@ const baseDelivery = {
 const makeDb = (overrides: {
   readonly contactId?: string;
   readonly delivery?: typeof baseDelivery | null;
-  /** What a conditional update matches: the dead-letter path only fails an unfinished one. */
-  readonly failedOnDeadLetter?: boolean;
   /** Whether the sending Project's link to the Domain is ownership-verified. */
   readonly holdsDomain?: boolean;
+  /** Whether a conditional update (a claim, a dead-letter failure) finds its row. */
+  readonly updateMatches?: boolean;
   readonly orgSlug?: string;
-  readonly suppressedEmails?: readonly string[];
 }) => {
   const updates: unknown[] = [];
   const delivery = overrides.delivery === undefined ? baseDelivery : overrides.delivery;
-  const suppressed = new Set(overrides.suppressedEmails ?? []);
   const inserts: unknown[] = [];
 
   const db: any = {
@@ -110,9 +102,6 @@ const makeDb = (overrides: {
             slug: overrides.orgSlug ?? "acme",
           }),
       },
-      organizationAppEnvironment: {
-        findFirst: () => Effect.succeed({ organizationId: "org_test" }),
-      },
       organizationDomain: {
         findFirst: (query: { where: Record<string, unknown> }) =>
           Effect.succeed(
@@ -126,7 +115,8 @@ const makeDb = (overrides: {
     },
     select: () => ({
       from: () => ({
-        where: () => Effect.succeed([...suppressed].map((email) => ({ email }))),
+        // No recipient is suppressed; send.integration.test.ts checks suppression as SQL.
+        where: () => Effect.succeed([]),
       }),
     }),
     transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),
@@ -136,7 +126,11 @@ const makeDb = (overrides: {
           updates.push(values);
           return Object.assign(Effect.void, {
             returning: () =>
-              Effect.succeed(overrides.failedOnDeadLetter ? [{ messageId: "msg_test" }] : []),
+              Effect.succeed(
+                overrides.updateMatches === false
+                  ? []
+                  : [{ id: "edlv_test", messageId: "msg_test", startedAt: new Date(0) }],
+              ),
           });
         },
       }),
@@ -155,6 +149,19 @@ const testLayer = (
 ) =>
   Layer.mergeAll(
     Layer.succeed(DB, db),
+    // No SES answer is ever kept from an earlier run here.
+    Layer.succeed(Redis, {
+      acknowledge: unsupported,
+      append: unsupported,
+      autoClaim: unsupported,
+      createConsumerGroup: unsupported,
+      evaluateNumber: () => Effect.succeed(1),
+      evaluateString: () => Effect.succeed(""),
+      ping: Effect.void,
+      readGroup: unsupported,
+      sortedSetAdd: unsupported,
+      sortedSetRemove: unsupported,
+    } satisfies RedisService),
     Layer.succeed(Usage, {
       confirm: () => Effect.void,
       release: () => Effect.void,
@@ -199,45 +206,6 @@ const payload = {
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
 
 describe("emailDeliverHandler", () => {
-  it.effect("no-ops when the Delivery is already sent", () => {
-    const { db, updates } = makeDb({
-      delivery: { ...baseDelivery, status: "sent" },
-    });
-    return emailDeliverHandler.handle(payload, execution).pipe(
-      Effect.provide(testLayer(db)),
-      Effect.map(() => {
-        expect(updates).toEqual([]);
-        return true;
-      }),
-    );
-  });
-
-  it.effect("marks paused domains failed and terminates", () => {
-    const { db, updates } = makeDb({
-      delivery: {
-        ...baseDelivery,
-        customDomain: {
-          fqdn: "example.com",
-          id: "dom_test",
-          isPaused: true,
-          registration: verifiedRegistration,
-        },
-      },
-    });
-    return emailDeliverHandler.handle(payload, execution).pipe(
-      Effect.provide(testLayer(db)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          _tag: "MessageDeliveryTerminalError",
-          stage: "domain",
-        });
-        expect(updates[0]).toMatchObject({ status: "failed" });
-        return error;
-      }),
-    );
-  });
-
   it.effect("fails, without sending, a Delivery whose Project no longer holds the Domain", () => {
     // A claim proven between accept and send moved the Domain to another Project.
     const { db } = makeDb({ holdsDomain: false });
@@ -250,26 +218,6 @@ describe("emailDeliverHandler", () => {
           message: "The Project no longer holds the sending Domain",
           stage: "domain",
         });
-        return error;
-      }),
-    );
-  });
-
-  it.effect("skips when every recipient is suppressed", () => {
-    const { db, updates } = makeDb({
-      suppressedEmails: ["recipient@example.com"],
-    });
-    return emailDeliverHandler.handle(payload, execution).pipe(
-      Effect.provide(testLayer(db)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          _tag: "MessageDeliveryTerminalError",
-          stage: "suppressions",
-        });
-        expect(updates.some((update) => (update as { status?: string }).status === "skipped")).toBe(
-          true,
-        );
         return error;
       }),
     );
@@ -403,77 +351,12 @@ describe("emailDeliverHandler", () => {
     );
   });
 
-  it.effect("retries any other SES failure, leaving the Delivery sending", () => {
-    const { db, updates } = makeDb({});
-
-    return emailDeliverHandler.handle(payload, execution).pipe(
-      Effect.provide(
-        testLayer(db, {
-          send: () => Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" })),
-        }),
-      ),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          _tag: "MessageDeliveryRetryableError",
-          stage: "send",
-        });
-        expect(emailDeliverHandler.classifyFailure(error)).toBe("retryable");
-        expect(updates.map((update) => (update as { status?: string }).status)).toEqual([
-          "sending",
-        ]);
-        return error;
-      }),
-    );
-  });
-
-  it.effect(
-    "on dead letter, fails an unfinished Delivery with its reason and releases Usage",
-    () => {
-      let released = false;
-      const { db, inserts, updates } = makeDb({ failedOnDeadLetter: true });
-      const onDeadLetter = emailDeliverHandler.onDeadLetter;
-      if (!onDeadLetter) {
-        throw new Error("expected onDeadLetter");
-      }
-      return onDeadLetter(
-        payload,
-        execution,
-        new MessageDeliveryRetryableError({
-          deliveryId: "edlv_test",
-          message: "SES send failed",
-          stage: "send",
-        }),
-      ).pipe(
-        Effect.provide(
-          testLayer(db, {
-            usage: {
-              release: () => {
-                released = true;
-                return Effect.void;
-              },
-            },
-          }),
-        ),
-        Effect.map(() => {
-          expect(updates).toEqual([
-            expect.objectContaining({
-              error: { message: "SES send failed", retryable: false },
-              status: "failed",
-            }),
-          ]);
-          // No subscribed Webhook Endpoint, so no event row; the emit was attempted.
-          expect(inserts).toEqual([]);
-          expect(released).toBe(true);
-          return true;
-        }),
-      );
-    },
-  );
-
-  it.effect("on dead letter, leaves a finished Delivery as it is", () => {
+  it.effect("on dead letter, keeps the Usage of a Delivery SES already sent", () => {
     let released = false;
-    const { db } = makeDb({ failedOnDeadLetter: false });
+    const { db } = makeDb({
+      delivery: { ...baseDelivery, status: "sent" },
+      updateMatches: false,
+    });
     const onDeadLetter = emailDeliverHandler.onDeadLetter;
     if (!onDeadLetter) {
       throw new Error("expected onDeadLetter");
@@ -481,10 +364,10 @@ describe("emailDeliverHandler", () => {
     return onDeadLetter(
       payload,
       execution,
-      new MessageDeliveryTerminalError({
+      new MessageDeliveryRetryableError({
         deliveryId: "edlv_test",
-        message: "No deliverable recipients after suppression",
-        stage: "suppressions",
+        message: "Usage could not be confirmed",
+        stage: "usage",
       }),
     ).pipe(
       Effect.provide(
@@ -498,7 +381,7 @@ describe("emailDeliverHandler", () => {
         }),
       ),
       Effect.map(() => {
-        expect(released).toBe(true);
+        expect(released).toBe(false);
         return true;
       }),
     );

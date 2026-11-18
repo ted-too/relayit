@@ -1,7 +1,7 @@
 export { subBucket } from "./bucket";
 export { makeObjectStorageLive, ObjectStorage, type ObjectStorageService } from "./client";
 export {
-  LocalObjectStorageInProduction,
+  LocalObjectStorageOutsideDevelopment,
   makeObjectStorageLayer,
   objectStorageConfig,
 } from "./config";

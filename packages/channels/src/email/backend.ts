@@ -109,6 +109,7 @@ export class EmailBackendRateLimited extends Data.TaggedError("EmailBackendRateL
   readonly retryAfterMs?: number;
 }> {}
 
+/** SES refused the send, or the request provably never reached SES: nothing went out. */
 export class EmailBackendRejected extends Data.TaggedError("EmailBackendRejected")<{
   readonly cause?: unknown;
   readonly reason: string;

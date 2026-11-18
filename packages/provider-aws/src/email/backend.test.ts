@@ -23,15 +23,17 @@ describe("selectEmailBackend", () => {
   it.effect("follows EMAIL_BACKEND when set", () =>
     Effect.gen(function* () {
       expect(yield* select("ses", "development")).toMatchObject({ success: "ses" });
-      expect(yield* select("fake", undefined)).toMatchObject({ success: "fake" });
+      expect(yield* select("fake", "test")).toMatchObject({ success: "fake" });
     }),
   );
 
-  it.effect("refuses the fake under NODE_ENV=production", () =>
+  it.effect("refuses the fake outside development and test, as in a deployed image", () =>
     Effect.gen(function* () {
-      expect(yield* select("fake", "production")).toMatchObject({
-        failure: { _tag: "FakeEmailBackendInProduction" },
-      });
+      for (const nodeEnv of [undefined, "production", "staging"]) {
+        expect(yield* select("fake", nodeEnv)).toMatchObject({
+          failure: { _tag: "FakeEmailBackendOutsideDevelopment" },
+        });
+      }
     }),
   );
 });

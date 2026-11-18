@@ -88,8 +88,8 @@ class FakeDeliveryNotRecorded extends Data.TaggedError("FakeDeliveryNotRecorded"
  * An SES stand-in for local development: accepts every send without contacting AWS and,
  * once the Delivery records the returned id, reports outcomes through the same ingest SES
  * notifications reach. Identities verify at once in any region and there is no
- * infrastructure to make. Chosen only through `selectEmailBackend`, which refuses it
- * under NODE_ENV=production.
+ * infrastructure to make. Chosen only through `selectEmailBackend`, which allows it only
+ * under NODE_ENV development or test.
  */
 export const makeFakeEmailBackend = (defaultRegion: string) =>
   Effect.gen(function* () {
