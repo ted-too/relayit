@@ -1,10 +1,15 @@
 import { defineJobHandler } from "@repo/jobs";
 import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
-import { customDomain, emailDelivery } from "@repo/persistence/db/schema";
+import {
+  customDomain,
+  emailDelivery,
+  organizationDomain,
+  sandboxDomain,
+} from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { Redis } from "@repo/redis";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
@@ -26,6 +31,7 @@ export interface EmailDeliverHandlerOptions {
 
 /** What the Project reads in `message.failed` for each way a send can fail. */
 const SES_REFUSED = "SES send failed";
+const SES_REJECTED_MESSAGE = "SES rejected the message";
 const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
 
 /**
@@ -40,6 +46,28 @@ const SES_SEND_TIMEOUT = Duration.seconds(30);
  * knows its owner may still be sending and retries later instead of failing it.
  */
 const CLAIM_LEASE = Duration.minutes(2);
+
+/**
+ * Whether a Delivery's sender may send right now, as conditions on the Delivery's own row: its
+ * Domain is not paused and its Project still holds it (a claim another Project proved, or the
+ * Project removing the Domain, ends that), or its Sandbox Domain is active and not paused. The
+ * claim carries them in its `WHERE`, so no gap separates the check from the claim; a claim
+ * that matched nothing reads them back to say why.
+ */
+const senderMaySend = (organizationId: string) => ({
+  domainHeld: sql<boolean>`(${emailDelivery.customDomainId} is null or exists (
+    select 1 from ${organizationDomain}
+    where ${organizationDomain.customDomainId} = ${emailDelivery.customDomainId}
+      and ${organizationDomain.organizationId} = ${organizationId}
+      and ${organizationDomain.ownershipVerificationStatus} = 'verified'))`,
+  domainUnpaused: sql<boolean>`(${emailDelivery.customDomainId} is null or exists (
+    select 1 from ${customDomain}
+    where ${customDomain.id} = ${emailDelivery.customDomainId} and not ${customDomain.isPaused}))`,
+  sandboxOpen: sql<boolean>`(${emailDelivery.sandboxDomainId} is null or exists (
+    select 1 from ${sandboxDomain}
+    where ${sandboxDomain.id} = ${emailDelivery.sandboxDomainId}
+      and ${sandboxDomain.isActive} and not ${sandboxDomain.isPaused}))`,
+});
 
 /**
  * Writes `values` only while the Delivery is still in the state this run saw (`queued`, or
@@ -266,14 +294,14 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             where: { id: payload.deliveryId },
             with: {
               customDomain: {
-                columns: { fqdn: true, id: true, isPaused: true },
+                columns: { fqdn: true },
                 with: { registration: true },
               },
               message: {
                 with: { appEnvironment: { columns: { organizationId: true } } },
               },
               sandboxDomain: {
-                columns: { isActive: true, isPaused: true, rootDomain: true },
+                columns: { rootDomain: true },
                 with: { registration: true },
               },
             },
@@ -360,57 +388,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             // skipped, canceled or failed: nothing to send. Its Usage goes back here too, so a
             // release the dead-letter step could not make is made when the job runs again.
             return yield* releaseUsage(loaded.id);
-        }
-
-        // A paused or inactive sender rejects new sends at accept; one queued before that
-        // fails here. The dead-letter step records it and tells the Project.
-        if (loaded.customDomain?.isPaused) {
-          return yield* new MessageDeliveryTerminalError({
-            deliveryId: loaded.id,
-            message: "Domain is paused",
-            stage: "domain",
-          });
-        }
-        if (
-          loaded.sandboxDomain &&
-          (loaded.sandboxDomain.isPaused || !loaded.sandboxDomain.isActive)
-        ) {
-          return yield* new MessageDeliveryTerminalError({
-            deliveryId: loaded.id,
-            message: "Sandbox Domain is paused or inactive",
-            stage: "domain",
-          });
-        }
-
-        // The Project held the Domain at accept, but a claim proven since, or the Project
-        // removing the Domain, ends that: it never sends on another Project's Domain.
-        if (loaded.customDomainId) {
-          const holding = yield* db.query.organizationDomain
-            .findFirst({
-              columns: { organizationId: true },
-              where: {
-                customDomainId: loaded.customDomainId,
-                organizationId: appEnvironment.organizationId,
-                ownershipVerificationStatus: "verified",
-              },
-            })
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new EmailDeliveryPersistenceError({
-                    cause,
-                    deliveryId: loaded.id,
-                    operation: "load_delivery",
-                  }),
-              ),
-            );
-          if (!holding) {
-            return yield* new MessageDeliveryTerminalError({
-              deliveryId: loaded.id,
-              message: "The Project no longer holds the sending Domain",
-              stage: "domain",
-            });
-          }
         }
 
         const suppressionInput = {
@@ -689,12 +666,21 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
         // unknown outcome behind.
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
-            // Only a run that moves it from `queued` may send it. A duplicate run of the job
-            // finds nothing to claim and retries later, to find what this run did.
+            // Only a run that moves it from `queued` may send it, and only while its sender may
+            // send: a Domain paused or lost to another Project since accept is never sent from.
+            const sender = senderMaySend(appEnvironment.organizationId);
             const [claimed] = yield* db
               .update(emailDelivery)
               .set({ startedAt: new Date(yield* Clock.currentTimeMillis), status: "sending" })
-              .where(and(eq(emailDelivery.id, loaded.id), eq(emailDelivery.status, "queued")))
+              .where(
+                and(
+                  eq(emailDelivery.id, loaded.id),
+                  eq(emailDelivery.status, "queued"),
+                  sender.domainUnpaused,
+                  sender.domainHeld,
+                  sender.sandboxOpen,
+                ),
+              )
               .returning({ startedAt: emailDelivery.startedAt })
               .pipe(
                 Effect.mapError(
@@ -709,6 +695,46 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             // Read back, so this claim's SES answer is keyed exactly as later runs will see it.
             const claimedAt = claimed?.startedAt;
             if (!claimedAt) {
+              // One read tells a sender that may not send from a claim another run made. The
+              // dead-letter step records the first and tells the Project; a duplicate run of
+              // the job retries later, to find what the other run did.
+              const [unclaimed] = yield* db
+                .select({ status: emailDelivery.status, ...sender })
+                .from(emailDelivery)
+                .where(eq(emailDelivery.id, loaded.id))
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new EmailDeliveryPersistenceError({
+                        cause,
+                        deliveryId: loaded.id,
+                        operation: "load_delivery",
+                      }),
+                  ),
+                );
+              if (unclaimed?.status === "queued") {
+                if (!unclaimed.domainUnpaused) {
+                  return yield* new MessageDeliveryTerminalError({
+                    deliveryId: loaded.id,
+                    message: "Domain is paused",
+                    stage: "domain",
+                  });
+                }
+                if (!unclaimed.sandboxOpen) {
+                  return yield* new MessageDeliveryTerminalError({
+                    deliveryId: loaded.id,
+                    message: "Sandbox Domain is paused or inactive",
+                    stage: "domain",
+                  });
+                }
+                if (!unclaimed.domainHeld) {
+                  return yield* new MessageDeliveryTerminalError({
+                    deliveryId: loaded.id,
+                    message: "The Project no longer holds the sending Domain",
+                    stage: "domain",
+                  });
+                }
+              }
               return yield* new MessageDeliveryRetryableError({
                 deliveryId: loaded.id,
                 message: "Another run claimed the Delivery",
@@ -725,42 +751,62 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 Effect.catch((error) => {
                   // SES refused it, or the request never reached SES (the backend reports a
                   // 4xx or a DNS, connect or TLS failure as rejected), so nothing went out:
-                  // keep that answer and put the Delivery back for a later run to claim and
-                  // send. If the requeue is not written, the kept answer tells that run so.
-                  const refused = keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
-                    Effect.andThen(
-                      updateDelivery(
-                        db,
-                        { claimedAt, id: loaded.id },
-                        { startedAt: null, status: "queued" },
+                  // keep that answer and put the Delivery back as it was accepted. If the
+                  // requeue is not written, the kept answer tells the next run so.
+                  const refused = (
+                    failure: MessageDeliveryRetryableError | MessageDeliveryTerminalError,
+                  ) =>
+                    keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                      Effect.andThen(
+                        updateDelivery(
+                          db,
+                          { claimedAt, id: loaded.id },
+                          { startedAt: null, status: "queued" },
+                        ),
                       ),
-                    ),
-                    Effect.ignore,
-                    Effect.andThen(
-                      Effect.fail(
-                        new MessageDeliveryRetryableError({
-                          cause: error,
-                          deliveryId: loaded.id,
-                          message: SES_REFUSED,
-                          stage: "send",
-                        }),
-                      ),
-                    ),
+                      Effect.ignore,
+                      Effect.andThen(Effect.fail(failure)),
+                    );
+                  // What may pass by itself (a throttle, the account paused, credentials or
+                  // configuration ops are changing, a network failure) is sent again later.
+                  const retried = refused(
+                    new MessageDeliveryRetryableError({
+                      cause: error,
+                      deliveryId: loaded.id,
+                      message: SES_REFUSED,
+                      stage: "send",
+                    }),
+                  );
+                  // SES will refuse this message however often it is sent, so it fails now,
+                  // through the dead-letter step, rather than after every retry.
+                  const rejected = refused(
+                    new MessageDeliveryTerminalError({
+                      cause: error,
+                      deliveryId: loaded.id,
+                      message: SES_REJECTED_MESSAGE,
+                      stage: "send",
+                    }),
                   );
                   switch (error._tag) {
                     case "EmailBackendRejected":
-                      // A Project Sending Pause is SES isolating this Project: retrying cannot
-                      // get past it, and other Projects keep sending.
-                      return error.reason === "project_sending_paused"
-                        ? keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                      switch (error.reason) {
+                        // A Project Sending Pause is SES isolating this Project: retrying
+                        // cannot get past it, and other Projects keep sending.
+                        case "project_sending_paused":
+                          return keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
                             Effect.andThen(failProjectSendingPaused(error, claimedAt)),
-                          )
-                        : refused;
+                          );
+                        case "message_rejected":
+                          return rejected;
+                        default:
+                          return retried;
+                      }
+                    case "EmailBackendMessageError":
+                      return rejected;
                     case "EmailBackendAuthenticationError":
                     case "EmailBackendConfigurationError":
-                    case "EmailBackendMessageError":
                     case "EmailBackendRateLimited":
-                      return refused;
+                      return retried;
                     default:
                       // Our timeout, a connection dropped after the request went out, a 5xx
                       // or an answer we could not read: SES may have taken it. It stays

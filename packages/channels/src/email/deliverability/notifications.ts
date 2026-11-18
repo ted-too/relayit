@@ -18,7 +18,7 @@ import {
   deliveryOpened,
 } from "@repo/webhooks/events";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { Data, Effect } from "effect";
+import { Clock, Data, Duration, Effect } from "effect";
 import { TypeID } from "typeid-js";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 
@@ -30,8 +30,19 @@ export interface NormalizedDeliveryEvent {
   readonly providerMessageId: string;
   readonly raw: unknown;
   readonly recipients: readonly string[];
+  /** When SES took the message (the notification's `mail.timestamp`), if it says. */
+  readonly sentAt: Date | null;
   readonly suppress: boolean;
 }
+
+/**
+ * How long after SES took a message a notification about it may find no Delivery and be
+ * refused, so SNS sends it again. The worker records SES's message id a moment after SES
+ * answers, or once Postgres is back; a notification can beat that write. Past this the id is
+ * taken for one no Delivery will ever carry (a send whose answer never reached Relayit, or
+ * mail this deployment did not send) and is acknowledged, so nothing makes SNS retry for ever.
+ */
+const UNRECORDED_SEND_GRACE = Duration.hours(1);
 
 const deliveryOutcomeEvent = (
   event: NormalizedDeliveryEvent,
@@ -109,6 +120,11 @@ export class DeliveryEventIngestError extends Data.TaggedError("DeliveryEventIng
     | "load_delivery"
     | "load_organization"
     | "suppress_contact";
+  readonly providerMessageId: string;
+}> {}
+
+/** SES reported on a message sent so recently that its Delivery may not be recorded yet. */
+class DeliveryNotRecordedYet extends Data.TaggedError("DeliveryNotRecordedYet")<{
   readonly providerMessageId: string;
 }> {}
 
@@ -206,6 +222,15 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
     const delivery = yield* loadDelivery(db, event.providerMessageId);
     const message = delivery?.message;
     if (!(delivery && message)) {
+      // Failing leaves the notification with SNS, which sends it again; by then the worker
+      // has recorded the send. A time in the future is no younger than one as far in the past.
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        event.sentAt &&
+        Math.abs(now - event.sentAt.getTime()) < Duration.toMillis(UNRECORDED_SEND_GRACE)
+      ) {
+        return yield* new DeliveryNotRecordedYet({ providerMessageId: event.providerMessageId });
+      }
       return;
     }
 

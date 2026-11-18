@@ -45,11 +45,26 @@ describe("normalizeSesNotification", () => {
             notificationType: "Delivery",
           },
           recipients: ["recipient@example.com"],
+          sentAt: null,
           suppress: false,
         },
       ],
       type: "events",
     });
+  });
+
+  it("reads when SES took the message, or that the notification does not say", () => {
+    const sentAt = (timestamp: unknown) => {
+      const result = normalizeSesNotification(
+        { mail: { ...mail, timestamp }, notificationType: "Bounce" },
+        "sns-message-id",
+      );
+      return result.type === "events" ? result.events[0]?.sentAt : undefined;
+    };
+
+    expect(sentAt("2026-11-18T09:30:00.000Z")).toEqual(new Date("2026-11-18T09:30:00.000Z"));
+    expect(sentAt("not a time")).toBeNull();
+    expect(sentAt(1_795_000_000)).toBeNull();
   });
 
   it("suppresses permanent bounces", () => {

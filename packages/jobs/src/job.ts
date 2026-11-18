@@ -1,5 +1,6 @@
 import type { Effect } from "effect";
 import { Schema } from "effect";
+import type { JobHandlerDefect } from "./errors";
 
 /** Job payload schemas are self-contained Effect Schema codecs. */
 export type JobSchema = Schema.Top;
@@ -150,10 +151,11 @@ export interface JobHandler<
     payload: JobPayload<Contract>,
     execution: WorkExecution,
   ) => Effect.Effect<unknown, Failure, Requirements>;
+  /** `failure` is what the last attempt failed with, or the defect it died of. */
   readonly onDeadLetter?: (
     payload: JobPayload<Contract>,
     execution: WorkExecution,
-    failure: Failure,
+    failure: Failure | JobHandlerDefect,
   ) => Effect.Effect<unknown, DeadLetterFailure, Requirements>;
   readonly reconcile?: Effect.Effect<void, Failure, Requirements>;
 }
@@ -178,7 +180,7 @@ export const defineJobHandler = <
   readonly onDeadLetter?: (
     payload: JobPayload<Contract>,
     execution: WorkExecution,
-    failure: NoInfer<E>,
+    failure: NoInfer<E> | JobHandlerDefect,
   ) => Effect.Effect<unknown, DeadLetterFailure, NoInfer<R>>;
   readonly reconcile?: Effect.Effect<void, NoInfer<E>, NoInfer<R>>;
 }): JobHandler<Contract, E, R, DeadLetterFailure> => handler;

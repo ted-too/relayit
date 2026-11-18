@@ -389,10 +389,12 @@ export const stageEmailAttachments = (
           attachmentId,
           deliveryId: input.deliveryId,
         };
+        // Recorded before the upload: one interrupted mid-flight may still land, and only what
+        // is recorded here is deleted. Deleting an object that never landed is harmless.
+        staged.push(stagedAttachment);
         const upload = yield* emailAttachmentsBucket.upload(stagedAttachment, attachment.bytes, {
           contentType: attachment.contentType,
         });
-        staged.push(stagedAttachment);
         yield* db
           .insert(emailAttachment)
           .values({

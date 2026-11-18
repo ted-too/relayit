@@ -3,7 +3,7 @@ import { type Database, DB } from "@repo/persistence/db/effect";
 import { emailDelivery, message } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { contactUpdated, messageScheduled } from "@repo/webhooks/events";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Cause, Data, DateTime, Effect, Result, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import {
@@ -237,9 +237,22 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     const deliveryId = typeid("edlv").toString();
     const messageId = typeid("msg").toString();
     let stagedAttachments: readonly StagedEmailAttachment[] = [];
+    // Held by the accept's transaction until Postgres has finished committing it or rolled it
+    // back, so whoever takes it afterwards reads a settled answer to "was the Message written".
+    const acceptLock = sql`select pg_advisory_xact_lock(hashtextextended(${messageId}, 0))`;
     const transaction = (policy: UsagePolicyResult) =>
       db.transaction((tx) =>
         Effect.gen(function* () {
+          yield* tx.execute(acceptLock).pipe(
+            Effect.mapError(
+              (cause) =>
+                new EmailAcceptPersistenceError({
+                  cause,
+                  messageId,
+                  operation: "insert_message",
+                }),
+            ),
+          );
           yield* tx
             .insert(message)
             .values({
@@ -368,9 +381,11 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     // Usage is reserved before the transaction. If the accept then ends any way but success
     // (a failure, a defect, the client disconnecting, even mid-COMMIT or with COMMIT's answer
     // lost), whether the Message was written is read back once the transaction is over, and
-    // only a Message that was not written gives back its Usage and staged objects. If that
-    // read fails as well nothing is given back: a leaked reservation is the safe side of a
-    // committed send losing its attachments.
+    // only a Message that was not written gives back its Usage and staged objects. The read
+    // first takes the accept's lock, so a COMMIT the server is still finishing (or has not
+    // yet received from a connection that dropped) is waited for rather than read as "not
+    // written". If the lock is not had in time or the read fails, nothing is given back: a
+    // leaked reservation is the safe side of a committed send losing its attachments.
     let reserved = false;
     const result = yield* usage
       .reserve({
@@ -392,10 +407,17 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
           !reserved && !Cause.hasInterrupts(cause)
             ? Effect.void
             : db
-                .select({ id: message.id })
-                .from(message)
-                .where(eq(message.id, messageId))
-                .limit(1)
+                .transaction((tx) =>
+                  Effect.gen(function* () {
+                    yield* tx.execute(sql`set local lock_timeout = '3s'`);
+                    yield* tx.execute(acceptLock);
+                    return yield* tx
+                      .select({ id: message.id })
+                      .from(message)
+                      .where(eq(message.id, messageId))
+                      .limit(1);
+                  }),
+                )
                 .pipe(
                   Effect.retry(compensationRetry),
                   Effect.matchEffect({
