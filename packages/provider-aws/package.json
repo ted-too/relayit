@@ -10,6 +10,7 @@
   "dependencies": {
     "@effect-aws/client-sesv2": "2.0.0",
     "@effect-aws/client-sns": "2.0.0",
+    "@effect-aws/client-sts": "2.0.0",
     "@repo/channels": "workspace:*",
     "@repo/jobs": "workspace:*",
     "@repo/persistence": "workspace:*",

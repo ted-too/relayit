@@ -14,7 +14,12 @@ import {
 } from "@repo/channels/email/accept/attachments";
 import { ATTACHMENTS_DEADLINE_SECONDS } from "@repo/channels/email/attachment-policy";
 import { UsageLimitExceeded } from "@repo/channels/usage";
-import { AwsSnsValidationError } from "@repo/provider-aws/errors";
+import {
+  AwsSnsTopicRejected,
+  AwsSnsTopicsUnavailable,
+  AwsSnsValidationError,
+  AwsSubscriptionConfirmationError,
+} from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
 import { Effect, Fiber } from "effect";
 import { FetchHttpClient } from "effect/http";
@@ -944,6 +949,76 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
         }),
       ).toEqual(respond(400, { code: "bad_request", message: "SES notification handling failed" }));
     }),
+  );
+
+  it.live("answers 400 to a notification from a topic this deployment did not subscribe", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(
+        stubs({
+          handleSes: () => Effect.fail(new AwsSnsTopicRejected({ topicArn: "arn:aws:sns:x" })),
+        }).stubs,
+      );
+
+      expect(
+        yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+          body: '{"Type":"Notification"}',
+          headers: { "content-type": "text/plain" },
+        }),
+      ).toEqual(respond(400, { code: "bad_request", message: "SES notification handling failed" }));
+    }),
+  );
+
+  it.live("answers 500 when it cannot look up which topics to trust, so SNS retries", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(
+        stubs({
+          handleSes: () =>
+            Effect.fail(new AwsSnsTopicsUnavailable({ cause: new Error("STS unreachable") })),
+        }).stubs,
+      );
+
+      expect(
+        yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+          body: '{"Type":"Notification"}',
+          headers: { "content-type": "text/plain" },
+        }),
+      ).toEqual(
+        respond(500, {
+          code: "internal_server_error",
+          message: "SES notification handling failed",
+        }),
+      );
+    }),
+  );
+
+  it.live(
+    "answers 500 when SNS could not be reached to confirm, and 400 to a bad SubscribeURL",
+    () =>
+      Effect.gen(function* () {
+        const confirming = (reason: "invalid_url" | "request_failed") =>
+          serve(
+            stubs({
+              handleSes: () => Effect.fail(new AwsSubscriptionConfirmationError({ reason })),
+            }).stubs,
+          ).pipe(
+            Effect.flatMap((origin) =>
+              request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+                body: '{"Type":"SubscriptionConfirmation"}',
+                headers: { "content-type": "text/plain" },
+              }),
+            ),
+          );
+
+        expect(yield* confirming("request_failed")).toEqual(
+          respond(500, {
+            code: "internal_server_error",
+            message: "SES notification handling failed",
+          }),
+        );
+        expect(yield* confirming("invalid_url")).toEqual(
+          respond(400, { code: "bad_request", message: "SES notification handling failed" }),
+        );
+      }),
   );
 
   it.live("answers 500 when it cannot record the outcome, so SNS retries", () =>

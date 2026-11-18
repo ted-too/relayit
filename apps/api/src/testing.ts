@@ -15,7 +15,10 @@ import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, type Database } from "@repo/persistence/db/effect";
 import type { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
-import type { handleSesNotification } from "@repo/provider-aws/email/webhooks";
+import {
+  type handleSesNotification,
+  SesNotificationTopics,
+} from "@repo/provider-aws/email/webhooks";
 import { Context, Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { apiServer } from "./http";
@@ -112,6 +115,7 @@ const unusedServices = Layer.mergeAll(
   Layer.succeed(Jobs, {} as JobsService),
   Layer.succeed(ObjectStorage, {} as ObjectStorageService),
   Layer.succeed(Usage, {} as UsageService),
+  Layer.succeed(SesNotificationTopics, {} as SesNotificationTopics["Service"]),
 );
 
 /** The api as it serves, on a free port of 127.0.0.1, for the length of the test. */
