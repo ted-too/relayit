@@ -17,6 +17,7 @@ export {
 export {
   emailRecheckProjectSendingPauseHandler,
   emailRecheckProjectSendingPauseJob,
+  lockProjectDomains,
   pauseProjectDomains,
   ProjectSendingPauseError,
   syncProjectSendingStatus,

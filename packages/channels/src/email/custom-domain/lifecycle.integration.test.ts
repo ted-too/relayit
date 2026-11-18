@@ -10,19 +10,25 @@ import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import {
+  contact,
   customDomain,
   emailDelivery,
+  emailDeliveryEvent,
+  emailDomainRegistration,
   message,
   organization,
   organizationAppEnvironment,
   organizationDomain,
+  webhookEndpoint,
+  webhookEvent,
 } from "@repo/persistence/db/schema";
-import { and, eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { and, count, eq, or, sql } from "drizzle-orm";
+import { Effect, Layer, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { ingestDeliveryEvents } from "../deliverability/notifications";
 import { createOwnershipToken, ownershipChallengeValue } from "./dns";
 import { emailDeleteDomainIdentityHandler } from "./handlers";
 import type { EmailDeleteDomainIdentityPayload } from "./jobs";
@@ -32,6 +38,7 @@ import {
   CLAIM_TTL_MS,
   createCustomDomain,
   deleteCustomDomain,
+  detachStrayDeliveries,
   removeDeletedProjectDomains,
   removeUnlinkedDomains,
 } from "./lifecycle";
@@ -50,15 +57,18 @@ describe("Domain lifecycle (PostgreSQL)", () => {
    * SES, public DNS and the queue as each test sets them; what was scheduled, cancelled and
    * enqueued, by job, the SES identities created and deleted, and the TXT values published
    * in DNS. `beforeKeyLoad` runs as a Domain's DKIM key is read, which an add does between
-   * writing a claim and registering the Domain.
+   * writing a claim and registering the Domain; `beforeCreateIdentity` runs inside each
+   * registration, as SES is called.
    */
   const boundaries = (
     options: {
+      readonly beforeCreateIdentity?: () => Effect.Effect<void>;
       readonly beforeKeyLoad?: () => Effect.Effect<void>;
       readonly databaseUrl?: string;
       readonly failCancel?: boolean;
       readonly failCreateIdentity?: () => boolean;
       readonly failEnqueueFor?: () => string | undefined;
+      readonly failSchedule?: () => boolean;
     } = {},
   ) => {
     const scheduled: { readonly name: string; readonly payload: unknown }[] = [];
@@ -77,10 +87,14 @@ describe("Domain lifecycle (PostgreSQL)", () => {
                   region: region ?? "eu-central-1",
                 }),
               )
-            : Effect.sync(() => {
-                createdIdentities.push(fqdn);
-                return { mailFrom: { domain: `send.${fqdn}`, records: [] } };
-              }),
+            : (options.beforeCreateIdentity?.() ?? Effect.void).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    createdIdentities.push(fqdn);
+                    return { mailFrom: { domain: `send.${fqdn}`, records: [] } };
+                  }),
+                ),
+              ),
         defaultRegion: "eu-central-1",
         deleteIdentity: ({ fqdn, region }) =>
           Effect.sync(() => {
@@ -119,6 +133,15 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           return Effect.void;
         }) as JobsService["enqueue"],
         schedule: ((contract: { readonly name: string }, payload: unknown) => {
+          if (options.failSchedule?.()) {
+            return Effect.fail(
+              new JobEnqueueError({
+                cause: "Redis is down",
+                jobName: contract.name,
+                stage: "schedule",
+              }),
+            );
+          }
           scheduled.push({ name: contract.name, payload });
           return Effect.void;
         }) as JobsService["schedule"],
@@ -215,32 +238,80 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     return { claimantIds, customDomainId, fqdn, holderId };
   });
 
-  /** A Delivery a Project sent from a Domain, which keeps naming it. */
+  /** A Delivery a Project sent from a Domain, with the outcome SES reported for it. */
   const sentFrom = Effect.fn(function* (input: {
     readonly customDomainId: string;
     readonly fqdn: string;
     readonly organizationId: string;
   }) {
     const db = yield* DB;
-    const environmentId = typeid("oenv").toString();
     const messageId = typeid("msg").toString();
-    yield* db
+    const [environment] = yield* db
       .insert(organizationAppEnvironment)
-      .values({ id: environmentId, organizationId: input.organizationId });
+      .values({ organizationId: input.organizationId })
+      .onConflictDoNothing()
+      .returning({ id: organizationAppEnvironment.id });
+    const environmentId =
+      environment?.id ??
+      (yield* db.query.organizationAppEnvironment.findFirst({
+        columns: { id: true },
+        where: { organizationId: input.organizationId },
+      }))?.id;
+    if (!environmentId) {
+      return yield* Effect.die("The Project has an App Environment");
+    }
     yield* db.insert(message).values({
       id: messageId,
       organizationAppEnvironmentId: environmentId,
       purpose: "transactional",
     });
-    yield* db.insert(emailDelivery).values({
+    const [delivery] = yield* db
+      .insert(emailDelivery)
+      .values({
+        customDomainId: input.customDomainId,
+        from: { address: `hello@${input.fqdn}`, normalized: `hello@${input.fqdn}` },
+        messageId,
+        providerMessageId: `ses-${Bun.randomUUIDv7()}`,
+        status: "sent",
+        subject: "Hi",
+        text: "Hi",
+        to: ["to@example.com"],
+      })
+      .returning();
+    if (!delivery) {
+      return yield* Effect.die("The Delivery was written");
+    }
+    yield* db.insert(emailDeliveryEvent).values({
       customDomainId: input.customDomainId,
-      from: { address: `hello@${input.fqdn}`, normalized: `hello@${input.fqdn}` },
-      messageId,
-      status: "sent",
-      subject: "Hi",
-      text: "Hi",
-      to: ["to@example.com"],
+      emailDeliveryId: delivery.id,
+      kind: "delivered",
     });
+    return delivery;
+  });
+
+  /** A Project's Messages with their Deliveries and events, as its history reads. */
+  const historyOf = Effect.fn(function* (organizationId: string) {
+    const db = yield* DB;
+    return yield* db
+      .select({ delivery: emailDelivery, event: emailDeliveryEvent, message })
+      .from(message)
+      .innerJoin(
+        organizationAppEnvironment,
+        eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
+      )
+      .innerJoin(emailDelivery, eq(emailDelivery.messageId, message.id))
+      .leftJoin(emailDeliveryEvent, eq(emailDeliveryEvent.emailDeliveryId, emailDelivery.id))
+      .where(eq(organizationAppEnvironment.organizationId, organizationId))
+      .orderBy(emailDelivery.id, emailDeliveryEvent.id);
+  });
+
+  const dkimKeyOf = Effect.fn(function* (customDomainId: string) {
+    const db = yield* DB;
+    const domain = yield* db.query.customDomain.findFirst({
+      columns: { dkimPrivateKey: true, dkimPublicKey: true },
+      where: { id: customDomainId },
+    });
+    return domain ?? (yield* Effect.die("Domain is gone"));
   });
 
   const domainOf = Effect.fn(function* (fqdn: string) {
@@ -254,6 +325,20 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         registration: { columns: { region: true } },
       },
     });
+  });
+
+  /** A Domain its holder added while SES was down: held, with no registration. */
+  const unregisteredDomain = Effect.fn(function* (ses: { down: boolean }) {
+    const holderId = yield* insertProject();
+    const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+    ses.down = true;
+    yield* Effect.flip(createCustomDomain({ fqdn, organizationId: holderId }));
+    ses.down = false;
+    const domain = yield* domainOf(fqdn);
+    if (!domain || domain.registration) {
+      return yield* Effect.die("The Domain was written, unregistered");
+    }
+    return { customDomainId: domain.id, fqdn, holderId };
   });
 
   /** Runs the identity deletes enqueued for `fqdn`, as the worker does once they commit. */
@@ -807,140 +892,482 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
-  it.live(
-    "a removed Domain its Deliveries still name is kept bare, and re-adding it is a claim",
-    () => {
-      const { deletedIdentities, enqueued, layer, scheduled } = boundaries();
+  it.live("a removed Domain that sent mail leaves no row, and is new when added again", () => {
+    const { deletedIdentities, enqueued, layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const projectId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: projectId });
+      const key = yield* dkimKeyOf(customDomainId);
+      const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: projectId });
+      const before = yield* historyOf(projectId);
+      expect(before).toMatchObject([
+        { delivery: { customDomainId, id: sent.id }, event: { customDomainId } },
+      ]);
+
+      expect(yield* deleteCustomDomain({ customDomainId, organizationId: projectId })).toEqual({
+        deleted: true,
+      });
+
+      expect(yield* domainOf(fqdn)).toBeUndefined();
+      expect(
+        yield* db.select().from(customDomain).where(eq(customDomain.id, customDomainId)),
+      ).toEqual([]);
+      yield* runIdentityDeletes(enqueued, fqdn);
+      expect(deletedIdentities).toEqual([{ fqdn, region: "eu-central-1" }]);
+
+      // The Project's history reads as it did, with its From, less the reference to the
+      // Domain: the Delivery names the FQDN it was sent from and its event names nothing.
+      const [past] = before;
+      if (!past?.event) {
+        return yield* Effect.die("The Delivery and its event were read");
+      }
+      const removed = [
+        {
+          delivery: { ...past.delivery, customDomainId: null, removedDomainFqdn: fqdn },
+          event: { ...past.event, customDomainId: null },
+          message: past.message,
+        },
+      ];
+      expect(yield* historyOf(projectId)).toEqual(removed);
+      expect(removed[0]?.delivery.from).toEqual({
+        address: `hello@${fqdn}`,
+        normalized: `hello@${fqdn}`,
+      });
+
+      scheduled.length = 0;
+      const again = yield* createCustomDomain({ fqdn, organizationId: projectId });
+      expect(again).toMatchObject({ kind: "created" });
+      expect(again.customDomainId).not.toBe(customDomainId);
+      const newKey = yield* dkimKeyOf(again.customDomainId);
+      expect(newKey.dkimPublicKey).not.toBe(key.dkimPublicKey);
+      expect(newKey.dkimPrivateKey).not.toBe(key.dkimPrivateKey);
+      // New, so held at once: no claim to prove.
+      expect(yield* domainOf(fqdn)).toMatchObject({
+        organizations: [{ organizationId: projectId, ownershipVerificationStatus: "verified" }],
+        registration: { region: "eu-central-1" },
+      });
+      expect(scheduled).toEqual([
+        { name: "email.verify-custom-domain", payload: { customDomainId: again.customDomainId } },
+      ]);
+      // The old Deliveries are not picked up by the Domain that now has their FQDN.
+      expect(yield* historyOf(projectId)).toEqual(removed);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a Domain added by another Project after its removal has none of its history", () => {
+    const { layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const firstId = yield* insertProject();
+      const nextId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const first = yield* createCustomDomain({ fqdn, organizationId: firstId });
+      const firstKey = yield* dkimKeyOf(first.customDomainId);
+      yield* sentFrom({ customDomainId: first.customDomainId, fqdn, organizationId: firstId });
+      yield* sentFrom({ customDomainId: first.customDomainId, fqdn, organizationId: firstId });
+      yield* deleteCustomDomain({ customDomainId: first.customDomainId, organizationId: firstId });
+      const firstHistory = yield* historyOf(firstId);
+      expect(firstHistory).toHaveLength(2);
+
+      const next = yield* createCustomDomain({ fqdn, organizationId: nextId });
+
+      // A new Domain, held without a claim, under its own key.
+      expect(next).toMatchObject({ kind: "created" });
+      expect(next.customDomainId).not.toBe(first.customDomainId);
+      expect((yield* dkimKeyOf(next.customDomainId)).dkimPublicKey).not.toBe(
+        firstKey.dkimPublicKey,
+      );
+      expect(yield* linksOf(next.customDomainId)).toEqual([
+        { organizationId: nextId, ownershipVerificationStatus: "verified" },
+      ]);
+      // Nothing the first Project sent is the new Domain's or the next Project's.
+      const namingNext = Effect.gen(function* () {
+        return {
+          deliveries: yield* db
+            .select({ id: emailDelivery.id })
+            .from(emailDelivery)
+            .where(eq(emailDelivery.customDomainId, next.customDomainId)),
+          events: yield* db
+            .select({ id: emailDeliveryEvent.id })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.customDomainId, next.customDomainId)),
+        };
+      });
+      expect(yield* namingNext).toEqual({ deliveries: [], events: [] });
+      expect(yield* historyOf(nextId)).toEqual([]);
+      expect(yield* historyOf(firstId)).toEqual(firstHistory);
+
+      // What the next Project sends, and its removing the Domain, leave the first
+      // Project's history alone, though both now record the same FQDN.
+      const sent = yield* sentFrom({
+        customDomainId: next.customDomainId,
+        fqdn,
+        organizationId: nextId,
+      });
+      expect(yield* namingNext).toMatchObject({ deliveries: [{ id: sent.id }], events: [{}] });
+      yield* deleteCustomDomain({ customDomainId: next.customDomainId, organizationId: nextId });
+      expect(yield* historyOf(firstId)).toEqual(firstHistory);
+      expect(yield* historyOf(nextId)).toMatchObject([
+        { delivery: { customDomainId: null, id: sent.id, removedDomainFqdn: fqdn } },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  /** What names a Domain's row: Deliveries, their events, and whether it is paused. */
+  const namingDomain = Effect.fn(function* (customDomainId: string) {
+    const db = yield* DB;
+    return {
+      deliveries: yield* db
+        .select({ id: emailDelivery.id })
+        .from(emailDelivery)
+        .where(eq(emailDelivery.customDomainId, customDomainId)),
+      events: yield* db
+        .select({ id: emailDeliveryEvent.id })
+        .from(emailDeliveryEvent)
+        .where(eq(emailDeliveryEvent.customDomainId, customDomainId)),
+      paused: (yield* db.query.customDomain.findFirst({
+        columns: { isPaused: true },
+        where: { id: customDomainId },
+      }))?.isPaused,
+    };
+  });
+
+  // The row outlives the sender's link when another Project takes the Domain by a claim:
+  // with the holder removing it while the claim is pending, and with the holder doing nothing.
+  it.live.each([true, false])(
+    "a Domain taken by a claim has none of its old holder's history (holder removed it first: %s)",
+    (holderRemoves) => {
+      const { layer, published } = boundaries();
       return Effect.gen(function* () {
         const db = yield* DB;
-        const projectId = yield* insertProject();
-        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
-        const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: projectId });
-        yield* db
-          .update(customDomain)
-          .set({ lastCheckedAt: new Date(), verificationStatus: "verified" })
-          .where(eq(customDomain.id, customDomainId));
-        yield* sentFrom({ customDomainId, fqdn, organizationId: projectId });
-
-        expect(yield* deleteCustomDomain({ customDomainId, organizationId: projectId })).toEqual({
-          deleted: true,
-        });
-
-        // The Project's send history still names the Domain, so its row stays, with nothing
-        // of its registration, and the SES identity is deleted all the same.
-        expect(yield* domainOf(fqdn)).toEqual({
-          dnsRecords: [],
-          id: customDomainId,
-          lastCheckedAt: null,
-          organizations: [],
-          registration: null,
-          verificationStatus: "not_verified",
-        });
-        yield* runIdentityDeletes(enqueued, fqdn);
-        expect(deletedIdentities).toEqual([{ fqdn, region: "eu-central-1" }]);
-
-        // Its DKIM key is still the one its DNS publishes, so adding it again takes proof.
-        scheduled.length = 0;
-        expect(yield* createCustomDomain({ fqdn, organizationId: projectId })).toEqual({
+        const {
+          claimantIds: [claimantId],
           customDomainId,
-          kind: "claim",
+          fqdn,
+          holderId,
+        } = yield* claimedDomain(1);
+        if (!claimantId) {
+          return yield* Effect.die("A claim was made");
+        }
+        const key = yield* dkimKeyOf(customDomainId);
+        yield* db.insert(webhookEndpoint).values(
+          [holderId, claimantId].map((organizationId) => ({
+            eventTypes: ["delivery.bounced"],
+            organizationId,
+            signingSecret: "secret",
+            url: "https://hooks.example.com/relayit",
+          })),
+        );
+        const webhooksOf = (organizationId: string) =>
+          db
+            .select({ type: webhookEvent.type })
+            .from(webhookEvent)
+            .where(eq(webhookEvent.organizationId, organizationId));
+        const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        const [before] = yield* historyOf(holderId);
+        if (!before?.event || !sent.providerMessageId) {
+          return yield* Effect.die("The Delivery and its event were read");
+        }
+        yield* db.insert(contact).values({
+          email: "to@example.com",
+          organizationAppEnvironmentId: before.message.organizationAppEnvironmentId,
         });
-        const readded = yield* domainOf(fqdn);
-        expect(readded).toMatchObject({
-          organizations: [
-            { organizationId: projectId, ownershipVerificationStatus: "not_verified" },
-          ],
-          registration: { region: "eu-central-1" },
-        });
-        expect(readded?.dnsRecords.map((record) => record.purpose)).toContain("dkim");
-        expect(scheduled).toContainEqual({
-          name: "email.verify-ownership",
-          payload: { customDomainId, organizationId: projectId },
+        const detached = {
+          delivery: { ...before.delivery, customDomainId: null, removedDomainFqdn: fqdn },
+          event: { ...before.event, customDomainId: null },
+          message: before.message,
+        };
+
+        if (holderRemoves) {
+          // The row stays for the claim, and already nothing the holder sent names it.
+          expect(yield* deleteCustomDomain({ customDomainId, organizationId: holderId })).toEqual({
+            deleted: false,
+          });
+          expect(yield* namingDomain(customDomainId)).toEqual({
+            deliveries: [],
+            events: [],
+            paused: false,
+          });
+          expect(yield* historyOf(holderId)).toEqual([detached]);
+        }
+        yield* publishProof(published, customDomainId, claimantId);
+        expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+          ownershipVerificationStatus: "verified",
         });
 
-        // Once the Project and its Deliveries are gone, so is the Domain.
-        const links = yield* linksOf(customDomainId);
-        yield* db.delete(organization).where(eq(organization.id, projectId));
-        yield* removeDeletedProjectDomains({
-          links: links.map((link) => ({ ...link, customDomainId })),
-          organizationId: projectId,
+        // The claimant holds the same row under the same key, with none of that history.
+        expect(yield* linksOf(customDomainId)).toEqual([
+          { organizationId: claimantId, ownershipVerificationStatus: "verified" },
+        ]);
+        expect(yield* dkimKeyOf(customDomainId)).toEqual(key);
+        expect(yield* namingDomain(customDomainId)).toEqual({
+          deliveries: [],
+          events: [],
+          paused: false,
         });
-        expect(yield* domainOf(fqdn)).toBeUndefined();
+        expect(yield* historyOf(holderId)).toEqual([detached]);
+        expect(yield* historyOf(claimantId)).toEqual([]);
+
+        // A bounce for the old send is the old holder's: recorded on its Delivery, heard by
+        // it, suppressing in its App Environment, and nothing to the Domain or its holder.
+        yield* ingestDeliveryEvents(db, {
+          events: [
+            {
+              kind: "bounced",
+              notificationId: Bun.randomUUIDv7(),
+              providerMessageId: sent.providerMessageId,
+              raw: { bounce: { bounceType: "Permanent" } },
+              recipients: ["to@example.com"],
+              sentAt: new Date(),
+              suppress: true,
+            },
+          ],
+        });
+        expect(
+          (yield* historyOf(holderId))
+            .map(({ delivery, event }) => ({
+              customDomainId: event?.customDomainId,
+              deliveryId: delivery.id,
+              kind: event?.kind,
+            }))
+            .toSorted((left, right) => (left.kind ?? "").localeCompare(right.kind ?? "")),
+        ).toEqual([
+          { customDomainId: null, deliveryId: sent.id, kind: "bounced" },
+          { customDomainId: null, deliveryId: sent.id, kind: "delivered" },
+        ]);
+        expect(
+          yield* db
+            .select({ reason: contact.suppressionReason })
+            .from(contact)
+            .where(
+              eq(contact.organizationAppEnvironmentId, before.message.organizationAppEnvironmentId),
+            ),
+        ).toEqual([{ reason: "hard_bounce" }]);
+        expect(yield* webhooksOf(holderId)).toEqual([{ type: "delivery.bounced" }]);
+        expect(yield* webhooksOf(claimantId)).toEqual([]);
+        expect(yield* namingDomain(customDomainId)).toEqual({
+          deliveries: [],
+          events: [],
+          paused: false,
+        });
       }).pipe(Effect.provide(layer));
     },
   );
 
-  it.live("a kept Domain whose claim is removed before it registers gets no identity", () => {
-    let removeClaim: Effect.Effect<void> = Effect.void;
-    const { createdIdentities, layer } = boundaries({ beforeKeyLoad: () => removeClaim });
+  it.live(
+    "a claimant's removed or lapsed claim leaves the holder's Deliveries on the Domain",
+    () => {
+      const { layer } = boundaries();
+      return Effect.gen(function* () {
+        const {
+          claimantIds: [removingId, lapsingId],
+          customDomainId,
+          fqdn,
+          holderId,
+        } = yield* claimedDomain(2);
+        if (!(removingId && lapsingId)) {
+          return yield* Effect.die("Two claims were made");
+        }
+        const db = yield* DB;
+        const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        const history = yield* historyOf(holderId);
+
+        yield* deleteCustomDomain({ customDomainId, organizationId: removingId });
+        yield* db
+          .update(organizationDomain)
+          .set({ createdAt: new Date(Date.now() - CLAIM_TTL_MS - 60_000) })
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, customDomainId),
+              eq(organizationDomain.organizationId, lapsingId),
+            ),
+          );
+        expect(yield* checkOwnership(customDomainId, lapsingId)).toMatchObject({
+          ownershipVerificationStatus: "lapsed",
+        });
+
+        // Only a leaving Project's own Deliveries move.
+        expect(yield* historyOf(holderId)).toEqual(history);
+        expect(yield* namingDomain(customDomainId)).toMatchObject({
+          deliveries: [{ id: sent.id }],
+          events: [{}],
+        });
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.live("a deleted Project's Deliveries go with it, off a Domain another Project claims", () => {
+    const { layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const { customDomainId, fqdn, holderId } = yield* claimedDomain(1);
+      yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+
+      // The Project's Messages, Deliveries and events are deleted with it by the database.
+      yield* db.delete(organization).where(eq(organization.id, holderId));
+
+      expect(yield* namingDomain(customDomainId)).toEqual({
+        deliveries: [],
+        events: [],
+        paused: false,
+      });
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live(
+    "a Project with more Deliveries on a Domain than one query can name is detached whole",
+    () => {
+      const { layer } = boundaries();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const { customDomainId, fqdn, holderId } = yield* claimedDomain(1);
+        const first = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        // Past the 65,535 parameters Postgres takes in one query, each with an event.
+        const more = 70_000;
+        const prefix = Bun.randomUUIDv7().replaceAll("-", "");
+        yield* db.execute(sql`
+          with numbered as (select g from generate_series(1, ${more}) g),
+          messages as (
+            insert into message (id, organization_app_environment_id, purpose)
+            select 'msg_' || ${prefix} || g, (select organization_app_environment_id from message where id = ${first.messageId}), 'transactional'
+            from numbered
+          ),
+          deliveries as (
+            insert into email_delivery (id, message_id, custom_domain_id, status, "from", "to", subject, text)
+            select 'edlv_' || ${prefix} || g, 'msg_' || ${prefix} || g, ${customDomainId}, 'sent',
+              ${JSON.stringify({ address: `hello@${fqdn}`, normalized: `hello@${fqdn}` })}::jsonb,
+              '["to@example.com"]'::jsonb, 'Hi', 'Hi'
+            from numbered
+          )
+          insert into email_delivery_event (id, email_delivery_id, custom_domain_id, kind)
+          select 'edev_' || ${prefix} || g, 'edlv_' || ${prefix} || g, ${customDomainId}, 'delivered'
+          from numbered`);
+        // A deployment's tables have statistics; rows loaded a moment ago do not, and
+        // without them the planner joins these the slow way round.
+        yield* db.execute(sql`analyze message, email_delivery, email_delivery_event`);
+        const counts = Effect.gen(function* () {
+          const [deliveries] = yield* db
+            .select({ naming: count(emailDelivery.customDomainId), total: count() })
+            .from(emailDelivery)
+            .where(
+              or(
+                eq(emailDelivery.customDomainId, customDomainId),
+                eq(emailDelivery.removedDomainFqdn, fqdn),
+              ),
+            );
+          const [events] = yield* db
+            .select({ naming: count() })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.customDomainId, customDomainId));
+          return { deliveries, events };
+        });
+        expect(yield* counts).toEqual({
+          deliveries: { naming: more + 1, total: more + 1 },
+          events: { naming: more + 1 },
+        });
+
+        // The row stays for the claim on it.
+        expect(yield* deleteCustomDomain({ customDomainId, organizationId: holderId })).toEqual({
+          deleted: false,
+        });
+
+        expect(yield* counts).toEqual({
+          deliveries: { naming: 0, total: more + 1 },
+          events: { naming: 0 },
+        });
+      }).pipe(Effect.provide(layer));
+    },
+    120_000,
+  );
+
+  it.live("a Delivery can't be written, or left, naming no Domain at all", () => {
+    const { layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const projectId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: projectId });
+      const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: projectId });
+      const { id: _id, createdAt: _createdAt, ...values } = sent;
+      const refusedBy = (constraint: string) => ({
+        cause: { reasons: [{ error: { reason: { cause: { constraint } } } }] },
+      });
+
+      // Neither a new Delivery with no sender, nor one that loses its Domain any other way
+      // than the removal, which records the FQDN as it clears the reference.
+      expect(
+        yield* Effect.flip(db.insert(emailDelivery).values({ ...values, customDomainId: null })),
+      ).toMatchObject(refusedBy("email_delivery_sender_kind_check"));
+      expect(
+        yield* Effect.flip(
+          db
+            .update(emailDelivery)
+            .set({ customDomainId: null })
+            .where(eq(emailDelivery.id, sent.id)),
+        ),
+      ).toMatchObject(refusedBy("email_delivery_sender_kind_check"));
+      expect(
+        yield* Effect.flip(db.delete(customDomain).where(eq(customDomain.id, customDomainId))),
+      ).toMatchObject(refusedBy("email_delivery_custom_domain_id_custom_domain_id_fkey"));
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a Domain removed before its registration is finished gets no identity", () => {
+    const ses = { down: false };
+    let remove: Effect.Effect<void> = Effect.void;
+    const { createdIdentities, layer } = boundaries({
+      beforeKeyLoad: () => remove,
+      failCreateIdentity: () => ses.down,
+    });
     return Effect.gen(function* () {
       const services = yield* Effect.context<DB | Jobs>();
-      const senderId = yield* insertProject();
-      const claimantId = yield* insertProject();
-      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
-      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: senderId });
-      yield* sentFrom({ customDomainId, fqdn, organizationId: senderId });
-      yield* deleteCustomDomain({ customDomainId, organizationId: senderId });
-      createdIdentities.length = 0;
+      const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
 
-      // The claim is written, then removed before the add reaches the registration.
-      removeClaim = Effect.suspend(() => {
-        removeClaim = Effect.void;
-        return deleteCustomDomain({ customDomainId, organizationId: claimantId });
+      // The holder adds it again to finish the registration, and removes it before the add
+      // reaches SES.
+      remove = Effect.suspend(() => {
+        remove = Effect.void;
+        return deleteCustomDomain({ customDomainId, organizationId: holderId });
       }).pipe(Effect.provide(services), Effect.orDie);
       expect(
-        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: holderId })),
       ).toMatchObject({
         message: "Domain was removed before it was registered with SES.",
         operation: "register_identity",
       });
 
       expect(createdIdentities).toEqual([]);
-      expect(yield* domainOf(fqdn)).toMatchObject({
-        dnsRecords: [],
-        id: customDomainId,
-        organizations: [],
-        registration: null,
-      });
+      expect(yield* domainOf(fqdn)).toBeUndefined();
     }).pipe(Effect.provide(layer));
   });
 
-  /** A Domain left as a bare row: removed by the Project that sent from it. */
-  const keptDomain = Effect.fn(function* () {
-    const organizationId = yield* insertProject();
-    const fqdn = `${Bun.randomUUIDv7()}.example.test`;
-    const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
-    yield* sentFrom({ customDomainId, fqdn, organizationId });
-    yield* deleteCustomDomain({ customDomainId, organizationId });
-    return { customDomainId, fqdn };
-  });
-
   it.live("a claim whose registration failed is checked, and adding it again registers it", () => {
-    let sesDown = false;
-    const { layer, scheduled } = boundaries({ failCreateIdentity: () => sesDown });
+    const ses = { down: false };
+    const { layer, scheduled } = boundaries({ failCreateIdentity: () => ses.down });
     return Effect.gen(function* () {
-      const { customDomainId, fqdn } = yield* keptDomain();
+      const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
       const claimantId = yield* insertProject();
       const claimCheck = {
         name: "email.verify-ownership",
         payload: { customDomainId, organizationId: claimantId },
       };
+      const links = expect.arrayContaining([
+        { organizationId: holderId, ownershipVerificationStatus: "verified" },
+        { organizationId: claimantId, ownershipVerificationStatus: "not_verified" },
+      ]);
       scheduled.length = 0;
 
-      sesDown = true;
+      ses.down = true;
       expect(
         yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
       ).toMatchObject({ operation: "register_identity" });
       // The claim stands unregistered, with the check that will prove or lapse it.
-      expect(yield* domainOf(fqdn)).toMatchObject({
-        organizations: [
-          { organizationId: claimantId, ownershipVerificationStatus: "not_verified" },
-        ],
-        registration: null,
-      });
+      expect(yield* domainOf(fqdn)).toMatchObject({ organizations: links, registration: null });
       expect(scheduled).toEqual([claimCheck]);
 
-      sesDown = false;
+      ses.down = false;
       scheduled.length = 0;
       expect(yield* createCustomDomain({ fqdn, organizationId: claimantId })).toEqual({
         customDomainId,
@@ -949,9 +1376,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
 
       const registered = yield* domainOf(fqdn);
       expect(registered).toMatchObject({
-        organizations: [
-          { organizationId: claimantId, ownershipVerificationStatus: "not_verified" },
-        ],
+        organizations: links,
         registration: { region: "eu-central-1" },
       });
       expect(registered?.dnsRecords.map((record) => record.purpose)).toContain("dkim");
@@ -962,15 +1387,61 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  it.live("a claimant adding a registered Domain never checked schedules its checks", () => {
+    const { layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const {
+        claimantIds: [claimantId],
+        customDomainId,
+        fqdn,
+      } = yield* claimedDomain(1);
+      if (!claimantId) {
+        return yield* Effect.die("A claim was made");
+      }
+      // Registered, and the verification scheduled with the claim was lost before it ran.
+      expect(yield* domainOf(fqdn)).toMatchObject({
+        lastCheckedAt: null,
+        registration: { region: "eu-central-1" },
+      });
+      scheduled.length = 0;
+
+      expect(yield* createCustomDomain({ fqdn, organizationId: claimantId })).toEqual({
+        customDomainId,
+        kind: "existing",
+      });
+
+      expect(scheduled).toEqual([
+        { name: "email.verify-ownership", payload: { customDomainId, organizationId: claimantId } },
+        { name: "email.verify-custom-domain", payload: { customDomainId } },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
   it.live("two claims made at once on an unregistered Domain both stand, checked", () => {
-    const { createdIdentities, layer, scheduled } = boundaries();
+    const ses = { down: false };
+    let untilBothClaimed: Effect.Effect<void> = Effect.void;
+    const { createdIdentities, layer, scheduled } = boundaries({
+      beforeCreateIdentity: () => untilBothClaimed,
+      failCreateIdentity: () => ses.down,
+    });
     return Effect.gen(function* () {
       const db = yield* DB;
-      const { customDomainId, fqdn } = yield* keptDomain();
+      const services = yield* Effect.context<DB>();
+      const { customDomainId, fqdn } = yield* unregisteredDomain(ses);
       const claimantIds = [yield* insertProject(), yield* insertProject()];
       scheduled.length = 0;
       createdIdentities.length = 0;
 
+      // The first registration to reach SES stays there until the other claim's link has
+      // committed. That claim found the Domain unregistered too, so it goes on to register
+      // it and waits behind this one: the two always meet at the registration's check.
+      untilBothClaimed = linksOf(customDomainId).pipe(
+        Effect.filterOrFail((links) => links.length === 3),
+        Effect.retry({ schedule: Schedule.spaced("20 millis"), times: 500 }),
+        Effect.provide(services),
+        Effect.orDie,
+        Effect.asVoid,
+      );
       const claims = yield* Effect.forEach(
         claimantIds,
         (organizationId) => createCustomDomain({ fqdn, organizationId }),
@@ -982,7 +1453,10 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         { customDomainId, kind: "claim" },
       ]);
       expect(
-        (yield* linksOf(customDomainId)).map((link) => link.organizationId).toSorted(),
+        (yield* linksOf(customDomainId))
+          .filter((link) => link.ownershipVerificationStatus === "not_verified")
+          .map((link) => link.organizationId)
+          .toSorted(),
       ).toEqual(claimantIds.toSorted());
       // Registered once, by whichever claim took the identity lock first.
       expect(
@@ -998,6 +1472,56 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           payload: { customDomainId, organizationId },
         });
       }
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a claim whose check could not be scheduled is still checked, and lapses", () => {
+    let redisDown = false;
+    const { layer, scheduled } = boundaries({ failSchedule: () => redisDown });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const holderId = yield* insertProject();
+      const claimantId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: holderId });
+      const claim = { customDomainId, organizationId: claimantId };
+      scheduled.length = 0;
+
+      redisDown = true;
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+      ).toMatchObject({ operation: "schedule" });
+      redisDown = false;
+      // The claim's link is written and nothing will check it.
+      expect(yield* linkOf(customDomainId, claimantId)).toMatchObject({
+        ownershipVerificationStatus: "not_verified",
+      });
+      expect(scheduled).toEqual([]);
+
+      // The worker starts.
+      yield* emailVerifyOwnershipHandler.reconcile ?? Effect.die("The handler reconciles");
+
+      expect(scheduled).toContainEqual({ name: "email.verify-ownership", payload: claim });
+
+      // Unproven at its TTL, the check it was given removes it and leaves the holder's.
+      yield* db
+        .update(organizationDomain)
+        .set({ createdAt: new Date(Date.now() - CLAIM_TTL_MS - 60_000) })
+        .where(
+          and(
+            eq(organizationDomain.customDomainId, customDomainId),
+            eq(organizationDomain.organizationId, claimantId),
+          ),
+        );
+      yield* emailVerifyOwnershipHandler.handle(claim, {
+        attempt: 1,
+        enqueuedAt: Date.now(),
+        id: "job_verify_ownership",
+      });
+
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: holderId, ownershipVerificationStatus: "verified" },
+      ]);
     }).pipe(Effect.provide(layer));
   });
 
@@ -1040,26 +1564,165 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  /**
+   * A database of its own, created, migrated and dropped around `use`: for what reads every
+   * Domain or every Delivery, which in the shared one would take what other tests are using.
+   */
+  const ownDatabase = () => {
+    const name = `own_${Bun.randomUUIDv7().replaceAll("-", "")}`;
+    const url = new URL(testDatabaseUrl);
+    url.pathname = `/${name}`;
+    const admin = (statement: string) =>
+      Effect.promise(async () => {
+        const sql = new Bun.SQL(testDatabaseUrl);
+        try {
+          await sql.unsafe(statement);
+        } finally {
+          await sql.close();
+        }
+      });
+    return {
+      url: url.href,
+      // Migrated inside, so a migration that fails still has the database dropped. The
+      // layer's pool is closed before it is.
+      within: <A, E>(use: Effect.Effect<A, E>) =>
+        Effect.acquireUseRelease(
+          admin(`create database "${name}"`),
+          () => Effect.promise(() => migrateOnStartup(url.href)).pipe(Effect.andThen(use)),
+          () => admin(`drop database "${name}" with (force)`),
+        ),
+    };
+  };
+
+  it.live(
+    "Deliveries naming a Domain their Project lost before they were detached are detached at start",
+    () => {
+      const database = ownDatabase();
+      const { layer, published } = boundaries({ databaseUrl: database.url });
+      const backfill = Effect.gen(function* () {
+        const db = yield* DB;
+        // As a proven claim left things before it detached anything: the claimant holds the
+        // Domain, the old holder's link is gone, and its Deliveries and events name the row.
+        const takenBefore = Effect.fn(function* (deliveries: number) {
+          const {
+            claimantIds: [claimantId],
+            customDomainId,
+            fqdn,
+            holderId,
+          } = yield* claimedDomain(1);
+          if (!claimantId) {
+            return yield* Effect.die("A claim was made");
+          }
+          const first = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+          const prefix = Bun.randomUUIDv7().replaceAll("-", "");
+          yield* db.execute(sql`
+            with numbered as (select g from generate_series(2, ${deliveries}) g),
+            messages as (
+              insert into message (id, organization_app_environment_id, purpose)
+              select 'msg_' || ${prefix} || g,
+                (select organization_app_environment_id from message where id = ${first.messageId}),
+                'transactional'
+              from numbered
+            ),
+            sent as (
+              insert into email_delivery (id, message_id, custom_domain_id, status, "from", "to", subject, text)
+              select 'edlv_' || ${prefix} || g, 'msg_' || ${prefix} || g, ${customDomainId}, 'sent',
+                ${JSON.stringify({ address: `hello@${fqdn}`, normalized: `hello@${fqdn}` })}::jsonb,
+                '["to@example.com"]'::jsonb, 'Hi', 'Hi'
+              from numbered
+            )
+            insert into email_delivery_event (id, email_delivery_id, custom_domain_id, kind)
+            select 'edev_' || ${prefix} || g, 'edlv_' || ${prefix} || g, ${customDomainId}, 'delivered'
+            from numbered`);
+          yield* db
+            .update(organizationDomain)
+            .set({ ownershipVerificationStatus: "verified" })
+            .where(
+              and(
+                eq(organizationDomain.customDomainId, customDomainId),
+                eq(organizationDomain.organizationId, claimantId),
+              ),
+            );
+          yield* db
+            .delete(organizationDomain)
+            .where(
+              and(
+                eq(organizationDomain.customDomainId, customDomainId),
+                eq(organizationDomain.organizationId, holderId),
+              ),
+            );
+          return { claimantId, customDomainId, fqdn, holderId };
+        });
+        /** A Project's Deliveries and events: how many, and how many name `customDomainId`. */
+        const stateOf = Effect.fn(function* (organizationId: string, customDomainId: string) {
+          const history = yield* historyOf(organizationId);
+          return {
+            deliveries: history.length,
+            detached: history.filter(({ delivery }) => delivery.removedDomainFqdn !== null).length,
+            naming: history.filter(({ delivery }) => delivery.customDomainId === customDomainId)
+              .length,
+            namingEvents: history.filter(({ event }) => event?.customDomainId === customDomainId)
+              .length,
+          };
+        });
+
+        // More than two batches' worth for one old holder.
+        const large = yield* takenBefore(2500);
+        // An old holder that has since claimed the Domain back, unproven: still not its holder.
+        const reclaiming = yield* takenBefore(3);
+        yield* createCustomDomain({ fqdn: reclaiming.fqdn, organizationId: reclaiming.holderId });
+        // Never strays: a holder's own, with a claim pending on its Domain, and what the new
+        // holder of a taken Domain sent from it since.
+        const held = yield* claimedDomain(1);
+        yield* sentFrom({ ...held, organizationId: held.holderId });
+        yield* sentFrom({
+          customDomainId: large.customDomainId,
+          fqdn: large.fqdn,
+          organizationId: large.claimantId,
+        });
+        const kept = { deliveries: 1, detached: 0, naming: 1, namingEvents: 1 };
+
+        yield* detachStrayDeliveries;
+
+        const after = Effect.gen(function* () {
+          return {
+            held: yield* stateOf(held.holderId, held.customDomainId),
+            large: yield* stateOf(large.holderId, large.customDomainId),
+            newHolder: yield* stateOf(large.claimantId, large.customDomainId),
+            reclaiming: yield* stateOf(reclaiming.holderId, reclaiming.customDomainId),
+          };
+        });
+        const detached = yield* after;
+        expect(detached).toEqual({
+          held: kept,
+          large: { deliveries: 2500, detached: 2500, naming: 0, namingEvents: 0 },
+          newHolder: kept,
+          reclaiming: { deliveries: 3, detached: 3, naming: 0, namingEvents: 0 },
+        });
+        expect((yield* historyOf(large.holderId))[0]?.delivery).toMatchObject({
+          from: { address: `hello@${large.fqdn}` },
+          removedDomainFqdn: large.fqdn,
+        });
+
+        // Nothing is left for a second run, and it moves nothing: the old holder that proves
+        // its claim again holds a Domain none of its earlier Deliveries name.
+        yield* publishProof(published, reclaiming.customDomainId, reclaiming.holderId);
+        yield* checkOwnership(reclaiming.customDomainId, reclaiming.holderId);
+        yield* detachStrayDeliveries;
+        expect(yield* after).toEqual(detached);
+      });
+      return database.within(backfill.pipe(Effect.provide(layer)));
+    },
+    60_000,
+  );
+
   it.live(
     "the sweep of every Domain removes those without a link, and only those",
     () => {
-      // A database of its own: the sweep reads every Domain, and in the shared one it would
-      // take the Domains other tests have yet to link.
-      const name = `sweep_${Bun.randomUUIDv7().replaceAll("-", "")}`;
-      const url = new URL(testDatabaseUrl);
-      url.pathname = `/${name}`;
-      const admin = (statement: string) =>
-        Effect.promise(async () => {
-          const sql = new Bun.SQL(testDatabaseUrl);
-          try {
-            await sql.unsafe(statement);
-          } finally {
-            await sql.close();
-          }
-        });
+      const database = ownDatabase();
       let refused: string | undefined;
       const { deletedIdentities, enqueued, layer } = boundaries({
-        databaseUrl: url.href,
+        databaseUrl: database.url,
         failEnqueueFor: () => refused,
       });
 
@@ -1075,13 +1738,27 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           db.delete(organization).where(eq(organization.id, organizationId));
         // Their Deliveries outlive the Projects that held the Domains they were sent from.
         const senderIds = [yield* insertProject(), yield* insertProject()] as const;
+        const deliveriesOf = (organizationId: string) =>
+          historyOf(organizationId).pipe(
+            Effect.map((history) =>
+              history.map(({ delivery }) => ({
+                customDomainId: delivery.customDomainId,
+                removedDomainFqdn: delivery.removedDomainFqdn,
+              })),
+            ),
+          );
 
         const linked = yield* add();
         const unlinked = yield* add();
         yield* deleteProject(unlinked.organizationId);
+        // As a removal left it before a Domain's row went with its last link: unlinked and
+        // unregistered, kept for the Deliveries that name it.
         const bare = yield* add();
         yield* sentFrom({ ...bare, organizationId: senderIds[0] });
-        yield* deleteCustomDomain(bare);
+        yield* deleteProject(bare.organizationId);
+        yield* db
+          .delete(emailDomainRegistration)
+          .where(eq(emailDomainRegistration.customDomainId, bare.customDomainId));
         const sent = yield* add();
         yield* sentFrom({ ...sent, organizationId: senderIds[1] });
         yield* deleteProject(sent.organizationId);
@@ -1090,7 +1767,6 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         refused = failing.fqdn;
         enqueued.length = 0;
 
-        const kept = { dnsRecords: [], organizations: [], registration: null };
         const after = Effect.gen(function* () {
           return {
             bare: yield* domainOf(bare.fqdn),
@@ -1109,8 +1785,15 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           registration: { region: "eu-central-1" },
         });
         expect(swept.unlinked).toBeUndefined();
-        expect(swept.bare).toMatchObject({ ...kept, id: bare.customDomainId });
-        expect(swept.sent).toMatchObject({ ...kept, id: sent.customDomainId });
+        // Those that sent go too, and their Deliveries stay with the Projects that sent them.
+        expect(swept.bare).toBeUndefined();
+        expect(swept.sent).toBeUndefined();
+        expect(yield* deliveriesOf(senderIds[0])).toEqual([
+          { customDomainId: null, removedDomainFqdn: bare.fqdn },
+        ]);
+        expect(yield* deliveriesOf(senderIds[1])).toEqual([
+          { customDomainId: null, removedDomainFqdn: sent.fqdn },
+        ]);
         // The one whose removal failed is as it was, and did not stop the others.
         expect(swept.failing).toMatchObject({
           id: failing.customDomainId,
@@ -1118,25 +1801,16 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         });
         expect(
           enqueued.map((job) => (job.payload as { readonly fqdn: string }).fqdn).toSorted(),
-        ).toEqual([unlinked.fqdn, sent.fqdn].toSorted());
+        ).toEqual([unlinked.fqdn, bare.fqdn, sent.fqdn].toSorted());
 
         yield* removeUnlinkedDomains();
 
         expect(yield* after).toEqual(swept);
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(3);
         expect(deletedIdentities).toEqual([]);
       });
 
-      return Effect.acquireUseRelease(
-        admin(`create database "${name}"`),
-        // Migrated here, so a migration that fails still has the database dropped. The
-        // layer's pool is closed before it is.
-        () =>
-          Effect.promise(() => migrateOnStartup(url.href)).pipe(
-            Effect.andThen(sweeps.pipe(Effect.provide(layer))),
-          ),
-        () => admin(`drop database "${name}" with (force)`),
-      );
+      return database.within(sweeps.pipe(Effect.provide(layer)));
     },
     30_000,
   );

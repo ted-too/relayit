@@ -12,7 +12,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { domainUpdated } from "@repo/webhooks/events";
-import { and, eq, not, sql } from "drizzle-orm";
+import { and, eq, not, type SQL, sql } from "drizzle-orm";
 import { Clock, Data, Duration, Effect, Schema } from "effect";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 
@@ -94,6 +94,38 @@ const heldInRegion = ({ defaultRegion, organizationId, region }: ProjectInRegion
         and coalesce(${emailDomainRegistration.region}, ${defaultRegion}) = ${region})`,
   );
 
+/**
+ * Takes the rows of Domains a Project holds in a region, in id order, before anything writes
+ * them: all of them, or those `among` picks. A pause or its lifting writes several Domains,
+ * and several run at once: SES refuses every send of a paused Project together, each from a
+ * Domain of its own, and reports the pause to the api besides. An update takes its rows in
+ * whatever order it finds them, so each writer takes them here first, in one order, or two
+ * wait on each other. The delivery handler takes all of them before its Delivery, the order
+ * a removal or a claim transfer takes a Domain and its Deliveries in.
+ *
+ * `NO KEY UPDATE` is what the update itself takes: it keeps out a removal or transfer, which
+ * take the row `FOR UPDATE`, and lets through an accept or an SES notification, which take
+ * it `KEY SHARE`. A row another transaction has written and not committed is judged as it
+ * was, as an update judges it, so lifting one pause never waits on another being made.
+ */
+export const lockProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion, among?: SQL) =>
+  tx
+    .select({ id: customDomain.id })
+    .from(customDomain)
+    .where(and(among, heldInRegion(input)))
+    .orderBy(customDomain.id)
+    .for("no key update")
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "lock",
+            organizationId: input.organizationId,
+          }),
+      ),
+    );
+
 /** Tells a Project that a Domain it holds was paused or unpaused, whoever did it. */
 export const emitDomainUpdated = (
   tx: DatabaseTransaction,
@@ -124,10 +156,12 @@ export const emitDomainUpdated = (
  */
 export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) =>
   Effect.gen(function* () {
+    const unpaused = not(customDomain.isPaused);
+    yield* lockProjectDomains(tx, input, unpaused);
     const paused = yield* tx
       .update(customDomain)
       .set({ isPaused: true, pausedReason: "project_sending_pause" })
-      .where(and(not(customDomain.isPaused), heldInRegion(input)))
+      .where(and(unpaused, heldInRegion(input)))
       .returning({
         id: customDomain.id,
         isPaused: customDomain.isPaused,
@@ -171,16 +205,15 @@ export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInReg
  */
 const unpauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) =>
   Effect.gen(function* () {
+    const pausedHere = and(
+      customDomain.isPaused,
+      eq(customDomain.pausedReason, "project_sending_pause"),
+    );
+    yield* lockProjectDomains(tx, input, pausedHere);
     const unpaused = yield* tx
       .update(customDomain)
       .set({ isPaused: false, pausedReason: null })
-      .where(
-        and(
-          customDomain.isPaused,
-          eq(customDomain.pausedReason, "project_sending_pause"),
-          heldInRegion(input),
-        ),
-      )
+      .where(and(pausedHere, heldInRegion(input)))
       .returning({
         id: customDomain.id,
         isPaused: customDomain.isPaused,

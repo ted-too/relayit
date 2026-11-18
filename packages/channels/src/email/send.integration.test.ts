@@ -46,6 +46,7 @@ import {
   type EmailBackendService,
   EmailBackendUnavailable,
 } from "./backend";
+import { completeDomainClaimTransfer, deleteCustomDomain } from "./custom-domain/lifecycle";
 import { emailDeliverJob } from "./delivery/job";
 import { makeEmailDeliverHandler } from "./delivery/handler";
 import { MessageDeliveryRetryableError } from "../messages/delivery";
@@ -1210,6 +1211,385 @@ describe("an accepted email send", () => {
       yield* acceptTransactionalEmail(
         sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
       );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  /** Another Project adds the FQDN a removed Domain had: a new Domain, verified and sending. */
+  const addedByAnotherProject = (fqdn: string) =>
+    Effect.gen(function* () {
+      const db = yield* DB;
+      const other = yield* seedProject();
+      yield* db.update(customDomain).set({ fqdn }).where(eq(customDomain.id, other.customDomainId));
+      return other;
+    });
+
+  it.live("ends failed, unsent, when its Domain is removed after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      yield* deleteCustomDomain(project);
+      // The FQDN sending again, for another Project, sends nothing of the removed Domain's.
+      const other = yield* addedByAnotherProject(project.fqdn);
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "The Project no longer holds the sending Domain" },
+        from: { address: `hello@${project.fqdn}` },
+        removedDomainFqdn: project.fqdn,
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+      expect(yield* eventsFor(other.organizationId, accepted.deliveryId)).toEqual([]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is not sent when its Domain is removed while the run was loading attachments", () => {
+    const backend = makeBackend();
+    const storage = makeStorageWithDownloadHook();
+    return Effect.gen(function* () {
+      const context = yield* Effect.context<DB | Jobs>();
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [ATTACHMENT]),
+      );
+      // The run has read the Delivery with its Domain, registered and sending; by the time
+      // it claims, the Domain is gone and the same FQDN is another Project's.
+      storage.hook.whileLoading = deleteCustomDomain(project).pipe(
+        Effect.andThen(addedByAnotherProject(project.fqdn)),
+        Effect.provide(context),
+        Effect.orDie,
+      );
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "The Project no longer holds the sending Domain" },
+        removedDomainFqdn: project.fqdn,
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
+  });
+
+  /** Another session's transaction holding a Domain's row, as a removal or transfer does. */
+  const holdDomainRow = (customDomainId: string) =>
+    Effect.promise(async () => {
+      const sql = new Bun.SQL(testDatabaseUrl, { max: 1 });
+      const session = await sql.reserve();
+      await session`begin`;
+      await session`select id from custom_domain where id = ${customDomainId} for update`;
+      const [backend] = await session`select pg_backend_pid() as pid`;
+      const { pid } = backend as { readonly pid: number };
+      return {
+        session,
+        // Until another backend is waiting on a lock this session holds, asked of Postgres
+        // from a session of its own, so what follows always finds the other side waiting.
+        blocksAnother: async () => {
+          const watch = new Bun.SQL(testDatabaseUrl, { max: 1 });
+          try {
+            for (let tries = 0; tries < 400; tries += 1) {
+              const waiting = await watch`select 1 from pg_stat_activity
+                where wait_event_type = 'Lock' and ${pid} = any(pg_blocking_pids(pid))`;
+              if (waiting.length > 0) {
+                return;
+              }
+              await Bun.sleep(25);
+            }
+            throw new Error("No backend came to wait on the Domain's row");
+          } finally {
+            await watch.close();
+          }
+        },
+        end: async () => {
+          await session`commit`;
+          session.release();
+          await sql.close();
+        },
+      };
+    });
+
+  it.live("refuses a send whose Project loses the Domain as it is accepted", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject({ dailySends: 1 });
+      // The Domain is being taken from the Project while the accept, which has already
+      // resolved its sender, goes on to write the Delivery.
+      const taking = yield* holdDomainRow(project.customDomainId);
+      const accepting = yield* Effect.forkChild(
+        Effect.result(
+          acceptTransactionalEmail(
+            sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+          ),
+        ),
+      );
+      const [link] = yield* Effect.promise(async () => {
+        await taking.blocksAnother();
+        const links = await taking.session`delete from organization_domain
+          where custom_domain_id = ${project.customDomainId} returning ownership_token`;
+        await taking.end();
+        return links as { readonly ownership_token: string }[];
+      });
+
+      expect(yield* Fiber.join(accepting)).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "EmailAcceptRejected", code: "invalid_from_address" },
+      });
+      // No Delivery was written naming a Domain the Project no longer holds.
+      expect(
+        yield* db
+          .select({ id: emailDelivery.id })
+          .from(emailDelivery)
+          .where(eq(emailDelivery.customDomainId, project.customDomainId)),
+      ).toEqual([]);
+      // Given the Domain back, the one send a day is still the Project's to make.
+      yield* db.insert(organizationDomain).values({
+        customDomainId: project.customDomainId,
+        organizationId: project.organizationId,
+        ownershipToken: link?.ownership_token ?? Bun.randomUUIDv7(),
+        ownershipVerificationStatus: "verified",
+      });
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("a Project Sending Pause never pauses a Domain another Project has taken", () => {
+    let ours = "";
+    let transfer: Effect.Effect<unknown> = Effect.void;
+    const backend = makeBackend((sender) =>
+      sender === ours
+        ? // The other Project's claim is proven while SES is answering this send.
+          Effect.suspend(() => transfer).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new EmailBackendRejected({
+                  reason: "project_sending_paused",
+                  region: "eu-central-1",
+                }),
+              ),
+            ),
+          )
+        : accept,
+    );
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const other = yield* seedProject();
+      ours = project.fqdn;
+      yield* db.insert(organizationDomain).values({
+        customDomainId: project.customDomainId,
+        organizationId: other.organizationId,
+        ownershipToken: Bun.randomUUIDv7(),
+      });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      transfer = completeDomainClaimTransfer({
+        customDomainId: project.customDomainId,
+        db,
+        organizationId: other.organizationId,
+        proof: {},
+      }).pipe(Effect.orDie);
+
+      yield* runWorker;
+
+      // The send fails for its own Project, and the Domain, now the other's, sends on.
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "SES paused sending for this Project" },
+        removedDomainFqdn: project.fqdn,
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+      ]);
+      expect(
+        yield* db.query.customDomain.findFirst({
+          columns: { isPaused: true, pausedReason: true },
+          where: { id: project.customDomainId },
+        }),
+      ).toEqual({ isPaused: false, pausedReason: null });
+      expect(
+        yield* db.query.organizationDomain.findMany({
+          columns: { organizationId: true, ownershipVerificationStatus: true },
+          where: { customDomainId: project.customDomainId },
+        }),
+      ).toEqual([
+        { organizationId: other.organizationId, ownershipVerificationStatus: "verified" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("two sends of one Project refused for its pause at once both end failed", () => {
+    // SES pauses a Project and refuses everything of its in flight, each send from a Domain
+    // of its own: both answers arrive together, once both sends have been claimed.
+    let ours: readonly string[] = [];
+    let inFlight = 0;
+    let bothInFlight: (() => void) | undefined;
+    const together = new Promise<void>((resolve) => {
+      bothInFlight = resolve;
+    });
+    const backend = makeBackend((sender) => {
+      if (!ours.includes(sender)) {
+        return accept;
+      }
+      inFlight += 1;
+      if (inFlight === 2) {
+        bothInFlight?.();
+      }
+      return Effect.promise(() => together).pipe(
+        Effect.andThen(
+          Effect.fail(
+            new EmailBackendRejected({ reason: "project_sending_paused", region: "eu-central-1" }),
+          ),
+        ),
+      );
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const redis = yield* Redis;
+      const project = yield* seedProject();
+      const secondId = typeid("domn").toString();
+      const second = `${secondId}.relayit.test`;
+      yield* db.insert(customDomain).values({
+        dkimPrivateKey: "unused",
+        dkimPublicKey: "unused",
+        dkimSelector: "relayit",
+        fqdn: second,
+        id: secondId,
+        verificationStatus: "verified",
+      });
+      yield* db.insert(organizationDomain).values({
+        customDomainId: secondId,
+        organizationId: project.organizationId,
+        ownershipToken: Bun.randomUUIDv7(),
+        ownershipVerificationStatus: "verified",
+      });
+      yield* db.insert(emailDomainRegistration).values({
+        customDomainId: secondId,
+        region: "eu-central-1",
+        verificationStatus: "verified",
+      });
+      ours = [project.fqdn, second];
+      const accepted = yield* Effect.forEach(ours, (fqdn) =>
+        acceptTransactionalEmail(sendInput(project, `hello@${fqdn}`, "someone@example.com")),
+      );
+
+      // One pass of a worker running both at once.
+      yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: deliverer.stream });
+      yield* publishOutboxBatch({ batchSize: 1000, claimTtlMs: 30_000, concurrency: 1 });
+      yield* processJobBatch([deliverer], {
+        blockMs: 100,
+        concurrency: 2,
+        consumer: "test",
+        count: 10,
+      });
+
+      // Neither run was ended as a deadlock and left for a retry.
+      for (const { deliveryId } of accepted) {
+        expect(yield* deliveryOf(deliveryId)).toMatchObject({
+          error: { message: "SES paused sending for this Project" },
+          status: "failed",
+        });
+        expect(yield* eventsFor(project.organizationId, deliveryId)).toMatchObject([
+          { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+        ]);
+      }
+      for (const id of [project.customDomainId, secondId]) {
+        expect(
+          yield* db.query.customDomain.findFirst({
+            columns: { isPaused: true, pausedReason: true },
+            where: { id },
+          }),
+        ).toEqual({ isPaused: true, pausedReason: "project_sending_pause" });
+      }
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("a Project Sending Pause and a removal of its Domain never deadlock", () => {
+    let ours = "";
+    let project: Effect.Success<ReturnType<typeof seedProject>> | undefined;
+    let removal: Promise<void> | undefined;
+    const backend = makeBackend((sender) =>
+      sender === ours && project
+        ? // A removal takes the Domain's row while SES is answering, then goes on to the
+          // Domain's Deliveries, this one among them, while the pause is being written.
+          holdDomainRow(project.customDomainId).pipe(
+            Effect.tap((removing) =>
+              Effect.sync(() => {
+                const { customDomainId, fqdn } = project ?? { customDomainId: "", fqdn: "" };
+                removal = (async () => {
+                  await removing.blocksAnother();
+                  await removing.session`delete from organization_domain
+                    where custom_domain_id = ${customDomainId}`;
+                  await removing.session`update email_delivery
+                    set custom_domain_id = null, removed_domain_fqdn = ${fqdn}
+                    where custom_domain_id = ${customDomainId}`;
+                  await removing.end();
+                })();
+                // Reported where it is awaited, below.
+                removal.catch(() => undefined);
+              }),
+            ),
+            Effect.andThen(
+              Effect.fail(
+                new EmailBackendRejected({
+                  reason: "project_sending_paused",
+                  region: "eu-central-1",
+                }),
+              ),
+            ),
+          )
+        : accept,
+    );
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+
+      // Neither was ended by Postgres as a deadlock: the removal finished, and the one run
+      // failed the Delivery and told the Project.
+      yield* Effect.promise(() => removal ?? Promise.reject(new Error("no removal ran")));
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        customDomainId: null,
+        error: { message: "SES paused sending for this Project" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+      ]);
+      // The Project no longer holds it, so it is not paused for the Project's reputation.
+      expect(
+        yield* db.query.customDomain.findFirst({
+          columns: { isPaused: true },
+          where: { id: project.customDomainId },
+        }),
+      ).toEqual({ isPaused: false });
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 

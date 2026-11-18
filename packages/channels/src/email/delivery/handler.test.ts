@@ -99,8 +99,12 @@ const makeDb = (overrides: {
     },
     select: () => ({
       from: () => ({
-        // No recipient is suppressed; send.integration.test.ts checks suppression as SQL.
-        where: () => Effect.succeed([]),
+        // No recipient is suppressed; send.integration.test.ts checks suppression as SQL,
+        // and that the Domains' rows are locked in an order that can't deadlock.
+        where: () =>
+          Object.assign(Effect.succeed([]), {
+            orderBy: () => ({ for: () => Effect.succeed([]) }),
+          }),
       }),
     }),
     transaction: <A, E, R>(body: (tx: typeof db) => Effect.Effect<A, E, R>) => body(db),

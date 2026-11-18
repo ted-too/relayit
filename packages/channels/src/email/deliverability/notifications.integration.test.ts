@@ -3,19 +3,22 @@ import { JobsLive } from "@repo/jobs";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
   contact,
+  customDomain,
   emailDelivery,
   emailDeliveryEvent,
   message,
   organization,
   organizationAppEnvironment,
+  organizationDomain,
   sandboxDomain,
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
 import { makeRedisLive } from "@repo/redis";
 import { eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import { typeid } from "typeid-js";
+import { deleteCustomDomain } from "../custom-domain/lifecycle";
 import { ingestDeliveryEvents, type NormalizedDeliveryEvent } from "./notifications";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
@@ -105,7 +108,7 @@ const sentDelivery = Effect.gen(function* () {
       webhooks: webhooks.map(({ type }) => type),
     };
   });
-  return { deliveryId: delivery?.id ?? "", ingest, providerMessageId, recorded };
+  return { deliveryId: delivery?.id ?? "", ingest, organizationId, providerMessageId, recorded };
 });
 
 describe("ingestDeliveryEvents", () => {
@@ -275,6 +278,201 @@ describe("ingestDeliveryEvents", () => {
           suppressed: [{ email: "to@example.com", reason: "hard_bounce", severity: "all" }],
           webhooks: ["delivery.bounced"],
         });
+      }).pipe(Effect.provide(services)),
+  );
+
+  it.live(
+    "a bounce for a Delivery whose Domain is gone is recorded and suppresses, and touches no other Domain",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DB;
+        const { deliveryId, ingest, organizationId, recorded } = yield* sentDelivery;
+        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+        const heldDomain = (projectId: string) =>
+          Effect.gen(function* () {
+            const [domain] = yield* db
+              .insert(customDomain)
+              .values({
+                dkimPrivateKey: "private",
+                dkimPublicKey: "public",
+                dkimSelector: "relayit",
+                fqdn,
+                verificationStatus: "verified",
+              })
+              .returning({ id: customDomain.id });
+            if (!domain) {
+              return yield* Effect.die("The Domain was written");
+            }
+            yield* db.insert(organizationDomain).values({
+              customDomainId: domain.id,
+              organizationId: projectId,
+              ownershipToken: Bun.randomUUIDv7(),
+              ownershipVerificationStatus: "verified",
+            });
+            return domain.id;
+          });
+        const eventSenders = db
+          .select({
+            customDomainId: emailDeliveryEvent.customDomainId,
+            kind: emailDeliveryEvent.kind,
+          })
+          .from(emailDeliveryEvent)
+          .where(eq(emailDeliveryEvent.emailDeliveryId, deliveryId))
+          .orderBy(emailDeliveryEvent.createdAt);
+
+        // Sent from the Project's own Domain, and reported delivered while it was held.
+        const customDomainId = yield* heldDomain(organizationId);
+        yield* db
+          .update(emailDelivery)
+          .set({ customDomainId, sandboxDomainId: null })
+          .where(eq(emailDelivery.id, deliveryId));
+        yield* ingest({
+          kind: "delivered",
+          notificationId: Bun.randomUUIDv7(),
+          raw: {},
+          recipients: ["to@example.com"],
+          suppress: false,
+        });
+        expect(yield* eventSenders).toEqual([{ customDomainId, kind: "delivered" }]);
+
+        // The Project removes the Domain and another adds the same FQDN: a new Domain.
+        yield* deleteCustomDomain({ customDomainId, organizationId });
+        const otherId = typeid("orgn").toString();
+        yield* db.insert(organization).values({
+          id: otherId,
+          name: "Next holder",
+          slug: `next-${Bun.randomUUIDv7()}`,
+        });
+        const nextDomainId = yield* heldDomain(otherId);
+
+        yield* ingest({
+          kind: "bounced",
+          notificationId: Bun.randomUUIDv7(),
+          raw: { bounce: { bounceType: "Permanent" } },
+          recipients: ["to@example.com"],
+          suppress: true,
+        });
+
+        // Both outcomes are the Delivery's still, the address is suppressed where it was
+        // sent from, and the sender hears of the bounce.
+        expect(yield* eventSenders).toEqual([
+          { customDomainId: null, kind: "delivered" },
+          { customDomainId: null, kind: "bounced" },
+        ]);
+        expect(yield* recorded).toEqual({
+          events: ["delivered", "bounced"],
+          suppressed: [{ email: "to@example.com", reason: "hard_bounce", severity: "all" }],
+          webhooks: ["delivery.delivered", "delivery.bounced"],
+        });
+        // The Domain that has the FQDN now gains no event and is not paused.
+        expect(
+          yield* db
+            .select({ id: emailDeliveryEvent.id })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.customDomainId, nextDomainId)),
+        ).toEqual([]);
+        expect(
+          yield* db
+            .select({ isPaused: customDomain.isPaused, status: customDomain.verificationStatus })
+            .from(customDomain)
+            .where(eq(customDomain.fqdn, fqdn)),
+        ).toEqual([{ isPaused: false, status: "verified" }]);
+        expect(
+          yield* db
+            .select({ type: webhookEvent.type })
+            .from(webhookEvent)
+            .where(eq(webhookEvent.organizationId, otherId)),
+        ).toEqual([]);
+      }).pipe(Effect.provide(services)),
+  );
+
+  it.live(
+    "a bounce that read its Delivery before the Domain was taken from its Project names no Domain",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DB;
+        const { deliveryId, ingest, organizationId } = yield* sentDelivery;
+        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+        const [domain] = yield* db
+          .insert(customDomain)
+          .values({
+            dkimPrivateKey: "private",
+            dkimPublicKey: "public",
+            dkimSelector: "relayit",
+            fqdn,
+            verificationStatus: "verified",
+          })
+          .returning({ id: customDomain.id });
+        if (!domain) {
+          return yield* Effect.die("The Domain was written");
+        }
+        yield* db.insert(organizationDomain).values({
+          customDomainId: domain.id,
+          organizationId,
+          ownershipToken: Bun.randomUUIDv7(),
+          ownershipVerificationStatus: "verified",
+        });
+        yield* db
+          .update(emailDelivery)
+          .set({ customDomainId: domain.id, sandboxDomainId: null })
+          .where(eq(emailDelivery.id, deliveryId));
+
+        // Another session is taking the Domain from the Project: it holds the Domain's row,
+        // as a removal or a claim transfer does, and detaches the Delivery before it commits.
+        // The ingest has read the Delivery, still naming the Domain, by then.
+        const sql = new Bun.SQL(testDatabaseUrl, { max: 1 });
+        const taking = yield* Effect.promise(async () => {
+          const session = await sql.reserve();
+          await session`begin`;
+          await session`select id from custom_domain where id = ${domain.id} for update`;
+          const [backend] = await session`select pg_backend_pid() as pid`;
+          return Object.assign(session, { pid: (backend as { readonly pid: number }).pid });
+        });
+        const bounce = yield* Effect.forkChild(
+          ingest({
+            kind: "bounced",
+            notificationId: Bun.randomUUIDv7(),
+            raw: { bounce: { bounceType: "Permanent" } },
+            recipients: ["to@example.com"],
+            suppress: true,
+          }),
+        );
+        yield* Effect.promise(async () => {
+          // Until the ingest is waiting on the Domain's row, asked of Postgres from a session
+          // of its own, so the detach always lands while it waits.
+          const watch = new Bun.SQL(testDatabaseUrl, { max: 1 });
+          try {
+            for (let tries = 0; ; tries += 1) {
+              const waiting = await watch`select 1 from pg_stat_activity
+                where wait_event_type = 'Lock' and ${taking.pid} = any(pg_blocking_pids(pid))`;
+              if (waiting.length > 0) {
+                break;
+              }
+              if (tries >= 400) {
+                throw new Error("The ingest never came to wait on the Domain's row");
+              }
+              await Bun.sleep(25);
+            }
+          } finally {
+            await watch.close();
+          }
+          await taking`update email_delivery set custom_domain_id = null, removed_domain_fqdn = ${fqdn}
+            where id = ${deliveryId}`;
+          await taking`commit`;
+          taking.release();
+          await sql.close();
+        });
+        yield* Fiber.join(bounce);
+
+        expect(
+          yield* db
+            .select({
+              customDomainId: emailDeliveryEvent.customDomainId,
+              kind: emailDeliveryEvent.kind,
+            })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.emailDeliveryId, deliveryId)),
+        ).toEqual([{ customDomainId: null, kind: "bounced" }]);
       }).pipe(Effect.provide(services)),
   );
 

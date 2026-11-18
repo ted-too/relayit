@@ -1,9 +1,14 @@
 import { Jobs } from "@repo/jobs";
 import { type Database, DB } from "@repo/persistence/db/effect";
-import { emailDelivery, message } from "@repo/persistence/db/schema";
+import {
+  customDomain,
+  emailDelivery,
+  message,
+  organizationDomain,
+} from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { contactUpdated, messageScheduled } from "@repo/webhooks/events";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Cause, Data, DateTime, Effect, Result, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import {
@@ -256,6 +261,46 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
                 }),
             ),
           );
+          if (sender.kind === "custom") {
+            // The sender was resolved before this transaction, and the Project's link to
+            // the Domain may have gone since. Whatever takes a link holds the Domain's row
+            // while it detaches the Project's Deliveries from it, so the row is taken here
+            // first and the link read after: this Delivery is then written before that, and
+            // detached with the rest, or not at all.
+            const held = yield* tx
+              .select({ id: customDomain.id })
+              .from(customDomain)
+              .where(eq(customDomain.id, sender.customDomainId))
+              .for("key share")
+              .pipe(
+                Effect.andThen(
+                  tx
+                    .select({ organizationId: organizationDomain.organizationId })
+                    .from(organizationDomain)
+                    .where(
+                      and(
+                        eq(organizationDomain.customDomainId, sender.customDomainId),
+                        eq(organizationDomain.organizationId, input.organizationId),
+                        eq(organizationDomain.ownershipVerificationStatus, "verified"),
+                      ),
+                    ),
+                ),
+                Effect.mapError(
+                  (cause) =>
+                    new EmailAcceptPersistenceError({
+                      cause,
+                      messageId,
+                      operation: "insert_email_delivery",
+                    }),
+                ),
+              );
+            if (held.length === 0) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_from_address",
+                message: "The Project no longer holds the Domain of the From address.",
+              });
+            }
+          }
           yield* tx
             .insert(message)
             .values({

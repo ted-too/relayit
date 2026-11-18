@@ -17,6 +17,7 @@ export {
   createCustomDomain,
   type DeleteCustomDomainInput,
   deleteCustomDomain,
+  detachStrayDeliveries,
   type PauseCustomDomainInput,
   pauseCustomDomain,
   removeDeletedProjectDomains,
