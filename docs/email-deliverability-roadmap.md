@@ -26,9 +26,11 @@ solutions so this can be picked up later.
   `formatTxtRecordContent` (Cloudflare requirement).
 - **Tri-state DNS record status** (`pending` / `active` / `missing`) that
   distinguishes never-seen from regressed.
-- **Idempotent SES create/delete** (adopt `AlreadyExistsException`, ignore
-  `NotFoundException`) so re-adding a domain can't be blocked by an orphaned
-  identity.
+- **Idempotent SES create/delete** (an identity that already exists is taken
+  only when it signs with the Domain's own DKIM selector, a removed Domain's is
+  recorded and replaced, `NotFoundException` is ignored) so re-adding a domain
+  can't be blocked by an identity Relayit left, and never takes one it did not
+  make.
 - **Bounce & complaint handling + suppression** (issue 2): provider-registered
   webhooks at `POST /webhooks/:vendorId/:productId`, SES configuration set +
   SNS auto-provisioning, `emailDeliveryEvent` ingest, suppression on `contact`
