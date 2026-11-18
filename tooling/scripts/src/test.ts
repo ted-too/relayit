@@ -5,7 +5,7 @@
  * non-zero if any did. Set both TEST_DATABASE_URL and TEST_REDIS_URL to use your own.
  */
 import * as NodePath from "node:path";
-import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { migrateDatabase } from "@repo/persistence/db/migrate";
 import { ROOT } from "./root-env";
 
 const RUN_LABEL = "relayit.test-run";
@@ -134,7 +134,7 @@ try {
     process.env.TEST_DATABASE_URL && process.env.TEST_REDIS_URL
       ? { databaseUrl: process.env.TEST_DATABASE_URL, redisUrl: process.env.TEST_REDIS_URL }
       : await startServices();
-  await migrateOnStartup(services.databaseUrl);
+  await migrateDatabase(services.databaseUrl);
 
   const env = {
     ...process.env,

@@ -23,7 +23,8 @@ RUN groupadd --system --gid 953 relayit && \
 ENV HOME=/home/relayit \
     TMPDIR=/tmp \
     BUN_TMPDIR=/tmp \
-    XDG_CACHE_HOME=/home/relayit/.cache
+    XDG_CACHE_HOME=/home/relayit/.cache \
+    DRIZZLE_MIGRATIONS_FOLDER=/app/drizzle
 
 # This install runs as root with XDG_CACHE_HOME set, so bun creates its cache
 # under /home/relayit as root; chown it back or runtime installs fail (EACCES).
@@ -36,6 +37,8 @@ RUN echo '{"dependencies":{"react": "^19.3.1", "react-dom": "^19.3.1", "@react-e
 
 # No migrations: the worker assumes the schema the api (or the builder) migrated.
 COPY --from=builder --chown=relayit:relayit /app/apps/worker/build ./
+# Read, never applied: the worker checks the database has them before it takes a job.
+COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
 
 # The job worker: no port, no HTTP. It exits non-zero on a fatal failure for the platform

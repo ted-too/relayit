@@ -1,5 +1,5 @@
 import { LoggingLive, logEffectFailure } from "@repo/logging";
-import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { requireMigrated } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
 import { Cause, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
@@ -10,8 +10,7 @@ import { makeAppLayers } from "./layers";
 const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* templateBuilderConfig;
-    yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
-    yield* Effect.logInfo("Database migrations up to date");
+    yield* requireMigrated({ databaseUrl: Redacted.value(config.databaseUrl) });
 
     const httpApp = Layer.mergeAll(
       RpcServer.layer(TemplatingBuilderRpcs).pipe(

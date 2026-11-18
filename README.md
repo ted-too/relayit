@@ -57,12 +57,24 @@ docker compose logs -f
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>` — the public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), Better Auth (`/auth/*`) and the dashboard's operations (`/config`, `/projects/*`); applies migrations on start
-- `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port, never migrates
+- `ghcr.io/ted-too/relayit-api:<tag>` — the public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), Better Auth (`/auth/*`) and the dashboard's operations (`/config`, `/projects/*`); also carries the migrate step, `bun run migrate.js`
+- `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port
 - `ghcr.io/ted-too/relayit-web:<tag>` — the dashboard: static files that call the api from the browser
 - `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)
 
-Prefer an env file (same keys as [env.example](env.example)):
+Prefer an env file (same keys as [env.example](env.example)).
+
+### Migrate
+
+No service migrates the database as it starts. Run the migrate step to completion first, on every install and every upgrade, from the api image of the version you are about to start; it exits 0 when the database is current. A service started before it waits five minutes for the database to catch up, then exits.
+
+```bash
+docker run --rm \
+  -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
+  ghcr.io/ted-too/relayit-api:alpha bun run migrate.js
+```
+
+### API
 
 ```bash
 docker run -d \
@@ -76,7 +88,7 @@ docker run -d \
 
 ### Worker
 
-Runs every background job. Without it, sends are accepted and queue but never go out. Start it once the api has migrated the database.
+Runs every background job. Without it, sends are accepted and queue but never go out. Start it once the migrate step has run.
 
 ```bash
 docker run -d \

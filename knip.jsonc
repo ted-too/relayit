@@ -18,7 +18,8 @@
       ],
     },
     "apps/api": {
-      "entry": ["src/index.ts"],
+      // The api, and the release's migrate step its image also carries.
+      "entry": ["src/index.ts", "src/migrate.ts"],
       // The bundle inlines better-auth through @repo/persistence; @opentelemetry/api is an
       // optional peer of @better-auth/core that this package provides for it.
       "ignoreDependencies": ["@opentelemetry/api", "better-auth"],

@@ -47,7 +47,7 @@
   },
   "scripts": {
     "prepare": "effect-tsgo patch && vp config --no-agent",
-    "dev": "vp run -r --parallel dev",
+    "dev": "bun run db:migrate && vp run --filter './apps/*' --parallel dev",
     "build": "vp run --filter './apps/*' build",
     "typecheck": "vp run -r typecheck",
     "test": "bun --no-env-file tooling/scripts/src/test.ts",

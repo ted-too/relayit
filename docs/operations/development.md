@@ -7,7 +7,7 @@ bun install          # also patches tsc and installs the commit hook
 cp .env.example .env # then point DATABASE_URL at an empty local database
 bun run db:migrate
 bun run db:seed      # a user, a Project, a Domain and an API key; it prints how to use them
-bun run dev          # dashboard :3000, site :3001, api :3005, builder :3006, and the worker
+bun run dev          # migrates, then dashboard :3000, site :3001, api :3005, builder :3006, and the worker
 ```
 
 For a fresh start, drop and recreate the database, then migrate and seed again. Tests need no `.env`.
@@ -81,4 +81,4 @@ Tests are Vitest, run through Vite+ under Bun: each package's `test` script is `
 
 ## Schema changes
 
-Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate`, or the next start of the api or builder, applies it; the worker never migrates. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.
+Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate` applies it, and `bun run dev` runs that before it starts the apps. An app never migrates: one started against a database that lacks a migration it carries (a dev script run alone, or an app that `--watch` restarts after a `db:generate`) logs what is missing, waits five minutes for it, then exits. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.

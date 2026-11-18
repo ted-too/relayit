@@ -42,4 +42,10 @@ COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/re
 USER relayit
 EXPOSE 8080
 
-ENTRYPOINT ["bun", "run", "index.js"]
+# CMD, not ENTRYPOINT: this image also carries the release's migrate step, run as
+# `bun run migrate.js` in place of the default command. Railway's documentation doesn't say
+# whether a pre-deploy command replaces an image's ENTRYPOINT or is handed to it as
+# arguments, and an ENTRYPOINT of `bun run index.js` given arguments would start the api
+# instead of migrating. Under the base image's entrypoint, which execs what it is given,
+# either way runs the command.
+CMD ["bun", "run", "index.js"]
