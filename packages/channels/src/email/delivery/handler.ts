@@ -49,6 +49,13 @@ const SES_SEND_TIMEOUT = Duration.seconds(30);
 const CLAIM_LEASE = Duration.minutes(2);
 
 /**
+ * How many times one run strips and claims before leaving the Delivery to the job's retry. A
+ * second pass needs a Suppression or a pause to change between two of the run's statements,
+ * so more than a few means something is flapping.
+ */
+const CLAIM_PASSES = 5;
+
+/**
  * Whether a Delivery's sender may send right now, as conditions on the Delivery's own row: its
  * Domain is not paused and its Project still holds it (a claim another Project proved, or the
  * Project removing the Domain, ends that), or its Sandbox Domain is active and not paused. The
@@ -392,13 +399,19 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
         }
 
         let attachments: Effect.Success<ReturnType<typeof loadEmailAttachmentsForSend>> | undefined;
-        // Run again from the strip when the claim finds a kept recipient suppressed meanwhile:
-        // each pass has one recipient fewer, so it ends in a claim or with none left.
-        while (true) {
+        // A claim refused while the Delivery is still `queued` and its sender may send means what
+        // this run checked changed before it claimed: a kept recipient was suppressed, or the
+        // Suppression or pause that refused the claim was lifted before the run read why. No
+        // other run holds it, so this one strips and claims again. A pass that only strips
+        // leaves a recipient fewer, but one that follows a lifted Suppression or pause does
+        // not, so nothing proves the passes end: hence the ceiling.
+        for (let pass = 0; pass < CLAIM_PASSES; pass += 1) {
           const suppressionInput = {
             organizationAppEnvironmentId: message.organizationAppEnvironmentId,
             organizationId: appEnvironment.organizationId,
-            purpose: payload.purpose,
+            // What accept wrote with the Delivery, not what the job says: a job that named
+            // the wrong purpose must not get past a `marketing` Suppression.
+            purpose: message.purpose,
           };
           const to = yield* filterSuppressedContacts(db, {
             ...suppressionInput,
@@ -682,7 +695,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 {
                   emails: [...toEmails, ...ccEmails, ...bccEmails].map(normalizeContactEmail),
                   organizationAppEnvironmentId: message.organizationAppEnvironmentId,
-                  purpose: payload.purpose,
+                  purpose: message.purpose,
                 },
               )})`;
               const [claimed] = yield* db
@@ -718,12 +731,13 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               // Read back, so this claim's SES answer is keyed exactly as later runs will see it.
               const claimedAt = claimed?.startedAt;
               if (!claimedAt) {
-                // One read tells a sender that may not send and a recipient suppressed meanwhile
-                // from a claim another run made. The dead-letter step records the first and
-                // tells the Project; the second is stripped and the claim made again; a
-                // duplicate run of the job retries later, to find what the other run did.
+                // One read tells a sender that may not send from a claim another run made. The
+                // dead-letter step records the first and tells the Project; a duplicate run of
+                // the job retries later, to find what the other run did. A Delivery still
+                // `queued` whose sender may send was refused for a recipient, or for something
+                // lifted since: either way no run has it, so this one goes round again.
                 const [unclaimed] = yield* db
-                  .select({ status: emailDelivery.status, ...sender, recipientsUnsuppressed })
+                  .select({ status: emailDelivery.status, ...sender })
                   .from(emailDelivery)
                   .where(eq(emailDelivery.id, loaded.id))
                   .pipe(
@@ -758,9 +772,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       stage: "domain",
                     });
                   }
-                  if (!unclaimed.recipientsUnsuppressed) {
-                    return true;
-                  }
+                  return true;
                 }
                 return yield* new MessageDeliveryRetryableError({
                   deliveryId: loaded.id,
@@ -871,6 +883,13 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             return;
           }
         }
+        // Not stage `claim`: no other run has the Delivery, so on a last attempt the
+        // dead-letter step must fail it rather than leave it to one.
+        return yield* new MessageDeliveryRetryableError({
+          deliveryId: loaded.id,
+          message: "The Delivery's recipients or sender kept changing as it was claimed",
+          stage: "suppressions",
+        });
       }).pipe(
         Effect.mapError((error) => {
           switch (error._tag) {

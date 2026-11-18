@@ -19,6 +19,7 @@ import {
   emailDelivery,
   emailDomainRegistration,
   member,
+  message,
   organization,
   organizationDomain,
   sandboxDomain,
@@ -29,7 +30,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { makeRedisLive, Redis } from "@repo/redis";
 import { webhookEventDefinitions } from "@repo/webhooks/events";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -1399,11 +1400,68 @@ describe("an accepted email send", () => {
   );
 
   it.live(
+    "is sent when the Suppression that refused its claim is lifted before the run reads why",
+    () => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const restored = `restored-${project.organizationId}@example.com`;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, restored, [ATTACHMENT]),
+        );
+        // Postgres lifts the Suppression right after any statement that updates Deliveries, the
+        // refused claim included (a statement trigger fires though no row matched): between the
+        // claim and the read that asks why it matched nothing.
+        const lift = `lift_${project.organizationId}`;
+        yield* db.execute(
+          sql.raw(`create function ${lift}() returns trigger language plpgsql as $$ begin
+          update contact set suppression_severity = null, suppression_reason = null,
+            suppressed_at = null where email = '${restored}' and suppression_severity is not null;
+          return null; end $$`),
+        );
+        yield* db.execute(
+          sql.raw(`create trigger ${lift} after update on email_delivery
+          for each statement execute function ${lift}()`),
+        );
+        storage.hook.whileLoading = db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "manual",
+            suppressionSeverity: "all",
+          })
+          .where(eq(contact.email, restored))
+          .pipe(Effect.orDie);
+
+        yield* runWorker.pipe(
+          Effect.ensuring(
+            db.execute(sql.raw(`drop function ${lift}() cascade`)).pipe(Effect.orDie),
+          ),
+        );
+
+        // No run holds the Delivery and nothing stops it any more, so it is not left `queued`.
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          status: "sent",
+          to: [restored],
+        });
+        expect(
+          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+        ).toEqual(["message.sent"]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live(
     "a complaint landing while attachments load stops a marketing send, not a transactional one",
     () => {
       const backend = makeBackend();
       const storage = makeStorageWithDownloadHook();
-      // No marketing send is accepted yet, so its job is run as a Campaign's will be.
+      // No marketing send is accepted yet, so the Message and its job are made a Campaign's.
       const handler = makeEmailDeliverHandler({ apiOrigin: "http://localhost", secret: "test" });
       return Effect.gen(function* () {
         const db = yield* DB;
@@ -1412,6 +1470,10 @@ describe("an accepted email send", () => {
         const marketing = yield* acceptTransactionalEmail(
           sendInput(project, `hello@${project.fqdn}`, reader, [ATTACHMENT]),
         );
+        yield* db
+          .update(message)
+          .set({ purpose: "marketing" })
+          .where(eq(message.id, marketing.messageId));
         const complain = db
           .update(contact)
           .set({
