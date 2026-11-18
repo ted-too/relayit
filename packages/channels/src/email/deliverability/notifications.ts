@@ -236,6 +236,12 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
       ) {
         return yield* new DeliveryNotRecordedYet({ providerMessageId: event.providerMessageId });
       }
+      // Only this deployment's sends reach its topics, so a notification that still matches
+      // nothing is a send whose record was lost: its bounce or complaint goes unrecorded.
+      yield* Effect.logWarning("Dropped an SES notification that matches no Delivery", {
+        kind: event.kind,
+        providerMessageId: event.providerMessageId,
+      });
       return;
     }
 

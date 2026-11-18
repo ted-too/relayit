@@ -134,7 +134,7 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 - **No Plans, unlimited entitlements.** Without Stripe keys, every user gets unlimited Projects, Domains, retention, and sends.
 - **Email and password sign-in.** Social sign-in is not set up by default.
-- **Your own SES account.** Email goes through the SES account in `SES_*`. When the worker starts it creates the SES configuration set and SNS topic each region needs and subscribes `API_URL` to it, so the IAM user needs SES and SNS permissions. Give the api the same `API_URL` and `SES_*` as the worker: it accepts SES's notifications only from the topics the worker made in that account, which it finds through STS (`GetCallerIdentity`, which needs no permission).
+- **Your own SES account.** Email goes through the SES account in `SES_*`. When the worker starts it creates the SES configuration set and SNS topic each region needs and subscribes `API_URL` to it, so the IAM user needs SES and SNS permissions. It also sets the topic's retry policy (`sns:SetTopicAttributes`), so that SNS keeps retrying a notification the api is not ready for; without that permission the worker logs a warning and SNS retries for about a minute only. Give the api the same `API_URL` and `SES_*` as the worker: it accepts SES's notifications only from the topics the worker made in that account, which it finds through STS (`GetCallerIdentity`, which needs no permission).
 - **No Sandbox Domain by default.** It exists only if you give the worker a Cloudflare zone for it (`CF_*`).
 - **Template workspace is optional.** Without a template-builder service, sending with existing Templates works, but editing the React Email workspace does not.
 
