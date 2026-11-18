@@ -11,8 +11,29 @@ import {
 import { Data, type Effect } from "effect";
 
 export class AwsUnexpectedResponseError extends Data.TaggedError("AwsUnexpectedResponseError")<{
-  readonly missingField: "Account" | "Arn" | "MessageId" | "TenantArn" | "TopicArn";
-  readonly operation: "CreateTenant" | "CreateTopic" | "GetCallerIdentity" | "SendEmail";
+  readonly missingField:
+    | "Account"
+    | "Arn"
+    | "MessageId"
+    | "SendingStatusAggregate"
+    | "TenantArn"
+    | "TopicArn";
+  readonly operation:
+    | "CreateTenant"
+    | "CreateTopic"
+    | "GetCallerIdentity"
+    | "GetReputationEntity"
+    | "SendEmail";
+}> {}
+
+/** The rule, target or topic policy for SES's tenant sending-status events was not ensured. */
+export class AwsTenantStatusEventsError extends Data.TaggedError("AwsTenantStatusEventsError")<{
+  readonly cause?: unknown;
+  readonly reason:
+    | "rule_arn_missing"
+    | "target_refused"
+    | "topic_arn_unreadable"
+    | "topic_policy_unreadable";
 }> {}
 
 export class AwsWebhookPayloadError extends Data.TaggedError("AwsWebhookPayloadError")<{
@@ -61,6 +82,7 @@ type SesOperation =
   | "deleteEmailIdentity"
   | "deleteTenantResourceAssociation"
   | "getEmailIdentity"
+  | "getReputationEntity"
   | "getTenant"
   | "listResourceTenants"
   | "listTenants"

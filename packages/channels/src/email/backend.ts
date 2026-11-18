@@ -28,6 +28,15 @@ export interface EmailBackendService {
   readonly getIdentityStatus: (
     input: EmailIdentityRef,
   ) => Effect.Effect<IdentityStatus, EmailBackendError>;
+  /**
+   * Whether SES lets the Project send from a region right now. SES keeps a Project's
+   * reputation, and pauses it, per region; `absent` is a Project that has never sent from
+   * this one.
+   */
+  readonly getProjectSendingStatus: (input: {
+    readonly projectId: string;
+    readonly region: string;
+  }) => Effect.Effect<ProjectSendingStatus, EmailBackendError>;
   readonly send: (input: {
     readonly message: OutboundEmail;
     readonly region: string | null;
@@ -61,6 +70,8 @@ export interface IdentityStatus {
   readonly dkimVerified: boolean;
   readonly verified: boolean;
 }
+
+export type ProjectSendingStatus = "absent" | "enabled" | "paused";
 
 export interface SendEmailResult {
   /** SES's message id, which its notifications name the message by. */

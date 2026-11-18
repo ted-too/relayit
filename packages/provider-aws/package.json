@@ -8,6 +8,7 @@
     "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@effect-aws/client-eventbridge": "2.0.0",
     "@effect-aws/client-sesv2": "2.0.0",
     "@effect-aws/client-sns": "2.0.0",
     "@effect-aws/client-sts": "2.0.0",

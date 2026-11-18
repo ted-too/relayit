@@ -1,4 +1,7 @@
-import { ingestDeliveryEvents } from "@repo/channels/email/deliverability";
+import {
+  ingestDeliveryEvents,
+  syncProjectSendingStatus,
+} from "@repo/channels/email/deliverability";
 import { logEffectFailure } from "@repo/logging";
 import { DB } from "@repo/persistence/db/effect";
 import { handleSesNotification } from "@repo/provider-aws/email/webhooks";
@@ -25,8 +28,13 @@ const MAX_SES_NOTIFICATION_BYTES = 1024 * 1024;
  * which SNS does not retry; one we could not check, confirm or record, or whose Delivery
  * the worker has not recorded yet, is a 500, which it retries. A body over
  * `MAX_SES_NOTIFICATION_BYTES` is not SNS's and is a 400 too: by its `Content-Length`
- * before any of it is read, or, without one, once reading it passes the limit. `handle` is
- * the real one unless a test swaps it.
+ * before any of it is read, or, without one, once reading it passes the limit.
+ *
+ * The same topics carry EventBridge's reports that SES changed a tenant's sending status,
+ * under the same checks. One for a Project of this deployment makes the api ask SES for the
+ * status now and pause or unpause the Project's Domains to match; if SES or Postgres cannot
+ * be asked it is a 500, so SNS brings it back. One for anything else is acknowledged.
+ * `handle` is the real one unless a test swaps it.
  */
 export const sesNotificationHandlers = (handle = handleSesNotification) =>
   HttpApiBuilder.group(Api, "sesNotifications", (handlers) =>
@@ -84,6 +92,16 @@ export const sesNotificationHandlers = (handle = handleSesNotification) =>
                 );
                 return "not_recorded_yet" as const;
               }
+            }
+            if (notification.success.type === "project_sending_status_changed") {
+              const db = yield* DB;
+              const { projectId, region } = notification.success;
+              const synced = yield* syncProjectSendingStatus(db, { projectId, region });
+              yield* Effect.logInfo("SES reported a tenant's sending status changed", {
+                ...synced,
+                projectId,
+                region,
+              });
             }
             return "recorded" as const;
           }).pipe(

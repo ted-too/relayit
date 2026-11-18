@@ -4,6 +4,7 @@ import {
   emailDeleteDomainIdentityHandler,
   removeUnlinkedDomains,
 } from "@repo/channels/email/custom-domain";
+import { emailRecheckProjectSendingPauseHandler } from "@repo/channels/email/deliverability";
 import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureSandboxDomain } from "@repo/channels/email/sandbox";
 import {
@@ -68,6 +69,7 @@ const workerProgram = Effect.gen(function* () {
         registerJobHandler(emailVerifyCustomDomainHandler),
         registerJobHandler(emailVerifyOwnershipHandler),
         registerJobHandler(emailDeleteDomainIdentityHandler),
+        registerJobHandler(emailRecheckProjectSendingPauseHandler),
       ],
       {
         blockMs: 5000,

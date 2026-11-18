@@ -1,3 +1,4 @@
+import type { EventBridge } from "@effect-aws/client-eventbridge";
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
 import { STS } from "@effect-aws/client-sts";
@@ -9,6 +10,12 @@ import { Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { createAwsErrorMapper } from "../errors";
 import { ensureSesInfrastructure } from "./infrastructure";
+import { sesTenantNameFor } from "./tenant-name";
+import {
+  TENANT_STATUS_EVENTS,
+  TENANT_STATUS_SNS_DELIVERIES,
+  tenantStatusEventFor,
+} from "./tenant-status.fixtures";
 import {
   handleSesNotification,
   normalizeSesNotification,
@@ -178,6 +185,10 @@ const workerTopic = (region: string, account = ACCOUNT) =>
     } as unknown as SESv2.Type;
     yield* ensureSesInfrastructure({
       deliveryWebhookUrl: sesNotificationsUrl(API_URL),
+      // The tenant status rule is not what these tests are about: it fails open.
+      events: {
+        putRule: () => Effect.fail({ _tag: "AccessDeniedException" }),
+      } as unknown as EventBridge.Type,
       mapAwsError: createAwsErrorMapper({ region }),
       region,
       ses,
@@ -279,6 +290,115 @@ describe("handleSesNotification", () => {
       const error = yield* Effect.flip(handleSesNotification(malformed));
       expect(error._tag).toBe("AwsWebhookPayloadError");
     }).pipe(Effect.provide(deploymentTopics.pipe(Layer.provide(stsFor())))),
+  );
+
+  it.live(
+    "reads a tenant status event as a reason to look at the Project, not as its status",
+    () => {
+      // The events were observed in this account and region.
+      const account = TENANT_STATUS_EVENTS.disabled.account;
+      const region = TENANT_STATUS_EVENTS.disabled.region;
+      const topics = sesNotificationTopicsInAccount({ apiUrl: API_URL, regions: [region] }).pipe(
+        Layer.provide(
+          Layer.succeed(STS, {
+            getCallerIdentity: () =>
+              Effect.succeed({ Account: account, Arn: `arn:aws:iam::${account}:user/relayit` }),
+          } as unknown as STS.Type),
+        ),
+      );
+      const projectId = "orgn_01k53s8sz5ecvvtqrh902mrhfc";
+      return Effect.gen(function* () {
+        const topicArn = yield* workerTopic(region, account);
+        // EventBridge publishes the whole event as the SNS message.
+        const delivered = (event: Record<string, unknown>, TopicArn = topicArn) =>
+          handleSesNotification(
+            snsBody({ Message: JSON.stringify(event), TopicArn, Type: "Notification" }),
+          );
+
+        for (const event of Object.values(TENANT_STATUS_EVENTS)) {
+          expect(
+            yield* delivered(tenantStatusEventFor(event, sesTenantNameFor(projectId))),
+          ).toEqual({
+            projectId,
+            region,
+            type: "project_sending_status_changed",
+          });
+        }
+        // Not a tenant of Relayit's, and an event the rule does not ask for: acknowledged.
+        expect(
+          yield* delivered(tenantStatusEventFor(TENANT_STATUS_EVENTS.disabled, "someone-elses")),
+        ).toEqual({ type: "noop" });
+        expect(
+          yield* delivered({
+            ...TENANT_STATUS_EVENTS.disabled,
+            "detail-type": "Advisor Recommendation Status Open",
+          }),
+        ).toEqual({ type: "noop" });
+        // The same checks as a notification: another account's topic is refused unread.
+        const foreign = yield* Effect.flip(
+          delivered(
+            tenantStatusEventFor(TENANT_STATUS_EVENTS.disabled, sesTenantNameFor(projectId)),
+            yield* workerTopic(region, "999999999999"),
+          ),
+        );
+        expect(foreign._tag).toBe("AwsSnsTopicRejected");
+        // And a notification beside them is still read as one.
+        expect(
+          yield* handleSesNotification(
+            snsBody({ Message: bounce, TopicArn: topicArn, Type: "Notification" }),
+          ),
+        ).toMatchObject({ events: [{ kind: "bounced" }], type: "events" });
+      }).pipe(Effect.provide(topics));
+    },
+  );
+
+  it.live(
+    "reads the Project from the events exactly as SNS delivered them from EventBridge",
+    () => {
+      const account = TENANT_STATUS_EVENTS.disabled.account;
+      const region = TENANT_STATUS_EVENTS.disabled.region;
+      const topics = sesNotificationTopicsInAccount({ apiUrl: API_URL, regions: [region] }).pipe(
+        Layer.provide(
+          Layer.succeed(STS, {
+            getCallerIdentity: () =>
+              Effect.succeed({ Account: account, Arn: `arn:aws:iam::${account}:user/relayit` }),
+          } as unknown as STS.Type),
+        ),
+      );
+      return Effect.gen(function* () {
+        const topicArn = yield* workerTopic(region, account);
+        expect(TENANT_STATUS_SNS_DELIVERIES).toHaveLength(2);
+        for (const delivery of TENANT_STATUS_SNS_DELIVERIES) {
+          const captured = JSON.parse(delivery) as Record<string, string>;
+          // An ordinary notification: nothing in the envelope marks it as EventBridge's.
+          expect(captured.Type).toBe("Notification");
+          expect(captured).not.toHaveProperty("Subject");
+          expect(typeof captured.Message).toBe("string");
+
+          // The captured signature cannot verify (the account id in what it signs was
+          // replaced) and the topic was a throwaway, so the captured `Message` is signed
+          // again as coming from the deployment's own topic; the message itself is untouched.
+          const result = yield* handleSesNotification(
+            snsBody({
+              Message: captured.Message ?? "",
+              MessageId: captured.MessageId ?? "",
+              TopicArn: topicArn,
+              Type: "Notification",
+            }),
+          );
+          expect(result).toEqual({
+            projectId: "evtest-1795009550",
+            region: "eu-central-1",
+            type: "project_sending_status_changed",
+          });
+
+          // As it arrived, signature and topic included, it is refused before it is read.
+          expect((yield* Effect.flip(handleSesNotification(delivery)))._tag).toBe(
+            "AwsSnsValidationError",
+          );
+        }
+      }).pipe(Effect.provide(topics));
+    },
   );
 
   it.live("looks the account up again after a failed lookup", () =>

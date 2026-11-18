@@ -14,3 +14,10 @@ export {
   type NormalizedDeliveryEvent,
   UNRECORDED_SEND_GRACE_SECONDS,
 } from "./notifications";
+export {
+  emailRecheckProjectSendingPauseHandler,
+  emailRecheckProjectSendingPauseJob,
+  pauseProjectDomains,
+  ProjectSendingPauseError,
+  syncProjectSendingStatus,
+} from "./project-sending-pause";

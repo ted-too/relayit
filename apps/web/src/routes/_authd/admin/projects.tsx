@@ -52,7 +52,7 @@ function RouteComponent() {
 }
 
 function DomainRow({ domain }: { domain: AdminProject["domains"][number] }) {
-  const [pauseOpen, setPauseOpen] = useState(false);
+  const [pauseAction, setPauseAction] = useState<"pause" | "unpause" | null>(null);
   const verification = VERIFICATION_STATUS[domain.verificationStatus];
 
   return (
@@ -82,10 +82,20 @@ function DomainRow({ domain }: { domain: AdminProject["domains"][number] }) {
         <Badge size="sm" variant={verification.variant}>
           {verification.label}
         </Badge>
-        <Button onClick={() => setPauseOpen(true)} size="sm" variant="outline">
+        {/* A pause of Relayit's own lifts itself; an admin can make it theirs instead. */}
+        {domain.pausedReason === "project_sending_pause" && (
+          <Button onClick={() => setPauseAction("pause")} size="sm" variant="outline">
+            Keep paused
+          </Button>
+        )}
+        <Button
+          onClick={() => setPauseAction(domain.isPaused ? "unpause" : "pause")}
+          size="sm"
+          variant="outline"
+        >
           {domain.isPaused ? "Unpause" : "Pause"}
         </Button>
-        <DomainPause domain={domain} open={pauseOpen} setOpen={setPauseOpen} />
+        <DomainPause action={pauseAction} close={() => setPauseAction(null)} domain={domain} />
       </ItemActions>
     </Item>
   );

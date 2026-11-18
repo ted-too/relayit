@@ -4,8 +4,9 @@ import {
   detachSesIdentityFromTenants,
   ensureSesTenant,
   type SesTenantClient,
-  sesTenantNameFor,
+  sesTenantSendingStatus,
 } from "./tenant";
+import { projectIdFromSesTenantName, sesTenantNameFor } from "./tenant-name";
 
 class AlreadyExistsException extends Data.TaggedError("AlreadyExistsException")<{
   readonly message: string;
@@ -124,6 +125,107 @@ describe("detachSesIdentityFromTenants", () => {
           `${sesTenantNameFor("orgn_b")}|${configurationSet}`,
         ]),
       );
+    }),
+  );
+});
+
+describe("projectIdFromSesTenantName", () => {
+  it("reads back the Project a tenant was named for, and nothing from any other name", () => {
+    const projectId = "orgn_01k53s8sz5ecvvtqrh902mrhfc";
+    expect(sesTenantNameFor(projectId)).toBe("relayit-orgn_01k53s8sz5ecvvtqrh902mrhfc");
+    expect(projectIdFromSesTenantName(sesTenantNameFor(projectId))).toBe(projectId);
+    expect(projectIdFromSesTenantName("acme-orgn_01k53s8sz5ecvvtqrh902mrhfc")).toBeUndefined();
+    expect(projectIdFromSesTenantName(sesTenantNameFor(""))).toBeUndefined();
+  });
+});
+
+describe("sesTenantSendingStatus", () => {
+  class NotFoundException extends Data.TaggedError("NotFoundException")<{
+    readonly message: string;
+  }> {}
+  const TENANT = sesTenantNameFor("orgn_test");
+
+  /** SES holding one tenant, answering as it did on 2026-11-18 for each status set by hand. */
+  const sesWith = (entity: Record<string, unknown> | "no tenant") => {
+    const asked: unknown[] = [];
+    const ses = {
+      getReputationEntity: (input: unknown) => {
+        asked.push(input);
+        return Effect.succeed({ ReputationEntity: entity });
+      },
+      getTenant: ({ TenantName }: { TenantName: string }) =>
+        entity === "no tenant"
+          ? Effect.fail(new NotFoundException({ message: "no such tenant" }))
+          : Effect.succeed({
+              // GetTenant's own status always says enabled here, so only the aggregate can
+              // be what is read.
+              Tenant: { SendingStatus: "ENABLED", TenantArn: tenantArn(TenantName) },
+            }),
+    } as unknown as SesTenantClient;
+    return { asked, ses };
+  };
+
+  it.effect("reads the aggregate of the tenant's two statuses", () =>
+    Effect.gen(function* () {
+      const byHand = (Status: string) => ({
+        AwsSesManagedStatus: null,
+        CustomerManagedStatus: { Status },
+        SendingStatusAggregate: Status,
+      });
+      const { asked, ses } = sesWith(byHand("DISABLED"));
+      expect(yield* sesTenantSendingStatus(ses, TENANT)).toBe("paused");
+      expect(asked).toEqual([
+        { ReputationEntityReference: tenantArn(TENANT), ReputationEntityType: "RESOURCE" },
+      ]);
+
+      expect(yield* sesTenantSendingStatus(sesWith(byHand("REINSTATED")).ses, TENANT)).toBe(
+        "enabled",
+      );
+      expect(yield* sesTenantSendingStatus(sesWith(byHand("ENABLED")).ses, TENANT)).toBe("enabled");
+      // A tenant nobody has touched.
+      expect(
+        yield* sesTenantSendingStatus(
+          sesWith({
+            AwsSesManagedStatus: null,
+            CustomerManagedStatus: null,
+            SendingStatusAggregate: "ENABLED",
+          }).ses,
+          TENANT,
+        ),
+      ).toBe("enabled");
+      // SES's own pause holds whatever the owner's status says.
+      expect(
+        yield* sesTenantSendingStatus(
+          sesWith({
+            AwsSesManagedStatus: { Status: "DISABLED" },
+            CustomerManagedStatus: { Status: "REINSTATED" },
+            SendingStatusAggregate: "DISABLED",
+          }).ses,
+          TENANT,
+        ),
+      ).toBe("paused");
+    }),
+  );
+
+  it.effect("answers absent for a Project with no tenant in the region", () =>
+    Effect.gen(function* () {
+      const { asked, ses } = sesWith("no tenant");
+      expect(yield* sesTenantSendingStatus(ses, TENANT)).toBe("absent");
+      expect(asked).toEqual([]);
+    }),
+  );
+
+  it.effect("fails on a status it does not know, so nothing is paused or unpaused by it", () =>
+    Effect.gen(function* () {
+      for (const SendingStatusAggregate of [undefined, "SUSPENDED"]) {
+        const error = yield* Effect.flip(
+          sesTenantSendingStatus(sesWith({ SendingStatusAggregate }).ses, TENANT),
+        );
+        expect(error).toMatchObject({
+          _tag: "AwsUnexpectedResponseError",
+          operation: "GetReputationEntity",
+        });
+      }
     }),
   );
 });
