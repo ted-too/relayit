@@ -144,7 +144,6 @@ describe("which send failures prove SES never took the message", () => {
     expect(provesNotSent({ code: "EHOSTUNREACH", syscall: "connect" })).toBe(true);
     expect(provesNotSent({ $metadata: { httpStatusCode: 403 } })).toBe(true);
     expect(provesNotSent({ code: "DEPTH_ZERO_SELF_SIGNED_CERT" })).toBe(true);
-    expect(provesNotSent({ code: "ERR_SSL_WRONG_VERSION_NUMBER" })).toBe(true);
   });
 
   it("counts a network error after the request went out as an unknown outcome", () => {
@@ -155,6 +154,8 @@ describe("which send failures prove SES never took the message", () => {
 
   it("counts a TLS error mid-connection as an unknown outcome", () => {
     expect(provesNotSent({ code: "ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC" })).toBe(false);
+    // A record with the wrong version can arrive after the handshake, once SES has the request.
+    expect(provesNotSent({ code: "ERR_SSL_WRONG_VERSION_NUMBER" })).toBe(false);
   });
 
   it("counts a 5xx as an unknown outcome", () => {
