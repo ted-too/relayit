@@ -86,14 +86,14 @@ DNS changes can take a while to propagate. If a record stays pending, check that
 
 ## Paused Domains
 
-A Domain is paused by Relayit, not by its Project: automatically for a bad sending reputation, or by one of Relayit's operators. A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**.
+A Domain is paused by Relayit, not by its Project: automatically for the Project's sending reputation (too many bounces or complaints, from any of its Domains), or by one of Relayit's operators. A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**.
 
 While a Domain is paused:
 
 - New sends from it fail with `422 invalid_from_address`.
 - Emails that were already queued fail at send time. They are not held for later.
 
-A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. After a pause for sending reputation, restore the Project's sending in SES before unpausing the Domain: otherwise the next send fails and pauses it again.
+A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. After a pause for the Project's sending reputation, restore the Project's sending in SES before unpausing the Domain: otherwise the next send fails and pauses it again.
 
 ## Claiming a domain from another Project
 
