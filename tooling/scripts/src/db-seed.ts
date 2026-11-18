@@ -64,7 +64,7 @@ try {
   });
   const userId = signedIn.response.user.id;
   // As an operator grants it, so the session signed in above sees the role too.
-  await setPlatformAdmin(auth, { admin: true, email: SEED.email });
+  await Effect.runPromise(setPlatformAdmin(auth, { admin: true, email: SEED.email }));
   // What the web app's sign-in hook does: no Stripe locally, so no limits.
   await syncSessionUserLimits(db, { stripeConfigured: false, userId });
 
