@@ -89,16 +89,25 @@ docker compose exec api bun platform-admin.js grant you@your-domain.com
 docker compose exec api bun platform-admin.js remove you@your-domain.com
 ```
 
-Outside Compose, run the same `bun platform-admin.js …` in a running api container, or in a one-off container of the api image with the api's environment: all of it, `REDIS_KEY_PREFIX` included if you set one, since the command finds the user's sessions through it.
+`exec` needs the api container running. To run the command in a one-off container instead, replace the image's entrypoint, which otherwise starts a second api and never runs the command:
+
+```bash
+docker compose run --rm --entrypoint bun api platform-admin.js grant you@your-domain.com
+docker run --rm --env-file api.env --entrypoint bun ghcr.io/ted-too/relayit-api:<tag> platform-admin.js grant you@your-domain.com
+```
+
+A one-off container needs the api's environment: all of it, `REDIS_KEY_PREFIX` included if you set one, since the command finds the user's sessions through it.
 
 Both take effect at once:
 
 - `grant` changes the role in the sessions the user already has open, so they don't sign in again.
-- `remove` ends every session the user has open. They are signed out, and when they sign in again they are not an admin.
+- `remove` ends every session the user has open. They are signed out, and when they sign in again they are not an admin. It signs the named user out even if they were not an admin, so check the email.
 
-The command prints how many open sessions it changed or ended, and exits non-zero without claiming success if it could not confirm them. If it reports 0 sessions for someone you know is signed in, it ran against a different Redis or `REDIS_KEY_PREFIX` than the api uses. Exit codes: `2` wrong arguments, `3` no user with that email, `4` the environment is incomplete, `5` the database could not be reached, `6` the sessions could not be confirmed (Redis unreachable); the message says whether the role was changed before it stopped.
+The command prints how many open sessions it updated or ended; the last line it prints is the outcome. If it found none, it says so, names the Redis host and key prefix it searched, and does not claim the user was signed out: if that user is signed in, the command ran against a different Redis or `REDIS_KEY_PREFIX` than the api uses, and the change has not reached their sessions. It also warns when that Redis holds no session of any user, which on a deployment anyone is signed in to means the same thing.
 
-An existing admin changing a role through better-auth's own `/auth/admin/set-role` is also correct: it updates the user's open sessions too.
+It exits non-zero without claiming success if it could not confirm the sessions. Exit codes: `2` wrong arguments, `3` no user with that email, `4` the environment is incomplete, `5` the database could not be reached, `6` the sessions could not be confirmed (Redis unreachable, or a session read back unchanged). The message says whether the role was changed in the database before it stopped. If it was, run the command again: until it succeeds, a removed admin's open sessions may still have platform admin access.
+
+An existing admin can also grant the role through better-auth's own `/auth/admin/set-role`, which updates the user's open sessions too. Use the command to remove the role: `set-role` does not sign the user out, and a session left open can keep the old role.
 
 Don't change the role by editing the `user` table. A signed-in user's sessions are kept in Redis, each with its own copy of the user and their role, and `/auth/admin/*` goes by that copy. A role removed in the database alone stays in those sessions until they end, and a session in use keeps renewing, so the user you demoted keeps those endpoints.
 

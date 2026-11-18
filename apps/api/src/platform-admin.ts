@@ -8,15 +8,17 @@
  * it reaches the api's sessions and rewrites them in the shape the api stores.
  *
  * Exit codes: 0 changed and confirmed, 2 usage, 3 no such user, 4 environment, 5 database,
- * 6 the sessions could not be confirmed.
+ * 6 the sessions could not be confirmed. The last line printed is the outcome: a failing
+ * Redis logs its reconnects, and better-auth its own errors, before it.
  */
 import { JobsLive } from "@repo/jobs";
-import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
+import { hasStoredSessions, setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { makeRedisLive } from "@repo/redis";
+import { makeRedisClient, makeRedisLive } from "@repo/redis";
 import { Effect, Layer, Redacted } from "effect";
 import { apiConfig } from "./env";
 import { ApiAuth } from "./lib/auth";
+import { changedLines, unconfirmedLine } from "./platform-admin-outcome";
 
 const args = Bun.argv.slice(2);
 const [action, email] = args;
@@ -56,11 +58,24 @@ const program = Effect.gen(function* () {
       ),
     ),
   );
-  console.log(
-    action === "grant"
-      ? `${email} is a platform admin. Open sessions updated: ${sessions}.`
-      : `${email} is no longer a platform admin and is signed out. Open sessions ended: ${sessions}.`,
-  );
+  // Nothing found is no evidence the change reached a session: say where it looked, and
+  // whether anyone's sessions are there at all.
+  const redisUrl = Redacted.value(config.redisUrl);
+  const empty =
+    sessions === 0 &&
+    !(yield* Effect.acquireUseRelease(
+      Effect.sync(() => makeRedisClient({ url: redisUrl })),
+      (redis) => hasStoredSessions(redis, config.redisKeyPrefix),
+      (redis) => Effect.sync(() => redis.close()),
+    ));
+  for (const line of changedLines({
+    action,
+    email,
+    sessions,
+    store: { empty, host: new URL(redisUrl).host, keyPrefix: config.redisKeyPrefix },
+  })) {
+    console.log(line);
+  }
 }).pipe(
   Effect.scoped,
   Effect.catch((error) => {
@@ -70,18 +85,19 @@ const program = Effect.gen(function* () {
       case "PlatformAdminSessionsStale":
         return stop(
           6,
-          `The role is changed in the database, but ${error.stale} of the user's sessions still carry the old one. Run this again.`,
+          unconfirmedLine(action, `sessions of theirs read back unchanged: ${error.stale}`),
         );
       case "PlatformAdminStoreError": {
-        const changed = error.roleChanged
-          ? "The role is changed in the database, but the user's sessions are not confirmed: run this again."
-          : "Nothing was changed.";
-        return error.store === "database"
-          ? stop(
-              5,
-              `The database (DATABASE_URL) could not be reached or refused the change. ${changed}`,
-            )
-          : stop(6, `The session store (REDIS_URL) could not be reached. ${changed}`);
+        const where =
+          error.store === "database"
+            ? "The database (DATABASE_URL) could not be reached or refused the change."
+            : "The session store (REDIS_URL) could not be reached.";
+        return stop(
+          error.store === "database" ? 5 : 6,
+          error.roleChanged
+            ? `${where} ${unconfirmedLine(action, "their sessions are not confirmed")}`
+            : `${where} Nothing was changed.`,
+        );
       }
       case "SqlError":
         return stop(5, "The database (DATABASE_URL) could not be reached. Nothing was changed.");

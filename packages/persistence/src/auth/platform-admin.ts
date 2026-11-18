@@ -1,5 +1,6 @@
 import { Data, Effect } from "effect";
-import type { Auth } from "./server";
+import { COOKIE_PREFIX } from "./constants";
+import type { Auth, AuthRedis } from "./server";
 
 export class PlatformAdminUserNotFound extends Data.TaggedError("PlatformAdminUserNotFound")<{
   readonly email: string;
@@ -84,4 +85,34 @@ export const setPlatformAdmin = (
       return yield* new PlatformAdminSessionsStale({ stale });
     }
     return { sessions: admin ? after.filter((live) => live !== null).length : open.length };
+  });
+
+/**
+ * Whether Redis holds a session of any user under this key prefix. `setPlatformAdmin`
+ * finding none of one user's sessions is ordinary; a store with none at all, on a
+ * deployment anyone is signed in to, is not the api's.
+ */
+export const hasStoredSessions = (redis: AuthRedis, redisKeyPrefix: string) =>
+  Effect.tryPromise({
+    // The row is already written by the time this is asked.
+    catch: (cause) => new PlatformAdminStoreError({ cause, roleChanged: true, store: "sessions" }),
+    try: async () => {
+      // better-auth's list of a user's sessions, as `createAuth` keys it; the prefix is literal.
+      const pattern = `${`${redisKeyPrefix}${COOKIE_PREFIX}:auth:`.replace(/[\\*?[\]]/g, "\\$&")}active-sessions-*`;
+      let cursor = "0";
+      do {
+        const [next, keys] = (await redis.send("SCAN", [
+          cursor,
+          "MATCH",
+          pattern,
+          "COUNT",
+          "1000",
+        ])) as [string, string[]];
+        if (keys.length > 0) {
+          return true;
+        }
+        cursor = next;
+      } while (cursor !== "0");
+      return false;
+    },
   });
