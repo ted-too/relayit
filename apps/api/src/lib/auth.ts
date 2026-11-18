@@ -1,4 +1,3 @@
-import { RESERVED_PROJECT_SLUGS } from "@repo/contracts/dashboard";
 import { allocateSandboxDomain } from "@repo/channels/email/sandbox";
 import { failureAnnotations } from "@repo/logging";
 import { syncSessionUserLimits } from "@repo/persistence/auth/plans";
@@ -138,12 +137,6 @@ export class ApiAuth extends Context.Service<
           return row?.billingUserId ?? row?.members[0]?.userId ?? null;
         };
 
-        const refuseReservedSlug = (slug: string | undefined) => {
-          if (slug !== undefined && RESERVED_PROJECT_SLUGS.has(slug)) {
-            throw new APIError("BAD_REQUEST", { message: "That slug is reserved." });
-          }
-        };
-
         const auth = createAuth({
           baseUrl: config.apiUrl.origin,
           cookieDomain: Option.getOrUndefined(config.authCookieDomain),
@@ -219,16 +212,10 @@ export class ApiAuth extends Context.Service<
                     .where(eq(organization.id, created.id));
                   await allocateSandbox(created.id);
                 },
-                beforeCreateOrganization: async ({ organization: created }) => {
-                  refuseReservedSlug(created.slug);
-                },
                 beforeRemoveMember: async ({ member: removed, organization: from }) => {
                   if ((await billingUserOf(from.id)) === removed.userId) {
                     throw new APIError("BAD_REQUEST", { message: BILLING_USER_LEAVING });
                   }
-                },
-                beforeUpdateOrganization: async ({ organization: updated }) => {
-                  refuseReservedSlug(updated.slug);
                 },
               },
             },

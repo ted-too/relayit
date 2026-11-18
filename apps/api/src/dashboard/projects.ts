@@ -1,4 +1,4 @@
-import { DashboardApi, DashboardUser, RESERVED_PROJECT_SLUGS } from "@repo/contracts/dashboard";
+import { DashboardApi, DashboardUser, projectSlugFromName } from "@repo/contracts/dashboard";
 import { DB } from "@repo/persistence/db/effect";
 import { organization } from "@repo/persistence/db/schema";
 import { generateDbSlug } from "@repo/persistence/db/slug";
@@ -16,16 +16,13 @@ export const projectHandlers = HttpApiBuilder.group(DashboardApi, "projects", (h
         const user = yield* DashboardUser;
         const request = yield* HttpServerRequest.HttpServerRequest;
         const db = yield* DB;
-        // A slug the dashboard already answers at its root would make the Project
-        // unreachable: such a name gets the `-project` suffix's slug instead.
-        const slug = yield* generateDbSlug(db, organization, payload.name).pipe(
-          Effect.flatMap((slug) =>
-            RESERVED_PROJECT_SLUGS.has(slug)
-              ? generateDbSlug(db, organization, `${payload.name} project`)
-              : Effect.succeed(slug),
-          ),
-          Effect.catch(operationFailed("Failed to create Project.")),
-        );
+        // `projectSlugFromName` always passes `ProjectSlug`, and leaves room for the `-2`,
+        // `-3`… that makes it unique.
+        const slug = yield* generateDbSlug(
+          db,
+          organization,
+          projectSlugFromName(payload.name),
+        ).pipe(Effect.catch(operationFailed("Failed to create Project.")));
         const created = yield* callAuth("Failed to create Project.", () =>
           auth.api.createOrganization({
             body: {

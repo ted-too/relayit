@@ -13,6 +13,7 @@
     "@better-auth/api-key": "^1.6.25",
     "@better-auth/stripe": "^1.6.25",
     "@effect/sql-pg": "catalog:",
+    "@repo/contracts": "workspace:*",
     "better-auth": "catalog:",
     "better-auth-harmony": "^1.3.2",
     "drizzle-orm": "catalog:",

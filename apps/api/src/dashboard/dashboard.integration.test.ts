@@ -349,7 +349,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const owner = yield* signUp("owner");
         const project = yield* createProject(owner, "Admin");
         // `admin` is the dashboard's own page, so the Project is given another slug.
-        expect(project.slug).not.toBe("admin");
+        expect(project.slug).toMatch(/^admin-project(-\d+)?$/);
         const p = `/projects/${project.slug}`;
 
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -475,15 +475,65 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
-    it.effect("refuses a reserved slug when a Project is renamed", () =>
+    it.effect("gives a new Project a slug of letters, digits and hyphens from its name", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("slugger");
+        const dotted = yield* createProject(owner, `Acme.io ${run.slice(-8)}`);
+        expect(dotted.slug).toBe(`acme-io-${run.slice(-8).toLowerCase()}`);
+        // A name the dashboard answers at its root gets another slug.
+        expect((yield* createProject(owner, "Admin")).slug).toMatch(/^admin-project(-\d+)?$/);
+        // A name that is only punctuation still gets a usable slug.
+        expect((yield* createProject(owner, "...")).slug).toMatch(/^project(-\d+)?$/);
+      }),
+    );
+
+    it.effect("refuses a slug outside the rule wherever a Project is created or renamed", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("renamer");
         const project = yield* createProject(owner, `Renamer ${run.slice(-8)}`);
-        const renamed = yield* call("POST", "/auth/organization/update", {
-          as: owner,
-          body: { data: { slug: "admin" }, organizationId: project.id },
+        const rename = (slug: string) =>
+          call("POST", "/auth/organization/update", {
+            as: owner,
+            body: { data: { slug }, organizationId: project.id },
+          });
+        for (const slug of [
+          "admin",
+          "acme.io",
+          "Acme",
+          "acme--mail",
+          "-acme",
+          "a",
+          "x".repeat(49),
+        ]) {
+          expect([slug, (yield* rename(slug)).status]).toEqual([slug, 400]);
+        }
+        expect(yield* rename("acme.io")).toMatchObject({
+          body: {
+            message:
+              "A Project slug is lowercase letters, digits and hyphens, with no hyphen at either end or two together.",
+          },
         });
-        expect(renamed.status).toBe(400);
+        const valid = `renamed-${run.slice(-8).toLowerCase()}`;
+        expect(yield* rename(valid)).toMatchObject({ body: { slug: valid }, status: 200 });
+        // Renaming only the name leaves the slug alone, and is not refused.
+        expect(
+          yield* call("POST", "/auth/organization/update", {
+            as: owner,
+            body: { data: { name: "Renamed" }, organizationId: project.id },
+          }),
+        ).toMatchObject({ body: { slug: valid }, status: 200 });
+
+        // better-auth's own create endpoint is held to the same rule.
+        const create = (slug: string) =>
+          call("POST", "/auth/organization/create", {
+            as: owner,
+            body: { name: "Direct", slug },
+          });
+        expect((yield* create(`direct.${run.slice(-8).toLowerCase()}`)).status).toBe(400);
+        expect((yield* create("user")).status).toBe(400);
+        expect(yield* create(`direct-${run.slice(-8).toLowerCase()}`)).toMatchObject({
+          status: 200,
+        });
       }),
     );
   });

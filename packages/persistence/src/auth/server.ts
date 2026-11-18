@@ -1,6 +1,6 @@
 import { apiKey } from "@better-auth/api-key";
 import { type StripeOptions, stripe } from "@better-auth/stripe";
-import { type BetterAuthOptions, betterAuth, type SocialProviders } from "better-auth";
+import { APIError, type BetterAuthOptions, betterAuth, type SocialProviders } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
   admin,
@@ -9,6 +9,8 @@ import {
   organization,
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
+import { ProjectSlug } from "@repo/contracts/dashboard";
+import { Result, Schema } from "effect";
 import type { PromiseDb } from "../db/promise";
 import * as schema from "../db/schema";
 import { AUTH_BASE_PATH, COOKIE_PREFIX } from "./constants";
@@ -78,6 +80,17 @@ export interface AuthConfig {
   redisKeyPrefix: string;
   socialProviders?: SocialProviders;
 }
+
+/** better-auth's refusal of a slug `ProjectSlug` doesn't take, with the rule it broke. */
+const refuseInvalidSlug = (slug: string | undefined) => {
+  if (slug === undefined) {
+    return;
+  }
+  const checked = Schema.decodeUnknownResult(ProjectSlug)(slug);
+  if (Result.isFailure(checked)) {
+    throw new APIError("BAD_REQUEST", { message: checked.failure.message });
+  }
+};
 
 export const createAuth = ({
   baseUrl,
@@ -233,7 +246,19 @@ export const createAuth = ({
             },
           },
         },
-        organizationHooks: plugins?.organization?.hooks,
+        // Every Project's slug is checked here, whoever creates or renames it: the
+        // dashboard, better-auth's own endpoints, the seed.
+        organizationHooks: {
+          ...plugins?.organization?.hooks,
+          beforeCreateOrganization: async (data) => {
+            refuseInvalidSlug(data.organization.slug);
+            return plugins?.organization?.hooks?.beforeCreateOrganization?.(data);
+          },
+          beforeUpdateOrganization: async (data) => {
+            refuseInvalidSlug(data.organization.slug);
+            return plugins?.organization?.hooks?.beforeUpdateOrganization?.(data);
+          },
+        },
       }),
       lastLoginMethod(),
       apiKey([
@@ -256,5 +281,6 @@ export const createAuth = ({
   });
 
 export type Auth = ReturnType<typeof createAuth>;
-export { APIError } from "better-auth";
+
 export { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+export { APIError };

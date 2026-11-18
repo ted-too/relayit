@@ -3,7 +3,7 @@ import { InputGroupText } from "@repo/ui/components/ui/shad/input-group";
 import { useMutation, useSuspenseQueries } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { SafeName } from "@repo/contracts/dashboard";
+import { ProjectSlug } from "@repo/contracts/dashboard";
 import { Schema } from "effect";
 import {
   SettingsCard,
@@ -16,8 +16,8 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { queries } from "@/lib/queries";
 
-// better-auth sets the slug, and refuses one the dashboard answers at its root itself.
-const SlugInput = Schema.Struct({ slug: SafeName });
+// better-auth sets the slug, and refuses one `ProjectSlug` doesn't take as well.
+const SlugInput = Schema.Struct({ slug: ProjectSlug });
 
 type FormSchema = typeof SlugInput.Type;
 
@@ -121,7 +121,7 @@ export function ProjectEditSlug() {
             {(field) => (
               <field.ErrorMessage
                 className="text-sm"
-                fallback={<p>TODO: Add description of validation</p>}
+                fallback={<p>Lowercase letters, digits and single hyphens, 2 to 48 characters.</p>}
               />
             )}
           </form.AppField>
