@@ -22,7 +22,9 @@ const drizzleFolder = NodePath.join(import.meta.dirname, "../../persistence/driz
 
 /**
  * Lists every row the Usage policy refuses for either purpose: each purpose must hold both
- * caps, each null or a whole number from 0 up to the largest a double holds exactly.
+ * caps, each null or a whole number from 0 up to the largest a double holds exactly. It
+ * reads a cap as Postgres stores it, so it also lists a cap the policy accepts only
+ * because JavaScript rounds it to a whole number on reading the row (`roundedOnRead`).
  */
 const REFUSED_ROWS = `
 SELECT user_id, limits FROM user_channel
@@ -51,15 +53,23 @@ WHERE NOT COALESCE((SELECT bool_and(COALESCE(
       THEN limits->p->'managed' ELSE limits->p END AS b) bucket,
     unnest(array['dailySends','monthlySends']) c), false)`;
 
-/** Puts flat purposes back under `managed`, for the release before this one. */
+/**
+ * Puts flat purposes back under `managed`, for the release before this one. Like the
+ * migration, it moves only a purpose holding both caps: wrapped, anything less would be
+ * read by that release as unlimited.
+ */
 const REVERSE = `
 UPDATE user_channel SET limits = limits
-  || CASE WHEN jsonb_typeof(limits->'transactional')='object' AND NOT (limits->'transactional' ? 'managed')
+  || CASE WHEN jsonb_typeof(limits->'transactional') = 'object'
+       AND limits->'transactional' ?& array['dailySends','monthlySends']
      THEN jsonb_build_object('transactional', jsonb_build_object('managed', limits->'transactional')) ELSE '{}'::jsonb END
-  || CASE WHEN jsonb_typeof(limits->'marketing')='object' AND NOT (limits->'marketing' ? 'managed')
+  || CASE WHEN jsonb_typeof(limits->'marketing') = 'object'
+       AND limits->'marketing' ?& array['dailySends','monthlySends']
      THEN jsonb_build_object('marketing', jsonb_build_object('managed', limits->'marketing')) ELSE '{}'::jsonb END
-WHERE (jsonb_typeof(limits->'transactional')='object' AND NOT (limits->'transactional' ? 'managed'))
-   OR (jsonb_typeof(limits->'marketing')='object' AND NOT (limits->'marketing' ? 'managed'))`;
+WHERE (jsonb_typeof(limits->'transactional') = 'object'
+    AND limits->'transactional' ?& array['dailySends','monthlySends'])
+   OR (jsonb_typeof(limits->'marketing') = 'object'
+    AND limits->'marketing' ?& array['dailySends','monthlySends'])`;
 
 const UNLIMITED = { dailySends: null, monthlySends: null };
 
@@ -192,11 +202,30 @@ const rows: readonly {
     },
   },
   {
+    // Hand-edited flat purposes. The reverse leaves them flat, where the release before
+    // this one fails the send, instead of wrapping them into a bucket it reads as unlimited.
+    name: "flat, one purpose missing a cap and the other empty",
+    before: { transactional: { monthlySends: 2500 }, marketing: {} },
+    after: { transactional: { monthlySends: 2500 }, marketing: {} },
+  },
+  {
+    name: "flat, one purpose whole and the other missing a cap",
+    before: { transactional: UNLIMITED, marketing: { dailySends: 20 } },
+    after: { transactional: UNLIMITED, marketing: { dailySends: 20 } },
+    reversed: { transactional: { managed: UNLIMITED }, marketing: { dailySends: 20 } },
+  },
+  {
     // No caps to carry over: left as it is, never rewritten into an unlimited bucket.
     name: "a managed level that holds no bucket",
     before: { transactional: { managed: null }, marketing: "managed" },
     after: { transactional: { managed: null }, marketing: "managed" },
   },
+];
+
+/** Decimals a double cannot hold, as JSON text: listed by the check, accepted by the policy. */
+const roundedOnRead = [
+  '{"transactional":{"dailySends":9007199254740990.5,"monthlySends":1},"marketing":{"dailySends":null,"monthlySends":null}}',
+  '{"transactional":{"dailySends":1e-400,"monthlySends":1},"marketing":{"dailySends":null,"monthlySends":null}}',
 ];
 
 /** Shapes no migration produces, for the check's agreement with the Usage policy. */
@@ -215,8 +244,8 @@ const strays: readonly unknown[] = [
   null,
 ];
 
-/** Stores each of `limits` as one new billing user's email limits, as given. */
-const store = (db: DatabaseExecutor, limits: readonly unknown[]) =>
+/** Stores each of `limits`, JSON text, as one new billing user's email limits, as given. */
+const store = (db: DatabaseExecutor, limits: readonly string[]) =>
   Effect.gen(function* () {
     const run = Bun.randomUUIDv7();
     const userIds = limits.map((_, index) => `user_limits_${run}_${index}`);
@@ -227,7 +256,7 @@ const store = (db: DatabaseExecutor, limits: readonly unknown[]) =>
       // Raw, because the column's type admits only the shape the plans code writes now.
       yield* db.execute(
         sql`insert into "user_channel" ("user_id", "channel_type", "limits", "updated_at")
-            values (${userIds[index]}, 'email', ${JSON.stringify(value)}::jsonb, now())`,
+            values (${userIds[index]}, 'email', ${value}::jsonb, now())`,
       );
     }
     return userIds;
@@ -263,7 +292,7 @@ describe("the migration flattening user_channel.limits", () => {
           Effect.gen(function* () {
             const userIds = yield* store(
               tx,
-              rows.map((row) => row.before),
+              rows.map((row) => JSON.stringify(row.before)),
             );
             const stored = Effect.map(
               tx
@@ -297,60 +326,75 @@ describe("the migration flattening user_channel.limits", () => {
     }).pipe(Effect.provide(live)),
   );
 
-  it.live("the check for refused rows lists exactly the rows the Usage policy refuses", () =>
-    Effect.gen(function* () {
-      const db = yield* DB;
-      const policies = yield* UsagePolicy;
-      const limits = [...rows.flatMap((row) => [row.before, row.after]), ...strays];
-      const userIds = yield* store(db, limits);
+  it.live(
+    "the check for refused rows lists every row the Usage policy refuses, and no other it reads as stored",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DB;
+        const policies = yield* UsagePolicy;
+        const limits = [
+          ...[...rows.flatMap((row) => [row.before, row.after]), ...strays].map((value) =>
+            JSON.stringify(value),
+          ),
+          ...roundedOnRead,
+        ];
+        const userIds = yield* store(db, limits);
 
-      const listed = new Set(
-        (yield* db.execute<{ user_id: string }>(sql.raw(REFUSED_ROWS))).rows.map(
-          (row) => row.user_id,
-        ),
-      );
-      const verdicts = yield* Effect.forEach(userIds, (userId, index) =>
-        Effect.gen(function* () {
-          const answers = yield* Effect.forEach(
-            ["transactional", "marketing"] as const,
-            (purpose) =>
-              Effect.result(
-                policies.resolve({
-                  billingUserId: userId,
-                  channel: "email",
-                  organizationId: "orgn_unused",
-                  purpose,
-                  reservedAt: new Date().toISOString(),
-                }),
-              ),
-          );
-          return {
-            limits: limits[index],
-            listed: listed.has(userId),
-            refused: answers.some(Result.isFailure),
-          };
-        }),
-      );
+        const listed = new Set(
+          (yield* db.execute<{ user_id: string }>(sql.raw(REFUSED_ROWS))).rows.map(
+            (row) => row.user_id,
+          ),
+        );
+        const verdicts = yield* Effect.forEach(userIds, (userId, index) =>
+          Effect.gen(function* () {
+            const answers = yield* Effect.forEach(
+              ["transactional", "marketing"] as const,
+              (purpose) =>
+                Effect.result(
+                  policies.resolve({
+                    billingUserId: userId,
+                    channel: "email",
+                    organizationId: "orgn_unused",
+                    purpose,
+                    reservedAt: new Date().toISOString(),
+                  }),
+                ),
+            );
+            return {
+              limits: limits[index],
+              listed: listed.has(userId),
+              refused: answers.some(Result.isFailure),
+            };
+          }),
+        );
 
-      expect(verdicts.filter((verdict) => verdict.listed !== verdict.refused)).toEqual([]);
+        expect(
+          verdicts
+            .filter((verdict) => verdict.listed !== verdict.refused)
+            .map(({ limits }) => limits),
+        ).toEqual(roundedOnRead);
+        expect(verdicts.filter((verdict) => !verdict.listed && verdict.refused)).toEqual([]);
 
-      // Before the migration, the forecast for a row is the verdict on what it becomes.
-      const forecast = new Set(
-        (yield* db.execute<{ user_id: string }>(sql.raw(REFUSED_ONCE_MIGRATED))).rows.map(
-          (row) => row.user_id,
-        ),
-      );
-      expect(
-        rows.map((row, index) => ({
-          forecast: forecast.has(userIds[index * 2] ?? ""),
-          name: row.name,
-        })),
-      ).toEqual(
-        rows.map((row, index) => ({ forecast: verdicts[index * 2 + 1]?.refused, name: row.name })),
-      );
-      // Not vacuous: the migrated Plan rows pass, the unmigrated ones don't.
-      expect(verdicts.filter((verdict) => verdict.refused).length).toBeGreaterThan(rows.length);
-      expect(verdicts.filter((verdict) => !verdict.refused).length).toBeGreaterThan(5);
-    }).pipe(Effect.provide(live)),
+        // Before the migration, the forecast for a row is the verdict on what it becomes.
+        const forecast = new Set(
+          (yield* db.execute<{ user_id: string }>(sql.raw(REFUSED_ONCE_MIGRATED))).rows.map(
+            (row) => row.user_id,
+          ),
+        );
+        expect(
+          rows.map((row, index) => ({
+            forecast: forecast.has(userIds[index * 2] ?? ""),
+            name: row.name,
+          })),
+        ).toEqual(
+          rows.map((row, index) => ({
+            forecast: verdicts[index * 2 + 1]?.refused,
+            name: row.name,
+          })),
+        );
+        // Not vacuous: the migrated Plan rows pass, the unmigrated ones don't.
+        expect(verdicts.filter((verdict) => verdict.refused).length).toBeGreaterThan(rows.length);
+        expect(verdicts.filter((verdict) => !verdict.refused).length).toBeGreaterThan(5);
+      }).pipe(Effect.provide(live)),
   );
 });
