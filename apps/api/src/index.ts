@@ -1,6 +1,6 @@
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
-import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
+import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { Cause, Effect, Fiber, Layer, Option, Redacted } from "effect";
 import { apiConfig } from "./env";
 import { apiServer } from "./http";
@@ -20,7 +20,10 @@ const apiProgram = Effect.gen(function* () {
     },
     hostname: config.hostname,
     port: config.port,
-    unsubscribeSecret: getCurrentBetterAuthSecret(Redacted.value(config.betterAuthSecrets)),
+    // The worker signs with the current secret; a link signed before a rotation still verifies.
+    unsubscribeSecrets: [
+      ...parseBetterAuthSecrets(Redacted.value(config.betterAuthSecrets)).keys.values(),
+    ],
   }).pipe(
     Layer.provide(
       ApiAuth.layer({

@@ -1,4 +1,4 @@
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import {
   RiArrowDownSLine,
   RiArrowUpSLine,
@@ -28,7 +28,35 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
 import { dashboard } from "@/lib/dashboard";
+import * as monaco from "monaco-editor";
+import EditorWorker from "monaco-editor/editor/editor.worker?worker";
+import CssWorker from "monaco-editor/language/css/css.worker?worker";
+import JsonWorker from "monaco-editor/language/json/json.worker?worker";
+import TsWorker from "monaco-editor/language/typescript/ts.worker?worker";
 import { componentNameFromSlug, starterReactEmailEntrySource } from "./starter-entry";
+
+// Monaco from the build, its workers files of their own in `assets/`. Left alone,
+// `@monaco-editor/react` loads it from a CDN, which the dashboard's Content-Security-Policy
+// refuses (`apps/web/nginx/default.conf.template`) and a self-hosted deployment shouldn't
+// depend on.
+self.MonacoEnvironment = {
+  getWorker: (_workerId, label) => {
+    switch (label) {
+      case "typescript":
+      case "javascript":
+        return new TsWorker();
+      case "json":
+        return new JsonWorker();
+      case "css":
+      case "scss":
+      case "less":
+        return new CssWorker();
+      default:
+        return new EditorWorker();
+    }
+  },
+};
+loader.config({ monaco });
 
 const toastError = (error: unknown, fallback = "Something went wrong") => {
   const message =

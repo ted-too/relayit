@@ -55,9 +55,12 @@ const withBuilder = <A, E extends { readonly _tag: string }>(
   Effect.gen(function* () {
     const builder = yield* Effect.serviceOption(TemplatingBuilderClient);
     if (builder._tag === "None") {
+      // The operator needs the variables; the customer only that the feature is off here.
+      yield* Effect.logWarning(
+        "Email Workspaces need TEMPLATING_BUILDER_URL and TEMPLATING_BUILDER_SECRET on the api",
+      );
       return yield* new Unavailable({
-        message:
-          "Template builder is not configured. Set TEMPLATING_BUILDER_URL and TEMPLATING_BUILDER_SECRET.",
+        message: "Email Workspaces aren't available on this deployment.",
       });
     }
     const workspace = yield* projectWorkspace(kind);

@@ -1,4 +1,6 @@
 import "@repo/ui/styles/globals.css";
+// First: it configures zod before any module defines a schema.
+import "./zod-jitless";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

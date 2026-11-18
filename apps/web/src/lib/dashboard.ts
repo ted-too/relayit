@@ -29,7 +29,7 @@ export const dashboard = <A, E>(operation: (client: DashboardClient) => Effect.E
             error._tag === "Unauthenticated"
           ) {
             window.location.assign(
-              `/auth/sign-in?redirect=${encodeURIComponent(window.location.pathname)}`,
+              `/auth/sign-in?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`,
             );
           }
         }),

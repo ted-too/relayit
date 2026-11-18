@@ -26,6 +26,16 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
+    # Browsers ignore it over plain http, so a local run is unaffected. No preload: that is
+    # a commitment for the whole domain, which is the deployment's to make.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    # Scripts and workers come only from the build (Monaco included: it is bundled, not
+    # fetched from a CDN) and /config.js, never inline. The page calls only the api. Styles
+    # may be inline because the UI library and Monaco set them from script. Images and fonts
+    # may come from any https origin: avatars and Project logos are URLs users give, and the
+    # template preview (a sandboxed srcdoc iframe, which inherits this policy) shows the
+    # email's own images and web fonts.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' ${API_ORIGIN}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" always;
 
     # Where the api is, from the container's API_URL: one published image serves any
     # deployment. index.html loads this before the app.

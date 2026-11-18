@@ -1,14 +1,14 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { queries } from "@/lib/queries";
+import { fetchSessionOrNull } from "@/lib/queries/session";
 
 export const Route = createFileRoute("/_authd")({
   beforeLoad: async ({ context, location }) => {
-    const session = await context.queryClient.fetchQuery(queries.session.me).catch(() => null);
+    const session = await fetchSessionOrNull(context.queryClient);
 
     if (!session) {
       throw redirect({
         to: "/auth/sign-in",
-        search: { redirect: location.pathname },
+        search: { redirect: location.href },
       });
     }
   },

@@ -13,14 +13,15 @@ const PATH = "/unsubscribe/:orgSlug/:contactId";
  * provider sends without cookies or JavaScript; the dashboard's unsubscribe page sends the
  * same POST when a person confirms. A GET is a person opening the link, and is sent to that
  * page on `appOrigin` with the same path and query: a GET never unsubscribes, since link
- * scanners fetch every URL in a message. The query (`msg`, `topic`, `sig`) is in mail
- * already delivered, so it is fixed. `handle` is the real one unless a test swaps it.
+ * scanners fetch every URL in a message. The path and query (`msg`, `topic`, `sig`) are in
+ * mail already delivered, so they are fixed; the slug in the path is not used, since the
+ * Project may have been renamed since. `handle` is the real one unless a test swaps it.
  */
 export const unsubscribeRoutes = (options: {
   readonly appOrigin: string;
   readonly handle?: typeof handleListUnsubscribeOneClick;
-  /** The current better-auth secret, which signed the link. */
-  readonly secret: string;
+  /** Every better-auth secret, current first: any of them may have signed the link. */
+  readonly secrets: ReadonlyArray<string>;
 }) =>
   Layer.mergeAll(
     // For the CORS middleware this is given, which answers the dashboard page's preflight.
@@ -30,14 +31,14 @@ export const unsubscribeRoutes = (options: {
     ),
     HttpRouter.add("POST", PATH, (request) =>
       Effect.gen(function* () {
-        const { contactId, orgSlug } = yield* HttpRouter.params;
+        const { contactId } = yield* HttpRouter.params;
         const url = HttpServerRequest.toURL(request);
         const query = {
           messageId: url._tag === "Some" ? (url.value.searchParams.get("msg") ?? "") : "",
           signature: url._tag === "Some" ? (url.value.searchParams.get("sig") ?? "") : "",
           topicId: url._tag === "Some" ? (url.value.searchParams.get("topic") ?? "") : "",
         };
-        if (!(orgSlug && contactId && query.messageId && query.signature && query.topicId)) {
+        if (!(contactId && query.messageId && query.signature && query.topicId)) {
           return HttpServerResponse.jsonUnsafe(
             { code: "bad_request", message: "msg, topic, and sig query params are required" },
             { contentType: JSON_TYPE, status: 400 },
@@ -46,8 +47,7 @@ export const unsubscribeRoutes = (options: {
         return yield* (options.handle ?? handleListUnsubscribeOneClick)({
           contactId,
           messageId: query.messageId,
-          orgSlug,
-          secret: options.secret,
+          secrets: options.secrets,
           signature: query.signature,
           topicId: query.topicId,
         }).pipe(

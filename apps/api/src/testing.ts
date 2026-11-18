@@ -127,7 +127,7 @@ export const serve = (stubs: Stubs) =>
         hostname: "127.0.0.1",
         port: 0,
         unsubscribe: stubs.unsubscribe,
-        unsubscribeSecret: "test-secret",
+        unsubscribeSecrets: ["test-secret"],
       }).pipe(
         Layer.provide(Layer.succeed(ApiAuth, makeAuth(stubs))),
         Layer.provide(unusedServices),

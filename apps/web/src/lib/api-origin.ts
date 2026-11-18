@@ -6,9 +6,9 @@ declare global {
 
 /**
  * The api's origin, which every call goes to with the session cookie. `/config.js` sets it
- * before the app loads: the dashboard's server writes it from its `API_URL` when it
- * starts (`server/http.ts`), and Vite's dev server the same way (`vite.config.ts`), so no
- * deployment's URL is in the build.
+ * before the app loads: the image's nginx writes it from `API_URL` when the container
+ * starts (`nginx/default.conf.template`), and Vite's dev server the same way
+ * (`vite.config.ts`), so no deployment's URL is in the build.
  */
 export const API_ORIGIN = (() => {
   const apiUrl = window.RELAYIT_CONFIG?.apiUrl;
