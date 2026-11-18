@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "@effect/vitest";
 import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
 import * as NodeStream from "node:stream";
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { createAwsErrorMapper } from "../errors";
 import { ensureSesInfrastructure } from "./infrastructure";
 import {
@@ -275,6 +276,35 @@ describe("handleSesNotification", () => {
       expect(error._tag).toBe("AwsSnsTopicsUnavailable");
       expect(yield* handleSesNotification(body)).toMatchObject({ type: "events" });
     }).pipe(Effect.provide(deploymentTopics.pipe(Layer.provide(stsFor(1))))),
+  );
+
+  it.effect("gives up on a stalled account lookup after 5s and looks it up again", () =>
+    Effect.gen(function* () {
+      const stalled = yield* Deferred.make<void>();
+      let calls = 0;
+      const sts = Layer.succeed(STS, {
+        getCallerIdentity: () => {
+          calls += 1;
+          return calls === 1
+            ? Deferred.succeed(stalled, undefined).pipe(Effect.andThen(Effect.never))
+            : Effect.succeed({ Account: ACCOUNT, Arn: `arn:aws:iam::${ACCOUNT}:user/relayit` });
+        },
+      } as unknown as STS.Type);
+      const body = snsBody({
+        Message: bounce,
+        TopicArn: yield* workerTopic("us-east-1"),
+        Type: "Notification",
+      });
+
+      yield* Effect.gen(function* () {
+        const waiting = yield* Effect.forkChild(Effect.flip(handleSesNotification(body)));
+        yield* Deferred.await(stalled);
+        yield* TestClock.adjust("5 seconds");
+        expect((yield* Fiber.join(waiting))._tag).toBe("AwsSnsTopicsUnavailable");
+        expect(yield* handleSesNotification(body)).toMatchObject({ type: "events" });
+        expect(calls).toBe(2);
+      }).pipe(Effect.provide(deploymentTopics.pipe(Layer.provide(sts))));
+    }),
   );
 
   it.live("trusts no topic when email is fake", () =>

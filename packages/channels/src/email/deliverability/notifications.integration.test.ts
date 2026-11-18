@@ -171,6 +171,30 @@ describe("ingestDeliveryEvents", () => {
     }).pipe(Effect.provide(services)),
   );
 
+  it.live("concurrent bounces naming the same recipients in opposite orders both apply", () =>
+    Effect.gen(function* () {
+      const { ingest, recorded } = yield* sentDelivery;
+      const bounce = (recipients: readonly string[]) =>
+        ingest({
+          kind: "bounced",
+          notificationId: Bun.randomUUIDv7(),
+          raw: { bounce: { bounceType: "Permanent" } },
+          recipients,
+          suppress: true,
+        });
+      const recipients = ["to@example.com", "copied@example.com", "hidden@example.com"];
+
+      yield* Effect.all(
+        Array.from({ length: 20 }, (_, index) =>
+          bounce(index % 2 === 0 ? recipients : recipients.toReversed()),
+        ),
+        { concurrency: "unbounded" },
+      );
+
+      expect((yield* recorded).events).toHaveLength(20);
+    }).pipe(Effect.provide(services)),
+  );
+
   it.live("separate notifications about one Delivery are each recorded", () =>
     Effect.gen(function* () {
       const { ingest, recorded } = yield* sentDelivery;

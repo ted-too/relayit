@@ -38,6 +38,8 @@ export class SesNotificationTopics extends Context.Service<
   { readonly arns: Effect.Effect<ReadonlySet<string>, AwsSnsTopicsUnavailable> }
 >()("ProviderAws/SesNotificationTopics") {}
 
+const STS_TIMEOUT = Duration.seconds(5);
+
 /**
  * The topics in the account `STS` signs in as, named as `ensureSesInfrastructure` names
  * them. The account is looked up on the first notification, and again on each one after
@@ -53,7 +55,9 @@ export const sesNotificationTopicsInAccount = (input: {
       const sts = yield* STS;
       const { topicName } = namesFor(sesNotificationsUrl(input.apiUrl));
       const arns = yield* Effect.gen(function* () {
-        const identity = yield* sts.getCallerIdentity({});
+        // Callers wait on one lookup at a time, so a stalled one must end: a timeout fails
+        // it, which is not cached, and the next notification starts a fresh one.
+        const identity = yield* sts.getCallerIdentity({}).pipe(Effect.timeout(STS_TIMEOUT));
         // The caller's own ARN names the partition (aws, aws-cn, …) the topics are in.
         const partition = identity.Arn?.split(":")[1];
         if (!identity.Account) {

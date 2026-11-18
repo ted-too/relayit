@@ -219,9 +219,11 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
     const deliveryRecipients = new Set(
       [...delivery.to, ...(delivery.cc ?? []), ...(delivery.bcc ?? [])].map(normalizeContactEmail),
     );
-    const suppressed = event.recipients.filter((recipient) =>
-      deliveryRecipients.has(normalizeContactEmail(recipient)),
-    );
+    // Sorted, so concurrent notifications lock shared Contacts in the same order and cannot
+    // deadlock.
+    const suppressed = [
+      ...new Set(event.recipients.map(normalizeContactEmail)).intersection(deliveryRecipients),
+    ].toSorted();
 
     yield* db.transaction((tx) =>
       Effect.gen(function* () {

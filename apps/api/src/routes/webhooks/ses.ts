@@ -10,7 +10,8 @@ import { Api, SesNotificationFailed, SesNotificationRejected } from "../../api";
  * SES's bounce, complaint and delivery notifications, as SNS posts them: `text/plain`
  * holding JSON, so the raw body is read whatever the content type. A notification that
  * fails SNS's checks, or comes from a topic this deployment did not subscribe, is a 400,
- * which SNS does not retry; one we could not check or record is a 500, which it retries. `handle` is the real one unless a test swaps it.
+ * which SNS does not retry; one we could not check, confirm or record is a 500, which it
+ * retries. `handle` is the real one unless a test swaps it.
  */
 export const sesNotificationHandlers = (handle = handleSesNotification) =>
   HttpApiBuilder.group(Api, "sesNotifications", (handlers) =>
@@ -24,6 +25,13 @@ export const sesNotificationHandlers = (handle = handleSesNotification) =>
                 // Not the sender's fault: SNS retries it once the account can be looked up.
                 case "AwsSnsTopicsUnavailable":
                   return yield* notification.failure;
+                // SNS couldn't be reached to confirm; it sends the confirmation again.
+                case "AwsSubscriptionConfirmationError":
+                  if (notification.failure.reason === "request_failed") {
+                    return yield* notification.failure;
+                  }
+                  yield* Effect.logWarning("Rejected an SES notification", notification.failure);
+                  return "rejected" as const;
                 default:
                   yield* Effect.logWarning("Rejected an SES notification", notification.failure);
                   return "rejected" as const;
