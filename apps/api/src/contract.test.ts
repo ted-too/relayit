@@ -68,6 +68,48 @@ const expectSchemaFailure = (
 
 const refused = (message: string) => respond(422, { message, on: "body", type: "validation" });
 
+/**
+ * A request that announces 40 MiB and sends 1 KiB: an answer can only come from a handler
+ * that isn't waiting for the rest.
+ */
+const announced = (origin: string, path: string, headers: Record<string, string>) =>
+  Effect.promise(async () => {
+    let received = "";
+    const answered = Promise.withResolvers<string>();
+    const socket = await Bun.connect({
+      hostname: "127.0.0.1",
+      port: Number(new URL(origin).port),
+      socket: {
+        close: () => answered.resolve(received),
+        data: (_socket, chunk) => {
+          received += chunk.toString();
+          const [head, body] = received.split("\r\n\r\n");
+          const length = Number(/content-length: (\d+)/i.exec(head ?? "")?.[1]);
+          if (body !== undefined && body.length >= length) {
+            answered.resolve(received);
+          }
+        },
+      },
+    });
+    socket.write(
+      [
+        `POST ${path} HTTP/1.1`,
+        "host: api.test",
+        `content-length: ${40 * 1024 * 1024}`,
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        "",
+        `{"html":"${"a".repeat(1024)}`,
+      ].join("\r\n"),
+    );
+    const response = await Promise.race([
+      answered.promise,
+      Bun.sleep(2000).then(() => "no answer while the body is unread"),
+    ]);
+    socket.end();
+    const [head, body] = response.split("\r\n\r\n");
+    return { body, status: head?.split("\r\n")[0] };
+  });
+
 describe("the api's HTTP contract", () => {
   it.live("answers /health, and 404 NOT_FOUND to anything it does not route", () =>
     Effect.gen(function* () {
@@ -244,45 +286,10 @@ describe("POST /messages/email", () => {
     Effect.gen(function* () {
       const { accepted, stubs: boundary } = stubs();
       const origin = yield* serve(boundary);
-      // 40 MiB announced and 1 KiB sent: an answer can only come from a handler that
-      // isn't waiting for the rest.
       const unfinished = (path: string, key?: string) =>
-        Effect.promise(async () => {
-          let received = "";
-          const answered = Promise.withResolvers<string>();
-          const socket = await Bun.connect({
-            hostname: "127.0.0.1",
-            port: Number(new URL(origin).port),
-            socket: {
-              close: () => answered.resolve(received),
-              data: (_socket, chunk) => {
-                received += chunk.toString();
-                const [head, body] = received.split("\r\n\r\n");
-                const length = Number(/content-length: (\d+)/i.exec(head ?? "")?.[1]);
-                if (body !== undefined && body.length >= length) {
-                  answered.resolve(received);
-                }
-              },
-            },
-          });
-          socket.write(
-            [
-              `POST ${path} HTTP/1.1`,
-              "host: api.test",
-              "content-type: application/json",
-              `content-length: ${40 * 1024 * 1024}`,
-              ...(key === undefined ? [] : [`x-api-key: ${key}`]),
-              "",
-              `{"html":"${"a".repeat(1024)}`,
-            ].join("\r\n"),
-          );
-          const response = await Promise.race([
-            answered.promise,
-            Bun.sleep(2000).then(() => "no answer while the body is unread"),
-          ]);
-          socket.end();
-          const [head, body] = response.split("\r\n\r\n");
-          return { body, status: head?.split("\r\n")[0] };
+        announced(origin, path, {
+          "content-type": "application/json",
+          ...(key === undefined ? {} : { "x-api-key": key }),
         });
 
       expect(yield* unfinished("/messages/email")).toMatchObject({
@@ -1040,6 +1047,42 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
         );
       }
       expect(received).toEqual([body, body, body]);
+    }),
+  );
+
+  it.live("answers 400 to a body larger than SNS sends, without reading it", () =>
+    Effect.gen(function* () {
+      const { received, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const rejected = { code: "bad_request", message: "SES notification handling failed" };
+
+      expect(yield* announced(origin, SES_NOTIFICATIONS_PATH, {})).toEqual({
+        body: JSON.stringify(rejected),
+        status: "HTTP/1.1 400 Bad Request",
+      });
+      // Without a Content-Length, reading stops once it passes the limit.
+      const chunked = yield* Effect.promise(async () => {
+        const response = await fetch(`${origin}${SES_NOTIFICATIONS_PATH}`, {
+          body: new ReadableStream({
+            start: (controller) => {
+              controller.enqueue(new TextEncoder().encode("a".repeat(2 * 1024 * 1024)));
+              controller.close();
+            },
+          }),
+          duplex: "half",
+          method: "POST",
+        });
+        return { body: await response.text(), status: response.status };
+      });
+      expect(chunked).toEqual({ body: JSON.stringify(rejected), status: 400 });
+      expect(received).toEqual([]);
+
+      // The most SNS sends, 256 KB of message escaped to twice that, is read.
+      const largest = "a".repeat(600 * 1024);
+      expect(yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, { body: largest })).toEqual(
+        respond(200, { ok: true }),
+      );
+      expect(received).toEqual([largest]);
     }),
   );
 

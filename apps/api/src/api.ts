@@ -348,18 +348,26 @@ export class Api extends HttpApi.make("relayit")
         "HTTP API for sending messages through Relayit. Prefer POST /messages/email for new integrations.",
       title: "Relayit API",
       // The generator closes every object, but `/messages/email` drops a field it does not
-      // know rather than refuse it, in the body, a Contact and an attachment alike. Its
-      // objects are opened here so the document says what the route does; `topic_id`,
-      // the one field it refuses, stays declared as never valid.
+      // know rather than refuse it, at every depth: the body, a Contact, an attachment, a
+      // tag, `template`. Every object its body reaches is opened here so the document says
+      // what the route does; `topic_id`, the one field it refuses, stays declared as never
+      // valid.
       transform: (spec) => {
-        const { Attachment, Contact } = spec.components.schemas;
-        for (const schema of [
-          spec.paths["/messages/email"].post.requestBody.content["application/json"].schema,
-          Contact,
-          ...Attachment.anyOf,
-        ]) {
-          schema.additionalProperties = true;
-        }
+        const opened = new Set<unknown>();
+        const open = (schema: unknown): void => {
+          if (typeof schema !== "object" || schema === null || opened.has(schema)) {
+            return;
+          }
+          opened.add(schema);
+          if ("$ref" in schema && typeof schema.$ref === "string") {
+            open(spec.components.schemas[schema.$ref.replace("#/components/schemas/", "")]);
+          }
+          if ("additionalProperties" in schema && schema.additionalProperties === false) {
+            schema.additionalProperties = true;
+          }
+          Object.values(schema).forEach(open);
+        };
+        open(spec.paths["/messages/email"].post.requestBody.content["application/json"].schema);
         return spec;
       },
       version: "0.0.0",

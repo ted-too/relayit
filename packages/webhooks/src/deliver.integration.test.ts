@@ -141,9 +141,13 @@ describe("webhookDeliverHandler (PostgreSQL)", () => {
     }),
   );
 
-  it.live("dead-letters a delivery to a URL that isn't https at once", () =>
+  it.live("dead-letters a delivery to a URL that could never be requested, saying why", () =>
     Effect.gen(function* () {
-      for (const url of ["http://hooks.example.com/relayit", "file:///etc/passwd"]) {
+      for (const [url, lastError] of [
+        ["http://hooks.example.com/relayit", "Webhook Endpoint URL is not an https URL"],
+        ["file:///etc/passwd", "Webhook Endpoint URL is not an https URL"],
+        [`https://${"a".repeat(254)}/relayit`, "Webhook Endpoint URL's hostname is too long"],
+      ] as const) {
         const { outcome, requests, row } = yield* attempt(url, ["93.184.215.14"]);
 
         expect(requests).toEqual([]);
@@ -151,11 +155,7 @@ describe("webhookDeliverHandler (PostgreSQL)", () => {
           _tag: "Failure",
           failure: { _tag: "WebhookDeliveryTerminalError" },
         });
-        expect(row).toMatchObject({
-          lastError: "Webhook Endpoint URL is not an https URL",
-          nextAttemptAt: null,
-          status: "dead_letter",
-        });
+        expect(row).toMatchObject({ lastError, nextAttemptAt: null, status: "dead_letter" });
       }
     }),
   );

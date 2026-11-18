@@ -252,17 +252,26 @@ export const webhookDeliverHandler = defineJobHandler({
               });
             case "PublicUrlRefused":
               // A name's addresses can change, and a name missing now may be a DNS fault,
-              // so that is tried again until the attempts run out. A URL that isn't https
-              // stays one: the delivery is dead-lettered at once.
-              return error.reason === "no_public_address"
-                ? new WebhookDeliveryRetryableError({
+              // so that is tried again until the attempts run out. A URL that isn't https,
+              // or whose hostname is too long to exist, stays so: the delivery is
+              // dead-lettered at once.
+              switch (error.reason) {
+                case "no_public_address":
+                  return new WebhookDeliveryRetryableError({
                     deliveryId,
                     message: "Webhook Endpoint URL's host has no public address",
-                  })
-                : new WebhookDeliveryTerminalError({
+                  });
+                case "hostname_too_long":
+                  return new WebhookDeliveryTerminalError({
+                    deliveryId,
+                    message: "Webhook Endpoint URL's hostname is too long",
+                  });
+                case "unsupported_url":
+                  return new WebhookDeliveryTerminalError({
                     deliveryId,
                     message: "Webhook Endpoint URL is not an https URL",
                   });
+              }
           }
         }),
         Effect.matchEffect({
