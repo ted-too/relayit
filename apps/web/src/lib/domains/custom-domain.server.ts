@@ -57,15 +57,12 @@ const mapLifecycleError = (cause: {
   }
 };
 
-const loadProviderForOrg = (input: {
-  readonly organizationId: string;
-  readonly providerId: string;
-}) =>
+const loadProvider = (providerId: string) =>
   Effect.gen(function* () {
     const db = yield* DB;
     const row = yield* db.query.provider
       .findFirst({
-        where: { id: input.providerId },
+        where: { id: providerId },
       })
       .pipe(
         Effect.mapError(
@@ -85,33 +82,13 @@ const loadProviderForOrg = (input: {
       });
     }
 
-    if (row.scope === "project" && row.organizationId !== input.organizationId) {
-      return yield* new CustomDomainAdminError({
-        code: "not_found",
-        message: "Email Provider not found.",
-      });
-    }
-
-    if (row.scope !== "platform" && row.scope !== "project") {
-      return yield* new CustomDomainAdminError({
-        code: "not_found",
-        message: "Email Provider not found.",
-      });
-    }
-
     return row satisfies Provider;
   });
 
-const resolveEmailProvider = (input: {
-  readonly organizationId: string;
-  readonly providerId?: string;
-}) =>
+const resolveEmailProvider = (providerId: string | undefined) =>
   Effect.gen(function* () {
-    if (input.providerId) {
-      return yield* loadProviderForOrg({
-        organizationId: input.organizationId,
-        providerId: input.providerId,
-      });
+    if (providerId) {
+      return yield* loadProvider(providerId);
     }
 
     const defaultId = yield* resolveDefaultManagedEmailProviderId;
@@ -122,10 +99,7 @@ const resolveEmailProvider = (input: {
       });
     }
 
-    return yield* loadProviderForOrg({
-      organizationId: input.organizationId,
-      providerId: defaultId,
-    });
+    return yield* loadProvider(defaultId);
   });
 
 export const createCustomDomainForProject = (input: {
@@ -134,10 +108,7 @@ export const createCustomDomainForProject = (input: {
   readonly providerId?: string;
 }) =>
   Effect.gen(function* () {
-    const provider = yield* resolveEmailProvider({
-      organizationId: input.organizationId,
-      providerId: input.providerId,
-    });
+    const provider = yield* resolveEmailProvider(input.providerId);
 
     const created = yield* createCustomDomain({
       fqdn: input.fqdn,

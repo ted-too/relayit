@@ -72,9 +72,7 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
             unencrypted: { region: "us-east-1" },
           }),
           name: "Fake SES",
-          organizationId,
           productId: "ses",
-          scope: "project",
           vendorId: "aws",
         })
         .returning();
@@ -128,6 +126,7 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
         headers: null,
         html: null,
         replyTo: null,
+        sender: { identityFqdn: fqdn, projectId: organizationId },
         subject: "Bounce me",
         text: "Hello",
         to: [bounceAddress],

@@ -64,11 +64,11 @@ export const userChannelPausedReasonEnum = pgEnum("user_channel_paused_reason", 
  * they own.
  *
  * `limits` holds the **actual** effective per-bucket caps read at send time
- * (Purpose × Provider kind; a null means unlimited). They're synced onto this
+ * (per purpose; a null means unlimited). They're synced onto this
  * row from the user's plan (cloud) or OSS defaults whenever the subscription
  * changes, so the send path never has to resolve a plan. Quota itself is
  * computed dynamically on the send endpoint against these limits (Redis
- * counters keyed by `(userId, channel, purpose, providerKind, period)`), which
+ * counters keyed by `(userId, channel, purpose, period)`), which
  * is why quota exhaustion is *not* a pause reason here.
  *
  * `isPaused` pauses every project's sending on this channel for this user

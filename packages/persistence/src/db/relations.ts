@@ -104,10 +104,6 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   provider: {
-    organization: r.one.organization({
-      from: r.provider.organizationId,
-      to: r.organization.id,
-    }),
     providerIdentities: r.many.emailDomainProviderIdentity(),
   },
   customDomain: {

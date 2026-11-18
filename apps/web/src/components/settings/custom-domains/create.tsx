@@ -43,36 +43,24 @@ export function CreateDomain({
   const setOpen = _setOpenProp ?? _setOpen;
 
   const {
-    data: { managed, byo, defaultManagedProviderId },
+    data: { managed, defaultManagedProviderId },
   } = useSuspenseQuery(queries.organizations.bySlug(orgSlug).listProviders);
 
-  const showProviderPicker = managed.length > 1 || byo.length > 0;
+  const showProviderPicker = managed.length > 1;
 
-  const providerItems = useMemo(() => {
-    const items: { label: string; value: string }[] = [];
-
-    for (const provider of managed) {
-      items.push({
+  const providerItems = useMemo(
+    () =>
+      managed.map((provider) => ({
         label: `${provider.name ?? `${provider.vendorId}.${provider.productId}`}${provider.isDefault ? " · default" : ""}`,
         value: provider.id,
-      });
-    }
-
-    for (const provider of byo) {
-      items.push({
-        label: `${provider.name ?? `${provider.vendorId}.${provider.productId}`} · BYO`,
-        value: provider.id,
-      });
-    }
-
-    return items;
-  }, [managed, byo]);
+      })),
+    [managed],
+  );
 
   const defaultProviderId =
     defaultManagedProviderId ??
     managed.find((provider) => provider.isDefault)?.id ??
-    managed[0]?.id ??
-    byo[0]?.id;
+    managed[0]?.id;
 
   const { mutateAsync: createDomain } = useMutation({
     mutationFn: async (body: CreateCustomDomainFormValues) =>

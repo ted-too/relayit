@@ -5,7 +5,7 @@ description: "Rules for acceptable use of Relayit, including prohibited content,
 
 Effective date: 6 June 2025
 
-Last updated: 30 October 2026
+Last updated: 13 November 2026
 
 ## 1. Overview
 
@@ -178,7 +178,6 @@ If you believe enforcement action was taken in error:
 You must also comply with the terms and policies of the third-party delivery providers your messages pass through, including:
 
 - The Amazon SES sending guidelines and the AWS Acceptable Use Policy.
-- The terms of any provider you connect with your own credentials.
 - The terms of any other provider we integrate in the future.
 
 ### 8.2 Provider violations

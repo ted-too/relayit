@@ -81,9 +81,6 @@ export function ProviderItem({ provider }: { provider: PlatformProviderListItem 
               default
             </Badge>
           )}
-          <Badge size="sm" variant="secondary">
-            {provider.scope}
-          </Badge>
         </ItemTitle>
         <ItemDescription>{formatDateTime(provider.createdAt)}</ItemDescription>
       </ItemContent>

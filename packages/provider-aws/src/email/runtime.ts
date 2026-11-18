@@ -172,12 +172,10 @@ export const awsSesProviderFactory = {
                   }),
                 }),
               );
-              const tenantName = message.sender
-                ? yield* ensureTenantForSend({
-                    identityFqdn: message.sender.identityFqdn,
-                    tenantName: sesTenantNameFor(message.sender.projectId),
-                  })
-                : undefined;
+              const tenantName = yield* ensureTenantForSend({
+                identityFqdn: message.sender.identityFqdn,
+                tenantName: sesTenantNameFor(message.sender.projectId),
+              });
               const result = yield* ses
                 .sendEmail({
                   ConfigurationSetName: SES_CONFIGURATION_SET_NAME,

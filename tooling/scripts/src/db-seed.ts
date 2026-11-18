@@ -100,7 +100,7 @@ try {
       const vault = yield* ProviderCredentialsVault;
       const managed =
         (yield* effectDb.query.provider.findFirst({
-          where: { channelType: "email", isDefault: true, scope: "platform" },
+          where: { channelType: "email", isDefault: true },
         })) ??
         (yield* effectDb
           .insert(provider)
@@ -113,7 +113,6 @@ try {
             isDefault: true,
             name: "Local SES (placeholder credentials)",
             productId: "ses",
-            scope: "platform",
             vendorId: "aws",
           })
           .returning()

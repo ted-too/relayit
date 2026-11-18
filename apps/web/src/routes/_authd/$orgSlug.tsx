@@ -108,7 +108,7 @@ const NAV_ITEMS = [
         to: "/$orgSlug/domains",
         icon: Global,
         requiredPermissions: {
-          integration: ["read"],
+          domain: ["read"],
         },
       },
     ],

@@ -130,25 +130,19 @@ Example:
 
 On Relayit Cloud, each user has a Plan. The Plan of a Project's Billing User applies to every Project that user is Billing User for.
 
-Usage is counted per Delivery: one per accepted send, however many recipients it has. Limits are tracked separately for each combination of purpose (transactional or marketing) and Provider kind (managed or BYO). A blank daily limit means no daily cap.
+Usage is counted per Delivery: one per accepted send, however many recipients it has. Transactional and marketing sends are limited separately. A blank daily limit means no daily cap.
 
-|                                 | Free   | Signal    | Broadcast |
-| ------------------------------- | ------ | --------- | --------- |
-| Projects                        | 1      | 3         | 5         |
-| Data retention                  | 7 days | 30 days   | 90 days   |
-| Custom Domains                  | 1      | Unlimited | Unlimited |
-| BYO Providers                   | No     | No        | Yes       |
-| Transactional, managed: monthly | 2,500  | 40,000    | 200,000   |
-| Transactional, managed: daily   | 80     |           |           |
-| Transactional, BYO: monthly     | 10,000 | 200,000   | 1,000,000 |
-| Transactional, BYO: daily       | 500    |           |           |
-| Marketing, managed: monthly     | 500    | 10,000    | 50,000    |
-| Marketing, managed: daily       | 20     |           |           |
-| Marketing, BYO: monthly         | 2,000  | 50,000    | 250,000   |
-| Marketing, BYO: daily           | 100    |           |           |
+|                        | Free   | Signal    | Broadcast |
+| ---------------------- | ------ | --------- | --------- |
+| Projects               | 1      | 3         | 5         |
+| Data retention         | 7 days | 30 days   | 90 days   |
+| Custom Domains         | 1      | Unlimited | Unlimited |
+| Transactional: monthly | 2,500  | 40,000    | 200,000   |
+| Transactional: daily   | 80     |           |           |
+| Marketing: monthly     | 500    | 10,000    | 50,000    |
+| Marketing: daily       | 20     |           |           |
 
 Notes:
 
 - `POST /messages/email` always sends transactional email. Marketing limits apply to Campaigns, which are coming soon.
-- BYO limits only matter on Broadcast, the Plan that allows BYO Providers.
 - Self-hosted installs have no Plans. Every limit above is unlimited.

@@ -1,10 +1,5 @@
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
-import {
-  emailDomainProviderIdentity,
-  type Provider,
-  type ProviderKind,
-  provider,
-} from "@repo/persistence/db/schema";
+import { emailDomainProviderIdentity, type Provider, provider } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { EmailDeliveryPersistenceError } from "./errors";
@@ -17,9 +12,6 @@ export interface RoutableEmailProviderIdentity {
   readonly provider: Provider;
   readonly verificationStatus: string;
 }
-
-export const providerKindFor = (row: { readonly scope: string }): ProviderKind =>
-  row.scope === "platform" ? "managed" : "byo";
 
 export const listFailoverProviderIdentities = (
   db: DatabaseExecutor,

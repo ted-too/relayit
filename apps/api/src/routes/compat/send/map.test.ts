@@ -299,7 +299,6 @@ describe("mapAcceptResultToLegacyResponse", () => {
       mapAcceptResultToLegacyResponse(
         new UsageLimitExceeded({
           deliveryId: "edlv_1",
-          providerKind: "managed",
           retryAt: new Date("2026-08-15T00:00:00.000Z"),
           window: "daily",
         }),

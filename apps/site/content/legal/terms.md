@@ -5,7 +5,7 @@ description: "The terms and conditions governing your use of Relayit, on Relayit
 
 Effective date: 6 June 2025
 
-Last updated: 30 October 2026
+Last updated: 13 November 2026
 
 ## 1. Agreement to terms
 
@@ -18,7 +18,7 @@ These Terms apply to both:
 
 ## 2. Description of service
 
-Relayit is a messaging service that enables developers to send messages to their users through a unified API. Email is currently the only available channel. Additional channels, such as SMS, may be added in the future. We act as an intermediary, routing your messages to third-party delivery providers, either providers we manage or providers you connect with your own credentials.
+Relayit is a messaging service that enables developers to send messages to their users through a unified API. Email is currently the only available channel. Additional channels, such as SMS, may be added in the future. We act as an intermediary, routing your messages to third-party delivery providers that we manage.
 
 ## 3. Account registration and security
 

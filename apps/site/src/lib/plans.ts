@@ -45,15 +45,12 @@ export const plans: readonly Plan[] = [
     id: "broadcast",
     limits: [
       "200,000 emails a month",
-      "Up to 1,000,000 through your own AWS",
-      "5 projects, 90 days of history",
+      "5 projects, unlimited domains",
+      "90 days of message history",
     ],
     monthly: 99,
     monthlySends: 200_000,
     name: "Broadcast",
-    pitch: "For high volume and your own provider.",
+    pitch: "For high volume.",
   },
 ];
-
-/** Broadcast with a bring-your-own provider. */
-export const BYO_CEILING = 1_000_000;

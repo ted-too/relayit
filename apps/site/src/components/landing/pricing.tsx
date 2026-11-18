@@ -4,7 +4,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useId, useState } from "react";
-import { BYO_CEILING, type Plan, plans } from "@/lib/plans";
+import { type Plan, plans } from "@/lib/plans";
 
 const VOLUMES = [
   1000, 2500, 10_000, 25_000, 40_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000,
@@ -49,7 +49,6 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
   const [annual, setAnnual] = useState(false);
   const volume = VOLUMES[index] ?? VOLUMES[DEFAULT_INDEX];
   const plan = pickPlan(volume);
-  const byo = !plan && volume <= BYO_CEILING;
   const cadence = annual ? "year" : "month";
   const signUp = signedIn ? appUrl : `${appUrl}/auth/sign-up`;
 
@@ -65,15 +64,6 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
           <span className="text-primary dark:text-brand-mint">{price(plan, annual)}</span>
         </Roll>{" "}
         a {cadence}.
-      </>
-    );
-  } else if (byo) {
-    verdict = (
-      <>
-        <Roll id="byo">
-          <span className="text-primary dark:text-brand-mint">Broadcast</span>
-        </Roll>{" "}
-        with your own AWS covers it.
       </>
     );
   } else {
@@ -154,7 +144,7 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {plans.map((item) => {
-            const chosen = item.id === plan?.id || (byo && item.id === "broadcast");
+            const chosen = item.id === plan?.id;
             return (
               <div
                 className={cn(
@@ -227,20 +217,17 @@ export function Pricing({ appUrl, signedIn }: PricingProps) {
         <div
           className={cn(
             "mt-4 flex flex-col gap-4 rounded-xl border p-7 transition-colors duration-500 md:flex-row md:items-center md:justify-between",
-            plan || byo
+            plan
               ? "bg-card"
               : "border-brand-ink bg-brand-ink text-brand-mint dark:border-brand-mint/20",
           )}
         >
           <div>
-            <p className={cn("font-medium text-lg", !(plan || byo) && "text-white")}>
+            <p className={cn("font-medium text-lg", !plan && "text-white")}>
               Self-hosted <span className="font-normal opacity-70">$0, no send limits</span>
             </p>
             <p
-              className={cn(
-                "mt-1 text-sm",
-                plan || byo ? "text-muted-foreground" : "text-brand-mint/70",
-              )}
+              className={cn("mt-1 text-sm", plan ? "text-muted-foreground" : "text-brand-mint/70")}
             >
               Run the same API on your own servers. Every feature, no plans.
             </p>

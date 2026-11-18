@@ -32,15 +32,12 @@ describe("limitsFor", () => {
       projects: null,
       retention: null,
       email: {
-        byoProviders: true,
         customDomains: null,
         transactional: {
           managed: { monthlySends: null, dailySends: null },
-          byo: { monthlySends: null, dailySends: null },
         },
         marketing: {
           managed: { monthlySends: null, dailySends: null },
-          byo: { monthlySends: null, dailySends: null },
         },
       },
     });
@@ -217,15 +214,12 @@ describe("ensureUserLimits", () => {
         userId: "user_1",
         channelType: "email",
         limits: {
-          byoProviders: true,
           customDomains: null,
           transactional: {
             managed: { monthlySends: null, dailySends: null },
-            byo: { monthlySends: null, dailySends: null },
           },
           marketing: {
             managed: { monthlySends: null, dailySends: null },
-            byo: { monthlySends: null, dailySends: null },
           },
         },
       },

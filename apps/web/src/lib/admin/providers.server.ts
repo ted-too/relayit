@@ -11,7 +11,7 @@ import {
 import { ProviderCredentialsVault } from "@repo/persistence/crypto/provider-credentials";
 import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import { provider } from "@repo/persistence/db/schema";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import type { CreatePlatformProviderBody, UpdatePlatformProviderBody } from "./provider-schemas";
 import type {
@@ -70,7 +70,6 @@ const toListItem = (row: {
   isDefault: boolean;
   name: string | null;
   productId: string;
-  scope: "platform" | "project";
   updatedAt: Date;
   vendorId: string;
 }): PlatformProviderListItem => ({
@@ -83,7 +82,6 @@ const toListItem = (row: {
   isDefault: row.isDefault,
   name: row.name,
   productId: row.productId,
-  scope: row.scope,
   updatedAt: row.updatedAt,
   vendorId: row.vendorId,
 });
@@ -93,7 +91,7 @@ export const listPlatformProviders = Effect.gen(function* () {
   const rows = yield* db.query.provider
     .findMany({
       orderBy: { createdAt: "desc" },
-      where: { channelType: "email", scope: "platform" },
+      where: { channelType: "email" },
     })
     .pipe(
       Effect.mapError(
@@ -113,7 +111,7 @@ const clearEmailDefaults = (db: DatabaseExecutor) =>
   db
     .update(provider)
     .set({ isDefault: false })
-    .where(and(eq(provider.scope, "platform"), eq(provider.channelType, "email")))
+    .where(eq(provider.channelType, "email"))
     .pipe(
       Effect.mapError(
         (cause) =>
@@ -158,7 +156,6 @@ export const createPlatformProvider = (
         where: {
           channelType: "email",
           isDefault: true,
-          scope: "platform",
         },
       })
       .pipe(
@@ -179,9 +176,7 @@ export const createPlatformProvider = (
         credentials: sealed,
         isDefault: makeDefault || !existingDefault,
         name: input.name,
-        organizationId: null,
         productId: input.productId,
-        scope: "platform",
         vendorId: input.vendorId,
       })
       .returning()
@@ -240,7 +235,7 @@ export const updatePlatformProvider = (
 
     const existing = yield* db.query.provider
       .findFirst({
-        where: { id: input.providerId, scope: "platform" },
+        where: { id: input.providerId },
       })
       .pipe(
         Effect.mapError(
@@ -354,7 +349,6 @@ export const setDefaultPlatformProvider = (providerId: string) =>
         where: {
           channelType: "email",
           id: providerId,
-          scope: "platform",
         },
       })
       .pipe(
@@ -399,7 +393,7 @@ export const deletePlatformProvider = (providerId: string, apiOrigin: string) =>
     const db = yield* DB;
     const existing = yield* db.query.provider
       .findFirst({
-        where: { id: providerId, scope: "platform" },
+        where: { id: providerId },
       })
       .pipe(
         Effect.mapError(

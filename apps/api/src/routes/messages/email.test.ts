@@ -25,7 +25,6 @@ const makeTestLayer = () => {
   const usage = {
     confirm: () => Effect.void,
     release: () => Effect.void,
-    remeter: () => Effect.void,
     reserve: () =>
       Effect.succeed({
         billingUserId: "billing_test",
@@ -333,7 +332,6 @@ describe("POST /messages/email", () => {
       Effect.fail(
         new UsageLimitExceeded({
           deliveryId: "edlv_test",
-          providerKind: "managed",
           retryAt: new Date(Date.now() + 60_000),
           window: "daily",
         }),

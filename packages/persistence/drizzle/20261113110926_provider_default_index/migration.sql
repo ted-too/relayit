@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "provider_default_per_channel_uidx" ON "provider" ("channel_type") WHERE "is_default" = true;

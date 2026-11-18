@@ -9,23 +9,11 @@ export interface ManagedEmailProviderSummary {
   readonly isDefault: boolean;
   readonly name: string | null;
   readonly productId: string;
-  readonly scope: "platform";
   readonly updatedAt: Date;
   readonly vendorId: string;
 }
 
 export interface ProjectProvidersList {
-  readonly byo: readonly {
-    readonly channelType: string;
-    readonly createdAt: Date;
-    readonly id: string;
-    readonly isDefault: boolean;
-    readonly name: string | null;
-    readonly productId: string;
-    readonly scope: "project";
-    readonly updatedAt: Date;
-    readonly vendorId: string;
-  }[];
   readonly defaultManagedProviderId: string | null;
   readonly managed: readonly ManagedEmailProviderSummary[];
 }
@@ -38,7 +26,6 @@ export const resolveDefaultManagedEmailProviderId = Effect.gen(function* () {
       where: {
         channelType: "email",
         isDefault: true,
-        scope: "platform",
       },
     })
     .pipe(
@@ -62,7 +49,6 @@ export const resolveDefaultManagedEmailProviderId = Effect.gen(function* () {
       orderBy: { createdAt: "asc" },
       where: {
         channelType: "email",
-        scope: "platform",
       },
     })
     .pipe(
@@ -79,38 +65,9 @@ export const resolveDefaultManagedEmailProviderId = Effect.gen(function* () {
   return any?.id ?? null;
 });
 
-export const listProvidersForProject = (organizationId: string) =>
+export const listProvidersForProject = () =>
   Effect.gen(function* () {
     const db = yield* DB;
-
-    const byo = yield* db.query.provider
-      .findMany({
-        columns: {
-          channelType: true,
-          createdAt: true,
-          id: true,
-          isDefault: true,
-          name: true,
-          productId: true,
-          scope: true,
-          updatedAt: true,
-          vendorId: true,
-        },
-        where: {
-          organizationId,
-          scope: "project",
-        },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainAdminError({
-              cause,
-              code: "failed",
-              message: "Failed to list Project Providers.",
-            }),
-        ),
-      );
 
     const managed = yield* db.query.provider
       .findMany({
@@ -121,13 +78,11 @@ export const listProvidersForProject = (organizationId: string) =>
           isDefault: true,
           name: true,
           productId: true,
-          scope: true,
           updatedAt: true,
           vendorId: true,
         },
         where: {
           channelType: "email",
-          scope: "platform",
         },
       })
       .pipe(
@@ -144,40 +99,16 @@ export const listProvidersForProject = (organizationId: string) =>
     const defaultManagedProviderId = yield* resolveDefaultManagedEmailProviderId;
 
     return {
-      byo: byo.flatMap((row) =>
-        row.scope === "project"
-          ? [
-              {
-                channelType: row.channelType,
-                createdAt: row.createdAt,
-                id: row.id,
-                isDefault: row.isDefault,
-                name: row.name,
-                productId: row.productId,
-                scope: "project" as const,
-                updatedAt: row.updatedAt,
-                vendorId: row.vendorId,
-              },
-            ]
-          : [],
-      ),
       defaultManagedProviderId,
-      managed: managed.flatMap((row) =>
-        row.scope === "platform" && row.channelType === "email"
-          ? [
-              {
-                channelType: "email" as const,
-                createdAt: row.createdAt,
-                id: row.id,
-                isDefault: row.isDefault,
-                name: row.name,
-                productId: row.productId,
-                scope: "platform" as const,
-                updatedAt: row.updatedAt,
-                vendorId: row.vendorId,
-              },
-            ]
-          : [],
-      ),
+      managed: managed.map((row) => ({
+        channelType: "email" as const,
+        createdAt: row.createdAt,
+        id: row.id,
+        isDefault: row.isDefault,
+        name: row.name,
+        productId: row.productId,
+        updatedAt: row.updatedAt,
+        vendorId: row.vendorId,
+      })),
     } satisfies ProjectProvidersList;
   });

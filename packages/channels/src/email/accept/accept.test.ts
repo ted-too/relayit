@@ -26,7 +26,6 @@ const testServices = Layer.mergeAll(
   Layer.succeed(Usage, {
     confirm: unsupported,
     release: unsupported,
-    remeter: unsupported,
     reserve: unsupported,
   } satisfies UsageService),
   Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),

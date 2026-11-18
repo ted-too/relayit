@@ -6,18 +6,18 @@ import { Usage, UsageLive, UsagePolicy, type UsagePolicyService } from "./usage"
 const testRedisUrl = Bun.env.TEST_REDIS_URL;
 const integrationTestName = "Usage reservation lifecycle";
 
-const makePolicy = (limits: Partial<Record<"managed" | "byo", number>>): UsagePolicyService => {
+const makePolicy = (limit: number | null): UsagePolicyService => {
   const periodStart = new Date();
   periodStart.setUTCHours(0, 0, 0, 0);
   const periodEnd = new Date(periodStart);
   periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
 
   return {
-    resolve: ({ organizationId, providerKind }) =>
+    resolve: ({ organizationId }) =>
       Effect.succeed({
         billingUserId: `billing_${organizationId}`,
-        dailyLimit: limits[providerKind] ?? null,
-        monthlyLimit: limits[providerKind] ?? null,
+        dailyLimit: limit,
+        monthlyLimit: limit,
         periodEnd,
         periodStart,
       }),
@@ -40,15 +40,10 @@ const runWithUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A,
     ),
   );
 
-const makeReservation = (
-  organizationId: string,
-  deliveryId: string,
-  providerKind: "managed" | "byo" = "managed",
-) => ({
+const makeReservation = (organizationId: string, deliveryId: string) => ({
   channel: "email" as const,
   deliveryId,
   organizationId,
-  providerKind,
   purpose: "transactional" as const,
   reservedAt: new Date().toISOString(),
 });
@@ -67,7 +62,7 @@ describe("Usage reservation lifecycle", () => {
     const second = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
-      makePolicy({ managed: 1 }),
+      makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;
         const policy = yield* usage.reserve(first);
@@ -87,46 +82,12 @@ describe("Usage reservation lifecycle", () => {
     );
   });
 
-  test("remetering moves the reservation to the actual Provider kind", () => {
-    const organizationId = `organization_${Bun.randomUUIDv7()}`;
-    const original = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
-
-    return runWithUsage(
-      makePolicy({ byo: 1, managed: 1 }),
-      Effect.gen(function* () {
-        const usage = yield* Usage;
-        yield* usage.reserve(original);
-        yield* usage.remeter({
-          deliveryId: original.deliveryId,
-          providerKind: "byo",
-        });
-        yield* usage.remeter({
-          deliveryId: original.deliveryId,
-          providerKind: "byo",
-        });
-
-        yield* usage.reserve(
-          makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`, "managed"),
-        );
-
-        const error = yield* usage
-          .reserve(makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`, "byo"))
-          .pipe(Effect.flip);
-
-        expect(error).toMatchObject({
-          _tag: "UsageLimitExceeded",
-          window: "daily",
-        });
-      }),
-    );
-  });
-
   test("releasing twice cannot release another Delivery's Usage", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
     const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
-      makePolicy({ managed: 1 }),
+      makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;
         yield* usage.reserve(first);
@@ -152,7 +113,7 @@ describe("Usage reservation lifecycle", () => {
     const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
     return runWithUsage(
-      makePolicy({ managed: 1 }),
+      makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;
         yield* usage.reserve(first);

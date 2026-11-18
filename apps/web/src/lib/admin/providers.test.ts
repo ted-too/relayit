@@ -21,9 +21,7 @@ const platformProvider = {
   id: "prov_1",
   isDefault: true,
   name: "eu-central-1",
-  organizationId: null,
   productId: "ses",
-  scope: "platform" as const,
   updatedAt: new Date("2026-01-01"),
   vendorId: "aws",
 };

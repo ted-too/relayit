@@ -2,7 +2,6 @@ import { DB } from "@repo/persistence/db/effect";
 import {
   emailDomainProviderIdentity,
   organization,
-  provider,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
 import { and, count, eq, isNull } from "drizzle-orm";
@@ -19,7 +18,7 @@ export class SandboxAllocateError extends Data.TaggedError("SandboxAllocateError
 
 /**
  * Assign an organization to the least-loaded active verified sandbox root that
- * has ≥1 verified managed (platform) Provider identity. Returns null when none
+ * has ≥1 verified Provider identity. Returns null when none
  * are allocatable.
  */
 export const allocateSandboxDomain = (organizationId: string) =>
@@ -34,13 +33,6 @@ export const allocateSandboxDomain = (organizationId: string) =>
         and(
           eq(emailDomainProviderIdentity.sandboxDomainId, sandboxDomain.id),
           eq(emailDomainProviderIdentity.verificationStatus, "verified"),
-        ),
-      )
-      .innerJoin(
-        provider,
-        and(
-          eq(emailDomainProviderIdentity.providerId, provider.id),
-          eq(provider.scope, "platform"),
         ),
       )
       .leftJoin(organization, eq(organization.sandboxDomainId, sandboxDomain.id))

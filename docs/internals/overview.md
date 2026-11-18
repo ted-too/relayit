@@ -54,9 +54,9 @@ The worker checks suppression again before sending, since a bounce may have land
 
 ### SES tenant per Project
 
-All Projects on a managed SES account share that account's bounce and complaint rates, so one Project mailing a stale list could get the account paused and stop everyone's mail. Managed sends therefore go through an SES tenant per Project (`relayit-<projectId>`, derived, not stored), with SES's Standard reputation policy pausing only that tenant. The worker ensures the tenant on a Project's first send in each process: it creates the tenant and associates the Domain identity and the shared configuration set. A Domain identity is detached from its tenants before it is deleted, since SES refuses to delete an associated one.
+All Projects on the platform's SES account share that account's bounce and complaint rates, so one Project mailing a stale list could get the account paused and stop everyone's mail. Sends therefore go through an SES tenant per Project (`relayit-<projectId>`, derived, not stored), with SES's Standard reputation policy pausing only that tenant. The worker ensures the tenant on a Project's first send in each process: it creates the tenant and associates the Domain identity and the shared configuration set. A Domain identity is detached from its tenants before it is deleted, since SES refuses to delete an associated one.
 
-Ensuring the tenant fails open: if it fails (IAM lacking `ses:*Tenant*`, say), the send goes out untenanted and the next send tries again. A `SendingPausedException` is a Project Sending Pause only when `GetTenant` reports the tenant `DISABLED`; otherwise it is the whole account paused. BYO Providers send untenanted: the account is the customer's, so a tenant would isolate no one. Unpausing a tenant in SES does not yet unpause the Domain.
+Ensuring the tenant fails open: if it fails (IAM lacking `ses:*Tenant*`, say), the send goes out untenanted and the next send tries again. A `SendingPausedException` is a Project Sending Pause only when `GetTenant` reports the tenant `DISABLED`; otherwise it is the whole account paused. Unpausing a tenant in SES does not yet unpause the Domain.
 
 Per-Project configuration sets were rejected because they give metrics but no enforcement; a Relayit-side bounce-rate breaker because it rebuilds what SES's reputation policies already do, without changing how SES attributes reputation.
 
@@ -106,6 +106,5 @@ Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it 
 Ted has decided these go. They are still in the code; don't build on them.
 
 - **Pluggable providers.** SES is the only email vendor; the provider registry and the `vendor.product` type ids (`aws.ses`, the `:vendorId/:productId` webhook path) go.
-- **BYO Providers.** A deployment's SES accounts become ops-only backends, possibly one per region, with no customer-owned credentials, and the BYO Plan limits and pricing with them.
 - **Multi-provider Domains.** A Domain belongs to exactly one backend: pairings with several Providers, failover between them, the provider circuit and switching a Domain's Provider go, as does choosing a Provider when creating a Domain.
 - **`bun test`.** Tests move to Vitest and `@effect/vitest`, once Effect is on 4.0.2.
