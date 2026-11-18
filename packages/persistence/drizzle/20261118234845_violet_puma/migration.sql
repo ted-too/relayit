@@ -1,0 +1,1 @@
+CREATE INDEX "contact_app_env_lower_email_idx" ON "contact" ("organization_app_environment_id",lower("email"));

@@ -6,7 +6,7 @@ import {
   removeUnlinkedDomains,
 } from "@repo/channels/email/custom-domain";
 import { emailRecheckProjectSendingPauseHandler } from "@repo/channels/email/deliverability";
-import { makeEmailDeliverHandler } from "@repo/channels/email/delivery";
+import { endStuckDeliveries, makeEmailDeliverHandler } from "@repo/channels/email/delivery";
 import { ensureSandboxDomain } from "@repo/channels/email/sandbox";
 import {
   emailVerifyCustomDomainHandler,
@@ -65,6 +65,17 @@ const workerProgram = Effect.gen(function* () {
         Effect.catchCause(
           logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
         ),
+      ),
+    );
+
+    // A Delivery whose job was lost while it was `sending` has no run left to end it. Beside
+    // the jobs and on a timer, not only at start: one can be left at any time, and a worker
+    // may run for months.
+    yield* Effect.forkChild(
+      endStuckDeliveries.pipe(
+        Effect.catchCause(logEffectFailure("Failed to end Deliveries left sending")),
+        Effect.andThen(Effect.sleep("1 hour")),
+        Effect.forever,
       ),
     );
 

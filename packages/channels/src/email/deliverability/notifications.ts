@@ -19,10 +19,11 @@ import {
   deliveryDelivered,
   deliveryOpened,
 } from "@repo/webhooks/events";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Clock, Data, Effect } from "effect";
 import { TypeID } from "typeid-js";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
+import { contactsAmong } from "../../messages/suppressions";
 
 /** One outcome SES reported for a sent message, read from its notification. */
 export interface NormalizedDeliveryEvent {
@@ -193,10 +194,10 @@ const suppressContacts = (
   return Effect.forEach(
     input.recipients,
     (recipient) => {
-      const scope = and(
-        eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
-        sql`lower(${contact.email}) = ${normalizeContactEmail(recipient)}`,
-      );
+      const scope = contactsAmong({
+        emails: [normalizeContactEmail(recipient)],
+        organizationAppEnvironmentId: input.organizationAppEnvironmentId,
+      });
       // Hard bounce may upgrade marketing → all. Complaint must not downgrade all.
       const where =
         input.suppressionSeverity === "all" ? scope : and(scope, isNull(contact.suppressionReason));
