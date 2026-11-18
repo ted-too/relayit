@@ -1,11 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import type { EmailBackendService } from "@repo/channels/email/backend";
 import { makeSesEmailBackend, provesNotSent } from "./ses";
 
 const SEND_PATH = "/v2/email/outbound-emails";
 
-/** One send through the real SES client, with SES at `endpoint`. */
-const sendThrough = (endpoint: string) =>
+/** Runs `use` with one send through the real SES client, with SES at `endpoint`. */
+const throughSes = <A, E>(
+  endpoint: string,
+  use: (send: ReturnType<EmailBackendService["send"]>) => Effect.Effect<A, E>,
+) =>
   Effect.gen(function* () {
     const previous = process.env.AWS_ENDPOINT_URL_SESV2;
     process.env.AWS_ENDPOINT_URL_SESV2 = endpoint;
@@ -15,8 +19,8 @@ const sendThrough = (endpoint: string) =>
         regions: ["eu-central-1"],
         secretAccessKey: "secret",
       });
-      return yield* backend
-        .send({
+      return yield* use(
+        backend.send({
           message: {
             bcc: null,
             cc: null,
@@ -30,8 +34,8 @@ const sendThrough = (endpoint: string) =>
             to: ["someone@example.com"],
           },
           region: "eu-central-1",
-        })
-        .pipe(Effect.flip);
+        }),
+      );
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
@@ -44,6 +48,9 @@ const sendThrough = (endpoint: string) =>
       ),
     );
   });
+
+/** What one send that SES does not accept fails with. */
+const sendThrough = (endpoint: string) => throughSes(endpoint, Effect.flip);
 
 /** SES, the boundary: answers every call with `status`, counting the sends. */
 const answering = (status: number, errorType: string) => {
@@ -108,6 +115,62 @@ describe("the SES backend's send", () => {
       });
     }),
   );
+
+  it.live("opens a connection of its own for every send, however alive the last one is", () => {
+    // SES accepts every send and offers to keep each connection open.
+    const sendsOnConnection: number[] = [];
+    const server = Bun.listen<{ connection: number }>({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        data: (socket, chunk) => {
+          if (Buffer.from(chunk).toString("latin1").includes(SEND_PATH)) {
+            sendsOnConnection[socket.data.connection] =
+              (sendsOnConnection[socket.data.connection] ?? 0) + 1;
+          }
+          const body = JSON.stringify({ MessageId: "ses-message-id" });
+          socket.write(
+            `HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${body.length}\r\nconnection: keep-alive\r\n\r\n${body}`,
+          );
+        },
+        open: (socket) => {
+          socket.data = { connection: sendsOnConnection.length };
+          sendsOnConnection.push(0);
+        },
+      },
+    });
+    return Effect.gen(function* () {
+      const sent = yield* throughSes(`http://127.0.0.1:${server.port}`, (send) =>
+        Effect.forEach([1, 2, 3], () => send),
+      );
+
+      expect(sent).toEqual([
+        { providerMessageId: "ses-message-id" },
+        { providerMessageId: "ses-message-id" },
+        { providerMessageId: "ses-message-id" },
+      ]);
+      // The tenant calls beside each send keep their own kept-alive connection.
+      expect(sendsOnConnection.filter((sends) => sends > 0)).toEqual([1, 1, 1]);
+    }).pipe(Effect.ensuring(Effect.sync(() => server.stop(true))));
+  });
+
+  it.live("is an unknown outcome when a connection SES accepted drops before it reads", () => {
+    // Bun names the failing syscall `connect` only when no connection was made. One that
+    // was made and then dropped, even with nothing of the request read, must not be taken
+    // for proof that nothing was sent.
+    const server = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: { data: () => {}, open: (socket) => void socket.terminate() },
+    });
+    return Effect.gen(function* () {
+      const error = yield* sendThrough(`http://127.0.0.1:${server.port}`);
+
+      expect(error).toMatchObject({ _tag: "EmailBackendUnavailable" });
+      expect(provesNotSent(error.cause)).toBe(false);
+      expect(error.cause).not.toMatchObject({ syscall: "connect" });
+    }).pipe(Effect.ensuring(Effect.sync(() => server.stop(true))));
+  });
 
   it.live("goes to SES once, as an unknown outcome, when the connection drops after it", () => {
     // SES takes the request and the connection is reset before any answer.

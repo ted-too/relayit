@@ -2,7 +2,7 @@ import { makeSchemaJsonCodec, Redis } from "@repo/redis";
 import type { StreamReadEntry } from "@repo/redis/stream";
 import { Cause, Clock, Duration, Effect, Schedule } from "effect";
 import { type DeadLetterFailure, DeadLetterStore } from "./dead-letter";
-import { JobProcessingError, JobWorkerRuntimeError } from "./errors";
+import { JobHandlerDefect, JobProcessingError, JobWorkerRuntimeError } from "./errors";
 import type { JobDispatch, JobHandler, JobRetryPolicy, JobSchema } from "./job";
 import { type OutboxPublisherOptions, publishOutboxBatch } from "./outbox";
 import {
@@ -282,10 +282,18 @@ export const processJob = <
         onFailure: (error) => ({ _tag: "Failure", error }) as const,
         onSuccess: () => ({ _tag: "Success" }) as const,
       }),
+      // A handler that dies has failed this attempt, no more: the job is retried and in the
+      // end dead-lettered, so what it was for (a Delivery, say) still ends visibly.
+      Effect.catchDefect((defect) =>
+        Effect.logError("Job handler died", Cause.die(defect)).pipe(
+          Effect.as({ _tag: "Defect", error: new JobHandlerDefect({ cause: defect }) } as const),
+        ),
+      ),
     );
 
-    if (outcome._tag === "Failure") {
-      const disposition = handler.classifyFailure(outcome.error);
+    if (outcome._tag !== "Success") {
+      const disposition =
+        outcome._tag === "Defect" ? "retryable" : handler.classifyFailure(outcome.error);
 
       if (disposition === "retryable" && attempt < handler.contract.retry.maxAttempts) {
         const now = yield* Clock.currentTimeMillis;
@@ -426,12 +434,16 @@ export const registerJobHandler = <
           scheduledKey: keys.scheduled,
         }
       : {}),
-    // A job that fails here (a Redis blip on its acknowledge, say) stays pending and is
-    // reclaimed later. Failing the batch instead would interrupt every other job in it
-    // mid-handler and run them all again.
+    // A job that fails here (a Redis blip on its acknowledge, say), or dies outside its
+    // handler, stays pending and is reclaimed later. Failing the batch instead would
+    // interrupt every other job in it mid-handler and run them all again.
     process: (entry: StreamReadEntry) =>
       processJob(handler, entry).pipe(
-        Effect.catch((error) => Effect.logError("Job left pending for reclaim", error)),
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.interrupt
+            : Effect.logError("Job left pending for reclaim", cause),
+        ),
       ),
     reconcile: handler.reconcile,
     stream: keys.ready,

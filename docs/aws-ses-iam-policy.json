@@ -41,6 +41,7 @@
       "Effect": "Allow",
       "Action": [
         "sns:CreateTopic",
+        "sns:SetTopicAttributes",
         "sns:Subscribe",
         "sns:Unsubscribe",
         "sns:ListSubscriptionsByTopic"

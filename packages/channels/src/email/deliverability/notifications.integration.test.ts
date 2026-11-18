@@ -78,8 +78,9 @@ const sentDelivery = Effect.gen(function* () {
       ),
     );
 
-  const ingest = (event: Omit<NormalizedDeliveryEvent, "providerMessageId">) =>
-    ingestDeliveryEvents(db, { events: [{ ...event, providerMessageId }] });
+  // SES took the message a moment ago, as when its notifications usually arrive.
+  const ingest = (event: Omit<NormalizedDeliveryEvent, "providerMessageId" | "sentAt">) =>
+    ingestDeliveryEvents(db, { events: [{ ...event, providerMessageId, sentAt: new Date() }] });
   const recorded = Effect.gen(function* () {
     const events = yield* db
       .select({ kind: emailDeliveryEvent.kind })
@@ -104,7 +105,7 @@ const sentDelivery = Effect.gen(function* () {
       webhooks: webhooks.map(({ type }) => type),
     };
   });
-  return { ingest, providerMessageId, recorded };
+  return { deliveryId: delivery?.id ?? "", ingest, providerMessageId, recorded };
 });
 
 describe("ingestDeliveryEvents", () => {
@@ -236,23 +237,70 @@ describe("ingestDeliveryEvents", () => {
     }).pipe(Effect.provide(services)),
   );
 
-  it.live("a notification about no known Delivery changes nothing", () =>
+  it.live(
+    "a bounce that beats its Delivery's sent write is refused, then recorded when SNS sends it again",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DB;
+        const { deliveryId, ingest, providerMessageId, recorded } = yield* sentDelivery;
+        // SES has the message; the worker has claimed the Delivery and not yet recorded SES's
+        // answer.
+        yield* db
+          .update(emailDelivery)
+          .set({ providerMessageId: null, status: "sending" })
+          .where(eq(emailDelivery.id, deliveryId));
+        const bounce = {
+          kind: "bounced",
+          notificationId: Bun.randomUUIDv7(),
+          raw: { bounce: { bounceType: "Permanent" } },
+          recipients: ["to@example.com"],
+          suppress: true,
+        } as const;
+
+        // Not acknowledged: the api answers SNS with a 500 and SNS sends it again.
+        expect(yield* ingest(bounce).pipe(Effect.flip)).toMatchObject({
+          _tag: "DeliveryNotRecordedYet",
+          providerMessageId,
+        });
+        expect(yield* recorded).toEqual({ events: [], suppressed: [], webhooks: [] });
+
+        yield* db
+          .update(emailDelivery)
+          .set({ providerMessageId, status: "sent" })
+          .where(eq(emailDelivery.id, deliveryId));
+        yield* ingest(bounce);
+
+        expect(yield* recorded).toEqual({
+          events: ["bounced"],
+          suppressed: [{ email: "to@example.com", reason: "hard_bounce", severity: "all" }],
+          webhooks: ["delivery.bounced"],
+        });
+      }).pipe(Effect.provide(services)),
+  );
+
+  it.live("a notification about a message no Delivery carries is acknowledged once it is old", () =>
     Effect.gen(function* () {
       const db = yield* DB;
       const { recorded } = yield* sentDelivery;
+      const unknown = {
+        kind: "bounced",
+        notificationId: Bun.randomUUIDv7(),
+        providerMessageId: `ses-${Bun.randomUUIDv7()}`,
+        raw: {},
+        recipients: ["to@example.com"],
+        suppress: true,
+      } as const;
 
-      yield* ingestDeliveryEvents(db, {
-        events: [
-          {
-            kind: "bounced",
-            notificationId: Bun.randomUUIDv7(),
-            providerMessageId: `ses-${Bun.randomUUIDv7()}`,
-            raw: {},
-            recipients: ["to@example.com"],
-            suppress: true,
-          },
-        ],
-      });
+      // Sent long enough ago that the worker would have recorded it, at a time the
+      // notification does not give, or (a forged one) far in the future: SNS is not made to
+      // retry any of them.
+      for (const sentAt of [
+        new Date(Date.now() - 2 * 3_600_000),
+        null,
+        new Date(Date.now() + 2 * 3_600_000),
+      ]) {
+        yield* ingestDeliveryEvents(db, { events: [{ ...unknown, sentAt }] });
+      }
 
       expect(yield* recorded).toEqual({ events: [], suppressed: [], webhooks: [] });
     }).pipe(Effect.provide(services)),
