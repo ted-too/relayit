@@ -3,13 +3,13 @@ import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { emailAttachment } from "@repo/persistence/db/schema";
 import * as NodeDnsPromises from "node:dns/promises";
 import * as NodeNet from "node:net";
-import { Context, DateTime, Effect, Predicate, Result, Stream } from "effect";
+import { Context, DateTime, Duration, Effect, Predicate, Result, Stream } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import ipaddr from "ipaddr.js";
 import { typeid } from "typeid-js";
 import { z } from "zod";
 import {
-  ATTACHMENT_FETCH_TIMEOUT,
+  ATTACHMENTS_DEADLINE_SECONDS,
   ATTACHMENT_TTL_MS,
   contentTypeFromFilename,
   isBlockedAttachmentFilename,
@@ -152,8 +152,8 @@ export const resolveEmailAttachments = (
           const literal = NodeNet.isIP(hostname) !== 0;
           const hostLookup = yield* AttachmentHostLookup;
 
-          // Downloaded from a public address, up to the size limit, the lookup and the
-          // download together within the timeout. The host is resolved once and every
+          // Downloaded from a public address, up to the size limit, within the send's
+          // deadline. The host is resolved once and every
           // address checked; the request goes to one of those addresses, each in turn until
           // one connects, with the hostname as `Host` and as the TLS server name the
           // certificate is checked against, so another DNS answer can't steer it elsewhere.
@@ -164,25 +164,24 @@ export const resolveEmailAttachments = (
             const addresses = literal
               ? [hostname]
               : yield* Effect.tryPromise({
-                  // A name with no address is the caller's; any other DNS failure is ours.
-                  catch: (cause) => {
-                    switch (Predicate.hasProperty(cause, "code") ? cause.code : undefined) {
-                      case "ENODATA":
-                      case "ENOTFOUND":
-                        return new EmailAcceptRejected({
-                          code: "invalid_attachment",
-                          details: { filename: attachment.filename, reason: "unresolvable_host" },
-                          message: "Attachment URL's host could not be resolved.",
-                        });
-                      default:
-                        return new EmailAcceptInfrastructureError({
-                          cause,
-                          operation: "attachments",
-                          organizationId,
-                        });
-                    }
-                  },
-                  try: () => hostLookup.resolve(hostname),
+                  catch: (cause) =>
+                    new EmailAcceptInfrastructureError({
+                      cause,
+                      operation: "attachments",
+                      organizationId,
+                    }),
+                  // A name with no address has no public one, and is refused as such below;
+                  // any other DNS failure is Relayit's.
+                  try: () =>
+                    hostLookup.resolve(hostname).catch((cause: unknown) => {
+                      switch (Predicate.hasProperty(cause, "code") ? cause.code : undefined) {
+                        case "ENODATA":
+                        case "ENOTFOUND":
+                          return [];
+                        default:
+                          throw cause;
+                      }
+                    }),
                 });
             // Only plain public unicast. Loopback, private, link-local, unique-local, CGNAT,
             // unspecified, multicast, reserved and the IPv6 ranges that embed an IPv4 address
@@ -196,10 +195,15 @@ export const resolveEmailAttachments = (
               );
             };
             if (addresses.length === 0 || !addresses.every(isPublic)) {
+              // One answer whether the name exists or not, so a key holder can't learn which
+              // internal names Relayit's resolver knows; the log keeps the difference.
+              yield* Effect.logInfo("Attachment host has no public address").pipe(
+                Effect.annotateLogs({ host: parsed.host, resolved: addresses.length > 0 }),
+              );
               return yield* new EmailAcceptRejected({
                 code: "invalid_attachment",
                 details: { filename: attachment.filename, reason: "blocked_address" },
-                message: "Attachment URL must resolve to a public address.",
+                message: "Attachment URL's host has no public address.",
               });
             }
 
@@ -294,21 +298,35 @@ export const resolveEmailAttachments = (
               ...(literal ? {} : { tls: { serverName: hostname } }),
             } satisfies BunFetchRequestInit),
             Effect.provide(FetchHttpClient.layer),
-            Effect.timeout(ATTACHMENT_FETCH_TIMEOUT),
+            // What failed is the customer's URL: no address connected, or the body broke
+            // off. A request this code couldn't build is ours.
             Effect.catchTags({
-              // What failed is the customer's URL: no address connected, or the body broke
-              // off. A request this code couldn't build is ours.
               HttpClientError: (cause) => {
                 switch (cause.reason._tag) {
                   case "DecodeError":
-                  case "TransportError":
-                    return Effect.fail(
-                      new EmailAcceptRejected({
-                        code: "invalid_attachment",
-                        details: { filename: attachment.filename, reason: "fetch_failed" },
-                        message: "Failed to fetch attachment from URL.",
+                  case "TransportError": {
+                    // Logged so a fault on Relayit's side (its egress, its CA store) shows
+                    // up, though each send answers 422. The error's code and the host only:
+                    // its message and request carry the URL, whose query may hold a token.
+                    const failure = cause.reason.cause;
+                    return Effect.logWarning("Attachment URL fetch failed").pipe(
+                      Effect.annotateLogs({
+                        code: Predicate.hasProperty(failure, "code") ? String(failure.code) : "",
+                        failure: cause.reason._tag,
+                        host: parsed.host,
+                        name: Predicate.hasProperty(failure, "name") ? String(failure.name) : "",
                       }),
+                      Effect.andThen(
+                        Effect.fail(
+                          new EmailAcceptRejected({
+                            code: "invalid_attachment",
+                            details: { filename: attachment.filename, reason: "fetch_failed" },
+                            message: "Failed to fetch attachment from URL.",
+                          }),
+                        ),
+                      ),
                     );
+                  }
                   default:
                     return Effect.fail(
                       new EmailAcceptInfrastructureError({
@@ -319,18 +337,22 @@ export const resolveEmailAttachments = (
                     );
                 }
               },
-              TimeoutError: () =>
-                Effect.fail(
-                  new EmailAcceptRejected({
-                    code: "invalid_attachment",
-                    details: { filename: attachment.filename, reason: "fetch_timeout" },
-                    message: "Attachment URL did not finish within the time limit.",
-                  }),
-                ),
             }),
           );
         }),
       { concurrency: 4 },
+    ).pipe(
+      Effect.timeout(Duration.seconds(ATTACHMENTS_DEADLINE_SECONDS)),
+      Effect.catchTags({
+        TimeoutError: () =>
+          Effect.fail(
+            new EmailAcceptRejected({
+              code: "invalid_attachment",
+              details: { reason: "fetch_timeout" },
+              message: "Attachments did not finish within the time limit.",
+            }),
+          ),
+      }),
     );
   });
 

@@ -135,7 +135,7 @@ const Attachment = Schema.Union([
     content: Schema.optionalKey(Schema.Never),
     path: UriString.annotate({
       description:
-        "HTTPS URL of a hosted file to attach, fetched when the send is accepted, with 30 seconds for the lookup and download together. Only `https:` URLs whose host resolves to a public address are fetched, each address in turn until one connects; a redirect is refused, not followed.",
+        "HTTPS URL of a hosted file to attach, fetched when the send is accepted, within the 30 seconds all of a send's attachments have together. Only `https:` URLs whose host resolves to a public address are fetched, each address in turn until one connects; a redirect is refused, not followed.",
     }),
   }).annotate({ title: "Hosted attachment" }),
 ]).annotate({ identifier: "Attachment", title: "Attachment" });

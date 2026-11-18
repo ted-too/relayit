@@ -8,10 +8,17 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
+import {
+  AttachmentHostLookup,
+  resolveEmailAttachments,
+} from "@repo/channels/email/accept/attachments";
+import { ATTACHMENTS_DEADLINE_SECONDS } from "@repo/channels/email/attachment-policy";
 import { UsageLimitExceeded } from "@repo/channels/usage";
 import { AwsSnsValidationError } from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { TestClock } from "effect/testing";
 import { GOOD_KEY, request, serve, stubs } from "./testing";
 
 const JSON_TYPE = "application/json;charset=utf-8";
@@ -486,6 +493,63 @@ describe("POST /messages/email", () => {
           code: "all_recipients_suppressed",
           message:
             "Every recipient is suppressed at severity all; no deliverable addresses remain.",
+        }),
+      );
+    }),
+  );
+
+  it.effect("answers 422 fetch_timeout when hosted attachments outlast the send's deadline", () =>
+    Effect.gen(function* () {
+      // Accept's own attachment resolution, against a host that never answers.
+      const fetched: string[] = [];
+      const neverAnswers = Object.assign(
+        (input: string | URL | Request) => {
+          fetched.push(String(input));
+          return new Promise<Response>(() => undefined);
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      );
+      const origin = yield* serve(
+        stubs({
+          accept: (input) =>
+            resolveEmailAttachments(input.email.attachments, input.organizationId).pipe(
+              Effect.provideService(FetchHttpClient.Fetch, neverAnswers),
+              Effect.provideService(AttachmentHostLookup, {
+                resolve: () => Promise.resolve(["93.184.215.14"]),
+              }),
+              Effect.as({
+                deliveryId: "edlv_1",
+                messageId: "msg_1",
+                replayed: false,
+                stripped: [],
+              }),
+            ),
+        }).stubs,
+      );
+
+      const response = yield* request(origin, "POST", "/messages/email", {
+        body: email({
+          attachments: [{ filename: "slow.pdf", path: "https://files.example.com/slow.pdf" }],
+        }),
+        headers: keyed,
+      }).pipe(Effect.forkChild);
+      yield* Effect.promise(async () => {
+        while (fetched.length === 0) {
+          await Bun.sleep(1);
+        }
+      });
+      yield* TestClock.adjust(`${ATTACHMENTS_DEADLINE_SECONDS + 1} seconds`);
+      const answered = yield* Effect.raceFirst(
+        Fiber.join(response),
+        Effect.promise(() => Bun.sleep(2000)).pipe(Effect.as("no answer after the deadline")),
+      );
+      // Lets anything still waiting on the clock finish, so the server can shut down.
+      yield* TestClock.adjust("1 hour");
+      expect(answered).toEqual(
+        respond(422, {
+          code: "invalid_attachment",
+          message: "Attachments did not finish within the time limit.",
+          details: { reason: "fetch_timeout" },
         }),
       );
     }),

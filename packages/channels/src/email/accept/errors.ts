@@ -9,7 +9,6 @@ export type EmailAcceptAttachmentReason =
   | "fetch_timeout"
   | "invalid_base64"
   | "redirect_refused"
-  | "unresolvable_host"
   | "unsupported_url";
 
 export interface EmailAcceptRejectedDetails {

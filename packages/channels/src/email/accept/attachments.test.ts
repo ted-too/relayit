@@ -1,8 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Logger, References } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
-import { MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "../attachment-policy";
+import {
+  ATTACHMENTS_DEADLINE_SECONDS,
+  MAX_ATTACHMENT_BYTES,
+  MAX_TOTAL_ATTACHMENT_BYTES,
+} from "../attachment-policy";
 import { AttachmentHostLookup, resolveEmailAttachments } from "./attachments";
 
 interface FetchCall {
@@ -33,6 +37,21 @@ const fakeLookup = (answers: Record<string, readonly string[]>) => ({
       : Promise.resolve(addresses);
   },
 });
+
+/** Every log line written while it is provided, with its annotations. */
+const captureLogs = () => {
+  const lines: { annotations: Record<string, unknown>; level: string; message: unknown }[] = [];
+  const layer = Logger.layer([
+    Logger.make((options) => {
+      lines.push({
+        annotations: options.fiber.getRef(References.CurrentLogAnnotations),
+        level: options.logLevel,
+        message: options.message,
+      });
+    }),
+  ]);
+  return { layer, lines };
+};
 
 const hosted = (url: string, filename = "file.pdf") => ({
   filename,
@@ -101,7 +120,7 @@ describe("resolveEmailAttachments, hosted", () => {
         expect(error, url).toMatchObject({
           code: "invalid_attachment",
           details: { reason: "blocked_address" },
-          message: "Attachment URL must resolve to a public address.",
+          message: "Attachment URL's host has no public address.",
         });
       }
       expect(calls).toEqual([]);
@@ -140,14 +159,29 @@ describe("resolveEmailAttachments, hosted", () => {
     }),
   );
 
-  it.effect("refuses a hostname that does not resolve", () =>
+  it.effect("answers a name with no address as one with no public address", () =>
     Effect.gen(function* () {
-      const { fetch } = fakeFetch(() => new Response("file"));
-      const error = yield* Effect.flip(resolveOne("https://nowhere.example.com/a.pdf", { fetch }));
-      expect(error).toMatchObject({
+      const { calls, fetch } = fakeFetch(() => new Response("file"));
+      const lookup = fakeLookup({ "api.railway.internal": ["10.0.0.7"] });
+      const logs = captureLogs();
+      const missing = yield* Effect.flip(
+        resolveOne("https://nowhere.railway.internal/a.pdf", { fetch, lookup }),
+      ).pipe(Effect.provide(logs.layer));
+      const internal = yield* Effect.flip(
+        resolveOne("https://api.railway.internal/a.pdf", { fetch, lookup }),
+      ).pipe(Effect.provide(logs.layer));
+      // The customer can't tell an internal name that exists from one that doesn't.
+      expect(missing).toEqual(internal);
+      expect(missing).toMatchObject({
         code: "invalid_attachment",
-        details: { reason: "unresolvable_host" },
+        details: { filename: "file.pdf", reason: "blocked_address" },
       });
+      expect(calls).toEqual([]);
+      // Relayit's log can.
+      expect(logs.lines.map((line) => line.annotations)).toMatchObject([
+        { host: "nowhere.railway.internal", resolved: false },
+        { host: "api.railway.internal", resolved: true },
+      ]);
     }),
   );
 
@@ -248,7 +282,8 @@ describe("resolveEmailAttachments, hosted", () => {
       expect(error).toMatchObject({
         _tag: "EmailAcceptRejected",
         code: "invalid_attachment",
-        details: { filename: "file.pdf", reason: "fetch_timeout" },
+        details: { reason: "fetch_timeout" },
+        message: "Attachments did not finish within the time limit.",
       });
     }),
   );
@@ -299,6 +334,56 @@ describe("resolveEmailAttachments, hosted", () => {
     }),
   );
 
+  it.effect("gives all of a send's attachments one deadline, not one each", () =>
+    Effect.gen(function* () {
+      // Each answers when the test says, so each takes as long as the test clock allows.
+      const pending: (() => void)[] = [];
+      const { calls, fetch } = fakeFetch(
+        () =>
+          new Promise<Response>((resolve) => {
+            pending.push(() => resolve(new Response("%PDF")));
+          }),
+      );
+      const lookup = fakeLookup({ "files.example.com": ["93.184.215.14"] });
+      const settle = (count: number) =>
+        Effect.promise(async () => {
+          while (calls.length < count) {
+            await Bun.sleep(1);
+          }
+        });
+      const fiber = yield* resolveEmailAttachments(
+        ["1", "2", "3", "4", "5"].map((name) =>
+          hosted(`https://files.example.com/${name}.pdf`, `${name}.pdf`),
+        ),
+        "org_test",
+      ).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.provideService(AttachmentHostLookup, lookup),
+        Effect.flip,
+        Effect.forkChild,
+      );
+
+      // Four at a time take 20 seconds; the fifth starts only then.
+      yield* settle(4);
+      yield* TestClock.adjust("20 seconds");
+      for (const answer of pending.splice(0)) {
+        answer();
+      }
+      yield* settle(5);
+      // 35 seconds in: past the send's deadline, though the fifth has had only 15.
+      yield* TestClock.adjust(`${ATTACHMENTS_DEADLINE_SECONDS - 15} seconds`);
+      const error = yield* Effect.raceFirst(
+        Fiber.join(fiber),
+        Effect.promise(() => Bun.sleep(1000)).pipe(Effect.as("still fetching past the deadline")),
+      );
+      expect(error).toMatchObject({
+        _tag: "EmailAcceptRejected",
+        code: "invalid_attachment",
+        details: { reason: "fetch_timeout" },
+      });
+    }),
+  );
+
   it.effect("tries each checked address in turn until one connects", () =>
     Effect.gen(function* () {
       const refused = () => {
@@ -320,10 +405,12 @@ describe("resolveEmailAttachments, hosted", () => {
       ]);
       expect(calls[1]?.init).toMatchObject({ tls: { serverName: "files.example.com" } });
 
-      // None connects: the customer's URL failed, not Relayit.
+      // None connects: the customer's URL failed, not Relayit, but Relayit logs why, in
+      // case the fault is its own, without the URL's signed query.
+      const logs = captureLogs();
       const error = yield* Effect.flip(
-        resolveOne("https://dead.example.com/a.pdf", { fetch, lookup }),
-      );
+        resolveOne("https://dead.example.com/a.pdf?sig=customer-secret", { fetch, lookup }),
+      ).pipe(Effect.provide(logs.layer));
       expect(error).toEqual(
         expect.objectContaining({
           _tag: "EmailAcceptRejected",
@@ -331,6 +418,18 @@ describe("resolveEmailAttachments, hosted", () => {
         }),
       );
       expect(calls).toHaveLength(4);
+      expect(logs.lines).toMatchObject([
+        {
+          annotations: {
+            code: "ECONNREFUSED",
+            failure: "TransportError",
+            host: "dead.example.com",
+            name: "Error",
+          },
+          level: "Warn",
+        },
+      ]);
+      expect(JSON.stringify(logs.lines)).not.toContain("customer-secret");
     }),
   );
 

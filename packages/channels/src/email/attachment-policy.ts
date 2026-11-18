@@ -15,8 +15,12 @@ export const MAX_TOTAL_ATTACHMENT_BYTES = Math.floor(((40_000_000 * 3) / 4) * (7
 /** Max attachments on one send. */
 export const MAX_ATTACHMENTS = 20;
 
-/** Attachment URL fetch timeout, from the request to the last byte of the body. */
-export const ATTACHMENT_FETCH_TIMEOUT = "30 seconds" as const;
+/**
+ * How long all of one send's attachments may take: every hosted one's lookup and download
+ * and every inline one's decoding, together. The api's server keeps a connection open
+ * longer than this (`apps/api/src/http.ts`), so a send that runs out answers its 422.
+ */
+export const ATTACHMENTS_DEADLINE_SECONDS = 30;
 
 export const ATTACHMENT_CONTENT_TYPES: Readonly<Record<string, string>> = {
   csv: "text/csv",

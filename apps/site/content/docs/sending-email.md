@@ -183,7 +183,7 @@ Limits and behavior:
 
 - Up to 20 attachments per request. Each can be at most 10 MiB (10,485,760 bytes) after decoding or download, and together they can be at most 29,230,769 bytes (about 27.9 MiB), which is what fits in an email of SES's 40 MB maximum once base64 encoded. Over that, the request fails with `invalid_attachment` and `reason: "exceeds_total_size_limit"`.
 - The whole request body can be at most 50 MiB. A larger one fails with `413` and `payload_too_large`.
-- Hosted files are fetched once, with 30 seconds for the DNS lookup and the whole download together. If the host has several addresses, each is tried in turn until one connects.
+- Hosted files are fetched once, and all of a request's attachments have 30 seconds together: every hosted one's DNS lookup and download, at most four at a time. If a host has several addresses, each is tried in turn until one connects.
 - Only `https:` URLs are fetched, and only from a public address: a host that resolves to a loopback, private, link-local or other internal address is refused. Redirects are not followed, so link to the file itself.
 - A hosted file that can't be fetched fails the request with `422` and `invalid_attachment`, never `500`: a non-2xx or redirect response, a connection or TLS failure, or the time running out. `details.reason` says which; see [Attachment reasons](/docs/errors-and-limits#attachment-reasons).
 - Attachments are stored for 7 days after the later of the send time and `scheduled_at`.

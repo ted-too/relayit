@@ -90,7 +90,7 @@ When present, `details` contains some of these fields:
 
 | Field       | Used by                                                       | Description                                                                                     |
 | ----------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `filename`  | `invalid_attachment`                                          | The attachment that failed; absent for `exceeds_total_size_limit`.                              |
+| `filename`  | `invalid_attachment`                                          | The attachment that failed; absent for `exceeds_total_size_limit` and `fetch_timeout`.          |
 | `reason`    | `invalid_attachment`                                          | See [Attachment reasons](#attachment-reasons).                                                  |
 | `max_bytes` | `invalid_attachment`                                          | The limit in bytes: 10485760 for `exceeds_size_limit`, 29230769 for `exceeds_total_size_limit`. |
 | `status`    | `invalid_attachment`                                          | The HTTP status the attachment URL answered with, for `fetch_failed` and `redirect_refused`.    |
@@ -106,11 +106,10 @@ When present, `details` contains some of these fields:
 | `exceeds_total_size_limit` | The request's attachments together are over 29,230,769 bytes. `filename` is not set.                                                                         |
 | `invalid_base64`           | `content` is not valid base64.                                                                                                                               |
 | `unsupported_url`          | `path` is not an `https:` URL.                                                                                                                               |
-| `unresolvable_host`        | The host in `path` has no DNS address.                                                                                                                       |
-| `blocked_address`          | The host in `path` is, or resolves to, a loopback, private, link-local or other internal address.                                                            |
+| `blocked_address`          | The host in `path` has no public address: it has no DNS address, or it is or resolves to a loopback, private, link-local or other internal address.          |
 | `fetch_failed`             | The URL answered with a non-2xx status, given in `status`; or, without `status`, no address connected (connection or TLS failure) or the download broke off. |
 | `redirect_refused`         | The URL answered with a redirect, its status in `status`. Link to the file itself.                                                                           |
-| `fetch_timeout`            | The DNS lookup and download took more than 30 seconds together.                                                                                              |
+| `fetch_timeout`            | The request's attachments took more than 30 seconds together: every hosted one's DNS lookup and download. `filename` is not set.                             |
 
 Example:
 
