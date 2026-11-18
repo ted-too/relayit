@@ -6,7 +6,7 @@ Relayit ships as four images on GitHub Container Registry, `ghcr.io/ted-too/rela
 
 - **A pull request into `main`** builds all four images and pushes them as `:pr-<number>` (`.github/workflows/build-images.yml`).
 - **A push to `main`** runs semantic-release (`.github/workflows/semantic-release.yml`, `release.config.cjs`). `main` is a prerelease branch, so a release is the next `v1.0.0-alpha.N`: a GitHub Release and tag, no changelog commit. `feat`, `fix`, `perf`, `refactor` and `revert` commits release; `docs`, `chore`, `test`, `build`, `ci` and `style` don't. PRs are squash-merged, so the PR title is the commit it reads.
-- **A release** builds the four images in the same workflow and pushes them as `:<version>` and `:alpha`. Nothing deploys them: Relayit's cloud pins each of its four Railway services (api, worker, builder, web) to an exact image digest, and a release goes out when someone sets those images, the api's first ([Deploying a release](#deploying-a-release)). The `stable` branch exists only because semantic-release requires a non-prerelease branch; nothing is pushed to it, and the `:main` tag it would produce is unused.
+- **A release** builds the four images in the same workflow and pushes them as `:<version>` and `:alpha`. Nothing deploys them: Relayit's cloud pins each of its four Railway services (api, worker, builder, web) to an exact image, by digest or `:<version>`, and a release goes out when someone sets those images, the api's first ([Deploying a release](#deploying-a-release)). The `stable` branch exists only because semantic-release requires a non-prerelease branch; nothing is pushed to it, and the `:main` tag it would produce is unused.
 
 ## What lives where
 
@@ -78,7 +78,7 @@ This is what a deployment that skipped the setting up sees, on the api: the new 
 
 #### Rolling back
 
-Set the service's image back to the earlier release's digest or `:<version>` and deploy. For an api image that has the step nothing else is needed: the step finds the database ahead of it and exits 0, and the app starts. An api image from before the migrate step existed has no `migrate.js`, so with the command set its pre-deploy step fails, or runs until its timeout, and the deployment does not proceed. Clear the Pre-deploy Command first, roll back, and set it again when moving forward.
+Set the service's image back to the earlier release's digest or `:<version>` and deploy. For an api image that has the step nothing else is needed: the step finds the database ahead of it and exits 0, and the app starts. An api image from before the migrate step existed has no `migrate.js`, so with the command set its pre-deploy step fails, or runs until its timeout, and the deployment does not proceed. Clear the Pre-deploy Command first, roll back, and set it and its 600-second timeout again (clearing the command clears the timeout too) when moving forward.
 
 ### Docker Compose
 
