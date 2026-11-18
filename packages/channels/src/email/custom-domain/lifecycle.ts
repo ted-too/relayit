@@ -1,13 +1,13 @@
 import { Jobs } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
-import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
+import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import {
   type CustomDomain,
   customDomain,
   type DomainPausedReason,
   emailDnsRecord,
   emailDomainRegistration,
-  type OrganizationDomain,
+  type OrganizationDomainInsert,
   organizationDomain,
 } from "@repo/persistence/db/schema";
 import { and, eq, ne } from "drizzle-orm";
@@ -89,17 +89,10 @@ const loadCustomDomainKeyMaterial = (domain: CustomDomain) =>
   });
 
 /**
- * How long a claim has to prove ownership. One left unproven lapses, so it can't hold a
- * Domain against every later claim.
+ * How long a claim has to prove ownership. One left unproven lapses and its next check
+ * removes it, so abandoned claims don't pile up.
  */
 export const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-export const isLapsedClaim = (
-  link: Pick<OrganizationDomain, "createdAt" | "ownershipVerificationStatus">,
-  now: Date,
-) =>
-  link.ownershipVerificationStatus !== "verified" &&
-  now.getTime() - new Date(link.createdAt).getTime() > CLAIM_TTL_MS;
 
 /** The Project holds the Domain: its link is ownership-verified, not a claim. */
 const assertDomainHolder = (input: {
@@ -411,23 +404,10 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         }
       }
 
-      const now = new Date();
-      const pendingClaim = existing.organizations.find(
-        (organization) =>
-          organization.ownershipVerificationStatus !== "verified" &&
-          !isLapsedClaim(organization, now),
-      );
-      if (pendingClaim) {
-        return yield* new CustomDomainError({
-          customDomainId: existing.id,
-          message: "Another Project already has a pending claim on this domain.",
-          operation: "claim",
-          organizationId: input.organizationId,
-        });
-      }
-
       // Proof is asked for even when no Project holds the Domain any more: one whose holder
       // was deleted, or left while a claim was pending, is still someone's DNS and DKIM key.
+      // Claims run side by side: each has its own token, and the first proven takes the
+      // Domain from the rest, so one claim never blocks another.
       yield* createOrgDomainLink({
         customDomainId: existing.id,
         db,
@@ -597,29 +577,63 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   });
 
 /**
- * After ownership verifies on a claim: every other Project loses the Domain. Its SES
- * registration and DNS records stay, since they belong to the domain, not the Project.
+ * A proven claim takes the Domain: its link is marked proven and every other Project's link
+ * goes, in one transaction holding the Domain's row. A failure leaves the claim unproven to
+ * be checked again, and of two claims proven at once the second finds its link gone. False
+ * when it is: another claim took the Domain first. The SES registration and DNS records
+ * stay, since they belong to the Domain, not the Project.
  */
 export const completeDomainClaimTransfer = (input: {
-  readonly customDomain: CustomDomain;
-  readonly db: DatabaseExecutor;
+  readonly customDomainId: string;
+  readonly db: Database;
   readonly organizationId: string;
+  readonly proof: Pick<
+    OrganizationDomainInsert,
+    | "ownershipBackoffLevel"
+    | "ownershipEverVerifiedAt"
+    | "ownershipLastCheckedAt"
+    | "ownershipNextVerifyAt"
+  >;
 }) =>
   input.db
-    .delete(organizationDomain)
-    .where(
-      and(
-        eq(organizationDomain.customDomainId, input.customDomain.id),
-        ne(organizationDomain.organizationId, input.organizationId),
-      ),
+    .transaction((tx) =>
+      Effect.gen(function* () {
+        yield* tx
+          .select({ id: customDomain.id })
+          .from(customDomain)
+          .where(eq(customDomain.id, input.customDomainId))
+          .for("update");
+        const [proven] = yield* tx
+          .update(organizationDomain)
+          .set({ ...input.proof, ownershipVerificationStatus: "verified" })
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              eq(organizationDomain.organizationId, input.organizationId),
+            ),
+          )
+          .returning({ organizationId: organizationDomain.organizationId });
+        if (!proven) {
+          return false;
+        }
+        yield* tx
+          .delete(organizationDomain)
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              ne(organizationDomain.organizationId, input.organizationId),
+            ),
+          );
+        return true;
+      }),
     )
     .pipe(
       Effect.mapError(
         (cause) =>
           new CustomDomainError({
             cause,
-            customDomainId: input.customDomain.id,
-            message: "Failed to remove source Project domain link.",
+            customDomainId: input.customDomainId,
+            message: "Failed to complete the Domain claim transfer.",
             operation: "claim",
             organizationId: input.organizationId,
           }),

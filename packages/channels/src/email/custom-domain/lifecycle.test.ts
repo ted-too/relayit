@@ -138,49 +138,7 @@ describe("pauseCustomDomain / unpauseCustomDomain", () => {
   });
 });
 
-describe("createCustomDomain claim guard", () => {
-  it.effect("rejects a second pending claim on a held FQDN", () => {
-    const db: any = {
-      query: {
-        customDomain: {
-          findFirst: () =>
-            Effect.succeed({
-              fqdn: "acme.test",
-              id: "dom_held",
-              organizations: [
-                {
-                  createdAt: new Date(),
-                  organizationId: "org_owner",
-                  ownershipVerificationStatus: "verified",
-                },
-                {
-                  createdAt: new Date(),
-                  organizationId: "org_pending",
-                  ownershipVerificationStatus: "not_verified",
-                },
-              ],
-              registration: null,
-            }),
-        },
-      },
-    };
-
-    return createCustomDomain({
-      fqdn: "acme.test",
-      organizationId: "org_claimant",
-    }).pipe(
-      Effect.provide(Layer.merge(Layer.succeed(DB, db), unusedCreateServices)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          message: "Another Project already has a pending claim on this domain.",
-          operation: "claim",
-        });
-        return error;
-      }),
-    );
-  });
-
+describe("createCustomDomain", () => {
   it.effect("returns existing when the Project is already linked", () => {
     const db: any = {
       query: {

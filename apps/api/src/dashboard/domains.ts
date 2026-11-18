@@ -38,7 +38,7 @@ const lifecycleFailure =
     switch (error._tag) {
       case "CustomDomainError":
         switch (error.operation) {
-          // Another Project holds the Domain and the claim can't start.
+          // A claim not yet proven asked to change the Domain it claims.
           case "claim":
             return Effect.fail(new Conflict({ message: error.message }));
           case "persist":
@@ -213,13 +213,23 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
             return yield* listedDomain({ customDomainId: params.domainId, organizationId });
           }
           if (!domain.registration) {
+            // A first add that failed partway left the Domain unregistered; adding it again,
+            // as the holder, finishes the registration.
+            yield* createCustomDomain({ fqdn: domain.fqdn, organizationId }).pipe(
+              Effect.catch(lifecycleFailure("Failed to finish registering the Domain.")),
+            );
+          }
+          const registration =
+            domain.registration ??
+            (yield* db.query.emailDomainRegistration
+              .findFirst({ where: { customDomainId: domain.id } })
+              .pipe(Effect.catch(operationFailed("Failed to load Custom Domain for refresh."))));
+          if (!registration) {
             return yield* operationFailed("Domain is not registered with SES.")(domain.id);
           }
-          yield* verifyCustomDomainRegistration({
-            db,
-            domain,
-            registration: domain.registration,
-          }).pipe(Effect.catch(operationFailed("Failed to refresh Custom Domain verification.")));
+          yield* verifyCustomDomainRegistration({ db, domain, registration }).pipe(
+            Effect.catch(operationFailed("Failed to refresh Custom Domain verification.")),
+          );
           return yield* listedDomain({ customDomainId: params.domainId, organizationId });
         }),
       )

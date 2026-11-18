@@ -7,7 +7,12 @@
  */
 import { describe, expect, layer, test } from "@effect/vitest";
 import { createPromiseDb } from "@repo/persistence/db/promise";
-import { templatingWorkspace, templatingWorkspaceEntry } from "@repo/persistence/db/schema";
+import {
+  emailDomainRegistration,
+  templatingWorkspace,
+  templatingWorkspaceEntry,
+} from "@repo/persistence/db/schema";
+import { eq } from "drizzle-orm";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { apiConfig } from "../env";
@@ -486,6 +491,39 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           body: { code: "invalid_from_address" },
           status: 422,
         });
+        yield* Effect.promise(() => db.$client.end());
+      }),
+    );
+
+    it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("unregistered");
+        const project = yield* createProject(owner, `Unregistered ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        const added = yield* call("POST", `${p}/domains`, {
+          as: owner,
+          body: { fqdn: `${run}.unregistered.example.test` },
+        });
+        const domainId = (added.body as { id: string }).id;
+        // As a first add leaves it when SES refuses the identity.
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        yield* Effect.promise(() =>
+          db
+            .delete(emailDomainRegistration)
+            .where(eq(emailDomainRegistration.customDomainId, domainId)),
+        );
+
+        expect(
+          yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner }),
+        ).toMatchObject({ body: { verificationStatus: "verified" }, status: 200 });
+        expect(
+          yield* Effect.promise(() =>
+            db.query.emailDomainRegistration.findFirst({
+              columns: { verificationStatus: true },
+              where: { customDomainId: domainId },
+            }),
+          ),
+        ).toEqual({ verificationStatus: "verified" });
         yield* Effect.promise(() => db.$client.end());
       }),
     );

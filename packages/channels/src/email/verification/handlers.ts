@@ -350,7 +350,7 @@ export const emailVerifyOwnershipHandler = defineJobHandler({
         ),
       );
 
-      // A proven claim needs no more checks, and a lapsed one is gone.
+      // A proven claim needs no more checks; a lapsed or superseded one is gone.
       if (result.ownershipVerificationStatus !== "not_verified") {
         yield* jobs
           .cancel(emailVerifyOwnershipJob, {

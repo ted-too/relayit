@@ -14,6 +14,7 @@ import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { ownershipChallengeValue } from "./dns";
 import { verifyCustomDomainOwnership } from "../verification/custom-identity";
 import { CLAIM_TTL_MS, createCustomDomain } from "./lifecycle";
 
@@ -27,9 +28,13 @@ describe("createCustomDomain (PostgreSQL)", () => {
     return;
   }
 
-  /** SES, public DNS and the queue as each test sets them; what was scheduled, by job. */
+  /**
+   * SES, public DNS and the queue as each test sets them; what was scheduled, by job, and
+   * the TXT values published in DNS.
+   */
   const boundaries = (options: { readonly failCreateIdentity?: () => boolean } = {}) => {
     const scheduled: { readonly name: string; readonly payload: unknown }[] = [];
+    const published = new Set<string>();
     const layer = Layer.mergeAll(
       Layer.succeed(EmailBackend, {
         createIdentity: ({ fqdn, region }) =>
@@ -49,8 +54,7 @@ describe("createCustomDomain (PostgreSQL)", () => {
       }),
       Layer.succeed(DnsLookups, {
         detectProvider: () => Promise.resolve("cloudflare"),
-        // No claim's TXT record is published.
-        evaluate: () => Promise.resolve({ matches: false, warnings: [] }),
+        evaluate: ({ value }) => Promise.resolve({ matches: published.has(value), warnings: [] }),
       }),
       Layer.succeed(Jobs, {
         cancel: () => Effect.void,
@@ -63,7 +67,7 @@ describe("createCustomDomain (PostgreSQL)", () => {
       EmailManagedDns.noop(),
       SymmetricCrypto.live(parseBetterAuthSecrets("1:lifecycle-test-secret-0123456789")),
     ).pipe(Layer.provideMerge(makeDbLive({ databaseUrl: testDatabaseUrl })));
-    return { layer, scheduled };
+    return { layer, published, scheduled };
   };
 
   const insertProject = Effect.fn(function* () {
@@ -78,6 +82,54 @@ describe("createCustomDomain (PostgreSQL)", () => {
     return yield* db.query.organizationDomain.findFirst({
       where: { customDomainId, organizationId },
     });
+  });
+
+  const linksOf = Effect.fn(function* (customDomainId: string) {
+    const db = yield* DB;
+    return yield* db.query.organizationDomain.findMany({
+      columns: { organizationId: true, ownershipVerificationStatus: true },
+      where: { customDomainId },
+    });
+  });
+
+  /** Runs the ownership check for one Project's link, as the worker's job does. */
+  const checkOwnership = Effect.fn(function* (customDomainId: string, organizationId: string) {
+    const db = yield* DB;
+    const domain = yield* db.query.customDomain.findFirst({ where: { id: customDomainId } });
+    if (!domain) {
+      return yield* Effect.die("Domain is gone");
+    }
+    return yield* verifyCustomDomainOwnership({ customDomain: domain, db, organizationId });
+  });
+
+  /** Publishes the TXT record that proves a Project's claim. */
+  const publishProof = Effect.fn(function* (
+    published: Set<string>,
+    customDomainId: string,
+    organizationId: string,
+  ) {
+    const link = yield* linkOf(customDomainId, organizationId);
+    if (!link) {
+      return yield* Effect.die("No claim to prove");
+    }
+    published.add(ownershipChallengeValue(link.ownershipToken));
+  });
+
+  /** A Domain held by one Project with a claim on it by each of `claims` others. */
+  const claimedDomain = Effect.fn(function* (claims: number) {
+    const holderId = yield* insertProject();
+    const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+    const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: holderId });
+    const claimantIds: string[] = [];
+    for (let claim = 0; claim < claims; claim += 1) {
+      const claimantId = yield* insertProject();
+      expect(yield* createCustomDomain({ fqdn, organizationId: claimantId })).toEqual({
+        customDomainId,
+        kind: "claim",
+      });
+      claimantIds.push(claimantId);
+    }
+    return { claimantIds, customDomainId, fqdn, holderId };
   });
 
   it.live("a new Domain is the adding Project's, registered and scheduled for checks", () => {
@@ -183,21 +235,100 @@ describe("createCustomDomain (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
-  it.live("a pending claim holds off other claims until it lapses unproven", () => {
+  it.live("claims run side by side, and the first proven takes the Domain from the rest", () => {
+    const { layer, published } = boundaries();
+    return Effect.gen(function* () {
+      const {
+        claimantIds: [firstId, secondId],
+        customDomainId,
+      } = yield* claimedDomain(2);
+      if (!(firstId && secondId)) {
+        return yield* Effect.die("Two claims were made");
+      }
+
+      // The second claim is proven while the first is still pending.
+      yield* publishProof(published, customDomainId, secondId);
+      expect(yield* checkOwnership(customDomainId, firstId)).toMatchObject({
+        ownershipVerificationStatus: "not_verified",
+      });
+      expect(yield* checkOwnership(customDomainId, secondId)).toMatchObject({
+        ownershipVerificationStatus: "verified",
+      });
+
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: secondId, ownershipVerificationStatus: "verified" },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a proof recorded without its transfer is finished by the next check", () => {
     const { layer } = boundaries();
     return Effect.gen(function* () {
       const db = yield* DB;
-      const holderId = yield* insertProject();
-      const claimantId = yield* insertProject();
-      const laterId = yield* insertProject();
-      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
-      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: holderId });
-      yield* createCustomDomain({ fqdn, organizationId: claimantId });
+      const {
+        claimantIds: [claimantId],
+        customDomainId,
+      } = yield* claimedDomain(1);
+      if (!claimantId) {
+        return yield* Effect.die("A claim was made");
+      }
+      // A worker that died between recording the proof and the transfer left two holders.
+      yield* db
+        .update(organizationDomain)
+        .set({ ownershipEverVerifiedAt: new Date(), ownershipVerificationStatus: "verified" })
+        .where(
+          and(
+            eq(organizationDomain.organizationId, claimantId),
+            eq(organizationDomain.customDomainId, customDomainId),
+          ),
+        );
 
-      expect(
-        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: laterId })),
-      ).toMatchObject({ operation: "claim" });
+      expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+        ownershipVerificationStatus: "verified",
+      });
 
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: claimantId, ownershipVerificationStatus: "verified" },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("two claims proven at once end with exactly one holder", () => {
+    const { layer, published } = boundaries();
+    return Effect.gen(function* () {
+      const { claimantIds, customDomainId } = yield* claimedDomain(2);
+      for (const claimantId of claimantIds) {
+        yield* publishProof(published, customDomainId, claimantId);
+      }
+
+      const results = yield* Effect.all(
+        claimantIds.map((claimantId) => checkOwnership(customDomainId, claimantId)),
+        { concurrency: "unbounded" },
+      );
+
+      expect(results.map((result) => result.ownershipVerificationStatus).toSorted()).toEqual([
+        "superseded",
+        "verified",
+      ]);
+      const winner = results.find((result) => result.ownershipVerificationStatus === "verified");
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: winner?.organizationId, ownershipVerificationStatus: "verified" },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a lapsed claim's next check removes it, and a holder stays proven", () => {
+    const { layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const {
+        claimantIds: [claimantId],
+        customDomainId,
+        holderId,
+      } = yield* claimedDomain(1);
+      if (!claimantId) {
+        return yield* Effect.die("A claim was made");
+      }
       yield* db
         .update(organizationDomain)
         .set({ createdAt: new Date(Date.now() - CLAIM_TTL_MS - 60_000) })
@@ -207,34 +338,19 @@ describe("createCustomDomain (PostgreSQL)", () => {
             eq(organizationDomain.customDomainId, customDomainId),
           ),
         );
-      expect(yield* createCustomDomain({ fqdn, organizationId: laterId })).toEqual({
-        customDomainId,
-        kind: "claim",
-      });
 
-      // The lapsed claim's next check removes it rather than looking for its record.
-      const domain = yield* db.query.customDomain.findFirst({ where: { id: customDomainId } });
-      if (!domain) {
-        return yield* Effect.die("Domain is gone");
-      }
-      const lapsed = yield* verifyCustomDomainOwnership({
-        customDomain: domain,
-        db,
-        organizationId: claimantId,
+      expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+        ownershipVerificationStatus: "lapsed",
       });
-      expect(lapsed.ownershipVerificationStatus).toBe("lapsed");
       expect(yield* linkOf(customDomainId, claimantId)).toBeUndefined();
 
       // The holder's own link stays proven though no TXT record is published for it.
-      const holder = yield* verifyCustomDomainOwnership({
-        customDomain: domain,
-        db,
-        organizationId: holderId,
-      });
-      expect(holder.ownershipVerificationStatus).toBe("verified");
-      expect(yield* linkOf(customDomainId, holderId)).toMatchObject({
+      expect(yield* checkOwnership(customDomainId, holderId)).toMatchObject({
         ownershipVerificationStatus: "verified",
       });
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: holderId, ownershipVerificationStatus: "verified" },
+      ]);
     }).pipe(Effect.provide(layer));
   });
 });

@@ -1,4 +1,4 @@
-import type { DatabaseExecutor } from "@repo/persistence/db/effect";
+import type { Database, DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type CustomDomain,
   customDomain,
@@ -12,7 +12,7 @@ import { and, eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { ownershipChallengeHost, ownershipChallengeValue } from "../custom-domain/dns";
-import { completeDomainClaimTransfer, isLapsedClaim } from "../custom-domain/lifecycle";
+import { CLAIM_TTL_MS, completeDomainClaimTransfer } from "../custom-domain/lifecycle";
 import { DnsLookups } from "../dns-lookups";
 import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
 
@@ -212,7 +212,7 @@ export const verifyCustomDomainRegistration = (input: {
  */
 export const verifyCustomDomainOwnership = (input: {
   readonly customDomain: CustomDomain;
-  readonly db: DatabaseExecutor;
+  readonly db: Database;
   readonly organizationId: string;
 }) =>
   Effect.gen(function* () {
@@ -245,7 +245,59 @@ export const verifyCustomDomainOwnership = (input: {
       });
     }
 
+    const transfer = (proof: Parameters<typeof completeDomainClaimTransfer>[0]["proof"]) =>
+      completeDomainClaimTransfer({
+        customDomainId: input.customDomain.id,
+        db: input.db,
+        organizationId: input.organizationId,
+        proof,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new VerifyCustomDomainError({
+              cause,
+              customDomainId: input.customDomain.id,
+              message: "Failed to complete domain claim transfer.",
+              operation: "claim",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
+
     if (link.ownershipVerificationStatus === "verified") {
+      // Before proofs were transactional, a proof could be recorded without the transfer that
+      // follows it, leaving two holders. The one proven last finishes taking the Domain.
+      const otherHolders = yield* input.db.query.organizationDomain
+        .findMany({
+          columns: { ownershipEverVerifiedAt: true },
+          where: {
+            customDomainId: input.customDomain.id,
+            organizationId: { ne: input.organizationId },
+            ownershipVerificationStatus: "verified",
+          },
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new VerifyCustomDomainError({
+                cause,
+                customDomainId: input.customDomain.id,
+                message: "Failed to load the Domain's other holders.",
+                operation: "persist",
+                organizationId: input.organizationId,
+              }),
+          ),
+        );
+      const provenAt = (at: Date | null) => (at ? new Date(at).getTime() : 0);
+      if (
+        otherHolders.length > 0 &&
+        otherHolders.every(
+          (other) =>
+            provenAt(other.ownershipEverVerifiedAt) < provenAt(link.ownershipEverVerifiedAt),
+        )
+      ) {
+        yield* transfer({});
+      }
       return {
         customDomainId: input.customDomain.id,
         organizationId: input.organizationId,
@@ -253,7 +305,7 @@ export const verifyCustomDomainOwnership = (input: {
       };
     }
 
-    if (isLapsedClaim(link, new Date())) {
+    if (Date.now() - new Date(link.createdAt).getTime() > CLAIM_TTL_MS) {
       yield* input.db
         .delete(organizationDomain)
         .where(
@@ -301,10 +353,6 @@ export const verifyCustomDomainOwnership = (input: {
       },
     });
 
-    const ownershipVerificationStatus = ownershipVerified
-      ? ("verified" as const)
-      : ("not_verified" as const);
-
     const now = new Date();
     const cadence = computeNextCheckAt({
       backoffLevel: link.ownershipBackoffLevel,
@@ -312,21 +360,31 @@ export const verifyCustomDomainOwnership = (input: {
       from: now,
       verificationStatus: ownershipVerified ? "verified" : "not_verified",
     });
+    const checked = {
+      ownershipBackoffLevel: cadence.backoffLevel,
+      ownershipLastCheckedAt: now,
+      ownershipNextVerifyAt: cadence.nextCheckAt,
+    };
+
+    // A link starts unverified only as a claim, so proving it takes the Domain.
+    if (ownershipVerified) {
+      const took = yield* transfer({ ...checked, ownershipEverVerifiedAt: now });
+      return {
+        customDomainId: input.customDomain.id,
+        organizationId: input.organizationId,
+        ownershipVerificationStatus: took ? ("verified" as const) : ("superseded" as const),
+      };
+    }
 
     yield* input.db
       .update(organizationDomain)
-      .set({
-        ownershipBackoffLevel: cadence.backoffLevel,
-        ownershipEverVerifiedAt:
-          ownershipVerified && !link.ownershipEverVerifiedAt ? now : link.ownershipEverVerifiedAt,
-        ownershipLastCheckedAt: now,
-        ownershipNextVerifyAt: cadence.nextCheckAt,
-        ownershipVerificationStatus,
-      })
+      .set(checked)
       .where(
         and(
           eq(organizationDomain.organizationId, input.organizationId),
           eq(organizationDomain.customDomainId, input.customDomain.id),
+          // A check running beside one that proved the claim leaves the proof alone.
+          eq(organizationDomain.ownershipVerificationStatus, "not_verified"),
         ),
       )
       .pipe(
@@ -342,30 +400,10 @@ export const verifyCustomDomainOwnership = (input: {
         ),
       );
 
-    // A link starts unverified only as a claim, so proving it takes the Domain.
-    if (ownershipVerified) {
-      yield* completeDomainClaimTransfer({
-        customDomain: input.customDomain,
-        db: input.db,
-        organizationId: input.organizationId,
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyCustomDomainError({
-              cause,
-              customDomainId: input.customDomain.id,
-              message: "Failed to complete domain claim transfer.",
-              operation: "claim",
-              organizationId: input.organizationId,
-            }),
-        ),
-      );
-    }
-
     return {
       customDomainId: input.customDomain.id,
       nextCheckAt: cadence.nextCheckAt,
       organizationId: input.organizationId,
-      ownershipVerificationStatus,
+      ownershipVerificationStatus: "not_verified" as const,
     };
   });

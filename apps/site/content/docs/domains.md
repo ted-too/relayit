@@ -105,7 +105,7 @@ If you add a domain that was already added to Relayit, by another Project or by 
 
 Until ownership verifies, the Domain is not yours: you cannot send from it, pause or unpause it, and its page shows only the ownership record.
 
-When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. If another Project already has a pending claim on the same domain, adding it fails until that claim is resolved. A claim not verified within 7 days lapses and is removed.
+When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 
 ## Delete a Domain
 
