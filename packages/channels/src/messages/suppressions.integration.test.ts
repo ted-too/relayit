@@ -8,7 +8,7 @@ import { contactsAmong, filterSuppressedContacts, suppressedAmong } from "./supp
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 
-/** An App Environment with `contacts` Contacts, and the planner told about them. */
+/** An App Environment with `contacts` Contacts, a tenth suppressed, and the planner told. */
 const seedAppEnvironment = (contacts: number) =>
   Effect.gen(function* () {
     const db = yield* DB;
@@ -22,10 +22,14 @@ const seedAppEnvironment = (contacts: number) =>
     yield* db
       .insert(organizationAppEnvironment)
       .values({ id: organizationAppEnvironmentId, organizationId });
+    // One in ten is suppressed: with next to none in the table the planner reads the few
+    // suppressed rows by severity instead, whatever index the email has.
     yield* db.execute(sql`
-      insert into contact (id, organization_app_environment_id, email, updated_at)
+      insert into contact
+        (id, organization_app_environment_id, email, suppression_severity, updated_at)
       select 'cont_' || gen_random_uuid(), ${organizationAppEnvironmentId},
-        'contact-' || n || '@example.com', now()
+        'contact-' || n || '@example.com',
+        case when n % 10 = 0 then 'all'::contact_suppression_severity end, now()
       from generate_series(1, ${contacts}) as n`);
     yield* db.execute(sql`analyze contact`);
     return { organizationAppEnvironmentId, organizationId };
