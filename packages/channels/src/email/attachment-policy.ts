@@ -4,8 +4,23 @@ export const ATTACHMENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Max resolved attachment size (SES-aligned). */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-/** Attachment URL fetch timeout. */
-export const ATTACHMENT_FETCH_TIMEOUT = "30 seconds" as const;
+/**
+ * Max resolved size of one send's attachments together: what SES's 40 MB message limit
+ * (SESv2 `SendEmail`, taken as 40,000,000 bytes) leaves once each attachment is base64
+ * encoded, 3 bytes to 4 characters, in MIME lines of 76 characters plus CRLF. About
+ * 27.9 MiB; the rest of the message is small beside the margin decimal megabytes leave.
+ */
+export const MAX_TOTAL_ATTACHMENT_BYTES = Math.floor(((40_000_000 * 3) / 4) * (76 / 78));
+
+/** Max attachments on one send. */
+export const MAX_ATTACHMENTS = 20;
+
+/**
+ * How long all of one send's attachments may take: every hosted one's lookup and download
+ * and every inline one's decoding, together. The api's server keeps a connection open
+ * longer than this (`apps/api/src/http.ts`), so a send that runs out answers its 422.
+ */
+export const ATTACHMENTS_DEADLINE_SECONDS = 30;
 
 export const ATTACHMENT_CONTENT_TYPES: Readonly<Record<string, string>> = {
   csv: "text/csv",

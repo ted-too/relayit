@@ -1,6 +1,12 @@
-import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
-import { HttpRouter, HttpServerRequest } from "effect/http";
-import { RequestValidation, requestSchemas, SchemaValidationFailed } from "../api";
+import { ByteSize, Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import { HttpIncomingMessage, HttpRouter, HttpServerRequest } from "effect/http";
+import {
+  MAX_SEND_BODY_BYTES,
+  PayloadTooLarge,
+  RequestValidation,
+  requestSchemas,
+  SchemaValidationFailed,
+} from "../api";
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -69,7 +75,9 @@ const toFailure = (on: "body" | "headers", error: Schema.SchemaError) => {
  * Checks a request against its endpoint's schemas before its auth runs, as the api always
  * has: a body that isn't JSON is a bare `400 Bad Request`, a header or body that fails its
  * schema a `422`. A body sent without a JSON content type was never parsed, so it fails as
- * a missing object. The endpoint decodes them again afterwards, and they pass.
+ * a missing object. The endpoint decodes them again afterwards, and they pass. First, a
+ * body over `MAX_SEND_BODY_BYTES` is a `413`: by its `Content-Length` before any of it is
+ * read, or, without one, once reading it passes the limit.
  */
 export const RequestValidationLive = Layer.succeed(
   RequestValidation,
@@ -80,10 +88,27 @@ export const RequestValidationLive = Layer.succeed(
         return yield* httpEffect;
       }
       const request = yield* HttpServerRequest.HttpServerRequest;
+      if (Number(request.headers["content-length"] ?? 0) > MAX_SEND_BODY_BYTES) {
+        return yield* new PayloadTooLarge({
+          code: "payload_too_large",
+          message: "Request body exceeds the 50 MiB limit.",
+        });
+      }
       // In order: the body is parsed, then the path, headers and body are checked.
       let body: unknown;
       if (JSON_MEDIA_TYPE.test(request.headers["content-type"] ?? "")) {
-        const text = yield* Effect.orDie(request.text);
+        const read = yield* Effect.result(request.text);
+        if (Result.isFailure(read)) {
+          const { reason } = read.failure;
+          if (reason._tag === "RequestParseError" && reason.reason === "BodyTooLarge") {
+            return yield* new PayloadTooLarge({
+              code: "payload_too_large",
+              message: "Request body exceeds the 50 MiB limit.",
+            });
+          }
+          return yield* Effect.die(read.failure);
+        }
+        const text = read.success;
         if (text !== "") {
           const parsed = Result.try(() => JSON.parse(text) as unknown);
           if (Result.isFailure(parsed)) {
@@ -108,6 +133,12 @@ export const RequestValidationLive = Layer.succeed(
         return yield* toFailure("body", decoded.failure);
       }
       return yield* httpEffect;
-    }),
+    }).pipe(
+      // The endpoint reads the body again, from the same cache, under the same limit.
+      Effect.provideService(
+        HttpIncomingMessage.MaxBodySize,
+        ByteSize.fromInputUnsafe(MAX_SEND_BODY_BYTES),
+      ),
+    ),
   ),
 );

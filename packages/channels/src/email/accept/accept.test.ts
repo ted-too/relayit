@@ -3,7 +3,6 @@ import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import { type Database, DB } from "@repo/persistence/db/effect";
 import { DateTime, Effect, Layer } from "effect";
-import { HttpClient } from "effect/http";
 import { Usage, type UsageService } from "../../usage";
 import { acceptTransactionalEmail } from "./accept";
 
@@ -28,7 +27,6 @@ const testServices = Layer.mergeAll(
     release: unsupported,
     reserve: unsupported,
   } satisfies UsageService),
-  Layer.succeed(HttpClient.HttpClient, {} as Effect.Success<typeof HttpClient.HttpClient>),
 );
 
 const baseInput = {

@@ -1,5 +1,10 @@
+import { MAX_ATTACHMENTS } from "@repo/channels/email/attachment-policy";
 import { Schema } from "effect";
-import { EmailAddressString, UriString } from "../../messages/validators/email";
+import {
+  ATTACHMENTS_DESCRIPTION,
+  EmailAddressString,
+  UriString,
+} from "../../messages/validators/email";
 
 const stringMap = Schema.Record(Schema.String, Schema.String);
 const nonEmpty = Schema.String.check(Schema.isMinLength(1));
@@ -15,14 +20,21 @@ const LegacyAttachment = Schema.Union([
     contentId: Schema.optionalKey(Schema.String),
     contentType: Schema.optionalKey(Schema.String),
     filename: nonEmpty,
-    path: UriString,
+    path: UriString.annotate({
+      description:
+        "HTTPS URL of a hosted file to attach, fetched as on `/messages/email`. Only `https:` URLs whose host resolves to a public address are fetched; a redirect is refused, not followed.",
+    }),
   }).annotate({ title: "Hosted attachment" }),
 ]);
 
 const legacyBase = {
   app: Schema.optionalKey(Schema.String),
   appEnvironment: Schema.optionalKey(Schema.String),
-  attachments: Schema.optionalKey(Schema.Array(LegacyAttachment).check(Schema.isMaxLength(20))),
+  attachments: Schema.optionalKey(
+    Schema.Array(LegacyAttachment)
+      .check(Schema.isMaxLength(MAX_ATTACHMENTS))
+      .annotate({ description: ATTACHMENTS_DESCRIPTION }),
+  ),
   contact: Schema.optionalKey(
     Schema.Struct({
       externalIdentifiers: Schema.optionalKey(stringMap),

@@ -41,7 +41,7 @@ Body fields use snake_case. You can try every field in the interactive reference
 | `html`         | string             | One of `html`, `text`, or `template` | HTML body.                                                               |
 | `text`         | string             | One of `html`, `text`, or `template` | Plain-text body.                                                         |
 | `template`     | object             | One of `html`, `text`, or `template` | `{ "id": "...", "variables": { ... } }`.                                 |
-| `attachments`  | Attachment[]       | No                                   | Files to attach. See [Attachments](#attachments).                        |
+| `attachments`  | Attachment[]       | No                                   | Up to 20 files to attach. See [Attachments](#attachments).               |
 | `headers`      | object             | No                                   | Custom email headers, string values only.                                |
 | `tags`         | Tag[]              | No                                   | `{ "name": "...", "value": "..." }` pairs.                               |
 | `scheduled_at` | string             | No                                   | When to send. ISO 8601 preferred.                                        |
@@ -175,14 +175,17 @@ Each attachment has a `filename` and exactly one source: base64 `content` or a h
 | -------------- | -------------------------------------------------------------------------------------------------------------- |
 | `filename`     | Required. Include the extension. It is used to pick the MIME type.                                             |
 | `content`      | Base64-encoded file contents. Whitespace is ignored.                                                           |
-| `path`         | URL of a hosted file. Relayit downloads it when it accepts the request.                                        |
+| `path`         | `https:` URL of a hosted file. Relayit downloads it when it accepts the request.                               |
 | `content_type` | Optional MIME type. When omitted it is derived from the extension, falling back to `application/octet-stream`. |
 | `content_id`   | Optional id for an inline image. Reference it in HTML as `cid:<content_id>`.                                   |
 
 Limits and behavior:
 
-- Each attachment can be at most 10 MB after decoding or download.
-- Hosted files are fetched once, with a 30 second timeout. A non-2xx response fails the request with `invalid_attachment` and `reason: "fetch_failed"`.
+- Up to 20 attachments per request. Each can be at most 10 MiB (10,485,760 bytes) after decoding or download, and together they can be at most 29,230,769 bytes (about 27.9 MiB), which is what fits in an email of SES's 40 MB maximum once base64 encoded. Over that, the request fails with `invalid_attachment` and `reason: "exceeds_total_size_limit"`.
+- The whole request body can be at most 50 MiB. A larger one fails with `413` and `payload_too_large`.
+- Hosted files are fetched once, and all of a request's attachments have 30 seconds together: every hosted one's DNS lookup and download, at most four at a time. If a host has several addresses, each is tried in turn until one connects.
+- Only `https:` URLs are fetched, and only from a public address: a host that resolves to a loopback, private, link-local or other internal address is refused. Redirects are not followed, so link to the file itself.
+- A hosted file that can't be fetched fails the request with `422` and `invalid_attachment`, never `500`: a non-2xx or redirect response, a connection or TLS failure, or the time running out. `details.reason` says which; see [Attachment reasons](/docs/errors-and-limits#attachment-reasons).
 - Attachments are stored for 7 days after the later of the send time and `scheduled_at`.
 - Executable and script file types are blocked. A blocked filename fails with the message `This file type isn't allowed for security reasons.` The blocked extensions are:
 

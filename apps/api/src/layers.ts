@@ -10,7 +10,6 @@ import { emailBackendLayer } from "@repo/provider-aws/email/backend";
 import { makeRedisLive } from "@repo/redis";
 import { makeTemplatingBuilderClientLive } from "@repo/templating";
 import { Layer, Option, Redacted } from "effect";
-import { FetchHttpClient } from "effect/http";
 import type { ApiConfig } from "./env";
 
 /** What the routes need beyond `ApiAuth`, and the app logger, for the length of the server. */
@@ -28,13 +27,6 @@ export const makeApiServices = (config: ApiConfig) => {
   const usagePolicyLive = UsagePolicyLive.pipe(Layer.provide(dbLive));
   const usageLive = UsageLive.pipe(Layer.provide(Layer.merge(redisLive, usagePolicyLive)));
   const jobsLive = JobsLive.pipe(Layer.provide(redisLive));
-  const httpLive = FetchHttpClient.layer.pipe(
-    Layer.provide(
-      Layer.succeed(FetchHttpClient.RequestInit, {
-        redirect: "error",
-      }),
-    ),
-  );
   // Adding and verifying a Domain registers it with SES.
   const emailBackendLive = emailBackendLayer(config.emailBackend).pipe(
     Layer.provide(Layer.mergeAll(dbLive, jobsLive, logging)),
@@ -55,7 +47,6 @@ export const makeApiServices = (config: ApiConfig) => {
     objectStorageLive,
     usageLive,
     jobsLive,
-    httpLive,
     SymmetricCrypto.live(parseBetterAuthSecrets(Redacted.value(config.betterAuthSecrets))),
     emailBackendLive,
     managedDnsLive,

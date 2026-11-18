@@ -1,21 +1,23 @@
 import { subBucket } from "@repo/object-storage";
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { emailAttachment } from "@repo/persistence/db/schema";
-import { DateTime, Effect } from "effect";
-import { HttpClient } from "effect/http";
+import * as NodeDnsPromises from "node:dns/promises";
+import * as NodeNet from "node:net";
+import { Context, DateTime, Duration, Effect, Predicate, Result, Stream } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import ipaddr from "ipaddr.js";
 import { typeid } from "typeid-js";
 import { z } from "zod";
 import {
-  ATTACHMENT_FETCH_TIMEOUT,
+  ATTACHMENTS_DEADLINE_SECONDS,
   ATTACHMENT_TTL_MS,
   contentTypeFromFilename,
   isBlockedAttachmentFilename,
   MAX_ATTACHMENT_BYTES,
+  MAX_TOTAL_ATTACHMENT_BYTES,
 } from "../attachment-policy";
 import type { EmailAttachmentInput } from "./contracts";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "./errors";
-
-const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export const emailAttachmentsBucket = subBucket({
   key: ({ attachmentId, deliveryId }) => [deliveryId, attachmentId],
@@ -49,116 +51,309 @@ const assertAttachmentFilename = (filename: string): Effect.Effect<void, EmailAc
       )
     : Effect.void;
 
-const assertAttachmentSize = (
-  bytes: Uint8Array,
-  filename: string,
-): Effect.Effect<Uint8Array, EmailAcceptRejected> =>
-  bytes.byteLength <= MAX_ATTACHMENT_BYTES
-    ? Effect.succeed(bytes)
-    : Effect.fail(
-        new EmailAcceptRejected({
-          code: "invalid_attachment",
-          details: {
-            filename,
-            maxBytes: MAX_ATTACHMENT_BYTES,
-            reason: "exceeds_size_limit",
-          },
-          message: "Attachment exceeds the size limit.",
-        }),
-      );
-
-const resolveEmailAttachment = (attachment: EmailAttachmentInput, organizationId: string) =>
-  Effect.gen(function* () {
-    yield* assertAttachmentFilename(attachment.filename);
-    const fallbackType = attachment.contentType ?? contentTypeFromFilename(attachment.filename);
-    if (attachment.source.kind === "base64") {
-      const content = attachment.source.content.replace(/\s/g, "");
-      if (content.length % 4 !== 0 || (content.length > 0 && !BASE64_PATTERN.test(content))) {
-        return yield* new EmailAcceptRejected({
-          code: "invalid_attachment",
-          details: {
-            filename: attachment.filename,
-            reason: "invalid_base64",
-          },
-          message: "Attachment content is not valid base64.",
-        });
-      }
-      const bytes = yield* assertAttachmentSize(
-        Uint8Array.from(Buffer.from(content, "base64")),
-        attachment.filename,
-      );
-      return {
-        bytes,
-        contentId: attachment.contentId,
-        contentType: fallbackType,
-        filename: attachment.filename,
-      } satisfies ResolvedEmailAttachment;
-    }
-
-    const http = yield* HttpClient.HttpClient;
-    const response = yield* http.get(new URL(attachment.source.url)).pipe(
-      Effect.timeout(ATTACHMENT_FETCH_TIMEOUT),
-      Effect.mapError(
-        (cause) =>
-          new EmailAcceptInfrastructureError({
-            cause,
-            operation: "attachments",
-            organizationId,
-          }),
+/** Every address a hosted attachment's host resolves to. Real DNS unless a test replaces it. */
+export const AttachmentHostLookup = Context.Reference<{
+  readonly resolve: (hostname: string) => Promise<readonly string[]>;
+}>("Channels/AttachmentHostLookup", {
+  defaultValue: () => ({
+    resolve: async (hostname) =>
+      (await NodeDnsPromises.lookup(hostname, { all: true, verbatim: true })).map(
+        (entry) => entry.address,
       ),
-    );
-    if (response.status < 200 || response.status >= 300) {
-      return yield* new EmailAcceptRejected({
-        code: "invalid_attachment",
-        details: {
-          filename: attachment.filename,
-          reason: "fetch_failed",
-          status: response.status,
-        },
-        message: "Failed to fetch attachment from URL.",
-      });
-    }
+  }),
+});
 
-    const contentLength = Number.parseInt(response.headers["content-length"] ?? "", 10);
-    if (Number.isFinite(contentLength) && contentLength > MAX_ATTACHMENT_BYTES) {
-      return yield* new EmailAcceptRejected({
-        code: "invalid_attachment",
-        details: {
-          filename: attachment.filename,
-          maxBytes: MAX_ATTACHMENT_BYTES,
-          reason: "exceeds_size_limit",
-        },
-        message: "Attachment exceeds the size limit.",
-      });
-    }
+// IPv6 global unicast; everything outside it (loopback, IPv4-compatible `::/96`,
+// unique-local, link-local, multicast) is refused whatever its `range()`.
+const GLOBAL_UNICAST_V6 = ipaddr.parseCIDR("2000::/3");
 
-    const bytes = yield* response.arrayBuffer.pipe(
-      Effect.map((body) => new Uint8Array(body)),
-      Effect.flatMap((body) => assertAttachmentSize(body, attachment.filename)),
-      Effect.mapError((cause) =>
-        cause instanceof EmailAcceptRejected
-          ? cause
-          : new EmailAcceptInfrastructureError({
-              cause,
-              operation: "attachments",
-              organizationId,
-            }),
-      ),
-    );
-    return {
-      bytes,
-      contentId: attachment.contentId,
-      contentType: response.headers["content-type"] ?? fallbackType,
-      filename: attachment.filename,
-    } satisfies ResolvedEmailAttachment;
-  });
-
+/**
+ * Each attachment's bytes: base64 decoded, or downloaded from its `https:` URL. One send's
+ * attachments together stay under `MAX_TOTAL_ATTACHMENT_BYTES`, counted as inline ones are
+ * sized and hosted ones arrive; passing it fails the send, which interrupts the downloads
+ * still running. A few at a time, so one send holds few partial downloads at once.
+ */
 export const resolveEmailAttachments = (
   attachments: readonly EmailAttachmentInput[],
   organizationId: string,
 ) =>
-  Effect.forEach(attachments, (attachment) => resolveEmailAttachment(attachment, organizationId), {
-    concurrency: "unbounded",
+  // Counted afresh each time the effect runs.
+  Effect.suspend(() => {
+    let total = 0;
+    const count = (bytes: number) => {
+      total += bytes;
+      return total <= MAX_TOTAL_ATTACHMENT_BYTES
+        ? Effect.void
+        : Effect.fail(
+            new EmailAcceptRejected({
+              code: "invalid_attachment",
+              details: { maxBytes: MAX_TOTAL_ATTACHMENT_BYTES, reason: "exceeds_total_size_limit" },
+              message: "Attachments together exceed the size limit.",
+            }),
+          );
+    };
+
+    return Effect.forEach(
+      attachments,
+      (attachment) =>
+        Effect.gen(function* () {
+          yield* assertAttachmentFilename(attachment.filename);
+          const fallbackType =
+            attachment.contentType ?? contentTypeFromFilename(attachment.filename);
+          if (attachment.source.kind === "base64") {
+            const content = attachment.source.content.replace(/\s/g, "");
+            // Sized from its length, before anything is decoded.
+            const padding = content.endsWith("==") ? 2 : content.endsWith("=") ? 1 : 0;
+            const size = (content.length / 4) * 3 - padding;
+            if (size > MAX_ATTACHMENT_BYTES) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: {
+                  filename: attachment.filename,
+                  maxBytes: MAX_ATTACHMENT_BYTES,
+                  reason: "exceeds_size_limit",
+                },
+                message: "Attachment exceeds the size limit.",
+              });
+            }
+            // Decoded without a regex over the whole string: Bun's engine refuses valid
+            // base64 past 2^23 characters. `fromBase64` takes only the standard alphabet,
+            // with padding at the end alone; it would also take a missing pad.
+            const bytes =
+              content.length % 4 === 0
+                ? Result.try(() => Uint8Array.fromBase64(content))
+                : Result.fail(undefined);
+            if (Result.isFailure(bytes)) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: { filename: attachment.filename, reason: "invalid_base64" },
+                message: "Attachment content is not valid base64.",
+              });
+            }
+            yield* count(size);
+            return {
+              bytes: bytes.success,
+              contentId: attachment.contentId,
+              contentType: fallbackType,
+              filename: attachment.filename,
+            } satisfies ResolvedEmailAttachment;
+          }
+
+          const parsed = URL.parse(attachment.source.url);
+          if (parsed?.protocol !== "https:") {
+            return yield* new EmailAcceptRejected({
+              code: "invalid_attachment",
+              details: { filename: attachment.filename, reason: "unsupported_url" },
+              message: "Attachment path must be an https URL.",
+            });
+          }
+          // The URL parser has already normalised IPv4 spellings; IPv6 keeps its brackets.
+          const hostname = parsed.hostname.replace(/^\[(.*)\]$/, "$1");
+          const literal = NodeNet.isIP(hostname) !== 0;
+          const hostLookup = yield* AttachmentHostLookup;
+
+          // Downloaded from a public address, up to the size limit, within the send's
+          // deadline. The host is resolved once and every
+          // address checked; the request goes to one of those addresses, each in turn until
+          // one connects, with the hostname as `Host` and as the TLS server name the
+          // certificate is checked against, so another DNS answer can't steer it elsewhere.
+          // A redirect is not followed but refused. The client is built here, with its own
+          // `RequestInit`, rather than taken from the caller; only the `fetch` function it
+          // calls comes from the context (`FetchHttpClient.Fetch`), as a test's fake does.
+          return yield* Effect.gen(function* () {
+            const addresses = literal
+              ? [hostname]
+              : yield* Effect.tryPromise({
+                  catch: (cause) =>
+                    new EmailAcceptInfrastructureError({
+                      cause,
+                      operation: "attachments",
+                      organizationId,
+                    }),
+                  // A name with no address has no public one, and is refused as such below;
+                  // any other DNS failure is Relayit's.
+                  try: () =>
+                    hostLookup.resolve(hostname).catch((cause: unknown) => {
+                      switch (Predicate.hasProperty(cause, "code") ? cause.code : undefined) {
+                        case "ENODATA":
+                        case "ENOTFOUND":
+                          return [];
+                        default:
+                          throw cause;
+                      }
+                    }),
+                });
+            // Only plain public unicast. Loopback, private, link-local, unique-local, CGNAT,
+            // unspecified, multicast, reserved and the IPv6 ranges that embed an IPv4 address
+            // (6to4, NAT64, Teredo) all have another `range()`; an IPv4-mapped IPv6 address
+            // is judged as the IPv4 address it maps. One such address among public ones
+            // refuses the URL.
+            const isPublic = (candidate: string) => {
+              const ip = ipaddr.process(candidate);
+              return (
+                ip.range() === "unicast" && (ip.kind() === "ipv4" || ip.match(GLOBAL_UNICAST_V6))
+              );
+            };
+            if (addresses.length === 0 || !addresses.every(isPublic)) {
+              // One answer whether the name exists or not, so a key holder can't learn which
+              // internal names Relayit's resolver knows; the log keeps the difference.
+              yield* Effect.logInfo("Attachment host has no public address").pipe(
+                Effect.annotateLogs({ host: parsed.host, resolved: addresses.length > 0 }),
+              );
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: { filename: attachment.filename, reason: "blocked_address" },
+                message: "Attachment URL's host has no public address.",
+              });
+            }
+
+            const http = yield* HttpClient.HttpClient;
+            // `get` fails only before a response arrives, so the next address is tried only
+            // when this one gave none.
+            const response = yield* Effect.firstSuccessOf(
+              addresses.map((address) => {
+                const pinned = new URL(parsed);
+                pinned.hostname = NodeNet.isIP(address) === 6 ? `[${address}]` : address;
+                return http.get(pinned, { headers: { host: parsed.host } });
+              }),
+            );
+            if (response.status >= 300 && response.status < 400) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: {
+                  filename: attachment.filename,
+                  reason: "redirect_refused",
+                  status: response.status,
+                },
+                message: "Attachment URL redirects; link to the file itself.",
+              });
+            }
+            if (response.status < 200 || response.status >= 300) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: {
+                  filename: attachment.filename,
+                  reason: "fetch_failed",
+                  status: response.status,
+                },
+                message: "Failed to fetch attachment from URL.",
+              });
+            }
+
+            const contentLength = Number.parseInt(response.headers["content-length"] ?? "", 10);
+            if (Number.isFinite(contentLength) && contentLength > MAX_ATTACHMENT_BYTES) {
+              return yield* new EmailAcceptRejected({
+                code: "invalid_attachment",
+                details: {
+                  filename: attachment.filename,
+                  maxBytes: MAX_ATTACHMENT_BYTES,
+                  reason: "exceeds_size_limit",
+                },
+                message: "Attachment exceeds the size limit.",
+              });
+            }
+
+            // Counted as it arrives, so a body without a Content-Length, or one that
+            // understates it, is cut off at the limit rather than read whole. It grows one
+            // buffer in place, which reserves its maximum without committing it, and hands
+            // that buffer over at the end, so the body is never copied whole.
+            const body = new ArrayBuffer(0, { maxByteLength: MAX_ATTACHMENT_BYTES });
+            yield* response.stream.pipe(
+              Stream.runForEach((chunk) => {
+                const received = body.byteLength + chunk.byteLength;
+                if (received > MAX_ATTACHMENT_BYTES) {
+                  return Effect.fail(
+                    new EmailAcceptRejected({
+                      code: "invalid_attachment",
+                      details: {
+                        filename: attachment.filename,
+                        maxBytes: MAX_ATTACHMENT_BYTES,
+                        reason: "exceeds_size_limit",
+                      },
+                      message: "Attachment exceeds the size limit.",
+                    }),
+                  );
+                }
+                return count(chunk.byteLength).pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      body.resize(received);
+                      new Uint8Array(body, received - chunk.byteLength).set(chunk);
+                    }),
+                  ),
+                );
+              }),
+              // A response without a body (a 204) is an empty file, as it always was.
+              Effect.catchReason("HttpClientError", "EmptyBodyError", () => Effect.void),
+            );
+            return {
+              bytes: new Uint8Array(body.transferToFixedLength()),
+              contentId: attachment.contentId,
+              contentType: response.headers["content-type"] ?? fallbackType,
+              filename: attachment.filename,
+            } satisfies ResolvedEmailAttachment;
+          }).pipe(
+            Effect.provideService(FetchHttpClient.RequestInit, {
+              redirect: "manual",
+              ...(literal ? {} : { tls: { serverName: hostname } }),
+            } satisfies BunFetchRequestInit),
+            Effect.provide(FetchHttpClient.layer),
+            // What failed is the customer's URL: no address connected, or the body broke
+            // off. A request this code couldn't build is ours.
+            Effect.catchTags({
+              HttpClientError: (cause) => {
+                switch (cause.reason._tag) {
+                  case "DecodeError":
+                  case "TransportError": {
+                    // Logged so a fault on Relayit's side (its egress, its CA store) shows
+                    // up, though each send answers 422. The error's code and the host only:
+                    // its message and request carry the URL, whose query may hold a token.
+                    const failure = cause.reason.cause;
+                    return Effect.logWarning("Attachment URL fetch failed").pipe(
+                      Effect.annotateLogs({
+                        code: Predicate.hasProperty(failure, "code") ? String(failure.code) : "",
+                        failure: cause.reason._tag,
+                        host: parsed.host,
+                        name: Predicate.hasProperty(failure, "name") ? String(failure.name) : "",
+                      }),
+                      Effect.andThen(
+                        Effect.fail(
+                          new EmailAcceptRejected({
+                            code: "invalid_attachment",
+                            details: { filename: attachment.filename, reason: "fetch_failed" },
+                            message: "Failed to fetch attachment from URL.",
+                          }),
+                        ),
+                      ),
+                    );
+                  }
+                  default:
+                    return Effect.fail(
+                      new EmailAcceptInfrastructureError({
+                        cause,
+                        operation: "attachments",
+                        organizationId,
+                      }),
+                    );
+                }
+              },
+            }),
+          );
+        }),
+      { concurrency: 4 },
+    ).pipe(
+      Effect.timeout(Duration.seconds(ATTACHMENTS_DEADLINE_SECONDS)),
+      Effect.catchTags({
+        TimeoutError: () =>
+          Effect.fail(
+            new EmailAcceptRejected({
+              code: "invalid_attachment",
+              details: { reason: "fetch_timeout" },
+              message: "Attachments did not finish within the time limit.",
+            }),
+          ),
+      }),
+    );
   });
 
 export const deleteStagedEmailAttachments = (attachments: readonly StagedEmailAttachment[]) =>

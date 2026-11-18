@@ -17,6 +17,7 @@
     "@repo/webhooks": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "ipaddr.js": "^2.5.0",
     "typeid-js": "catalog:",
     "zod": "catalog:"
   },

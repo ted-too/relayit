@@ -8,10 +8,17 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
+import {
+  AttachmentHostLookup,
+  resolveEmailAttachments,
+} from "@repo/channels/email/accept/attachments";
+import { ATTACHMENTS_DEADLINE_SECONDS } from "@repo/channels/email/attachment-policy";
 import { UsageLimitExceeded } from "@repo/channels/usage";
 import { AwsSnsValidationError } from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { TestClock } from "effect/testing";
 import { GOOD_KEY, request, serve, stubs } from "./testing";
 
 const JSON_TYPE = "application/json;charset=utf-8";
@@ -282,6 +289,59 @@ describe("POST /messages/email", () => {
     }),
   );
 
+  it.live("answers 413 payload_too_large to a body over 50 MiB, before reading it or the key", () =>
+    Effect.gen(function* () {
+      const { accepted, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const tooLarge = respond(413, {
+        code: "payload_too_large",
+        message: "Request body exceeds the 50 MiB limit.",
+      });
+      const withAttachment = (bytes: number) =>
+        email({ attachments: [{ content: "A".repeat(bytes), filename: "big.pdf" }] });
+      const over = withAttachment(50 * 1024 * 1024);
+
+      for (const path of ["/messages/email", "/send/acme/raw/email"]) {
+        expect(yield* request(origin, "POST", path, { body: over, headers: keyed })).toEqual(
+          tooLarge,
+        );
+      }
+      expect(
+        yield* request(origin, "POST", "/messages/email", { body: over, headers: asJson }),
+      ).toEqual(tooLarge);
+      // Without a Content-Length, reading stops once it passes the limit.
+      const chunked = yield* Effect.promise(async () => {
+        const bytes = new TextEncoder().encode(over);
+        const response = await fetch(`${origin}/messages/email`, {
+          body: new ReadableStream({
+            start: (controller) => {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+          duplex: "half",
+          headers: keyed,
+          method: "POST",
+        });
+        return {
+          body: await response.text(),
+          contentType: response.headers.get("content-type"),
+          status: response.status,
+        };
+      });
+      expect(chunked).toEqual(tooLarge);
+      expect(accepted).toEqual([]);
+
+      // Every deliverable send fits: SES refuses a message over 40 MB.
+      expect(
+        yield* request(origin, "POST", "/messages/email", {
+          body: withAttachment(40 * 1024 * 1024),
+          headers: keyed,
+        }),
+      ).toEqual(respond(201, { id: "msg_1" }));
+    }),
+  );
+
   it.live("refuses a body that fails the schema with 422 validation on the failing property", () =>
     Effect.gen(function* () {
       const { accepted, stubs: boundary } = stubs();
@@ -291,6 +351,18 @@ describe("POST /messages/email", () => {
 
       expectSchemaFailure(yield* send(email({ to: undefined })), "body", "/to");
       expectSchemaFailure(yield* send(email({ to: "not-an-email" })), "body", "/to");
+      expectSchemaFailure(
+        yield* send(
+          email({
+            attachments: Array.from({ length: 21 }, (_, i) => ({
+              content: "QQ==",
+              filename: `${i}.txt`,
+            })),
+          }),
+        ),
+        "body",
+        "/attachments",
+      );
       expectSchemaFailure(
         yield* send(email({ to: Array.from({ length: 51 }, (_, i) => `r${i}@example.com`) })),
         "body",
@@ -421,6 +493,63 @@ describe("POST /messages/email", () => {
           code: "all_recipients_suppressed",
           message:
             "Every recipient is suppressed at severity all; no deliverable addresses remain.",
+        }),
+      );
+    }),
+  );
+
+  it.effect("answers 422 fetch_timeout when hosted attachments outlast the send's deadline", () =>
+    Effect.gen(function* () {
+      // Accept's own attachment resolution, against a host that never answers.
+      const fetched: string[] = [];
+      const neverAnswers = Object.assign(
+        (input: string | URL | Request) => {
+          fetched.push(String(input));
+          return new Promise<Response>(() => undefined);
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      );
+      const origin = yield* serve(
+        stubs({
+          accept: (input) =>
+            resolveEmailAttachments(input.email.attachments, input.organizationId).pipe(
+              Effect.provideService(FetchHttpClient.Fetch, neverAnswers),
+              Effect.provideService(AttachmentHostLookup, {
+                resolve: () => Promise.resolve(["93.184.215.14"]),
+              }),
+              Effect.as({
+                deliveryId: "edlv_1",
+                messageId: "msg_1",
+                replayed: false,
+                stripped: [],
+              }),
+            ),
+        }).stubs,
+      );
+
+      const response = yield* request(origin, "POST", "/messages/email", {
+        body: email({
+          attachments: [{ filename: "slow.pdf", path: "https://files.example.com/slow.pdf" }],
+        }),
+        headers: keyed,
+      }).pipe(Effect.forkChild);
+      yield* Effect.promise(async () => {
+        while (fetched.length === 0) {
+          await Bun.sleep(1);
+        }
+      });
+      yield* TestClock.adjust(`${ATTACHMENTS_DEADLINE_SECONDS + 1} seconds`);
+      const answered = yield* Effect.raceFirst(
+        Fiber.join(response),
+        Effect.promise(() => Bun.sleep(2000)).pipe(Effect.as("no answer after the deadline")),
+      );
+      // Lets anything still waiting on the clock finish, so the server can shut down.
+      yield* TestClock.adjust("1 hour");
+      expect(answered).toEqual(
+        respond(422, {
+          code: "invalid_attachment",
+          message: "Attachments did not finish within the time limit.",
+          details: { reason: "fetch_timeout" },
         }),
       );
     }),
