@@ -150,8 +150,9 @@ const tagToken = Schema.String.check(
 );
 
 /**
- * `POST /messages/email` body. Fields it does not know, `topic_id` among them, are
- * dropped, as they were before.
+ * `POST /messages/email` body. A field it does not know is dropped, so a Resend client
+ * that sends one keeps working. `topic_id` alone is refused: a sender who names a Topic
+ * believes its consent was applied, and a transactional send applies none.
  */
 export const SendEmailBody = Schema.Struct({
   from: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -187,6 +188,13 @@ export const SendEmailBody = Schema.Struct({
       Schema.Struct({ name: tagToken, value: tagToken }).annotate({ title: "Tag" }),
     ).annotate({
       description: "Tags as { name, value } pairs.",
+    }),
+  ),
+  topic_id: Schema.optionalKey(
+    Schema.Never.annotate({
+      description:
+        "Not supported, and refused with 422 whatever its value: this endpoint sends transactional email and applies no Topic consent. Leave it out.",
+      message: "topic_id is not supported: this endpoint applies no Topic consent",
     }),
   ),
   template: Schema.optionalKey(

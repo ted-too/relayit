@@ -28,7 +28,9 @@ Some `422` errors also carry a `details` object (see [Error details](#error-deta
 }
 ```
 
-Schema failures (wrong types, unknown fields, more than 50 recipients, a missing `x-api-key` header) use the same `type: "validation"` shape and include extra fields describing the failing property.
+Schema failures (wrong types, a `topic_id` field, more than 50 recipients, a missing `x-api-key` header) use the same `type: "validation"` shape and include extra fields describing the failing property. A field Relayit does not know, other than `topic_id`, is ignored and fails nothing.
+
+The API key is checked before the body is read. A request whose key is missing or invalid gets that answer whatever its body holds, so fix the key first: only then does a body that is not JSON (`400`) or fails validation (`422`) say so.
 
 **Limit error.** `429` responses add `retry_after_seconds`.
 

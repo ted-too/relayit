@@ -10,6 +10,7 @@
       "@repo/object-storage": ["../object-storage/src/index.ts"],
       "@repo/object-storage/*": ["../object-storage/src/*"],
       "@repo/persistence/*": ["../persistence/src/*"],
+      "@repo/public-url": ["../public-url/src/index.ts"],
       "@repo/provider-aws/*": ["./src/*"],
       "@repo/redis": ["../redis/src/index.ts"],
       "@repo/redis/*": ["../redis/src/*"],

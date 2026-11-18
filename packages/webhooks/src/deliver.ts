@@ -1,9 +1,10 @@
 import { defineJob, defineJobHandler, type WorkExecution } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { webhookEndpoint, webhookEvent, webhookEventDelivery } from "@repo/persistence/db/schema";
+import { requestPublicUrl } from "@repo/public-url";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { HttpClientRequest } from "effect/http";
 import { typeid } from "typeid-js";
 import { WebhookDeliveryRetryableError, WebhookDeliveryTerminalError } from "./errors";
 import { signWebhookPayload } from "./signing";
@@ -211,30 +212,68 @@ export const webhookDeliverHandler = defineJobHandler({
       }
 
       const timestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000);
-      const http = yield* HttpClient.HttpClient;
-      const request = HttpClientRequest.post(delivery.url, {
-        headers: {
-          "content-type": "application/json",
-          "webhook-id": delivery.idempotencyId,
-          "webhook-signature": signWebhookPayload({
-            body: delivery.body,
-            idempotencyId: delivery.idempotencyId,
-            secret: delivery.signingSecret,
-            timestamp,
-          }),
-          "webhook-timestamp": String(timestamp),
-        },
-      }).pipe(HttpClientRequest.bodyText(delivery.body, "application/json"));
-      const response = yield* http.execute(request).pipe(
-        Effect.timeout(REQUEST_TIMEOUT_MS),
-        Effect.mapError(
-          (error) =>
-            new WebhookDeliveryRetryableError({
-              cause: error,
-              deliveryId,
-              message: "Webhook HTTP request failed",
+      // The Endpoint's URL is its Project's to choose, so the request goes out only as
+      // `requestPublicUrl` allows: over https, to a public address of its host, following
+      // no redirect (a 3xx is a failed attempt like any other status outside 2xx).
+      const response = yield* requestPublicUrl(delivery.url, (pinned) =>
+        HttpClientRequest.post(pinned, {
+          headers: {
+            "content-type": "application/json",
+            "webhook-id": delivery.idempotencyId,
+            "webhook-signature": signWebhookPayload({
+              body: delivery.body,
+              idempotencyId: delivery.idempotencyId,
+              secret: delivery.signingSecret,
+              timestamp,
             }),
+            "webhook-timestamp": String(timestamp),
+          },
+        }).pipe(HttpClientRequest.bodyText(delivery.body, "application/json")),
+      ).pipe(
+        Effect.timeout(REQUEST_TIMEOUT_MS),
+        // The Project reads one answer whether the name exists or not; the log keeps the
+        // difference, as it does for a hosted attachment.
+        Effect.tapError((error) =>
+          error._tag === "PublicUrlRefused" && error.reason === "no_public_address"
+            ? Effect.logInfo("Webhook Endpoint host has no public address").pipe(
+                Effect.annotateLogs({ deliveryId, host: error.host, resolved: error.resolved }),
+              )
+            : Effect.void,
         ),
+        Effect.mapError((error) => {
+          switch (error._tag) {
+            case "HttpClientError":
+            case "PublicHostLookupFailed":
+            case "TimeoutError":
+              return new WebhookDeliveryRetryableError({
+                cause: error,
+                deliveryId,
+                message: "Webhook HTTP request failed",
+              });
+            case "PublicUrlRefused":
+              // A name's addresses can change, and a name missing now may be a DNS fault,
+              // so that is tried again until the attempts run out. A URL that isn't https,
+              // or whose hostname is too long to exist, stays so: the delivery is
+              // dead-lettered at once.
+              switch (error.reason) {
+                case "no_public_address":
+                  return new WebhookDeliveryRetryableError({
+                    deliveryId,
+                    message: "Webhook Endpoint URL's host has no public address",
+                  });
+                case "hostname_too_long":
+                  return new WebhookDeliveryTerminalError({
+                    deliveryId,
+                    message: "Webhook Endpoint URL's hostname is too long",
+                  });
+                case "unsupported_url":
+                  return new WebhookDeliveryTerminalError({
+                    deliveryId,
+                    message: "Webhook Endpoint URL is not an https URL",
+                  });
+              }
+          }
+        }),
         Effect.matchEffect({
           onFailure: (error) =>
             markFailed(delivery, execution, error.message).pipe(Effect.andThen(Effect.fail(error))),

@@ -12,12 +12,12 @@
     "@repo/jobs": "workspace:*",
     "@repo/object-storage": "workspace:*",
     "@repo/persistence": "workspace:*",
+    "@repo/public-url": "workspace:*",
     "@repo/redis": "workspace:*",
     "@repo/template-render": "workspace:*",
     "@repo/webhooks": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "ipaddr.js": "^2.5.0",
     "typeid-js": "catalog:",
     "zod": "catalog:"
   },

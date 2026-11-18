@@ -1,5 +1,6 @@
 import { type DatabaseTransaction, DB } from "@repo/persistence/db/effect";
 import { webhookEndpoint } from "@repo/persistence/db/schema";
+import { checkPublicUrl } from "@repo/public-url";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { setWebhookEndpointEnabled } from "./endpoint-lifecycle";
@@ -99,11 +100,29 @@ export interface CreatedWebhookEndpoint extends PublicWebhookEndpoint {
   readonly signingSecret: string;
 }
 
+/**
+ * Refuses a URL deliveries could never use: one that isn't https, or that names a
+ * non-public address outright. What a hostname resolves to is not looked up here, inside
+ * the caller's transaction; delivery checks it each time, since the answer can change
+ * after the Endpoint is saved.
+ */
+const assertEndpointUrl = (url: string) =>
+  checkPublicUrl(url).pipe(
+    Effect.mapError(
+      () =>
+        new WebhookManagementError({
+          code: "invalid_url",
+          message: "Webhook Endpoint URL must be an https URL of a public host",
+        }),
+    ),
+  );
+
 export const createWebhookEndpoint = (
   transaction: DatabaseTransaction,
   input: CreateWebhookEndpointInput,
 ): Effect.Effect<CreatedWebhookEndpoint, WebhookManagementError> =>
   Effect.gen(function* () {
+    yield* assertEndpointUrl(input.url);
     const signingSecret = generateWebhookSigningSecret();
     const [endpoint] = yield* transaction
       .insert(webhookEndpoint)
@@ -154,6 +173,9 @@ export const updateWebhookEndpoint = (
   input: UpdateWebhookEndpointInput,
 ): Effect.Effect<PublicWebhookEndpoint, WebhookManagementError> =>
   Effect.gen(function* () {
+    if (input.url !== undefined) {
+      yield* assertEndpointUrl(input.url);
+    }
     const [existing] = yield* transaction
       .select()
       .from(webhookEndpoint)

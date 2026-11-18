@@ -10,6 +10,7 @@
   "dependencies": {
     "@repo/jobs": "workspace:*",
     "@repo/persistence": "workspace:*",
+    "@repo/public-url": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "typeid-js": "catalog:"

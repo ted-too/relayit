@@ -14,7 +14,8 @@ Content-Type: application/json
 This endpoint creates a transactional email. It is shaped to match Resend's send-email API, so most Resend request bodies work unchanged. Two things differ:
 
 - Authenticate with the `x-api-key` header instead of `Authorization: Bearer`.
-- Resend's `topic_id` field is not supported. Unknown fields, including `topic_id`, are rejected. Topic-based marketing sends will go through Campaigns (coming soon).
+- Resend's `topic_id` field is not supported, and a body that has it is refused with `422` (`type: "validation"`, on `/topic_id`): this endpoint sends transactional email and applies no Topic consent, so a send naming a Topic is never accepted as if it had. Topic-based marketing sends will go through Campaigns (coming soon).
+- Any other field Relayit does not know is ignored, not refused, so a Resend client that sends one keeps working.
 
 Body fields use snake_case. You can try every field in the interactive reference at https://api.relayit.io/docs. The machine-readable spec is at https://api.relayit.io/openapi.json.
 

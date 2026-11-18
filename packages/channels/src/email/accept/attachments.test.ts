@@ -7,7 +7,8 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_TOTAL_ATTACHMENT_BYTES,
 } from "../attachment-policy";
-import { AttachmentHostLookup, resolveEmailAttachments } from "./attachments";
+import { PublicHostLookup } from "@repo/public-url";
+import { resolveEmailAttachments } from "./attachments";
 
 interface FetchCall {
   readonly init: BunFetchRequestInit;
@@ -67,7 +68,7 @@ const resolveOne = (
 ) =>
   resolveEmailAttachments([hosted(url)], "org_test").pipe(
     Effect.provideService(FetchHttpClient.Fetch, services.fetch),
-    Effect.provideService(AttachmentHostLookup, services.lookup ?? fakeLookup({})),
+    Effect.provideService(PublicHostLookup, services.lookup ?? fakeLookup({})),
   );
 
 describe("resolveEmailAttachments, hosted", () => {
@@ -182,6 +183,48 @@ describe("resolveEmailAttachments, hosted", () => {
         { host: "nowhere.railway.internal", resolved: false },
         { host: "api.railway.internal", resolved: true },
       ]);
+    }),
+  );
+
+  it.effect("refuses a hostname too long to exist without looking it up or logging it", () =>
+    Effect.gen(function* () {
+      const { calls, fetch } = fakeFetch(() => new Response("file"));
+      const looked: string[] = [];
+      const lookup = {
+        resolve: (hostname: string) => {
+          looked.push(hostname);
+          return Promise.reject(Object.assign(new Error("not found"), { code: "ENOTFOUND" }));
+        },
+      };
+      const logs = captureLogs();
+      const label = "a".repeat(63);
+      // The longest name DNS holds is looked up, and logged whole when it has no address.
+      const longest = `${label}.${label}.${label}.${"a".repeat(61)}`;
+      expect(longest).toHaveLength(253);
+      const refused = yield* Effect.flip(
+        resolveOne(`https://${longest}/a.pdf`, { fetch, lookup }),
+      ).pipe(Effect.provide(logs.layer));
+      expect(looked).toEqual([longest]);
+      expect(logs.lines.map((line) => line.annotations)).toEqual([
+        { host: longest, resolved: false },
+      ]);
+
+      // One character more, or the 60 KB a URL can carry, answers the same and reaches
+      // neither the resolver nor the log.
+      for (const hostname of [`a${longest}`, `${`${label}.`.repeat(1000)}test`]) {
+        expect(
+          yield* Effect.flip(resolveOne(`https://${hostname}/a.pdf`, { fetch, lookup })).pipe(
+            Effect.provide(logs.layer),
+          ),
+        ).toEqual(refused);
+      }
+      expect(refused).toMatchObject({
+        code: "invalid_attachment",
+        details: { filename: "file.pdf", reason: "blocked_address" },
+      });
+      expect(looked).toEqual([longest]);
+      expect(logs.lines).toHaveLength(1);
+      expect(calls).toEqual([]);
     }),
   );
 
@@ -307,7 +350,7 @@ describe("resolveEmailAttachments, hosted", () => {
         "org_test",
       ).pipe(
         Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.provideService(AttachmentHostLookup, lookup),
+        Effect.provideService(PublicHostLookup, lookup),
       );
       expect(resolved).toHaveLength(20);
       expect(calls).toHaveLength(20);
@@ -358,7 +401,7 @@ describe("resolveEmailAttachments, hosted", () => {
         "org_test",
       ).pipe(
         Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.provideService(AttachmentHostLookup, lookup),
+        Effect.provideService(PublicHostLookup, lookup),
         Effect.flip,
         Effect.forkChild,
       );
@@ -621,7 +664,7 @@ describe("resolveEmailAttachments, inline and together", () => {
         ).pipe(
           Effect.as("resolved"),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
-          Effect.provideService(AttachmentHostLookup, lookup),
+          Effect.provideService(PublicHostLookup, lookup),
         ),
       );
       expect(error).toMatchObject({ details: { reason: "exceeds_total_size_limit" } });
