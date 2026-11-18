@@ -78,11 +78,14 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
           }),
         );
     }),
-  // An outage, a throttle, a call that timed out or a database failure may pass. A region
-  // this deployment no longer has, refused credentials or a refusal from SES will not.
+  // An outage, a throttle, a call that timed out or a database failure may pass, and so
+  // may refused credentials, as while a key is rotated. Retrying matters here: the Domain's
+  // row is gone, so nothing deletes the identity of a dead letter. A region this deployment
+  // no longer has, or a request SES rejects as invalid, will not pass.
   classifyFailure: (failure) => {
     switch (failure._tag) {
       case "DeleteDomainIdentityHandlerError":
+      case "EmailBackendAuthenticationError":
       case "EmailBackendRateLimited":
       case "EmailBackendUnavailable":
         return "retryable";

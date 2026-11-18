@@ -187,9 +187,11 @@ describe("createCustomDomain", () => {
       organizations: [{ organizationId: "org_1", ownershipVerificationStatus: "verified" }],
       registration: null,
     };
+    // Its link, then no registration.
+    const limited: unknown[][] = [[{ organizationId: "org_1" }], []];
     const db: any = {
       query: { customDomain: { findFirst: () => Effect.succeed(domain) } },
-      // The Domain is still there and linked when registration takes its locks.
+      // The Domain is still there, linked and unregistered when registration takes its locks.
       transaction: (run: (tx: unknown) => Effect.Effect<unknown, unknown>) =>
         run({
           execute: () => Effect.void,
@@ -197,7 +199,7 @@ describe("createCustomDomain", () => {
             from: () => ({
               where: () => ({
                 for: () => Effect.succeed([{ id: "dom_1" }]),
-                limit: () => Effect.succeed([{ organizationId: "org_1" }]),
+                limit: () => Effect.succeed(limited.shift() ?? []),
               }),
             }),
           }),

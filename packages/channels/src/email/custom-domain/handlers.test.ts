@@ -4,6 +4,7 @@ import { Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import {
   EmailBackend,
+  EmailBackendAuthenticationError,
   EmailBackendConfigurationError,
   type EmailBackendService,
   EmailBackendUnavailable,
@@ -60,12 +61,19 @@ describe("emailDeleteDomainIdentityHandler", () => {
     }),
   );
 
-  it.effect("retries an SES outage, and stops on a region the deployment doesn't have", () =>
+  it.effect("retries an outage and refused credentials, and stops on an unknown region", () =>
     Effect.gen(function* () {
       const outage = yield* Effect.flip(
         deleteIdentity(() => Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" }))),
       );
       expect(emailDeleteDomainIdentityHandler.classifyFailure(outage)).toBe("retryable");
+
+      const refused = yield* Effect.flip(
+        deleteIdentity(() =>
+          Effect.fail(new EmailBackendAuthenticationError({ region: "eu-central-1" })),
+        ),
+      );
+      expect(emailDeleteDomainIdentityHandler.classifyFailure(refused)).toBe("retryable");
 
       const unknownRegion = yield* Effect.flip(
         deleteIdentity(() =>

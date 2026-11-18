@@ -904,6 +904,102 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  /** A Domain left as a bare row: removed by the Project that sent from it. */
+  const keptDomain = Effect.fn(function* () {
+    const organizationId = yield* insertProject();
+    const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+    const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
+    yield* sentFrom({ customDomainId, fqdn, organizationId });
+    yield* deleteCustomDomain({ customDomainId, organizationId });
+    return { customDomainId, fqdn };
+  });
+
+  it.live("a claim whose registration failed is checked, and adding it again registers it", () => {
+    let sesDown = false;
+    const { layer, scheduled } = boundaries({ failCreateIdentity: () => sesDown });
+    return Effect.gen(function* () {
+      const { customDomainId, fqdn } = yield* keptDomain();
+      const claimantId = yield* insertProject();
+      const claimCheck = {
+        name: "email.verify-ownership",
+        payload: { customDomainId, organizationId: claimantId },
+      };
+      scheduled.length = 0;
+
+      sesDown = true;
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+      ).toMatchObject({ operation: "register_identity" });
+      // The claim stands unregistered, with the check that will prove or lapse it.
+      expect(yield* domainOf(fqdn)).toMatchObject({
+        organizations: [
+          { organizationId: claimantId, ownershipVerificationStatus: "not_verified" },
+        ],
+        registration: null,
+      });
+      expect(scheduled).toEqual([claimCheck]);
+
+      sesDown = false;
+      scheduled.length = 0;
+      expect(yield* createCustomDomain({ fqdn, organizationId: claimantId })).toEqual({
+        customDomainId,
+        kind: "existing",
+      });
+
+      const registered = yield* domainOf(fqdn);
+      expect(registered).toMatchObject({
+        organizations: [
+          { organizationId: claimantId, ownershipVerificationStatus: "not_verified" },
+        ],
+        registration: { region: "eu-central-1" },
+      });
+      expect(registered?.dnsRecords.map((record) => record.purpose)).toContain("dkim");
+      expect(scheduled).toEqual([
+        claimCheck,
+        { name: "email.verify-custom-domain", payload: { customDomainId } },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("two claims made at once on an unregistered Domain both stand, checked", () => {
+    const { createdIdentities, layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const { customDomainId, fqdn } = yield* keptDomain();
+      const claimantIds = [yield* insertProject(), yield* insertProject()];
+      scheduled.length = 0;
+      createdIdentities.length = 0;
+
+      const claims = yield* Effect.forEach(
+        claimantIds,
+        (organizationId) => createCustomDomain({ fqdn, organizationId }),
+        { concurrency: "unbounded" },
+      );
+
+      expect(claims).toEqual([
+        { customDomainId, kind: "claim" },
+        { customDomainId, kind: "claim" },
+      ]);
+      expect(
+        (yield* linksOf(customDomainId)).map((link) => link.organizationId).toSorted(),
+      ).toEqual(claimantIds.toSorted());
+      // Registered once, by whichever claim took the identity lock first.
+      expect(
+        yield* db.query.emailDomainRegistration.findMany({
+          columns: { region: true },
+          where: { customDomainId },
+        }),
+      ).toEqual([{ region: "eu-central-1" }]);
+      expect(createdIdentities).toEqual([fqdn]);
+      for (const organizationId of claimantIds) {
+        expect(scheduled).toContainEqual({
+          name: "email.verify-ownership",
+          payload: { customDomainId, organizationId },
+        });
+      }
+    }).pipe(Effect.provide(layer));
+  });
+
   it.live("a removal stands when its ownership check can't be cancelled", () => {
     const { enqueued, layer } = boundaries({ failCancel: true });
     return Effect.gen(function* () {
@@ -1031,11 +1127,13 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       });
 
       return Effect.acquireUseRelease(
-        admin(`create database "${name}"`).pipe(
-          Effect.andThen(Effect.promise(() => migrateOnStartup(url.href))),
-        ),
-        // The layer's pool is closed before the database is dropped.
-        () => sweeps.pipe(Effect.provide(layer)),
+        admin(`create database "${name}"`),
+        // Migrated here, so a migration that fails still has the database dropped. The
+        // layer's pool is closed before it is.
+        () =>
+          Effect.promise(() => migrateOnStartup(url.href)).pipe(
+            Effect.andThen(sweeps.pipe(Effect.provide(layer))),
+          ),
         () => admin(`drop database "${name}" with (force)`),
       );
     },

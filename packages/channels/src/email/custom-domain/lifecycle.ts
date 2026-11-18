@@ -205,6 +205,16 @@ const registerCustomDomainIdentity = (input: {
               operation: "register_identity",
             });
           }
+          // Another claim on the same unregistered Domain registered it while this one
+          // waited for the lock.
+          const [registered] = yield* tx
+            .select({ id: emailDomainRegistration.id })
+            .from(emailDomainRegistration)
+            .where(eq(emailDomainRegistration.customDomainId, input.customDomainId))
+            .limit(1);
+          if (registered) {
+            return;
+          }
 
           yield* managedDns
             .reconcile({
@@ -246,7 +256,8 @@ const registerCustomDomainIdentity = (input: {
                   }),
               ),
               // A call that never answers would hold this connection, the Domain's row
-              // and the FQDN's identity lock with it. Adding the Domain again finishes it.
+              // and the FQDN's identity lock with it. Adding the Domain again finishes it,
+              // for the Project that holds it and for one that claims it.
               Effect.timeoutOrElse({
                 duration: IDENTITY_CALL_TIMEOUT,
                 orElse: () =>
@@ -304,18 +315,12 @@ const registerCustomDomainIdentity = (input: {
       );
   });
 
-const scheduleCustomDomainVerification = (input: {
-  readonly customDomainId: string;
-  readonly ownership?: {
-    readonly organizationId: string;
-  };
-}) =>
+const scheduleCustomDomainVerification = (input: { readonly customDomainId: string }) =>
   Effect.gen(function* () {
     const jobs = yield* Jobs;
-    const runAt = Date.now();
 
     yield* jobs
-      .schedule(emailVerifyCustomDomainJob, { customDomainId: input.customDomainId }, runAt)
+      .schedule(emailVerifyCustomDomainJob, { customDomainId: input.customDomainId }, Date.now())
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -327,30 +332,27 @@ const scheduleCustomDomainVerification = (input: {
             }),
         ),
       );
+  });
 
-    if (input.ownership) {
-      yield* jobs
-        .schedule(
-          emailVerifyOwnershipJob,
-          {
-            customDomainId: input.customDomainId,
-            organizationId: input.ownership.organizationId,
-          },
-          runAt,
-        )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new CustomDomainError({
-                cause,
-                customDomainId: input.customDomainId,
-                message: "Failed to schedule ownership verification job.",
-                operation: "schedule",
-                organizationId: input.ownership?.organizationId,
-              }),
-          ),
-        );
-    }
+const scheduleOwnershipCheck = (claim: {
+  readonly customDomainId: string;
+  readonly organizationId: string;
+}) =>
+  Effect.gen(function* () {
+    const jobs = yield* Jobs;
+
+    yield* jobs.schedule(emailVerifyOwnershipJob, claim, Date.now()).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CustomDomainError({
+            cause,
+            customDomainId: claim.customDomainId,
+            message: "Failed to schedule ownership verification job.",
+            operation: "schedule",
+            organizationId: claim.organizationId,
+          }),
+      ),
+    );
   });
 
 const createOrgDomainLink = (input: {
@@ -421,9 +423,22 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         (organization) => organization.organizationId === input.organizationId,
       );
       if (ownLink) {
+        // A claim is checked from the moment it is made, and that check is what lapses it.
+        // One whose check could not be scheduled gets it here.
+        if (ownLink.ownershipVerificationStatus !== "verified") {
+          yield* scheduleOwnershipCheck({
+            customDomainId: existing.id,
+            organizationId: input.organizationId,
+          });
+        }
         // A first add that failed after writing the Domain left it unregistered or never
-        // checked; adding it again finishes the job.
-        if (ownLink.ownershipVerificationStatus === "verified" && existing.lastCheckedAt === null) {
+        // checked, and a claim on an unregistered Domain whose registration failed left it
+        // unregistered; adding it again finishes the job.
+        if (
+          ownLink.ownershipVerificationStatus === "verified"
+            ? existing.lastCheckedAt === null
+            : !existing.registration
+        ) {
           if (!existing.registration) {
             yield* registerCustomDomainIdentity({
               customDomainId: existing.id,
@@ -521,6 +536,13 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         );
 
       if (claim) {
+        // Before the registration, which can fail: a claim left without its check would
+        // never lapse, and its link would keep the Domain for good.
+        yield* scheduleOwnershipCheck({
+          customDomainId: existing.id,
+          organizationId: input.organizationId,
+        });
+
         if (!claim.registered) {
           yield* registerCustomDomainIdentity({
             customDomainId: existing.id,
@@ -530,10 +552,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
           });
         }
 
-        yield* scheduleCustomDomainVerification({
-          customDomainId: existing.id,
-          ownership: { organizationId: input.organizationId },
-        });
+        yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
 
         return { customDomainId: existing.id, kind: "claim" as const };
       }
