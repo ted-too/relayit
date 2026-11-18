@@ -9,10 +9,12 @@ import { Api, SesNotificationFailed, SesNotificationRejected } from "../../api";
 
 /**
  * The largest body this route reads. Anyone can post here, and the body is read before
- * SNS's signature can be checked. SNS publishes at most 256 KB of message, which arrives
- * as one JSON string inside its envelope: escaping can at worst double it, and the
+ * SNS's signature can be checked. The worker makes its topics without a
+ * `MaximumMessageSize`, so they keep SNS's default of 256 KiB of message, which arrives as
+ * one JSON string inside its envelope: escaping can double or at most triple it, and the
  * envelope's own fields (signature, certificate and unsubscribe URLs) add a few KB, so
- * nothing SNS sends comes near 1 MiB.
+ * nothing they send reaches 1 MiB. Raise this with that attribute, or real notifications
+ * get a 400 SNS does not retry.
  */
 const MAX_SES_NOTIFICATION_BYTES = 1024 * 1024;
 
