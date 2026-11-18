@@ -98,7 +98,7 @@ While a Domain is paused:
 - New sends from it fail with `422 invalid_from_address`.
 - Emails that were already queued fail at send time. They are not held for later.
 
-A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. An automatic pause needs no unpausing there: restore the Project's sending in SES (its tenant, `relayit-<project id>`) and Relayit unpauses the Domains when SES reports it, or within five minutes if the report is lost. To keep such a Domain paused whatever SES does, use **Keep paused** and give it a reason: it then stays paused until an admin unpauses it. Unpausing one by hand while SES still pauses the Project only lets the next send fail and pause it again.
+A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. An automatic pause needs no unpausing there: restore the Project's sending in SES (its tenant, `relayit-<project id>`) and Relayit unpauses the Domains when SES reports it, or within five minutes if the report is lost or never sent. To keep such a Domain paused whatever SES does, use **Keep paused** and give it a reason: it then stays paused until an admin unpauses it. Unpausing one by hand while SES still pauses the Project only lets the next send fail and pause it again.
 
 ## Claiming a domain from another Project
 

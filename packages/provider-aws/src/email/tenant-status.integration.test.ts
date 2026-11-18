@@ -1,15 +1,16 @@
 import { describe, expect, it, test } from "@effect/vitest";
-import { EmailBackend } from "@repo/channels/email/backend";
+import { EmailBackend, EmailBackendUnavailable } from "@repo/channels/email/backend";
 import {
   pauseCustomDomain,
   unpauseCustomDomain,
 } from "@repo/channels/email/custom-domain/lifecycle";
 import {
   emailRecheckProjectSendingPauseHandler,
+  emailRecheckProjectSendingPauseJob,
   pauseProjectDomains,
   syncProjectSendingStatus,
 } from "@repo/channels/email/deliverability";
-import { Jobs, JobsLive } from "@repo/jobs";
+import { JobEnqueueError, Jobs, JobsLive, registerJobHandler } from "@repo/jobs";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
   customDomain,
@@ -18,7 +19,7 @@ import {
   organizationDomain,
   webhookEndpoint,
 } from "@repo/persistence/db/schema";
-import { makeRedisLive } from "@repo/redis";
+import { makeRedisLive, Redis } from "@repo/redis";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { typeid } from "typeid-js";
 import { makeFakeEmailBackend } from "./fake";
@@ -36,6 +37,36 @@ const testRedisUrl = Bun.env.TEST_REDIS_URL;
 /** The region the observed events are from, and where the Projects' Domains are registered. */
 const REGION = TENANT_STATUS_EVENTS.disabled.region;
 
+/** A Domain the Project holds, registered in `region`, in the pause state given. */
+const addDomain = (
+  organizationId: string,
+  region: string | null,
+  pause: Pick<typeof customDomain.$inferInsert, "isPaused" | "pausedReason"> = {},
+) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    const customDomainId = typeid("domn").toString();
+    yield* db.insert(customDomain).values({
+      ...pause,
+      dkimPrivateKey: "unused",
+      dkimPublicKey: "unused",
+      dkimSelector: "relayit",
+      fqdn: `${customDomainId}.relayit.test`,
+      id: customDomainId,
+      verificationStatus: "verified",
+    });
+    yield* db.insert(organizationDomain).values({
+      customDomainId,
+      organizationId,
+      ownershipToken: Bun.randomUUIDv7(),
+      ownershipVerificationStatus: "verified",
+    });
+    yield* db
+      .insert(emailDomainRegistration)
+      .values({ customDomainId, region, verificationStatus: "verified" });
+    return customDomainId;
+  });
+
 /** A Project holding one Domain per entry of `regions`, told of every Domain change. */
 const seedProject = (regions: readonly (string | null)[] = [REGION]) =>
   Effect.gen(function* () {
@@ -52,31 +83,12 @@ const seedProject = (regions: readonly (string | null)[] = [REGION]) =>
       signingSecret: "whsec_test",
       url: "https://hooks.relayit.test/events",
     });
-    const domainIds = yield* Effect.forEach(regions, (region) =>
-      Effect.gen(function* () {
-        const customDomainId = typeid("domn").toString();
-        yield* db.insert(customDomain).values({
-          dkimPrivateKey: "unused",
-          dkimPublicKey: "unused",
-          dkimSelector: "relayit",
-          fqdn: `${customDomainId}.relayit.test`,
-          id: customDomainId,
-          verificationStatus: "verified",
-        });
-        yield* db.insert(organizationDomain).values({
-          customDomainId,
-          organizationId,
-          ownershipToken: Bun.randomUUIDv7(),
-          ownershipVerificationStatus: "verified",
-        });
-        yield* db
-          .insert(emailDomainRegistration)
-          .values({ customDomainId, region, verificationStatus: "verified" });
-        return customDomainId;
-      }),
-    );
+    const domainIds = yield* Effect.forEach(regions, (region) => addDomain(organizationId, region));
     return { domainIds, organizationId };
   });
+
+/** A pause of Relayit's own as it is in the database, with nothing scheduled for it. */
+const PAUSED_UNSCHEDULED = { isPaused: true, pausedReason: "project_sending_pause" } as const;
 
 const pauseOf = (customDomainId: string) =>
   Effect.gen(function* () {
@@ -111,21 +123,47 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
     return;
   }
 
-  const services = Layer.mergeAll(
-    makeDbLive({ databaseUrl: testDatabaseUrl }),
-    JobsLive.pipe(
-      Layer.provide(makeRedisLive({ keyPrefix: `test:${Bun.randomUUIDv7()}:`, url: testRedisUrl })),
+  const services = JobsLive.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        makeDbLive({ databaseUrl: testDatabaseUrl }),
+        makeRedisLive({ keyPrefix: `test:${Bun.randomUUIDv7()}:`, url: testRedisUrl }),
+      ),
     ),
   );
+
+  const recheckSchedule = registerJobHandler(emailRecheckProjectSendingPauseHandler).scheduledKey;
+  /** When the Project's next recheck is due, as Redis holds it; `undefined` when none is. */
+  const nextRecheckAt = (organizationId: string) =>
+    Effect.gen(function* () {
+      const redis = yield* Redis;
+      const at = yield* redis.evaluateNumber({
+        args: [
+          emailRecheckProjectSendingPauseJob.recurrence.identity({
+            organizationId,
+            region: REGION,
+          }),
+        ],
+        keys: [recheckSchedule ?? ""],
+        script: `local at = redis.call("ZSCORE", KEYS[1], ARGV[1])
+if at then return tonumber(at) end
+return -1`,
+      });
+      return at === -1 ? undefined : at;
+    });
+  const recheckJob = (organizationId: string) =>
+    emailRecheckProjectSendingPauseHandler.handle(
+      { organizationId, region: REGION },
+      { attempt: 1, enqueuedAt: Date.now(), id: "job_recheck" },
+    );
 
   /**
    * One test's world: the fake standing in for SES, `deliver`, which takes an event as the
    * api does once SNS's checks have passed, and `recheck`, one run of the worker's job.
-   * `asked` counts the reads of SES; `rechecks` is what was asked of the job schedule.
+   * `asked` counts the reads of SES.
    */
   const ses = Effect.gen(function* () {
     const db = yield* DB;
-    const jobs = yield* Jobs;
     const fake = yield* makeFakeEmailBackend(REGION);
     let asked = 0;
     const backend = {
@@ -135,54 +173,22 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
         return fake.getProjectSendingStatus(input);
       },
     };
-    const rechecks: { readonly action: "cancel" | "schedule"; readonly organizationId: string }[] =
-      [];
-    const recorded = (action: "cancel" | "schedule", args: readonly unknown[]) =>
-      Effect.sync(() => {
-        rechecks.push({
-          action,
-          organizationId: (args[1] as { readonly organizationId: string }).organizationId,
-        });
-      });
-    const recordingJobs = {
-      ...jobs,
-      cancel: ((...args: Parameters<typeof jobs.cancel>) =>
-        recorded("cancel", args).pipe(Effect.andThen(jobs.cancel(...args)))) as typeof jobs.cancel,
-      schedule: ((...args: Parameters<typeof jobs.schedule>) =>
-        recorded("schedule", args).pipe(
-          Effect.andThen(jobs.schedule(...args)),
-        )) as typeof jobs.schedule,
-    };
     return {
       asked: () => asked,
+      backend,
       deliver: (event: Record<string, unknown>) => {
         const project = projectOfTenantStatusEvent(event, TENANT_STATUS_EVENTS_TOPIC);
         return project
-          ? syncProjectSendingStatus(db, project).pipe(
-              Effect.provideService(EmailBackend, backend),
-              Effect.provideService(Jobs, recordingJobs),
-            )
+          ? syncProjectSendingStatus(db, project).pipe(Effect.provideService(EmailBackend, backend))
           : Effect.succeed(undefined);
       },
       /** What the delivery handler does when SES refuses a send for the Project. */
       pauseFromRefusedSend: (organizationId: string) =>
-        db
-          .transaction((tx) =>
-            pauseProjectDomains(tx, { defaultRegion: REGION, organizationId, region: REGION }),
-          )
-          .pipe(Effect.provideService(Jobs, recordingJobs)),
+        db.transaction((tx) =>
+          pauseProjectDomains(tx, { defaultRegion: REGION, organizationId, region: REGION }),
+        ),
       recheck: (organizationId: string) =>
-        emailRecheckProjectSendingPauseHandler
-          .handle(
-            { organizationId, region: REGION },
-            { attempt: 1, enqueuedAt: Date.now(), id: "job_recheck" },
-          )
-          .pipe(
-            Effect.provideService(EmailBackend, backend),
-            Effect.provideService(Jobs, recordingJobs),
-          ),
-      rechecksFor: (organizationId: string) =>
-        rechecks.filter((recheck) => recheck.organizationId === organizationId),
+        recheckJob(organizationId).pipe(Effect.provideService(EmailBackend, backend)),
       setPaused: fake.setProjectSendingPaused,
     };
   });
@@ -392,19 +398,21 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
 
   describe("the recheck job", () => {
     it.live("lifts a pause a refused send committed after SES restored the Project", () =>
-      withSes(({ deliver, pauseFromRefusedSend, recheck, rechecksFor }) =>
+      withSes(({ asked, deliver, pauseFromRefusedSend, recheck }) =>
         Effect.gen(function* () {
           const project = yield* seedProject();
           const [domainId = ""] = project.domainIds;
           // SES refused a send, restored the tenant, and the api handled the "enabled" event
           // (finding nothing to unpause) before the handler's pause was written.
           yield* deliver(eventFor("enabled", project.organizationId));
+          expect(yield* nextRecheckAt(project.organizationId)).toBeUndefined();
+          const before = Date.now();
           expect(yield* pauseFromRefusedSend(project.organizationId)).toBe(1);
           expect(yield* pauseOf(domainId)).toEqual(PAUSED_BY_RELAYIT);
-          // The pause asked for its own recheck.
-          expect(rechecksFor(project.organizationId)).toEqual([
-            { action: "schedule", organizationId: project.organizationId },
-          ]);
+          // The pause asked for its own recheck, five minutes on.
+          const first = yield* nextRecheckAt(project.organizationId);
+          expect(first).toBeGreaterThanOrEqual(before + 5 * 60_000);
+          expect(first).toBeLessThan(before + 6 * 60_000);
 
           yield* recheck(project.organizationId);
 
@@ -413,35 +421,82 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
             { payload: { domain_id: domainId, paused: true }, type: "domain.updated" },
             { payload: { domain_id: domainId, paused: false }, type: "domain.updated" },
           ]);
-          // Nothing is left to recheck, so the job drops itself, and running it again
-          // (a duplicate delivery of the job) asks SES nothing and tells nobody.
-          expect(rechecksFor(project.organizationId).at(-1)?.action).toBe("cancel");
+          // The run after it finds nothing paused: it asks SES nothing, tells nobody and
+          // schedules no other, which is how the rechecks end.
+          const scheduled = yield* nextRecheckAt(project.organizationId);
+          const reads = asked();
           yield* recheck(project.organizationId);
+          expect(asked()).toBe(reads);
           expect(yield* eventsOf(project.organizationId)).toHaveLength(2);
+          expect(yield* nextRecheckAt(project.organizationId)).toBe(scheduled);
         }),
       ),
     );
 
     it.live("keeps the pause, and keeps checking, while SES still pauses the Project", () =>
-      withSes(({ asked, deliver, recheck, rechecksFor, setPaused }) =>
+      withSes(({ asked, deliver, recheck, setPaused }) =>
         Effect.gen(function* () {
           const project = yield* seedProject();
           yield* setPaused(project.organizationId, true);
           yield* deliver(eventFor("disabled", project.organizationId));
           const before = asked();
+          const fromPause = (yield* nextRecheckAt(project.organizationId)) ?? 0;
 
+          yield* Effect.sleep("5 millis");
           yield* recheck(project.organizationId);
+          const afterFirst = (yield* nextRecheckAt(project.organizationId)) ?? 0;
+          yield* Effect.sleep("5 millis");
           yield* recheck(project.organizationId);
+          const afterSecond = (yield* nextRecheckAt(project.organizationId)) ?? 0;
 
           expect(asked() - before).toBe(2);
           expect(yield* pauseOf(project.domainIds[0] ?? "")).toEqual(PAUSED_BY_RELAYIT);
           expect(yield* eventsOf(project.organizationId)).toHaveLength(1);
-          // One schedule from the pause and one from each run; never dropped.
-          expect(rechecksFor(project.organizationId).map(({ action }) => action)).toEqual([
-            "schedule",
-            "schedule",
-            "schedule",
-          ]);
+          // Each run moved the next one on.
+          expect(afterFirst).toBeGreaterThan(fromPause);
+          expect(afterSecond).toBeGreaterThan(afterFirst);
+        }),
+      ),
+    );
+
+    it.live("keeps the recheck of a pause that is committing as an earlier one is lifted", () =>
+      withSes(({ pauseFromRefusedSend, recheck }) =>
+        Effect.gen(function* () {
+          const db = yield* DB;
+          const project = yield* seedProject();
+          const [lifted = ""] = project.domainIds;
+          yield* pauseFromRefusedSend(project.organizationId);
+          const refusedAgain = yield* addDomain(project.organizationId, REGION);
+
+          // A send is refused again: its transaction has paused the Project's other Domain
+          // and scheduled the recheck, and has not committed when the recheck of the first
+          // pause runs, finds SES enabled and unpauses. That run cannot see the new pause.
+          const paused = yield* Deferred.make<void>();
+          const commit = yield* Deferred.make<void>();
+          const refusedSend = yield* Effect.forkChild(
+            db.transaction((tx) =>
+              pauseProjectDomains(tx, {
+                defaultRegion: REGION,
+                organizationId: project.organizationId,
+                region: REGION,
+              }).pipe(
+                Effect.andThen(Deferred.succeed(paused, undefined)),
+                Effect.andThen(Deferred.await(commit)),
+              ),
+            ),
+          );
+          yield* Deferred.await(paused);
+          yield* recheck(project.organizationId);
+          expect(yield* pauseOf(lifted)).toEqual(NOT_PAUSED);
+          expect(yield* pauseOf(refusedAgain)).toEqual(NOT_PAUSED);
+          yield* Deferred.succeed(commit, undefined);
+          yield* Fiber.join(refusedSend);
+
+          // The pause that has now landed still has the recheck that will lift it.
+          expect(yield* pauseOf(refusedAgain)).toEqual(PAUSED_BY_RELAYIT);
+          expect(yield* nextRecheckAt(project.organizationId)).toBeGreaterThan(Date.now());
+          yield* recheck(project.organizationId);
+          expect(yield* pauseOf(refusedAgain)).toEqual(NOT_PAUSED);
         }),
       ),
     );
@@ -456,6 +511,7 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
           });
           yield* recheck(admins.organizationId);
           expect(asked()).toBe(0);
+          expect(yield* nextRecheckAt(admins.organizationId)).toBeUndefined();
 
           // Beside a pause of Relayit's own that SES has since lifted.
           const mixed = yield* seedProject([REGION, REGION]);
@@ -476,82 +532,121 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
     );
 
     it.live("is scheduled for every pause of Relayit's own when a worker starts", () =>
-      withSes(({ pauseFromRefusedSend }) =>
+      withSes(({ backend }) =>
         Effect.gen(function* () {
-          const jobs = yield* Jobs;
-          const fake = yield* makeFakeEmailBackend(REGION);
-          const paused = yield* seedProject();
-          yield* pauseFromRefusedSend(paused.organizationId);
+          // Paused with nothing scheduled: the schedule was lost, or never written.
+          const paused = yield* seedProject([]);
+          yield* addDomain(paused.organizationId, REGION, PAUSED_UNSCHEDULED);
           const byAdmin = yield* seedProject();
           yield* pauseCustomDomain({
             customDomainId: byAdmin.domainIds[0] ?? "",
             reason: "bad_reputation",
           });
-          const scheduled: { readonly organizationId: string; readonly region: string }[] = [];
-
           const atStart = emailRecheckProjectSendingPauseHandler.reconcile;
           if (!atStart) {
             return yield* Effect.die("the recheck job has nothing to do when a worker starts");
           }
-          yield* atStart.pipe(
-            Effect.provideService(EmailBackend, fake),
-            Effect.provideService(Jobs, {
-              ...jobs,
-              schedule: ((...args: Parameters<typeof jobs.schedule>) => {
-                scheduled.push(args[1] as (typeof scheduled)[number]);
-                return jobs.schedule(...args);
-              }) as typeof jobs.schedule,
-            }),
-          );
 
-          expect(scheduled).toContainEqual({
-            organizationId: paused.organizationId,
-            region: REGION,
-          });
-          expect(scheduled.map(({ organizationId }) => organizationId)).not.toContain(
-            byAdmin.organizationId,
-          );
+          yield* atStart.pipe(Effect.provideService(EmailBackend, backend));
+
+          expect(yield* nextRecheckAt(paused.organizationId)).toBeGreaterThan(Date.now());
+          expect(yield* nextRecheckAt(byAdmin.organizationId)).toBeUndefined();
         }),
       ),
     );
 
-    it.live("keeps its schedule when SES cannot be asked", () =>
-      withSes(({ pauseFromRefusedSend, rechecksFor }) =>
-        Effect.gen(function* () {
-          const jobs = yield* Jobs;
-          const project = yield* seedProject();
-          yield* pauseFromRefusedSend(project.organizationId);
-          const fake = yield* makeFakeEmailBackend(REGION);
-          const scheduled: unknown[] = [];
+    describe("a run that fails still leaves the next one scheduled", () => {
+      /** A Project paused by Relayit with no recheck scheduled, so any found is the run's. */
+      const pausedUnscheduled = Effect.gen(function* () {
+        const project = yield* seedProject([]);
+        const domainId = yield* addDomain(project.organizationId, REGION, PAUSED_UNSCHEDULED);
+        return { ...project, domainId };
+      });
 
-          const exit = yield* emailRecheckProjectSendingPauseHandler
-            .handle(
-              { organizationId: project.organizationId, region: REGION },
-              { attempt: 1, enqueuedAt: Date.now(), id: "job_recheck" },
-            )
-            .pipe(
+      it.live("when SES cannot be asked", () =>
+        withSes(({ backend }) =>
+          Effect.gen(function* () {
+            const project = yield* pausedUnscheduled;
+
+            const exit = yield* recheckJob(project.organizationId).pipe(
               Effect.provideService(EmailBackend, {
-                ...fake,
-                getProjectSendingStatus: () => Effect.die("SES is unreachable"),
+                ...backend,
+                getProjectSendingStatus: () =>
+                  Effect.fail(new EmailBackendUnavailable({ region: REGION })),
               }),
+              Effect.exit,
+            );
+
+            expect(exit._tag).toBe("Failure");
+            expect(yield* nextRecheckAt(project.organizationId)).toBeGreaterThan(Date.now());
+            expect(yield* pauseOf(project.domainId)).toEqual(PAUSED_BY_RELAYIT);
+          }),
+        ),
+      );
+
+      it.live("when its first read of the database fails", () =>
+        withSes(({ asked, backend }) =>
+          Effect.gen(function* () {
+            const db = yield* DB;
+            const project = yield* pausedUnscheduled;
+
+            const exit = yield* recheckJob(project.organizationId).pipe(
+              Effect.provideService(EmailBackend, backend),
+              Effect.provideService(
+                DB,
+                new Proxy(db, {
+                  get: (target, property, receiver) =>
+                    property === "selectDistinct"
+                      ? () => {
+                          throw new Error("Postgres is unreachable");
+                        }
+                      : Reflect.get(target, property, receiver),
+                }),
+              ),
+              Effect.exit,
+            );
+
+            expect(exit._tag).toBe("Failure");
+            expect(asked()).toBe(0);
+            expect(yield* nextRecheckAt(project.organizationId)).toBeGreaterThan(Date.now());
+          }),
+        ),
+      );
+
+      it.live("when Redis refuses the write that schedules it", () =>
+        withSes(({ backend }) =>
+          Effect.gen(function* () {
+            const jobs = yield* Jobs;
+            const project = yield* pausedUnscheduled;
+            let writes = 0;
+
+            const exit = yield* recheckJob(project.organizationId).pipe(
+              Effect.provideService(EmailBackend, backend),
               Effect.provideService(Jobs, {
                 ...jobs,
+                // The first write fails, as on a connection Redis has just dropped.
                 schedule: ((...args: Parameters<typeof jobs.schedule>) => {
-                  scheduled.push(args[1]);
-                  return jobs.schedule(...args);
+                  writes += 1;
+                  return writes === 1
+                    ? Effect.fail(
+                        new JobEnqueueError({
+                          cause: "connection reset",
+                          jobName: emailRecheckProjectSendingPauseJob.name,
+                          stage: "schedule",
+                        }),
+                      )
+                    : jobs.schedule(...args);
                 }) as typeof jobs.schedule,
               }),
               Effect.exit,
             );
 
-          expect(exit._tag).toBe("Failure");
-          // Scheduled before SES was asked, so a failing run does not end the rechecks.
-          expect(scheduled).toEqual([{ organizationId: project.organizationId, region: REGION }]);
-          expect(rechecksFor(project.organizationId)).toHaveLength(1);
-          expect(yield* pauseOf(project.domainIds[0] ?? "")).toEqual(PAUSED_BY_RELAYIT);
-        }),
-      ),
-    );
+            expect(exit._tag).toBe("Failure");
+            expect(yield* nextRecheckAt(project.organizationId)).toBeGreaterThan(Date.now());
+          }),
+        ),
+      );
+    });
   });
 
   describe("two syncs of one Project at once", () => {
@@ -687,7 +782,7 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
           yield* setPaused(project.organizationId, true);
           yield* deliver(eventFor("disabled", project.organizationId));
 
-          // Without unpausing: no send can pass in between.
+          // Without unpausing it first.
           yield* pauseCustomDomain({ customDomainId: domainId, reason: "manual_admin_pause" });
           yield* setPaused(project.organizationId, false);
           yield* deliver(eventFor("enabled", project.organizationId));
@@ -719,7 +814,8 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
       const error = yield* syncProjectSendingStatus(db, named).pipe(
         Effect.provideService(EmailBackend, {
           ...fake,
-          getProjectSendingStatus: () => Effect.die("SES is unreachable"),
+          getProjectSendingStatus: () =>
+            Effect.fail(new EmailBackendUnavailable({ region: REGION })),
         }),
         Effect.exit,
       );

@@ -622,7 +622,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   // is refused from now on, and the same pause is what the api makes when SES
                   // reports the tenant's status, so whichever comes first tells the Project
                   // once. This one goes by the refusal, not by the status now: if SES restored
-                  // the tenant meanwhile, the reconcile job lifts it.
+                  // the tenant meanwhile, the recheck job lifts it.
                   yield* pauseProjectDomains(tx, {
                     defaultRegion: backend.defaultRegion,
                     organizationId: appEnvironment.organizationId,

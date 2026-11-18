@@ -34,7 +34,7 @@ const UNPAUSE_WARNINGS: Partial<Record<NonNullable<AdminDomain["pausedReason"]>,
  * A platform admin pauses or unpauses a Domain: a pause asks for its reason, an unpause
  * confirms. A Domain that is already paused can be paused again, which only changes the
  * reason: that is how an admin keeps a Domain paused that Relayit paused itself and would
- * unpause when SES restores the Project, without a moment in which it can send. Either
+ * unpause when SES restores the Project, without unpausing it first. Either
  * closes as the Domain's new state lands in the admin's list, so its badge changes without
  * a reload.
  */
@@ -131,7 +131,7 @@ export function DomainPause({
             </DialogTitle>
             <DialogDescription>
               {domain.isPaused
-                ? "This Domain is paused already, and stays paused throughout. Giving it a reason of your own makes the pause yours: Relayit no longer unpauses it when SES restores the Project's sending. "
+                ? "This Domain is paused already. Giving it a reason of your own makes the pause yours, without unpausing it: Relayit no longer unpauses it when SES restores the Project's sending. If Relayit has just unpaused it, this pauses it again. "
                 : "While it is paused, new sends from this Domain are rejected and Deliveries already queued from it fail. Nothing is held to send later. "}
               Its Project's members see the pause and its reason, and cannot lift it: it stays
               paused until an admin unpauses it.
