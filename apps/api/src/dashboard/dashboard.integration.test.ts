@@ -7,6 +7,7 @@
  */
 import { describe, expect, layer, test } from "@effect/vitest";
 import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
+import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
   emailDomainRegistration,
@@ -784,6 +785,61 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             }),
           ),
         ).toEqual([]);
+        yield* Effect.promise(() => db.$client.end());
+      }),
+    );
+
+    it.effect("refuses a Domain beyond the Plan's limit with a message a member can act on", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("limited");
+        const project = yield* createProject(owner, `Limited ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        // The Free Plan's limits, as sign-in writes them on a deployment with Stripe.
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        const billingUser = yield* Effect.promise(() =>
+          db.query.user.findFirst({
+            columns: { id: true },
+            where: { email: `limited-${run}@example.test` },
+          }),
+        );
+        yield* Effect.promise(() =>
+          ensureUserLimits(db, { planName: "free", userId: billingUser?.id ?? "" }),
+        );
+
+        const first = yield* call("POST", `${p}/domains`, {
+          as: owner,
+          body: { fqdn: `${run}.first.limited.example.test` },
+        });
+        expect(first.status).toBe(200);
+        expect(
+          yield* call("POST", `${p}/domains`, {
+            as: owner,
+            body: { fqdn: `${run}.second.limited.example.test` },
+          }),
+        ).toEqual({
+          body: {
+            _tag: "PlanLimitReached",
+            limit: 1,
+            message:
+              "The Project's Plan doesn't allow another Domain. Remove a Domain or a pending claim, or upgrade the Billing User's Plan.",
+          },
+          cookies: [],
+          status: 402,
+        });
+        expect(yield* call("GET", `${p}/domains`, { as: owner })).toMatchObject({
+          body: [{ fqdn: `${run}.first.limited.example.test` }],
+          status: 200,
+        });
+
+        // Removing one makes room again.
+        const firstId = (first.body as { id: string }).id;
+        expect((yield* call("DELETE", `${p}/domains/${firstId}`, { as: owner })).status).toBe(204);
+        expect(
+          (yield* call("POST", `${p}/domains`, {
+            as: owner,
+            body: { fqdn: `${run}.second.limited.example.test` },
+          })).status,
+        ).toBe(200);
         yield* Effect.promise(() => db.$client.end());
       }),
     );

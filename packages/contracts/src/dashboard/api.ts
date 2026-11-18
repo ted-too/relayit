@@ -11,7 +11,14 @@
  */
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { Conflict, Invalid, NotFound, OperationFailed, Unavailable } from "./errors";
+import {
+  Conflict,
+  Invalid,
+  NotFound,
+  OperationFailed,
+  PlanLimitReached,
+  Unavailable,
+} from "./errors";
 import {
   AdminProject,
   ApiKey,
@@ -102,7 +109,7 @@ export class DomainsApi extends HttpApiGroup.make("domains")
     }).annotate(RequiresPermission, { domain: ["read"] }),
     // Adds the Domain, or claims one another Project holds.
     HttpApiEndpoint.post("create", "/", {
-      error: failures,
+      error: [...failures, PlanLimitReached],
       params: project,
       payload: CreateDomainInput,
       success: Domain,

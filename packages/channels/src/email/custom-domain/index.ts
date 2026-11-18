@@ -26,4 +26,5 @@ export {
   type UnpauseCustomDomainInput,
   unpauseCustomDomain,
 } from "./lifecycle";
+export { DomainLimitReached, DomainLimitUnreadable } from "./plan-limit";
 export { detectDnsProvider, providerFromNameservers } from "./provider-detection";

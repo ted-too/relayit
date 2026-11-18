@@ -164,4 +164,5 @@ Usage is counted per Delivery: one per accepted send, however many recipients it
 Notes:
 
 - `POST /messages/email` always sends transactional email. Marketing limits apply to Campaigns, which are coming soon.
+- Custom Domains are counted across every Project the Billing User is Billing User for. A domain counts from the moment it is added, and so does a [claim](/docs/domains#claiming-a-domain-from-another-project) that has not verified yet; the Sandbox Domain never counts. At the limit, adding or claiming another domain is refused until you remove one or the Billing User moves to a higher Plan. If you already have more domains than your Plan allows, you keep them and they keep sending.
 - Self-hosted installs have no Plans. Every limit above is unlimited.

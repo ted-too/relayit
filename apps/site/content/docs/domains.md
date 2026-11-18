@@ -28,6 +28,8 @@ The Project keeps the Sandbox Domain after your own Domains verify, so you can k
 
 Relayit generates a DKIM key for the domain, registers it with Amazon SES, and shows you the DNS records to publish.
 
+On Relayit Cloud, a Plan limits how many custom Domains its Billing User's Projects can have between them: see [Plan limits](/docs/errors-and-limits#plan-limits). An add or a claim beyond the limit is refused.
+
 A domain can only belong to one Project at a time. If another Project already holds it, see [Claiming a domain from another Project](#claiming-a-domain-from-another-project).
 
 ## DNS records

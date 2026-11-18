@@ -38,6 +38,7 @@ import {
   customDomainRootDnsOwner,
   resolveCustomDomainMailFromRecords,
 } from "./dns";
+import { requireDomainAllowance } from "./plan-limit";
 
 export class CustomDomainError extends Data.TaggedError("CustomDomainError")<{
   readonly cause?: unknown;
@@ -493,6 +494,10 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
             if (!held) {
               return;
             }
+            yield* requireDomainAllowance(tx, {
+              customDomainId: existing.id,
+              organizationId: input.organizationId,
+            });
             yield* createOrgDomainLink({
               customDomainId: existing.id,
               db: tx,
@@ -510,6 +515,8 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
           Effect.mapError((error) => {
             switch (error._tag) {
               case "CustomDomainError":
+              case "DomainLimitReached":
+              case "DomainLimitUnreadable":
                 return error;
               default:
                 return new CustomDomainError({
@@ -577,6 +584,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     const row = yield* db
       .transaction((tx) =>
         Effect.gen(function* () {
+          yield* requireDomainAllowance(tx, { organizationId: input.organizationId });
           const [inserted] = yield* tx
             .insert(customDomain)
             .values({
@@ -604,6 +612,8 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         Effect.mapError((error) => {
           switch (error._tag) {
             case "CustomDomainError":
+            case "DomainLimitReached":
+            case "DomainLimitUnreadable":
               return error;
             default:
               return new CustomDomainError({
