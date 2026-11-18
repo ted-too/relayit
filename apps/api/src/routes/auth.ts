@@ -1,16 +1,18 @@
+import { AUTH_BASE_PATH } from "@repo/persistence/auth/constants";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { ApiAuth } from "../lib/auth";
 
 /**
- * better-auth at `/api/auth/*`: sign-in and sign-up, the session, organizations and their
- * members, API key deletion, the GitHub OAuth callback and Stripe's webhook. These URLs are
- * registered with GitHub and Stripe, so the path is fixed.
+ * better-auth at `/auth/*`: sign-in and sign-up, the session, organizations and their
+ * members, API key deletion, the GitHub OAuth callback (`/auth/callback/github`) and
+ * Stripe's webhook (`/auth/stripe/webhook`). GitHub and Stripe are configured with those
+ * URLs on `API_URL`.
  */
 export const authRoutes = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const { auth } = yield* ApiAuth;
-    yield* router.add("*", "/api/auth/*", (request) =>
+    yield* router.add("*", `${AUTH_BASE_PATH}/*`, (request) =>
       HttpServerRequest.toWeb(request).pipe(
         Effect.orDie,
         Effect.flatMap((webRequest) => Effect.promise(() => auth.handler(webRequest))),

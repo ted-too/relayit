@@ -45,7 +45,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       ).pipe(
         Layer.provideMerge(
           apiServer({
-            dashboard: { appOrigin: APP, billing: false, githubSignIn: false },
+            appOrigin: APP,
+            dashboard: { billing: false, githubSignIn: false },
             hostname: "127.0.0.1",
             port: 0,
             unsubscribeSecret: "test-secret",
@@ -60,6 +61,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
           env: {
+            API_URL: "http://api.test",
             APP_URL: APP,
             BETTER_AUTH_SECRETS: "1:dashboard-test-secret-0123456789abcdef",
             DATABASE_URL: testDatabaseUrl,
@@ -105,7 +107,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   /** Signs a new user up through better-auth and returns their session cookie. */
   const signUp = (name: string) =>
     Effect.gen(function* () {
-      const response = yield* call("POST", "/api/auth/sign-up/email", {
+      const response = yield* call("POST", "/auth/sign-up/email", {
         body: { email: `${name}-${run}@example.test`, name, password: "a-long-password" },
       });
       expect(response.status).toBe(200);
@@ -114,7 +116,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
 
   const createProject = (as: string, name: string) =>
     Effect.gen(function* () {
-      const response = yield* call("POST", "/api/dashboard/projects", { as, body: { name } });
+      const response = yield* call("POST", "/dashboard/projects", { as, body: { name } });
       expect(response.status).toBe(200);
       return response.body as { readonly id: string; readonly slug: string };
     });
@@ -122,16 +124,16 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   layer(server, { timeout: "60 seconds" })((it) => {
     it.effect("refuses every operation without a session, and reports the config without one", () =>
       Effect.gen(function* () {
-        expect(yield* call("GET", "/api/dashboard/config")).toMatchObject({
+        expect(yield* call("GET", "/dashboard/config")).toMatchObject({
           body: { billing: false, githubSignIn: false },
           status: 200,
         });
         for (const [method, path] of [
-          ["POST", "/api/dashboard/projects"],
-          ["GET", "/api/dashboard/projects/acme/api-keys"],
-          ["GET", "/api/dashboard/projects/acme/domains"],
-          ["GET", "/api/dashboard/projects/acme/templates"],
-          ["GET", "/api/dashboard/projects/acme/workspaces/reactEmail/entries"],
+          ["POST", "/dashboard/projects"],
+          ["GET", "/dashboard/projects/acme/api-keys"],
+          ["GET", "/dashboard/projects/acme/domains"],
+          ["GET", "/dashboard/projects/acme/templates"],
+          ["GET", "/dashboard/projects/acme/workspaces/reactEmail/entries"],
         ] as const) {
           const body = method === "GET" ? undefined : { name: "x" };
           expect((yield* call(method, path, { body })).status).toBe(401);
@@ -147,8 +149,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const carol = yield* signUp("carol");
         const projectA = yield* createProject(alice, `Alpha ${run.slice(-8)}`);
         const projectB = yield* createProject(bob, `Bravo ${run.slice(-8)}`);
-        const a = `/api/dashboard/projects/${projectA.slug}`;
-        const b = `/api/dashboard/projects/${projectB.slug}`;
+        const a = `/dashboard/projects/${projectA.slug}`;
+        const b = `/dashboard/projects/${projectB.slug}`;
 
         // Bob's Project has a Domain, a Template, an API key and a published Entry.
         const bobsDomain = yield* call("POST", `${b}/domains`, {
@@ -222,7 +224,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["POST", `${b}/workspaces/reactEmail/deps-sync`],
           ["POST", `${b}/workspaces/reactEmail/publish`],
           ["POST", `${b}/workspaces/reactEmail/preview`, { entryId: entry?.id }],
-          ["GET", `/api/dashboard/projects/no-such-project/domains`],
+          ["GET", `/dashboard/projects/no-such-project/domains`],
         ] as const) {
           expect([method, path, (yield* call(method, path, { as: alice, body })).status]).toEqual([
             method,
@@ -310,10 +312,10 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
     it.effect("lets an owner run each operation, and answers 503 for the missing builder", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("owner");
-        const project = yield* createProject(owner, "Docs");
-        // `docs` is the api's own path, so the Project is given another slug.
-        expect(project.slug).not.toBe("docs");
-        const p = `/api/dashboard/projects/${project.slug}`;
+        const project = yield* createProject(owner, "Admin");
+        // `admin` is the dashboard's own page, so the Project is given another slug.
+        expect(project.slug).not.toBe("admin");
+        const p = `/dashboard/projects/${project.slug}`;
 
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         const created = yield* call("POST", `${p}/api-keys`, {
@@ -379,11 +381,47 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("signs in only from the dashboard's origin, and grants CORS to it alone", () =>
+      Effect.gen(function* () {
+        yield* signUp("cors");
+        const signIn = (origin: string, callbackURL: string) =>
+          call("POST", "/auth/sign-in/email", {
+            body: { callbackURL, email: `cors-${run}@example.test`, password: "a-long-password" },
+            origin,
+          });
+        expect((yield* signIn("https://evil.test", `${APP}/`)).status).toBe(403);
+        // Sign-in only ever returns to the dashboard.
+        expect((yield* signIn(APP, "https://evil.test/")).status).toBe(403);
+        const signedIn = yield* signIn(APP, `${APP}/acme`);
+        expect(signedIn.status).toBe(200);
+        // Lax, not None: the dashboard and the api must be one site (app. and api. of a
+        // domain, or two ports of localhost), and the cookie stays off other sites' requests.
+        const sessionCookie = signedIn.cookies.find((c) => c.startsWith("relayit.session_token="));
+        expect(sessionCookie).toMatch(/; HttpOnly/i);
+        expect(sessionCookie).toMatch(/; SameSite=Lax/i);
+        const cookie = signedIn.cookies.map((c) => c.split(";")[0]).join("; ");
+
+        const origin = yield* Origin;
+        const session = (from: string) =>
+          Effect.promise(() =>
+            fetch(`${origin}/auth/get-session`, { headers: { cookie, origin: from } }),
+          );
+        const fromApp = yield* session(APP);
+        expect(fromApp.headers.get("access-control-allow-origin")).toBe(APP);
+        expect(fromApp.headers.get("access-control-allow-credentials")).toBe("true");
+        expect(yield* Effect.promise(() => fromApp.json())).toMatchObject({
+          user: { email: `cors-${run}@example.test` },
+        });
+        const fromElsewhere = yield* session("https://evil.test");
+        expect(fromElsewhere.headers.get("access-control-allow-origin")).toBeNull();
+      }),
+    );
+
     it.effect("refuses a reserved slug when a Project is renamed", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("renamer");
         const project = yield* createProject(owner, `Renamer ${run.slice(-8)}`);
-        const renamed = yield* call("POST", "/api/auth/organization/update", {
+        const renamed = yield* call("POST", "/auth/organization/update", {
           as: owner,
           body: { data: { slug: "admin" }, organizationId: project.id },
         });

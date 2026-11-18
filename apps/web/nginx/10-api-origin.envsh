@@ -1,0 +1,20 @@
+#!/bin/sh
+# Sourced by nginx's entrypoint before it fills in the config template: API_ORIGIN is the
+# origin of API_URL, checked here because it is written into a script the page runs.
+
+case "${API_URL:-}" in
+  http://* | https://*) ;;
+  *)
+    echo >&2 "relayit-web: set API_URL to the api's public origin, e.g. https://api.example.com"
+    exit 1
+    ;;
+esac
+
+API_ORIGIN=$(printf '%s' "$API_URL" | sed -E 's#^(https?://[^/?#]+).*$#\1#')
+case "$API_ORIGIN" in
+  *[!A-Za-z0-9.:/-]*)
+    echo >&2 "relayit-web: API_URL is not an origin the dashboard can call: $API_URL"
+    exit 1
+    ;;
+esac
+export API_ORIGIN

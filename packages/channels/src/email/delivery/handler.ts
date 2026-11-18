@@ -20,7 +20,7 @@ import { emailDeliverJob } from "./job";
 
 export interface EmailDeliverHandlerOptions {
   readonly secret: string;
-  readonly webOrigin: string;
+  readonly apiOrigin: string;
 }
 
 const updateDelivery = (
@@ -355,7 +355,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           secret: listUnsubscribe.secret,
           toCount: toEmails.length,
           topicId,
-          webOrigin: listUnsubscribe.webOrigin,
+          apiOrigin: listUnsubscribe.apiOrigin,
         });
 
         const failProjectSendingPaused = (error: EmailBackendRejected) =>

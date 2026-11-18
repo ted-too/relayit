@@ -37,7 +37,7 @@ COPY --from=builder --chown=relayit:relayit /app/apps/api/build ./
 COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
 
-# Combined HTTP ingress + job worker. Railway sets PORT.
+# The public API, and auth and every operation the dashboard calls. Railway sets PORT.
 USER relayit
 EXPOSE 8080
 

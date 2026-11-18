@@ -1,11 +1,9 @@
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import { resolveUseSyncExternalStoreFromReact } from "./vite/resolve-use-sync-external-store-from-react.ts";
 
 const config = defineConfig({
   server: {
@@ -20,14 +18,32 @@ const config = defineConfig({
     dedupe: ["react", "react-dom"],
   },
   build: {
-    sourcemap: "hidden",
+    // The image's nginx caches `assets/` for good: their names change with them.
+    assetsDir: "assets",
+    sourcemap: false,
   },
   plugins: [
-    resolveUseSyncExternalStoreFromReact(),
+    {
+      // `/config.js` in development, from `API_URL` as `bun run dev` builds it, written as
+      // the image's nginx writes it (`nginx/default.conf.template`). The dashboard then calls the api on
+      // its own port, cross-origin as it does when deployed, so CORS and cookies are
+      // exercised here too.
+      name: "relayit-runtime-config",
+      apply: "serve",
+      configureServer(server) {
+        server.middlewares.use("/config.js", (_request, response) => {
+          const apiUrl = process.env.API_URL;
+          response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+          response.setHeader("Cache-Control", "no-cache");
+          response.end(
+            `window.RELAYIT_CONFIG = ${JSON.stringify({ apiUrl: apiUrl && new URL(apiUrl).origin })};\n`,
+          );
+        });
+      },
+    },
     devtools(),
-    nitro({ preset: "bun" }),
     tailwindcss(),
-    tanstackStart(),
+    tanstackRouter({ autoCodeSplitting: true, target: "react" }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
   ],

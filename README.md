@@ -16,13 +16,13 @@ RelayIt is a self-hosted notification delivery service that abstracts the comple
 cp env.example .env
 ```
 
-Fill every required value in `.env` (see [env.example](env.example) — it mirrors the api/web schemas). Minimum shape:
+Fill every required value in `.env` (see [env.example](env.example) — it mirrors the api and worker schemas). Minimum shape:
 
 ```bash
 IMAGE_TAG=alpha
 
 API_URL=http://localhost:3005
-WEB_URL=http://localhost:3000
+APP_URL=http://localhost:3000
 
 POSTGRES_PASSWORD=your-secure-password
 BETTER_AUTH_SECRETS=1:$(openssl rand -base64 32)
@@ -38,7 +38,7 @@ Self-hosted usage is unlimited (no send metering / Stripe). Sign-in is email/pas
 
 ### 2. Deploy with Docker Compose
 
-Compose runs **api** (HTTP) + **worker** (background jobs) + **web** + Postgres 18 + Redis.
+Compose runs **api** (the API, sign-in and the dashboard's operations) + **worker** (background jobs) + **web** (the dashboard) + Postgres 18 + Redis.
 
 ```bash
 docker compose pull
@@ -50,16 +50,16 @@ docker compose logs -f
 
 ### 3. Access Your Instance
 
-- **Web dashboard**: http://localhost:3000
+- **Dashboard**: http://localhost:3000
 - **API**: http://localhost:3005
 
 ## Individual Container Deployment
 
 Images from [ted-too/relayit](https://github.com/ted-too/relayit):
 
-- `ghcr.io/ted-too/relayit-api:<tag>` — public ingress (`/health`, `POST /messages/email`, `/send/*`, SES notifications); applies migrations on start
+- `ghcr.io/ted-too/relayit-api:<tag>` — the public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), Better Auth (`/auth/*`) and the dashboard's operations (`/dashboard/*`); applies migrations on start
 - `ghcr.io/ted-too/relayit-worker:<tag>` — the job worker: sending, retries, Domain verification, outbound webhooks; no port, never migrates
-- `ghcr.io/ted-too/relayit-web:<tag>` — dashboard and Better Auth
+- `ghcr.io/ted-too/relayit-web:<tag>` — the dashboard: static files that call the api from the browser
 - `ghcr.io/ted-too/relayit-template-builder:<tag>` — internal template Rpc (workspace Git ops only; not in default compose)
 
 Prefer an env file (same keys as [env.example](env.example)):
@@ -85,19 +85,18 @@ docker run -d \
   -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   -e REDIS_URL="redis://redis:6379" \
   -e API_URL="http://localhost:3005" \
-  -e APP_URL="http://localhost:3000" \
   ghcr.io/ted-too/relayit-worker:alpha
 ```
 
 ### Web dashboard
 
-Serves the dashboard and forwards `/api/*` and the unsubscribe POST to the api, which runs auth and every session-authenticated operation.
+Serves the dashboard. `API_URL` is the api's public URL, which the browser calls; the server reads it at start, so changing it is a restart.
 
 ```bash
 docker run -d \
   --name relayit-web \
   -p 3000:3000 \
-  -e API_URL="http://api:3005" \
+  -e API_URL="http://localhost:3005" \
   ghcr.io/ted-too/relayit-web:alpha
 ```
 
@@ -107,26 +106,26 @@ docker run -d \
 
 Validated at process start (`apps/api/src/env.ts`).
 
-| Variable                                                                                | Description                                                                   |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                                          | Postgres connection string                                                    |
-| `REDIS_URL`                                                                             | Redis connection string                                                       |
-| `APP_URL`                                                                               | Public dashboard URL: better-auth's base URL and the only origin it trusts    |
-| `BETTER_AUTH_SECRETS`                                                                   | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`)                     |
-| `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                             | Same as worker; the api registers Domains with SES                            |
-| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported |
+| Variable                                                                                | Description                                                                                 |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                          | Postgres connection string                                                                  |
+| `REDIS_URL`                                                                             | Redis connection string                                                                     |
+| `API_URL`                                                                               | The api's public URL: better-auth's base URL (GitHub callback, Stripe webhook)              |
+| `APP_URL`                                                                               | The dashboard's public URL: the only origin allowed to call the api with the session cookie |
+| `BETTER_AUTH_SECRETS`                                                                   | Versioned auth + sealing secrets (`1:…` or `2:new,1:old`)                                   |
+| `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                             | Same as worker; the api registers Domains with SES                                          |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported               |
 
 Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`.
 
 ### Required environment (worker)
 
-Validated at process start (`apps/worker/src/env.ts`). Compose maps `WEB_URL` → `APP_URL`.
+Validated at process start (`apps/worker/src/env.ts`).
 
 | Variable                                     | Description                                                                           |
 | -------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `DATABASE_URL`, `REDIS_URL`                  | Same as api                                                                           |
-| `API_URL`                                    | Public API URL; SES notifications (through SNS) are pointed at it                     |
-| `APP_URL`                                    | Public web URL; used in unsubscribe links                                             |
+| `API_URL`                                    | Public API URL; SES notifications (through SNS) and unsubscribe links point at it     |
 | `BETTER_AUTH_SECRETS`                        | Same versioned secrets as api                                                         |
 | `S3_*`                                       | Same as api                                                                           |
 | `SES_REGIONS`                                | SES regions to send through, comma-separated; new Domains are registered in the first |
@@ -136,9 +135,9 @@ Optional: `LOG_LEVEL`; `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sand
 
 ### Required environment (web)
 
-| Variable  | Description                         |
-| --------- | ----------------------------------- |
-| `API_URL` | The api's address as web reaches it |
+| Variable  | Description                                   |
+| --------- | --------------------------------------------- |
+| `API_URL` | The api's public URL, which the browser calls |
 
 ### Image tags
 
@@ -155,25 +154,35 @@ Release notes: [GitHub Releases](https://github.com/ted-too/relayit/releases). M
 
 ### Reverse proxy
 
+The api and the dashboard each get a hostname, and the two must be subdomains of one domain (`api.your-domain.com`, `app.your-domain.com`): the dashboard sends the api's session cookie, which browsers send only within one site. Unrelated domains, or two subdomains of a public suffix such as `*.up.railway.app`, are not supported.
+
 ```nginx
 # /etc/nginx/sites-available/relayit
 server {
     listen 443 ssl;
-    server_name your-domain.com;
+    server_name api.your-domain.com;
 
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    location /api/ {
+    location / {
         proxy_pass http://localhost:3005;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
+}
+
+server {
+    listen 443 ssl;
+    server_name app.your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
 
     location / {
         proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
     }
 }
 ```
@@ -182,7 +191,7 @@ server {
 
 ```bash
 API_URL=https://api.your-domain.com
-WEB_URL=https://app.your-domain.com
+APP_URL=https://app.your-domain.com
 IMAGE_TAG=alpha
 # Or pin: IMAGE_TAG=1.0.0-alpha.3
 
@@ -214,11 +223,11 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u ted-too --password-stdin
 docker pull ghcr.io/ted-too/relayit-api:alpha
 ```
 
-**Web pointing at the wrong origin** — restart web with an updated `VITE_BASE_URL` (no rebuild).
+**Sign-in fails from the dashboard** — the api's `APP_URL` must be the URL you open the dashboard at, the web container's `API_URL` the api's public URL, and the two hostnames subdomains of one domain.
 
 ## Contributing
 
-- Open a PR against `main`. PR CI builds `relayit-api`, `relayit-worker`, `relayit-web`, and `relayit-template-builder`.
+- Open a PR against `main`. PR CI builds `relayit-api`, `relayit-worker`, `relayit-web` and `relayit-template-builder`.
 - After merge, semantic-release cuts the next `v1.0.0-alpha.N` and publishes GHCR images (including `:alpha`).
 - Use [Conventional Commits](https://conventionalcommits.org/) (`feat:`, `fix:`, etc.).
 

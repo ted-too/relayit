@@ -4,10 +4,9 @@ import { Config, Effect, Option, Redacted } from "effect";
 
 export const workerConfig = Effect.gen(function* () {
   const config = yield* Config.all({
-    // Where SES's notifications reach the api: the worker points SNS at it.
+    // The api's public origin: the worker points SNS at it for SES's notifications, and the
+    // List-Unsubscribe links in marketing mail go to it.
     apiUrl: Config.URL("API_URL"),
-    // The dashboard origin, for the List-Unsubscribe links in marketing mail.
-    appUrl: Config.URL("APP_URL"),
     betterAuthSecrets: Config.Redacted("BETTER_AUTH_SECRETS"),
     cfApiToken: Config.Redacted("CF_API_TOKEN").pipe(Config.option),
     cfRootDomain: Config.String("CF_ROOT_DOMAIN").pipe(Config.option),

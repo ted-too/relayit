@@ -14,7 +14,9 @@ For a fresh start, drop and recreate the database, then migrate and seed again. 
 
 ## Environment
 
-Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
+Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one.
+
+The dashboard runs on Vite's dev server at `WEB_PORT` and calls the api at `API_URL` (`API_PORT`) from the browser, cross-origin and with the session cookie, as it does when deployed: Vite answers `/config.js` with `API_URL` as the web image's nginx does. Two ports of localhost are one site, so the api's `SameSite=Lax` cookie is sent; the api grants CORS to `APP_URL` (`WEB_PORT`) alone. Open the dashboard on `WEB_PORT`. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/template-builder/src/env.ts`. The web image takes only `API_URL` and `PORT`. The worker has no port: it serves no HTTP.
 
 `env.example`, without the dot, is the Docker Compose file for self-hosting, and has nothing to do with this.
 

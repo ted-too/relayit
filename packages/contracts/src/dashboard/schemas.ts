@@ -31,22 +31,31 @@ export const Fqdn = Schema.String.pipe(
 );
 
 /**
- * First path segments a Project's slug may not take: the api serves its own routes and the
- * dashboard's top-level pages there, so a Project slugged `docs` could never be opened.
+ * First path segments of the dashboard's origin a Project's slug may not take, since its
+ * URL is `/<slug>`: the dashboard's own top-level pages, and the files its server answers
+ * at the root (`apps/web/public`, `config.js`, `assets/`), which it serves before any
+ * page. A Project slugged `admin` could never be opened. `apps/web/server/http.test.ts`
+ * checks every root file is here.
  */
 export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "admin",
-  "api",
-  "assets",
   "auth",
   "create-project",
-  "docs",
-  "health",
-  "messages",
-  "send",
   "unsubscribe",
   "user",
-  "webhooks",
+  "assets",
+  "config.js",
+  "apple-touch-icon.png",
+  "auth-1.svg",
+  "auth-2.svg",
+  "auth-3.svg",
+  "favicon-16x16.png",
+  "favicon-96x96.png",
+  "favicon.ico",
+  "favicon.svg",
+  "site.webmanifest",
+  "web-app-manifest-192x192.png",
+  "web-app-manifest-512x512.png",
 ]);
 
 export const CreateProjectInput = Schema.Struct({ name: SafeName });

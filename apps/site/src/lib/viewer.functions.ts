@@ -1,4 +1,4 @@
-import { COOKIE_PREFIX } from "@repo/persistence/auth/constants";
+import { AUTH_BASE_PATH, COOKIE_PREFIX } from "@repo/persistence/auth/constants";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 
@@ -16,15 +16,16 @@ const SESSION_COOKIE = new RegExp(
 const SESSION_LOOKUP_TIMEOUT_MS = 1200;
 
 const appUrl = () => process.env.APP_URL ?? "https://app.relayit.io";
+const apiUrl = () => process.env.API_URL ?? "https://api.relayit.io";
 
 /**
  * Who is looking at the marketing site.
  *
- * Better Auth lives in the dashboard app; with `AUTH_COOKIE_DOMAIN` set there,
- * its session cookie is scoped to the parent domain and reaches us too.
+ * Better Auth lives in the api; with `AUTH_COOKIE_DOMAIN` set there, its
+ * session cookie is scoped to the parent domain and reaches us too.
  * No cookie means signed out, with no network hop. With a cookie we ask the
- * dashboard's own `get-session` endpoint, so a revoked or expired session
- * reads as signed out. If the dashboard is slow or down we trust the cookie
+ * api's `get-session` endpoint, so a revoked or expired session reads as
+ * signed out. If the api is slow or down we trust the cookie
  * (optimistic, like Better Auth's `getSessionCookie`) because the worst case
  * is a "Dashboard" link that lands on sign-in.
  */
@@ -35,7 +36,7 @@ const readViewer = async (): Promise<Viewer | null> => {
   }
 
   try {
-    const response = await fetch(new URL("/api/auth/get-session", appUrl()), {
+    const response = await fetch(new URL(`${AUTH_BASE_PATH}/get-session`, apiUrl()), {
       // Forward the raw header: cookie values stay exactly as signed.
       headers: { cookie },
       signal: AbortSignal.timeout(SESSION_LOOKUP_TIMEOUT_MS),

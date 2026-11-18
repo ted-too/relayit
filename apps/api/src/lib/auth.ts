@@ -23,7 +23,7 @@ const BILLING_USER_LEAVING =
   "Reassign the Billing User before leaving or removing this member from the Project";
 
 /**
- * better-auth, which serves `/api/auth/*`, resolves dashboard sessions and verifies API
+ * better-auth, which serves `/auth/*`, resolves dashboard sessions and verifies API
  * keys, and the promise database its hooks and the key lookups use. Both are closed when
  * the layer is released.
  */
@@ -34,6 +34,7 @@ export class ApiAuth extends Context.Service<
   static readonly layer = (
     config: Pick<
       ApiConfig,
+      | "apiUrl"
       | "appUrl"
       | "authCookieDomain"
       | "databaseUrl"
@@ -144,7 +145,7 @@ export class ApiAuth extends Context.Service<
         };
 
         const auth = createAuth({
-          baseUrl: config.appUrl.origin,
+          baseUrl: config.apiUrl.origin,
           cookieDomain: Option.getOrUndefined(config.authCookieDomain),
           db,
           rateLimit: config.rateLimit,
@@ -234,6 +235,7 @@ export class ApiAuth extends Context.Service<
           },
           redis,
           redisKeyPrefix: config.redisKeyPrefix,
+          trustedOrigins: [config.appUrl.origin],
           socialProviders: Option.getOrUndefined(
             Option.map(config.github, (github) => ({
               github: {

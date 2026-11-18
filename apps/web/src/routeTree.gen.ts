@@ -16,7 +16,6 @@ import { Route as AuthdOrgSlugRouteImport } from './routes/_authd/$orgSlug'
 import { Route as AuthdAdminRouteImport } from './routes/_authd/admin'
 import { Route as AuthdCreateProjectRouteImport } from './routes/_authd/create-project'
 import { Route as AuthdUserRouteImport } from './routes/_authd/user'
-import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AuthSignInRouteImport } from './routes/auth/sign-in'
 import { Route as AuthSignUpRouteImport } from './routes/auth/sign-up'
 import { Route as AuthdOrgSlugIndexRouteImport } from './routes/_authd/$orgSlug/index'
@@ -69,11 +68,6 @@ const AuthdUserRoute = AuthdUserRouteImport.update({
   id: '/user',
   path: '/user',
   getParentRoute: () => AuthdRoute,
-} as any)
-const ApiSplatRoute = ApiSplatRouteImport.update({
-  id: '/api/$',
-  path: '/api/$',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
   id: '/sign-in',
@@ -179,7 +173,6 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthdAdminRouteWithChildren
   '/create-project': typeof AuthdCreateProjectRoute
   '/user': typeof AuthdUserRouteWithChildren
-  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/$orgSlug/api-keys': typeof AuthdOrgSlugApiKeysRoute
@@ -203,7 +196,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/create-project': typeof AuthdCreateProjectRoute
   '/user': typeof AuthdUserRouteWithChildren
-  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AuthdIndexRoute
@@ -232,7 +224,6 @@ export interface FileRoutesById {
   '/_authd/admin': typeof AuthdAdminRouteWithChildren
   '/_authd/create-project': typeof AuthdCreateProjectRoute
   '/_authd/user': typeof AuthdUserRouteWithChildren
-  '/api/$': typeof ApiSplatRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/_authd/': typeof AuthdIndexRoute
@@ -262,7 +253,6 @@ export interface FileRouteTypes {
     | '/admin'
     | '/create-project'
     | '/user'
-    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/$orgSlug/api-keys'
@@ -286,7 +276,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/create-project'
     | '/user'
-    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
@@ -314,7 +303,6 @@ export interface FileRouteTypes {
     | '/_authd/admin'
     | '/_authd/create-project'
     | '/_authd/user'
-    | '/api/$'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/_authd/'
@@ -339,7 +327,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthdRoute: typeof AuthdRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
-  ApiSplatRoute: typeof ApiSplatRoute
   UnsubscribeOrgSlugContactIdRoute: typeof UnsubscribeOrgSlugContactIdRoute
 }
 
@@ -393,13 +380,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/user'
       preLoaderRoute: typeof AuthdUserRouteImport
       parentRoute: typeof AuthdRoute
-    }
-    '/api/$': {
-      id: '/api/$'
-      path: '/api/$'
-      fullPath: '/api/$'
-      preLoaderRoute: typeof ApiSplatRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/auth/sign-in': {
       id: '/auth/sign-in'
@@ -626,19 +606,8 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AuthdRoute: AuthdRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
-  ApiSplatRoute: ApiSplatRoute,
   UnsubscribeOrgSlugContactIdRoute: UnsubscribeOrgSlugContactIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

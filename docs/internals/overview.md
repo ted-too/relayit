@@ -15,39 +15,50 @@ customer's code ── x-api-key ──► apps/api (HttpApi) ── POST /messa
                                         └─► customer's Webhook Endpoints
 SES ── SNS ──► apps/api /webhooks/providers/aws/ses ─► bounces, complaints, Suppression
 
-browser ──► apps/web (dashboard) ── /api/* ──► apps/api: better-auth /api/auth/*,
-                                                DashboardApi /api/dashboard/* ─► Postgres, Redis, SES
-                                                   └── Effect Rpc + shared secret ──► apps/template-builder
-                                                                                       └─► S3 (Git, artifacts)
+browser ──► apps/web (APP_URL): static build + /config.js (API_URL, read at start)
+   │
+   └── fetch, credentials, CORS ──► apps/api (API_URL)
+                                     ├── /auth/*: better-auth
+                                     ├── /dashboard/*: DashboardApi ─► Postgres, Redis, SES
+                                     │      └── Effect Rpc + shared secret ──► apps/template-builder ─► S3
+                                     └── /unsubscribe/…: one-click POST (also from mailbox providers)
 
 apps/site: marketing site and public docs
 ```
 
-The four apps share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
+The api, worker and builder share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
 
 ## Decisions
 
 ### Four deployables, one database
 
-Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only the api calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out.
+Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only the api calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out. The dashboard (`apps/web`) is the fourth: static files, with no database or credentials.
 
 The api runs one process per replica and scales with replicas, not by forking: its `node:cluster` mode existed to keep the worker on one primary, never ran in production (it needed `NODE_ENV=production`, which the images don't set), and went with the worker. Several workers are safe: they share one Redis consumer group, and a dead one's claims are reclaimed after a minute.
 
+The api, worker and builder share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
+
 ### The dashboard is a client of the api
 
-Everything a signed-in user does runs in the api, and the dashboard only calls it. better-auth is mounted at `/api/auth/*` (sign-in, sessions, organizations and members, deleting an API key, the GitHub callback, Stripe's webhook); the rest (creating a Project, API keys, Domains, Templates, Email Workspaces) is `DashboardApi`, an `HttpApi` contract in `packages/contracts` that the api implements under `/api/dashboard` and the dashboard calls with the client derived from it. It is a separate `HttpApi` from the public one, so none of it reaches `/docs`, and the contract package depends on `effect` alone, so nothing server-side follows it into the browser.
+Everything a signed-in user does runs in the api, and the dashboard only calls it. The api is one host (`API_URL`, api.relayit.io) whose paths start at the root, and the dashboard is another (`APP_URL`, app.relayit.io). better-auth is mounted at `/auth/*` (sign-in, sessions, organizations and members, deleting an API key, the GitHub callback `/auth/callback/github`, Stripe's webhook `/auth/stripe/webhook`); the rest (creating a Project, API keys, Domains, Templates, Email Workspaces) is `DashboardApi`, an `HttpApi` contract in `packages/contracts` that the api implements under `/dashboard/*` and the dashboard calls with the client derived from it. It is a separate `HttpApi` from the public one, so none of it reaches `/docs`, and the contract package depends on `effect` alone, so nothing server-side follows it into the browser. It sits under one prefix rather than beside the public paths because the public API may grow resources a dashboard operation would also name (`/projects` for a user's API key), and because one prefix is what CORS and the session apply to.
 
-`HttpApi` rather than Effect Rpc because these are plain request and response over the same origin, authenticated by the session cookie: each operation gets a readable URL and status, the session middleware is the same shape as the API key one, and errors are typed per endpoint. Rpc stays where it is: between the api and the builder, one service calling another with a shared secret.
+`HttpApi` rather than Effect Rpc because these are plain requests and responses authenticated by the session cookie: each operation gets a readable URL and status, the session middleware is the same shape as the API key one, and errors are typed per endpoint. Rpc stays where it is: between the api and the builder, one service calling another with a shared secret.
 
-Authorisation is in two middlewares, never in a handler. `DashboardSession` resolves the cookie to a user (401 without one). `ProjectAccess` also resolves `:orgSlug` to the user's membership of that Project and checks the role's permission named by the endpoint's `RequiresPermission` annotation against the roles in `packages/persistence/src/auth/permissions.ts`; an unknown Project, a non-member and a missing permission are all 403, so a Project's existence isn't revealed. A handler sees only `DashboardMember`, and every query it makes is scoped to that Project's id, so an id taken from another Project finds nothing (404). A change must come from the dashboard's own origin (`APP_URL`): the session cookie is `SameSite=Lax`, which already keeps it off another site's POST.
+Authorisation is in two middlewares, never in a handler. `DashboardSession` resolves the cookie to a user (401 without one). `ProjectAccess` also resolves `:orgSlug` to the user's membership of that Project and checks the role's permission named by the endpoint's `RequiresPermission` annotation against the roles in `packages/persistence/src/auth/permissions.ts`; an unknown Project, a non-member and a missing permission are all 403, so a Project's existence isn't revealed. A handler sees only `DashboardMember`, and every query it makes is scoped to that Project's id, so an id taken from another Project finds nothing (404). A change must come from the dashboard's origin (`APP_URL`): the session cookie is `SameSite=Lax`, which already keeps it off another site's POST.
 
-A Project's slug is the first segment of its dashboard URL, so slugs the api or the dashboard route themselves (`docs`, `health`, `api`, `auth`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed.
+The dashboard is a Vite + TanStack Router single-page app on its own origin, calling the api cross-origin. It was a TanStack Start app with server-side rendering; behind sign-in, rendering on the server bought nothing and needed a server of its own with every credential. It stays a separate deployable rather than files the api serves: the api is the API's host and nothing else, and the dashboard can be deployed, cached and rolled back on its own.
 
-All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
+Cross-origin, done once: the api grants CORS to `APP_URL` exactly, with credentials, on `/auth/*`, `/dashboard/*` and `/unsubscribe/*`, answers their preflights, and grants no other origin. The public API sends no CORS headers (it is called by servers holding a key, never from a page), so its preflight stays the 404 the contract tests pin. better-auth's base URL is `API_URL` and it trusts `APP_URL`, so sign-in, its CSRF check and every redirect after sign-in (GitHub's included, which returns to the api and is sent on to the dashboard) accept that origin alone. The session cookie is the api's, `HttpOnly` and `SameSite=Lax`: Lax is sent on the dashboard's fetches because `app.` and `api.` of one domain are the same site, as are two ports of localhost in development. Two hostnames that are not one site (two unrelated domains, or two subdomains of a public suffix such as `up.railway.app`) are not supported: the cookie would need `SameSite=None`, which browsers increasingly block as a third-party cookie. `AUTH_COOKIE_DOMAIN` widens the cookie to the parent domain only so the marketing site can see a visitor is signed in; the dashboard doesn't need it.
+
+No deployment's URL is in the build, because self-hosters run the published image. The image is nginx and the build, with no JavaScript runtime (`apps/web/nginx`): its entrypoint checks `API_URL` as the container starts and writes its origin into `/config.js`, which `index.html` loads before the app. The rest is the build, compressed once at image build: a file that exists as it is (`assets/` cached for good, everything else revalidated), and `index.html` for any other path (a path may have a dot in it, `/acme/domains/mail.example.com`, so the extension decides nothing). A missing file under `assets/` is a 404, so a stale tab fails loudly instead of parsing the page as a script. In development Vite answers `/config.js` the same way, and the dashboard on `WEB_PORT` calls the api on `API_PORT` cross-origin, so CORS and cookie mistakes show up there rather than in production.
+
+Unsubscribe links point at the api (`API_URL/unsubscribe/:orgSlug/:contactId?msg&topic&sig`). A mailbox provider's one-click POST is answered there without a cookie; a person who opens the link is redirected to the dashboard's page at the same path on `APP_URL`, which sends the same POST when they confirm. A GET never unsubscribes, because link scanners open every URL in a message.
+
+A Project's slug is the first segment of its dashboard URL, so the dashboard's own top-level pages and the files its server answers at the root (`admin`, `auth`, `assets`, `config.js`, `favicon.ico`, …, `RESERVED_PROJECT_SLUGS`) are refused when a Project is created or renamed. The api's paths don't matter here: it is another host.
 
 ### Work crosses processes as typed jobs
 
-A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. Web and the api import contracts and enqueue; only `apps/worker` imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
+A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. The api imports contracts and enqueues; only `apps/worker` imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
 
 A job that depends on rows being written is enqueued through the Postgres outbox in the same transaction, so a send is never accepted without its delivery job, nor a job left pointing at rows that rolled back. The outbox publishes to Redis Streams; a crashed worker's claims are reclaimed after a minute; a job that exhausts its retries is dead-lettered in Postgres.
 
@@ -114,7 +125,7 @@ Left unset, the fake and local storage are chosen only when `NODE_ENV` is `devel
 
 ### React's `use-sync-external-store` shim in SSR
 
-Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it inlines from `use-sync-external-store/shim` (via `@base-ui/utils`), which loads a second React or none. `apps/web` and `apps/site` resolve the shim to ESM that imports the bundled React (`vite/resolve-use-sync-external-store-from-react.ts`), and the web image sets `NODE_ENV=production`. Delete the plugin once our Nitro version ships `experimental.cjsRequireRewrite`.
+Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it inlines from `use-sync-external-store/shim` (via `@base-ui/utils`), which loads a second React or none. `apps/site` resolves the shim to ESM that imports the bundled React (`vite/resolve-use-sync-external-store-from-react.ts`), and its image sets `NODE_ENV=production`. Delete the plugin once our Nitro version ships `experimental.cjsRequireRewrite`.
 
 ## Migrations
 

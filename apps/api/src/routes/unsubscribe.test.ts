@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ListUnsubscribeError } from "@repo/channels/email/deliverability";
 import { Effect } from "effect";
-import { request, serve, stubs } from "../testing";
+import { APP_ORIGIN, request, serve, stubs } from "../testing";
 
 /** As a mailbox provider sends it (RFC 8058): no cookie, a form body. */
 const oneClick = (origin: string, path: string) =>
@@ -97,6 +97,23 @@ describe("POST /unsubscribe/:orgSlug/:contactId", () => {
           topicId: "topc_1",
         },
       ]);
+    }),
+  );
+});
+
+describe("GET /unsubscribe/:orgSlug/:contactId", () => {
+  it.live("sends a person who opens the link to the dashboard's page, unsubscribing nothing", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(stubs({ unsubscribe: () => Effect.die("unused") }).stubs);
+      const response = yield* Effect.promise(() =>
+        fetch(`${origin}/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=sig_1`, {
+          redirect: "manual",
+        }),
+      );
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        `${APP_ORIGIN}/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=sig_1`,
+      );
     }),
   );
 });

@@ -1,0 +1,48 @@
+# The relayit-web image's whole server. nginx's entrypoint fills in ${PORT} and
+# ${API_ORIGIN} as the container starts; every $variable it doesn't know is nginx's own.
+
+# Vite names everything in assets/ after its content, so those are cached for good. The
+# rest, index.html and config.js above all, is revalidated on every load, and so is a 404.
+map $status:$uri $relayit_cache_control {
+    ~^200:/assets/  "public, max-age=31536000, immutable";
+    default     "no-cache";
+}
+
+server {
+    listen ${PORT};
+    listen [::]:${PORT};
+    root /usr/share/nginx/html;
+
+    server_tokens off;
+    charset utf-8;
+    absolute_redirect off;
+    access_log off;
+    # The build is compressed once, in the image, not on every request.
+    gzip_static on;
+
+    # Every route of the dashboard answers with the same page, so nothing it serves may be
+    # framed or sniffed as another type.
+    add_header Cache-Control $relayit_cache_control always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    # Where the api is, from the container's API_URL: one published image serves any
+    # deployment. index.html loads this before the app.
+    location = /config.js {
+        return 200 'window.RELAYIT_CONFIG = {"apiUrl":"${API_ORIGIN}"};';
+    }
+
+    # A missing asset is a 404, not the page: a stale tab must fail loudly, not parse HTML
+    # as a script.
+    location /assets/ {
+        try_files $uri =404;
+    }
+
+    # A file in the build as it is; any other path is the dashboard's router's to resolve.
+    # A path may have a dot in it (/acme/domains/mail.example.com), so the extension
+    # decides nothing.
+    location / {
+        try_files $uri /index.html;
+    }
+}

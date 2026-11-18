@@ -21,6 +21,9 @@ import { HttpClient, HttpServer } from "effect/http";
 import { apiServer } from "./http";
 import { ApiAuth } from "./lib/auth";
 
+/** The dashboard's origin the api is served with. */
+export const APP_ORIGIN = "http://app.test";
+
 /** The one API key the stubbed better-auth accepts; it belongs to Project `acme` (`org_1`). */
 export const GOOD_KEY = "rel_good";
 
@@ -116,7 +119,8 @@ export const serve = (stubs: Stubs) =>
     const services = yield* Layer.build(
       apiServer({
         accept: stubs.accept,
-        dashboard: { appOrigin: "http://app.test", billing: false, githubSignIn: false },
+        appOrigin: APP_ORIGIN,
+        dashboard: { billing: false, githubSignIn: false },
         handleSes: stubs.handleSes,
         hostname: "127.0.0.1",
         port: 0,

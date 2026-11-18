@@ -13,8 +13,8 @@ const apiProgram = Effect.gen(function* () {
   yield* Effect.logInfo("Database migrations up to date");
 
   const server = apiServer({
+    appOrigin: config.appUrl.origin,
     dashboard: {
-      appOrigin: config.appUrl.origin,
       billing: Option.isSome(config.stripe),
       githubSignIn: Option.isSome(config.github),
     },

@@ -1,6 +1,6 @@
 # Marketing site, docs and legal pages (relayit.io), as Railway builds it.
 # Railway builds this from the repo root on every push to the branch the
-# service follows; deploy settings (Dockerfile path, PORT, APP_URL) live on
+# service follows; deploy settings (Dockerfile path, PORT, APP_URL, API_URL) live on
 # the service.
 FROM oven/bun:1.4.4-alpine AS build
 WORKDIR /app

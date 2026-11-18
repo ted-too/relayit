@@ -19,11 +19,15 @@ const stripeConfig = Config.all({
 
 export const apiConfig = Effect.gen(function* () {
   const config = yield* Config.all({
-    // The dashboard's origin: better-auth's base URL (OAuth callbacks, trusted origin) and
-    // the only origin the dashboard's operations accept a change from.
+    // This api's public origin: better-auth's base URL, so the GitHub OAuth callback and
+    // Stripe's webhook are on it.
+    apiUrl: Config.URL("API_URL"),
+    // The dashboard's origin: the one origin CORS grants and better-auth trusts, where
+    // sign-in returns to, and the only origin the dashboard's operations accept a change
+    // from.
     appUrl: Config.URL("APP_URL"),
     // Parent domain for the session cookie (e.g. `relayit.io`) so the marketing site can
-    // tell a visitor is signed in. Unset, the cookie is host-only.
+    // tell a visitor is signed in. Unset, the cookie is host-only, on the api's host.
     authCookieDomain: Config.String("AUTH_COOKIE_DOMAIN").pipe(Config.option),
     betterAuthSecrets: Config.Redacted("BETTER_AUTH_SECRETS"),
     databaseUrl: Config.Redacted("DATABASE_URL"),

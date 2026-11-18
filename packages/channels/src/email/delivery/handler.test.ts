@@ -174,7 +174,7 @@ const testLayer = (
 
 const emailDeliverHandler = makeEmailDeliverHandler({
   secret: "",
-  webOrigin: "",
+  apiOrigin: "",
 });
 
 const payload = {
@@ -483,7 +483,7 @@ describe("emailDeliverHandler", () => {
     });
     const handler = makeEmailDeliverHandler({
       secret: "test-secret",
-      webOrigin: "https://app.example.com",
+      apiOrigin: "https://api.example.com",
     });
 
     return handler
@@ -511,7 +511,7 @@ describe("emailDeliverHandler", () => {
             }),
           );
           expect(sentHeaders?.["List-Unsubscribe"]).toContain(
-            "https://app.example.com/unsubscribe/acme/cont_test?",
+            "https://api.example.com/unsubscribe/acme/cont_test?",
           );
           expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
           return true;

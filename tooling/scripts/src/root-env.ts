@@ -27,7 +27,6 @@ export const developmentEnv = (): Record<string, string> => {
     API_URL: env.API_URL ?? url("API_PORT", "3005"),
     APP_URL: env.APP_URL ?? url("WEB_PORT", "3000"),
     TEMPLATING_BUILDER_URL: env.TEMPLATING_BUILDER_URL ?? url("BUILDER_PORT", "3006"),
-    VITE_BASE_URL: env.VITE_BASE_URL ?? url("WEB_PORT", "3000"),
   };
 };
 
