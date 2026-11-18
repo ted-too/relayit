@@ -18,7 +18,7 @@ import {
   deliveryOpened,
 } from "@repo/webhooks/events";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { Clock, Data, Duration, Effect } from "effect";
+import { Clock, Data, Effect } from "effect";
 import { TypeID } from "typeid-js";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 
@@ -41,8 +41,13 @@ export interface NormalizedDeliveryEvent {
  * answers, or once Postgres is back; a notification can beat that write. Past this the id is
  * taken for one no Delivery will ever carry (a send whose answer never reached Relayit, or
  * mail this deployment did not send) and is acknowledged, so nothing makes SNS retry for ever.
+ *
+ * Refusing only helps while SNS still retries, so the retry policy the worker sets on the
+ * notification topic is built from this number (`sesNotificationDeliveryPolicy` in
+ * `packages/provider-aws`) to keep retrying for as long. An hour is the most SNS allows an
+ * HTTP/S policy in all, so this cannot be raised.
  */
-const UNRECORDED_SEND_GRACE = Duration.hours(1);
+export const UNRECORDED_SEND_GRACE_SECONDS = 3600;
 
 const deliveryOutcomeEvent = (
   event: NormalizedDeliveryEvent,
@@ -124,7 +129,7 @@ export class DeliveryEventIngestError extends Data.TaggedError("DeliveryEventIng
 }> {}
 
 /** SES reported on a message sent so recently that its Delivery may not be recorded yet. */
-class DeliveryNotRecordedYet extends Data.TaggedError("DeliveryNotRecordedYet")<{
+export class DeliveryNotRecordedYet extends Data.TaggedError("DeliveryNotRecordedYet")<{
   readonly providerMessageId: string;
 }> {}
 
@@ -227,7 +232,7 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
       const now = yield* Clock.currentTimeMillis;
       if (
         event.sentAt &&
-        Math.abs(now - event.sentAt.getTime()) < Duration.toMillis(UNRECORDED_SEND_GRACE)
+        Math.abs(now - event.sentAt.getTime()) < UNRECORDED_SEND_GRACE_SECONDS * 1000
       ) {
         return yield* new DeliveryNotRecordedYet({ providerMessageId: event.providerMessageId });
       }

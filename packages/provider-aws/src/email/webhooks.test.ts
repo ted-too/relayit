@@ -169,6 +169,7 @@ const workerTopic = (region: string, account = ACCOUNT) =>
         return Effect.succeed({ TopicArn: topicArn });
       },
       listSubscriptionsByTopic: () => Effect.succeed({ Subscriptions: [] }),
+      setTopicAttributes: () => Effect.succeed({}),
       subscribe: () => Effect.succeed({}),
     } as unknown as SNS.Type;
     const ses = {

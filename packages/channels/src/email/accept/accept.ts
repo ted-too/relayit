@@ -249,7 +249,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
                 new EmailAcceptPersistenceError({
                   cause,
                   messageId,
-                  operation: "insert_message",
+                  operation: "lock_accept",
                 }),
             ),
           );
@@ -384,8 +384,10 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
     // only a Message that was not written gives back its Usage and staged objects. The read
     // first takes the accept's lock, so a COMMIT the server is still finishing (or has not
     // yet received from a connection that dropped) is waited for rather than read as "not
-    // written". If the lock is not had in time or the read fails, nothing is given back: a
-    // leaked reservation is the safe side of a committed send losing its attachments.
+    // written". The read is tried three times, each waiting a second for the lock, so a
+    // failing accept is held about three seconds at most. If the lock is not had in that
+    // time or the read fails, nothing is given back: a leaked reservation is the safe side
+    // of a committed send losing its attachments.
     let reserved = false;
     const result = yield* usage
       .reserve({
@@ -409,7 +411,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
             : db
                 .transaction((tx) =>
                   Effect.gen(function* () {
-                    yield* tx.execute(sql`set local lock_timeout = '3s'`);
+                    yield* tx.execute(sql`set local lock_timeout = '1s'`);
                     yield* tx.execute(acceptLock);
                     return yield* tx
                       .select({ id: message.id })

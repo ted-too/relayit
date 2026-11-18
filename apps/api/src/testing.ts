@@ -37,6 +37,8 @@ export interface Stubs {
   /** The verified custom Domain a legacy send without `from` falls back to. */
   readonly defaultDomain: string | null;
   readonly ownerUserId: string | null;
+  /** What SES ingest reads Deliveries from, for the one test that reaches it. */
+  readonly db?: Database;
 }
 
 /** Boundaries that accept every send; override one to reach another outcome. */
@@ -108,7 +110,6 @@ const makeAuth = (stubs: Stubs): ApiAuth["Service"] => ({
 // The public routes reach these only through accept and the SES ingest, which are
 // stubbed; the dashboard's are tested against real ones (`dashboard/*.test.ts`).
 const unusedServices = Layer.mergeAll(
-  Layer.succeed(DB, {} as Database),
   Layer.succeed(EmailBackend, {} as EmailBackend["Service"]),
   Layer.succeed(EmailManagedDns, {} as EmailManagedDns["Service"]),
   Layer.succeed(SymmetricCrypto, {} as SymmetricCrypto["Service"]),
@@ -134,6 +135,7 @@ export const serve = (stubs: Stubs) =>
       }).pipe(
         Layer.provide(Layer.succeed(ApiAuth, makeAuth(stubs))),
         Layer.provide(unusedServices),
+        Layer.provide(Layer.succeed(DB, stubs.db ?? ({} as Database))),
       ),
     );
     const { address } = Context.get(services, HttpServer.HttpServer);

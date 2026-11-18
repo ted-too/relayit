@@ -777,8 +777,11 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       stage: "send",
                     }),
                   );
-                  // SES will refuse this message however often it is sent, so it fails now,
-                  // through the dead-letter step, rather than after every retry.
+                  // Nothing the job's few minutes of retries would change, so it fails now,
+                  // through the dead-letter step. `MessageRejected` is SES refusing the
+                  // content, and also SES not counting the sender (or, for an account still
+                  // in SES's sandbox, a recipient) as verified in the region: a state of the
+                  // Domain or the account that someone has to fix first.
                   const rejected = refused(
                     new MessageDeliveryTerminalError({
                       cause: error,

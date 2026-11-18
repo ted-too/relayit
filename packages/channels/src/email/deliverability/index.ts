@@ -9,6 +9,8 @@ export {
 } from "./list-unsubscribe";
 export {
   DeliveryEventIngestError,
+  DeliveryNotRecordedYet,
   ingestDeliveryEvents,
   type NormalizedDeliveryEvent,
+  UNRECORDED_SEND_GRACE_SECONDS,
 } from "./notifications";
