@@ -29,7 +29,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { makeRedisLive, Redis } from "@repo/redis";
 import { webhookEventDefinitions } from "@repo/webhooks/events";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -71,6 +71,7 @@ const makeBackend = (
     deleteIdentity: unsupported,
     ensureInfrastructure: unsupported,
     getIdentityStatus: unsupported,
+    getProjectSendingStatus: unsupported,
     send: (input) =>
       Effect.suspend(() => {
         sends.push(input);
@@ -765,9 +766,30 @@ describe("an accepted email send", () => {
       const domain = yield* db.query.customDomain.findFirst({
         where: { id: project.customDomainId },
       });
-      expect(domain).toMatchObject({ isPaused: true, pausedReason: "bad_reputation" });
+      // The pause the api lifts again once SES reports the Project's sending restored.
+      expect(domain).toMatchObject({ isPaused: true, pausedReason: "project_sending_pause" });
       expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
         { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+      ]);
+      // Told of the Domain once, though the failure was written on a later run.
+      const domainEvents = yield* db
+        .select({ payload: webhookEvent.payload })
+        .from(webhookEvent)
+        .where(
+          and(
+            eq(webhookEvent.organizationId, project.organizationId),
+            eq(webhookEvent.type, "domain.updated"),
+          ),
+        );
+      expect(domainEvents).toEqual([
+        {
+          payload: {
+            domain_id: project.customDomainId,
+            paused: true,
+            paused_reason: "project_sending_pause",
+            status: "verified",
+          },
+        },
       ]);
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });

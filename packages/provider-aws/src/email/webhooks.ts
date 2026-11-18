@@ -14,6 +14,7 @@ import {
 } from "../errors";
 import type { EmailBackendConfig } from "./backend";
 import { namesFor } from "./infrastructure";
+import { isEventBridgeEvent, projectOfTenantStatusEvent } from "./tenant-status";
 
 /**
  * Where the api receives SES's notifications, and where the worker subscribes SNS. The
@@ -113,7 +114,13 @@ const TOPIC_VALIDATION_MESSAGE =
 
 export type SesNotificationResult =
   | { readonly events: readonly NormalizedDeliveryEvent[]; readonly type: "events" }
-  | { readonly type: "noop" };
+  | { readonly type: "noop" }
+  /** SES changed something about the Project's sending status in the region: read it again. */
+  | {
+      readonly projectId: string;
+      readonly region: string;
+      readonly type: "project_sending_status_changed";
+    };
 
 const validator = new MessageValidator();
 const SNS_HOSTNAME = /^sns\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/;
@@ -314,9 +321,10 @@ const confirmSubscription = (value: unknown) =>
   });
 
 /**
- * Reads one SNS delivery to the notifications endpoint: confirms a subscription, or
- * normalizes the SES event it carries. Every message is checked against SNS's signature,
- * then against the topics this deployment subscribed, before anything is confirmed or read.
+ * Reads one SNS delivery to the notifications endpoint: confirms a subscription, normalizes
+ * the SES notification it carries, or names the Project whose tenant an EventBridge event
+ * is about. Every message is checked against SNS's signature, then against the topics this
+ * deployment subscribed, before anything is confirmed or read.
  */
 export const handleSesNotification = (rawBody: string) =>
   Effect.gen(function* () {
@@ -345,7 +353,14 @@ export const handleSesNotification = (rawBody: string) =>
 
     const payload = yield* parseJson(message.Message, "ses_notification");
     const record = asRecord(payload);
-    return record
-      ? normalizeSesNotification(record, message.MessageId)
-      : ({ type: "noop" } as const);
+    if (!record) {
+      return { type: "noop" } as const;
+    }
+    if (isEventBridgeEvent(record)) {
+      const project = projectOfTenantStatusEvent(record, message.TopicArn);
+      return project
+        ? ({ ...project, type: "project_sending_status_changed" } as const)
+        : ({ type: "noop" } as const);
+    }
+    return normalizeSesNotification(record, message.MessageId);
   });

@@ -21,6 +21,7 @@ const unusedServices = Layer.mergeAll(
     deleteIdentity: unused,
     ensureInfrastructure: unused,
     getIdentityStatus: unused,
+    getProjectSendingStatus: unused,
     send: unused,
   } satisfies EmailBackendService),
   Layer.succeed(Jobs, {
@@ -106,6 +107,7 @@ describe("ensureSandboxDomain", () => {
               deleteIdentity: unused,
               ensureInfrastructure: unused,
               getIdentityStatus: unused,
+              getProjectSendingStatus: unused,
               send: unused,
             } satisfies EmailBackendService),
             Layer.succeed(Jobs, {

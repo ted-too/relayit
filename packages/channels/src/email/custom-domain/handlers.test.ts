@@ -40,6 +40,7 @@ const deleteIdentity = (deleteIdentity: EmailBackendService["deleteIdentity"]) =
             deleteIdentity,
             ensureInfrastructure: unsupported,
             getIdentityStatus: unsupported,
+            getProjectSendingStatus: unsupported,
             send: unsupported,
           } satisfies EmailBackendService),
         ),

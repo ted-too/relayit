@@ -20,9 +20,15 @@ export const domainVerificationStatusEnum = pgEnum("domain_verification_status",
 
 export type DomainVerificationStatus = (typeof domainVerificationStatusEnum.enumValues)[number];
 
+/**
+ * `project_sending_pause` is the pause Relayit makes itself when SES pauses the Project's
+ * sending, and the only one it lifts itself when SES restores it. The other two are a
+ * platform admin's, whichever reason they chose, and only an admin lifts them.
+ */
 export const domainPausedReasonEnum = pgEnum("domain_paused_reason", [
   "bad_reputation",
   "manual_admin_pause",
+  "project_sending_pause",
 ]);
 
 export type DomainPausedReason = (typeof domainPausedReasonEnum.enumValues)[number];

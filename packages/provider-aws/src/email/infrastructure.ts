@@ -1,13 +1,16 @@
+import type { EventBridge } from "@effect-aws/client-eventbridge";
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
 import { EmailBackendConfigurationError } from "@repo/channels/email/backend";
 import { UNRECORDED_SEND_GRACE_SECONDS } from "@repo/channels/email/deliverability";
 import { Effect } from "effect";
 import { type AwsErrorMapper, AwsUnexpectedResponseError } from "../errors";
+import { ensureSesTenantStatusEvents } from "./tenant-status";
 
 export const SES_CONFIGURATION_SET_NAME = "relayit-delivery-events";
 const TOPIC_PREFIX = "relayit-delivery-";
 const DESTINATION_PREFIX = "relayit-sns-";
+const TENANT_STATUS_RULE_PREFIX = "relayit-tenant-status-";
 const EVENT_TYPES = [
   "SEND",
   "DELIVERY",
@@ -33,6 +36,7 @@ export const namesFor = (deliveryWebhookUrl: string) => {
   const hash = stableHash(deliveryWebhookUrl);
   return {
     destinationName: `${DESTINATION_PREFIX}${hash}`,
+    tenantStatusRuleName: `${TENANT_STATUS_RULE_PREFIX}${hash}`,
     topicName: `${TOPIC_PREFIX}${hash}`,
   };
 };
@@ -183,16 +187,19 @@ const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicA
 /**
  * The configuration set every send names, publishing every event to an SNS topic that is
  * subscribed to the api. Named after the webhook URL, so a deployment that keeps its URL
- * finds what it made before and changes nothing.
+ * finds what it made before and changes nothing. The same topic is given SES's tenant
+ * sending-status events, which sending does not wait for.
  */
 export const ensureSesInfrastructure = ({
   deliveryWebhookUrl,
+  events,
   mapAwsError,
   region,
   ses,
   sns,
 }: {
   deliveryWebhookUrl: string;
+  events: EventBridge.Type;
   mapAwsError: AwsErrorMapper;
   region: string;
   ses: SESv2.Type;
@@ -200,7 +207,8 @@ export const ensureSesInfrastructure = ({
 }) =>
   Effect.gen(function* () {
     const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, region);
-    const { destinationName, topicName } = namesFor(webhookUrl);
+    const { destinationName, tenantStatusRuleName, topicName } = namesFor(webhookUrl);
     const topicArn = yield* ensureTopicAndSubscription(sns, topicName, webhookUrl);
     yield* ensureEventDestination(ses, destinationName, topicArn);
+    yield* ensureSesTenantStatusEvents({ events, sns, tenantStatusRuleName, topicArn });
   }).pipe(Effect.mapError(mapAwsError));

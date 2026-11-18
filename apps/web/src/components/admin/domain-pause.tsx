@@ -22,6 +22,14 @@ import { queries } from "@/lib/queries";
 
 type AdminDomain = AdminProject["domains"][number];
 
+/** What an admin should know before lifting a pause that SES may put straight back. */
+const UNPAUSE_WARNINGS: Partial<Record<NonNullable<AdminDomain["pausedReason"]>, string>> = {
+  bad_reputation:
+    "An admin paused this Domain for its Project's sending reputation, or Relayit did before its own pauses were recorded apart. Unpausing it does not restore the Project's sending in SES: if SES still pauses the Project's tenant, the next send is accepted, fails for good and pauses the Domain again.",
+  project_sending_pause:
+    "Relayit paused this Domain because SES paused its Project's sending, and unpauses it by itself when SES restores that. Restore the Project's tenant in SES instead of unpausing here: while SES still pauses it, the next send is accepted, fails for good and pauses the Domain again.",
+};
+
 /**
  * A platform admin pauses or unpauses a Domain, whichever its state calls for: a pause asks
  * for its reason, an unpause confirms. Either closes as the Domain's new state lands in the
@@ -152,9 +160,8 @@ export function DomainPause({
       <ConfirmAction
         confirm={{ text: "Unpause Domain", variant: "default" }}
         description={
-          domain.pausedReason === "bad_reputation"
-            ? "This Domain was paused for its Project's sending reputation, by an admin or by Relayit itself when SES paused the Project's sending. Unpausing it here does not restore that: check the Project's tenant in SES and restore its sending there first, or the next send is accepted, fails for good and pauses the Domain again."
-            : "Sends from this Domain are accepted and delivered again straight away."
+          (domain.pausedReason && UNPAUSE_WARNINGS[domain.pausedReason]) ??
+          "Sends from this Domain are accepted and delivered again straight away."
         }
         // The mutation closes it on success and toasts on failure, which leaves it open.
         execute={() => unpauseDomain().then(() => undefined)}

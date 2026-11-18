@@ -19,7 +19,7 @@ import {
 import { filterSuppressedContacts } from "../../messages/suppressions";
 import { Usage } from "../../usage";
 import { EmailBackend, type EmailBackendRejected } from "../backend";
-import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
+import { mergeListUnsubscribeHeadersForSend, pauseProjectDomains } from "../deliverability";
 import { loadEmailAttachmentsForSend } from "./attachments";
 import { EmailDeliveryPersistenceError } from "./errors";
 import { emailDeliverJob } from "./job";
@@ -581,6 +581,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           apiOrigin: listUnsubscribe.apiOrigin,
         });
 
+        const backend = yield* EmailBackend;
         const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
           Effect.gen(function* () {
             const failureMessage = "SES paused sending for this Project";
@@ -598,22 +599,24 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 if (!failed) {
                   return;
                 }
-                if (loaded.customDomainId) {
-                  yield* tx
-                    .update(customDomain)
-                    .set({ isPaused: true, pausedReason: "bad_reputation" })
-                    .where(eq(customDomain.id, loaded.customDomainId))
-                    .pipe(
-                      Effect.mapError(
-                        (cause) =>
-                          new EmailDeliveryPersistenceError({
-                            cause,
-                            deliveryId: loaded.id,
-                            operation: "update_status",
-                          }),
-                      ),
-                    );
-                }
+                // SES pauses the Project, not a Domain: every Domain it holds in this region
+                // is refused from now on, and the same pause is what the api makes when SES
+                // reports the tenant's status, so whichever comes first tells the Project once.
+                // This one goes by the refusal, not by the status now (#97).
+                yield* pauseProjectDomains(tx, {
+                  defaultRegion: backend.defaultRegion,
+                  organizationId: appEnvironment.organizationId,
+                  region: registration.region ?? backend.defaultRegion,
+                }).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new EmailDeliveryPersistenceError({
+                        cause,
+                        deliveryId: loaded.id,
+                        operation: "update_status",
+                      }),
+                  ),
+                );
                 yield* emitWebhookEvent(tx, {
                   event: {
                     data: {
@@ -646,7 +649,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             });
           });
 
-        const backend = yield* EmailBackend;
         const sendMessage = {
           attachments: attachments.length > 0 ? [...attachments] : undefined,
           bcc: bccEmails.length > 0 ? bccEmails : null,

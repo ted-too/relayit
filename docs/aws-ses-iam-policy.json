@@ -37,10 +37,23 @@
       "Resource": "*"
     },
     {
+      "Sid": "RelayITSesTenantStatus",
+      "Effect": "Allow",
+      "Action": ["ses:GetTenant", "ses:GetReputationEntity"],
+      "Resource": "arn:aws:ses:*:ACCOUNT_ID:tenant/relayit-*"
+    },
+    {
+      "Sid": "RelayITTenantStatusEvents",
+      "Effect": "Allow",
+      "Action": ["events:PutRule", "events:PutTargets"],
+      "Resource": "arn:aws:events:*:ACCOUNT_ID:rule/relayit-tenant-status-*"
+    },
+    {
       "Sid": "RelayITSnsWebhooks",
       "Effect": "Allow",
       "Action": [
         "sns:CreateTopic",
+        "sns:GetTopicAttributes",
         "sns:SetTopicAttributes",
         "sns:Subscribe",
         "sns:Unsubscribe",

@@ -1,0 +1,1 @@
+ALTER TYPE "domain_paused_reason" ADD VALUE 'project_sending_pause';

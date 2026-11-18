@@ -1,3 +1,4 @@
+import type { EventBridge } from "@effect-aws/client-eventbridge";
 import type { SESv2 } from "@effect-aws/client-sesv2";
 import type { SNS } from "@effect-aws/client-sns";
 import { describe, expect, it } from "@effect/vitest";
@@ -8,17 +9,38 @@ import { ensureSesInfrastructure, sesNotificationDeliveryPolicy } from "./infras
 
 const WEBHOOK_URL = "https://api.relayit.test/webhooks/providers/aws/ses";
 
-/** SNS and SES in one region, holding one subscription to the api in the given state. */
+/**
+ * SNS, SES and EventBridge in one region, holding one subscription to the api in the given
+ * state. EventBridge takes the tenant status rule unless `putRule` says otherwise.
+ */
 const fakeAws = (
   subscriptionArn: string,
   setTopicAttributes: () => Effect.Effect<unknown, unknown> = () => Effect.succeed({}),
+  putRule: () => Effect.Effect<{ RuleArn?: string }, unknown> = () =>
+    Effect.succeed({
+      RuleArn: "arn:aws:events:us-east-1:111122223333:rule/relayit-tenant-status-x",
+    }),
 ) => {
+  const rules: string[] = [];
+  const targets: { Arn: string; Rule: string }[] = [];
+  const events = {
+    putRule: ({ Name }: { Name: string }) => {
+      rules.push(Name);
+      return putRule();
+    },
+    putTargets: ({ Rule, Targets }: { Rule: string; Targets: { Arn: string }[] }) => {
+      targets.push(...Targets.map(({ Arn }) => ({ Arn, Rule })));
+      return Effect.succeed({ FailedEntryCount: 0 });
+    },
+  } as unknown as EventBridge.Type;
   const subscribed: string[] = [];
   const attributes: { AttributeName: string; AttributeValue: string; TopicArn: string }[] = [];
   const destinations: string[] = [];
   const sns = {
     createTopic: ({ Name }: { Name: string }) =>
       Effect.succeed({ TopicArn: `arn:aws:sns:us-east-1:111122223333:${Name}` }),
+    getTopicAttributes: () =>
+      Effect.succeed({ Attributes: { Policy: JSON.stringify({ Statement: [] }) } }),
     listSubscriptionsByTopic: () =>
       Effect.succeed({
         Subscriptions: [
@@ -47,12 +69,13 @@ const fakeAws = (
   } as unknown as SESv2.Type;
   const ensure = ensureSesInfrastructure({
     deliveryWebhookUrl: WEBHOOK_URL,
+    events,
     mapAwsError: createAwsErrorMapper({ region: "us-east-1" }),
     region: "us-east-1",
     ses,
     sns,
   });
-  return { attributes, destinations, ensure, subscribed };
+  return { attributes, destinations, ensure, rules, subscribed, targets };
 };
 
 describe("ensureSesInfrastructure", () => {
@@ -70,10 +93,13 @@ describe("ensureSesInfrastructure", () => {
         "PendingConfirmation",
         "arn:aws:sns:us-east-1:111122223333:relayit-delivery-x:5f1c0e1e",
       ]) {
-        const { attributes, ensure } = fakeAws(subscriptionArn);
+        const { attributes: written, ensure } = fakeAws(subscriptionArn);
         // Two starts of the worker: the same value each time, so nothing accumulates.
         yield* ensure;
         yield* ensure;
+        const attributes = written.filter(
+          ({ AttributeName }) => AttributeName === "DeliveryPolicy",
+        );
 
         expect(attributes).toHaveLength(2);
         expect(attributes[0]).toEqual(attributes[1]);
@@ -97,6 +123,38 @@ describe("ensureSesInfrastructure", () => {
       yield* ensure;
       expect(subscribed).toEqual([WEBHOOK_URL]);
       expect(destinations).toHaveLength(1);
+    }),
+  );
+
+  it.effect("sends SES's tenant status events to the same topic, on every start", () =>
+    Effect.gen(function* () {
+      const { ensure, rules, targets } = fakeAws("PendingConfirmation");
+      yield* ensure;
+      yield* ensure;
+
+      // Named after the webhook URL like the topic, so both starts put the one rule.
+      expect(new Set(rules).size).toBe(1);
+      expect(rules[0]).toMatch(/^relayit-tenant-status-[0-9a-f]{8}$/);
+      expect(targets).toHaveLength(2);
+      expect(targets[0]).toEqual({
+        Arn: expect.stringMatching(/^arn:aws:sns:us-east-1:111122223333:relayit-delivery-/),
+        Rule: rules[0],
+      });
+    }),
+  );
+
+  it.effect("still ensures what sending needs when it may not make the tenant status rule", () =>
+    Effect.gen(function* () {
+      // An IAM policy from before `events:PutRule` was needed.
+      const { destinations, ensure, subscribed, targets } = fakeAws(
+        "PendingConfirmation",
+        undefined,
+        () => Effect.fail({ _tag: "AccessDeniedException" }),
+      );
+      yield* ensure;
+      expect(subscribed).toEqual([WEBHOOK_URL]);
+      expect(destinations).toHaveLength(1);
+      expect(targets).toEqual([]);
     }),
   );
 

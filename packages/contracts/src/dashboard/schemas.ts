@@ -131,6 +131,7 @@ export const CreatedApiKey = Schema.Struct({ apiKey: ApiKey, key: Schema.String 
 
 export const CreateDomainInput = Schema.Struct({ fqdn: Fqdn });
 
+/** The reasons an admin can give. `project_sending_pause` is Relayit's own and never chosen. */
 export const PauseDomainInput = Schema.Struct({
   reason: Schema.Literals(["bad_reputation", "manual_admin_pause"]),
 });
@@ -195,7 +196,9 @@ export const Domain = Schema.Struct({
   isPaused: Schema.Boolean,
   lastCheckedAt: Schema.NullOr(Schema.Date),
   ownership: Schema.Struct({ status: Schema.Literals(["active", "missing", "pending"]) }),
-  pausedReason: Schema.NullOr(Schema.Literals(["bad_reputation", "manual_admin_pause"])),
+  pausedReason: Schema.NullOr(
+    Schema.Literals(["bad_reputation", "manual_admin_pause", "project_sending_pause"]),
+  ),
   provider: DomainProvider,
   verificationStatus: Schema.Literals(["not_verified", "partially_verified", "verified"]),
 });
