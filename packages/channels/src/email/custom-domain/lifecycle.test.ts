@@ -5,7 +5,7 @@ import { DB } from "@repo/persistence/db/effect";
 import { Effect, Layer } from "effect";
 import { EmailBackend, type EmailBackendService } from "../backend";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
-import { createCustomDomain, pauseCustomDomain, unpauseCustomDomain } from "./lifecycle";
+import { createCustomDomain } from "./lifecycle";
 
 const unsupported = () => Effect.die("unused");
 
@@ -37,106 +37,6 @@ const unusedCreateServices = Layer.mergeAll(
     encrypt: unsupported,
   } as never),
 );
-
-describe("pauseCustomDomain / unpauseCustomDomain", () => {
-  it.effect("rejects pause when the Project is not linked to the domain", () => {
-    const db: any = {
-      query: {
-        organizationDomain: {
-          findFirst: () => Effect.succeed(null),
-        },
-      },
-    };
-
-    return pauseCustomDomain({
-      customDomainId: "dom_1",
-      organizationId: "org_1",
-      reason: "manual_admin_pause",
-    }).pipe(
-      Effect.provide(Layer.succeed(DB, db)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toMatchObject({
-          _tag: "CustomDomainError",
-          message: "Domain is not linked to this Project.",
-        });
-        return error;
-      }),
-    );
-  });
-
-  it.effect("refuses pause and unpause from a Project whose claim is not proven", () => {
-    const db: any = {
-      query: {
-        organizationDomain: {
-          findFirst: () =>
-            Effect.succeed({
-              customDomainId: "dom_1",
-              organizationId: "org_claimant",
-              ownershipVerificationStatus: "not_verified",
-            }),
-        },
-      },
-      update: () => Effect.die("changed the holder's Domain"),
-    };
-    const input = { customDomainId: "dom_1", organizationId: "org_claimant" };
-
-    return Effect.gen(function* () {
-      const refusal = {
-        _tag: "CustomDomainError",
-        message: "Prove ownership of this Domain before changing it.",
-        operation: "claim",
-      };
-      expect(
-        yield* Effect.flip(pauseCustomDomain({ ...input, reason: "manual_admin_pause" })),
-      ).toMatchObject(refusal);
-      expect(yield* Effect.flip(unpauseCustomDomain(input))).toMatchObject(refusal);
-    }).pipe(Effect.provide(Layer.succeed(DB, db)));
-  });
-
-  it.effect("pauses and unpauses a linked custom domain", () => {
-    const updates: unknown[] = [];
-    const db: any = {
-      query: {
-        organizationDomain: {
-          findFirst: () =>
-            Effect.succeed({
-              customDomainId: "dom_1",
-              organizationId: "org_1",
-              ownershipVerificationStatus: "verified",
-            }),
-        },
-      },
-      update: () => ({
-        set: (values: unknown) => ({
-          where: () => {
-            updates.push(values);
-            return Effect.void;
-          },
-        }),
-      }),
-    };
-
-    return Effect.gen(function* () {
-      const paused = yield* pauseCustomDomain({
-        customDomainId: "dom_1",
-        organizationId: "org_1",
-        reason: "bad_reputation",
-      });
-      expect(paused).toEqual({ customDomainId: "dom_1", isPaused: true });
-
-      const unpaused = yield* unpauseCustomDomain({
-        customDomainId: "dom_1",
-        organizationId: "org_1",
-      });
-      expect(unpaused).toEqual({ customDomainId: "dom_1", isPaused: false });
-      expect(updates).toEqual([
-        { isPaused: true, pausedReason: "bad_reputation" },
-        { isPaused: false, pausedReason: null },
-      ]);
-    }).pipe(Effect.provide(Layer.succeed(DB, db)));
-  });
-});
 
 describe("createCustomDomain", () => {
   it.effect("returns existing when the Project is already linked", () => {

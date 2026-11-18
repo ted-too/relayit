@@ -201,6 +201,23 @@ export const Domain = Schema.Struct({
 });
 export type Domain = typeof Domain.Type;
 
+/** A Project and the Domains it holds, as a platform admin sees them: enough to pause one. */
+export const AdminProject = Schema.Struct({
+  domains: Schema.Array(
+    Schema.Struct({
+      fqdn: Schema.String,
+      id: Schema.String,
+      isPaused: Schema.Boolean,
+      pausedReason: Domain.fields.pausedReason,
+      verificationStatus: Domain.fields.verificationStatus,
+    }),
+  ),
+  id: Schema.String,
+  name: Schema.String,
+  slug: Schema.String,
+});
+export type AdminProject = typeof AdminProject.Type;
+
 export const CreateTemplateInput = Schema.Struct({
   name: SafeName.check(Schema.isNonEmpty(), Schema.isMaxLength(256)),
 });

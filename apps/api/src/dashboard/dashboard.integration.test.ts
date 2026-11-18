@@ -11,6 +11,7 @@ import {
   emailDomainRegistration,
   templatingWorkspace,
   templatingWorkspaceEntry,
+  user,
 } from "@repo/persistence/db/schema";
 import { eq } from "drizzle-orm";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
@@ -128,6 +129,24 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       return response.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
     });
 
+  /**
+   * A platform admin's session cookie. The role is set as the seed and an operator set it,
+   * on the user's row: better-auth has no first admin to grant it.
+   */
+  const signUpAdmin = (name: string) =>
+    Effect.gen(function* () {
+      const cookie = yield* signUp(name);
+      const db = createPromiseDb({ databaseUrl: testDatabaseUrl ?? "" });
+      yield* Effect.promise(() =>
+        db
+          .update(user)
+          .set({ role: "admin" })
+          .where(eq(user.email, `${name}-${run}@example.test`)),
+      );
+      yield* Effect.promise(() => db.$client.end());
+      return cookie;
+    });
+
   const createProject = (as: string, name: string) =>
     Effect.gen(function* () {
       const response = yield* call("POST", "/projects", { as, body: { name } });
@@ -148,6 +167,9 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["GET", "/projects/acme/domains"],
           ["GET", "/projects/acme/templates"],
           ["GET", "/projects/acme/workspaces/reactEmail/entries"],
+          ["GET", "/admin/projects"],
+          ["POST", "/admin/domains/dom_1/pause"],
+          ["POST", "/admin/domains/dom_1/unpause"],
         ] as const) {
           const body = method === "GET" ? undefined : { name: "x" };
           expect((yield* call(method, path, { body })).status).toBe(401);
@@ -249,8 +271,6 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["POST", `${b}/domains`, { fqdn: "alice.example.test" }],
           ["POST", `${b}/domains/${domainId}/refresh`],
           ["DELETE", `${b}/domains/${domainId}`],
-          ["POST", `${b}/domains/${domainId}/pause`, { reason: "manual_admin_pause" }],
-          ["POST", `${b}/domains/${domainId}/unpause`],
           ["GET", `${b}/templates`],
           ["GET", `${b}/templates/${templateId}`],
           ["POST", `${b}/templates`, { name: "Mine" }],
@@ -289,8 +309,6 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ["DELETE", `${a}/api-keys/${keyId}`],
           ["POST", `${a}/domains/${domainId}/refresh`],
           ["DELETE", `${a}/domains/${domainId}`],
-          ["POST", `${a}/domains/${domainId}/pause`, { reason: "manual_admin_pause" }],
-          ["POST", `${a}/domains/${domainId}/unpause`],
           ["GET", `${a}/templates/${templateId}`],
           ["POST", `${a}/templates/${templateId}/archive`],
           ["PATCH", `${a}/templates/${templateId}`, { slug: "mine" }],
@@ -392,6 +410,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       Effect.gen(function* () {
         const holder = yield* signUp("holder");
         const claimant = yield* signUp("claimant");
+        const operator = yield* signUpAdmin("claim-operator");
         const holderProject = yield* createProject(holder, `Holder ${run.slice(-8)}`);
         const claimantProject = yield* createProject(claimant, `Claimant ${run.slice(-8)}`);
         const h = `/projects/${holderProject.slug}`;
@@ -425,8 +444,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const holderKey = yield* keyFor(holder, h);
         expect((yield* sendFrom(holderKey, `hello@${fqdn}`)).status).toBe(201);
         expect(
-          (yield* call("POST", `${h}/domains/${domainId}/pause`, {
-            as: holder,
+          (yield* call("POST", `/admin/domains/${domainId}/pause`, {
+            as: operator,
             body: { reason: "manual_admin_pause" },
           })).status,
         ).toBe(204);
@@ -456,7 +475,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
 
         // It sends from the Domain neither through /messages/email nor the legacy path.
         expect(
-          (yield* call("POST", `${h}/domains/${domainId}/unpause`, { as: holder })).status,
+          (yield* call("POST", `/admin/domains/${domainId}/unpause`, { as: operator })).status,
         ).toBe(204);
         const claimantKey = yield* keyFor(claimant, c);
         expect(yield* sendFrom(claimantKey, `hello@${fqdn}`)).toMatchObject({
@@ -482,20 +501,11 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         });
         expect((yield* sendFrom(holderKey, `hello@${fqdn}`)).status).toBe(201);
 
-        // Nor does it pause or unpause the Domain.
-        yield* call("POST", `${h}/domains/${domainId}/pause`, {
-          as: holder,
+        // Its refresh must leave a pause on the holder's Domain as it is.
+        yield* call("POST", `/admin/domains/${domainId}/pause`, {
+          as: operator,
           body: { reason: "manual_admin_pause" },
         });
-        for (const [path, body] of [
-          [`${c}/domains/${domainId}/pause`, { reason: "bad_reputation" }],
-          [`${c}/domains/${domainId}/unpause`],
-        ] as const) {
-          expect(yield* call("POST", path, { as: claimant, body })).toMatchObject({
-            body: { _tag: "Conflict" },
-            status: 409,
-          });
-        }
         const before = yield* domainRow(domainId);
         expect(before).toMatchObject({ isPaused: true, pausedReason: "manual_admin_pause" });
 
@@ -514,7 +524,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         expect(yield* domainRow(domainId)).toEqual(before);
         expect((yield* call("GET", `${h}/domains`, { as: holder })).body).toEqual([]);
         expect(
-          (yield* call("POST", `${c}/domains/${domainId}/unpause`, { as: claimant })).status,
+          (yield* call("POST", `/admin/domains/${domainId}/unpause`, { as: operator })).status,
         ).toBe(204);
         expect((yield* sendFrom(claimantKey, `hello@${fqdn}`)).status).toBe(201);
         expect(yield* sendFrom(holderKey, `hello@${fqdn}`)).toMatchObject({
@@ -522,6 +532,167 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           status: 422,
         });
         yield* Effect.promise(() => db.$client.end());
+      }),
+    );
+
+    it.effect("pauses a Domain for a platform admin alone, and rejects its sends meanwhile", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("pause-owner");
+        // An admin of the platform, and a member of no Project.
+        const operator = yield* signUpAdmin("pause-operator");
+        const project = yield* createProject(owner, `Pauser ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        const fqdn = `${run}.paused.example.test`;
+        const added = yield* call("POST", `${p}/domains`, { as: owner, body: { fqdn } });
+        const domainId = (added.body as { id: string }).id;
+        yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner });
+        const created = yield* call("POST", `${p}/api-keys`, { as: owner, body: { name: "K" } });
+        const { key } = created.body as { key: string };
+        const send = call("POST", "/messages/email", {
+          body: { from: `hello@${fqdn}`, subject: "Hi", text: "Hi", to: "someone@example.test" },
+          key,
+        });
+        const listed = call("GET", `${p}/domains`, { as: owner });
+        const pause = (as: string, reason: string) =>
+          call("POST", `/admin/domains/${domainId}/pause`, { as, body: { reason } });
+        const unpause = (as: string) => call("POST", `/admin/domains/${domainId}/unpause`, { as });
+
+        // The Project's owner is no platform admin: every admin operation refuses them, and
+        // the Project's own pause and unpause routes are gone.
+        const refused = { body: { _tag: "Forbidden" }, status: 403 };
+        expect(yield* pause(owner, "manual_admin_pause")).toMatchObject(refused);
+        expect(yield* call("GET", "/admin/projects", { as: owner })).toMatchObject(refused);
+        const origin = yield* Origin;
+        for (const path of [`${p}/domains/${domainId}/pause`, `${p}/domains/${domainId}/unpause`]) {
+          const gone = yield* Effect.promise(() =>
+            fetch(`${origin}${path}`, {
+              body: JSON.stringify({ reason: "manual_admin_pause" }),
+              headers: { "content-type": "application/json", cookie: owner, origin: APP },
+              method: "POST",
+            }),
+          );
+          expect([path, gone.status]).toEqual([path, 404]);
+        }
+        expect(yield* listed).toMatchObject({
+          body: [{ id: domainId, isPaused: false, pausedReason: null }],
+          status: 200,
+        });
+        expect((yield* send).status).toBe(201);
+
+        // A reason the contract doesn't name, a Domain that doesn't exist and a request from
+        // another site are refused for an admin too.
+        expect((yield* pause(operator, "because")).status).toBe(400);
+        expect(
+          yield* call("POST", "/admin/domains/dom_unknown/pause", {
+            as: operator,
+            body: { reason: "manual_admin_pause" },
+          }),
+        ).toMatchObject({ body: { _tag: "NotFound" }, status: 404 });
+        expect(
+          (yield* call("POST", "/admin/domains/dom_unknown/unpause", { as: operator })).status,
+        ).toBe(404);
+        expect(
+          (yield* call("POST", `/admin/domains/${domainId}/pause`, {
+            as: operator,
+            body: { reason: "manual_admin_pause" },
+            origin: "https://evil.test",
+          })).status,
+        ).toBe(403);
+        expect((yield* listed).body).toMatchObject([{ id: domainId, isPaused: false }]);
+
+        // The admin pauses a Domain of a Project they are no member of. The admin's list and
+        // the owner's both say so and why, and accept rejects a send from it.
+        expect((yield* pause(operator, "bad_reputation")).status).toBe(204);
+        const adminProjects = (yield* call("GET", "/admin/projects", { as: operator })).body as {
+          readonly domains: unknown;
+          readonly id: string;
+        }[];
+        expect(adminProjects.find(({ id }) => id === project.id)).toMatchObject({
+          domains: [
+            {
+              fqdn,
+              id: domainId,
+              isPaused: true,
+              pausedReason: "bad_reputation",
+              verificationStatus: "verified",
+            },
+          ],
+          slug: project.slug,
+        });
+        expect((yield* listed).body).toMatchObject([
+          { id: domainId, isPaused: true, pausedReason: "bad_reputation" },
+        ]);
+        expect(yield* send).toMatchObject({
+          body: { code: "invalid_from_address" },
+          status: 422,
+        });
+
+        // Nor does the owner unpause it.
+        expect(yield* unpause(owner)).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+
+        // An `admin` of the Project is no admin of the platform: the two share only a word.
+        const { auth } = yield* ApiAuth;
+        const projectAdmin = yield* signUp("pause-project-admin");
+        const projectAdminUser = yield* Effect.promise(() =>
+          auth.api.getSession({ headers: new Headers({ cookie: projectAdmin }) }),
+        );
+        yield* Effect.promise(() =>
+          auth.api.addMember({
+            body: {
+              organizationId: project.id,
+              role: "admin",
+              userId: projectAdminUser?.user.id ?? "",
+            },
+          }),
+        );
+        expect((yield* call("GET", `${p}/domains`, { as: projectAdmin })).status).toBe(200);
+        expect(yield* unpause(projectAdmin)).toMatchObject(refused);
+        expect(yield* pause(projectAdmin, "manual_admin_pause")).toMatchObject(refused);
+        expect(yield* call("GET", "/admin/projects", { as: projectAdmin })).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+
+        // An admin banned straight in the database keeps a session and loses this, until
+        // the ban lapses.
+        const bannedAdmin = yield* signUpAdmin("pause-banned");
+        const setBan = (banExpires: Date | null) =>
+          Effect.promise(async () => {
+            const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+            await db
+              .update(user)
+              .set({ banExpires, banned: true })
+              .where(eq(user.email, `pause-banned-${run}@example.test`));
+            await db.$client.end();
+          });
+        expect((yield* call("GET", "/admin/projects", { as: bannedAdmin })).status).toBe(200);
+        yield* setBan(null);
+        expect(yield* unpause(bannedAdmin)).toMatchObject(refused);
+        expect(yield* call("GET", "/admin/projects", { as: bannedAdmin })).toMatchObject(refused);
+        yield* setBan(new Date(Date.now() + 60 * 60 * 1000));
+        expect(yield* unpause(bannedAdmin)).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+        yield* setBan(new Date(Date.now() - 1000));
+        expect((yield* call("GET", "/admin/projects", { as: bannedAdmin })).status).toBe(200);
+
+        // An admin who is demoted loses it at once, whatever their session still says.
+        const demoted = yield* signUpAdmin("pause-demoted");
+        expect((yield* call("GET", "/admin/projects", { as: demoted })).status).toBe(200);
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        yield* Effect.promise(() =>
+          db
+            .update(user)
+            .set({ role: "user" })
+            .where(eq(user.email, `pause-demoted-${run}@example.test`)),
+        );
+        yield* Effect.promise(() => db.$client.end());
+        expect(yield* unpause(demoted)).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+
+        expect((yield* unpause(operator)).status).toBe(204);
+        expect((yield* listed).body).toMatchObject([
+          { id: domainId, isPaused: false, pausedReason: null },
+        ]);
+        expect((yield* send).status).toBe(201);
       }),
     );
 

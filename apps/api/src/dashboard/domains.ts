@@ -3,8 +3,6 @@ import {
   deleteCustomDomain,
   ownershipChallengeHost,
   ownershipChallengeValue,
-  pauseCustomDomain,
-  unpauseCustomDomain,
 } from "@repo/channels/email/custom-domain";
 import {
   verifyCustomDomainOwnership,
@@ -237,24 +235,6 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
           yield* deleteCustomDomain({ customDomainId: params.domainId, organizationId }).pipe(
-            Effect.catch(lifecycleFailure("Custom Domain operation failed.")),
-          );
-        }),
-      )
-      .handle("pause", ({ params, payload }) =>
-        Effect.gen(function* () {
-          const { organizationId } = yield* DashboardMember;
-          yield* pauseCustomDomain({
-            customDomainId: params.domainId,
-            organizationId,
-            reason: payload.reason,
-          }).pipe(Effect.catch(lifecycleFailure("Custom Domain operation failed.")));
-        }),
-      )
-      .handle("unpause", ({ params }) =>
-        Effect.gen(function* () {
-          const { organizationId } = yield* DashboardMember;
-          yield* unpauseCustomDomain({ customDomainId: params.domainId, organizationId }).pipe(
             Effect.catch(lifecycleFailure("Custom Domain operation failed.")),
           );
         }),

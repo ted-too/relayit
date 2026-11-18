@@ -3,8 +3,10 @@ import {
   RiCloseCircleFill,
   RiDeleteBin6Line,
   RiErrorWarningFill,
+  RiPauseCircleLine,
   RiRefreshLine,
 } from "@remixicon/react";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/reui/alert";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import { formatDateTime } from "@repo/ui/lib/utils";
@@ -19,6 +21,7 @@ import {
   useRefreshDomain,
 } from "@/components/settings/custom-domains/domain-actions";
 import { VERIFICATION_STATUS } from "@/components/settings/custom-domains/item";
+import { PAUSED_REASONS } from "@/components/settings/custom-domains/paused-reasons";
 import { DOMAIN_PROVIDER_ICONS } from "@/components/settings/custom-domains/provider-icons";
 import { queries } from "@/lib/queries";
 
@@ -65,8 +68,10 @@ function RouteComponent() {
   return (
     <div className="w-full">
       <div className="flex w-full flex-col gap-6 border-y bg-card p-6">
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-center gap-3">
           <span className="font-medium text-3xl">{domain.fqdn}</span>
+          {domain.isPaused && <Badge variant="destructive-light">Paused</Badge>}
+          <div className="grow" />
           <Button onClick={() => setDeleteOpen(true)} size="icon-lg" variant="destructive-light">
             <RiDeleteBin6Line />
           </Button>
@@ -78,6 +83,19 @@ function RouteComponent() {
             verificationText={domain.fqdn}
           />
         </div>
+        {domain.isPaused && (
+          <Alert className="px-3 py-3" variant="destructive">
+            <RiPauseCircleLine />
+            <AlertTitle>Sending from this Domain is paused</AlertTitle>
+            <AlertDescription>
+              <p>
+                {domain.pausedReason && `${PAUSED_REASONS[domain.pausedReason].description} `}
+                New sends from it are rejected and Deliveries already queued from it fail; none are
+                held to send later. It stays paused until Relayit's operators unpause it.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="grid grid-cols-5 gap-6">
           {(
             [
