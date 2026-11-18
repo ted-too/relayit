@@ -54,5 +54,9 @@ export class EmailAcceptInfrastructureError extends Data.TaggedError(
 export class EmailAcceptPersistenceError extends Data.TaggedError("EmailAcceptPersistenceError")<{
   readonly cause: unknown;
   readonly messageId: string;
-  readonly operation: "find_email_delivery" | "insert_email_delivery" | "insert_message";
+  readonly operation:
+    | "find_email_delivery"
+    | "insert_email_delivery"
+    | "insert_message"
+    | "lock_accept";
 }> {}

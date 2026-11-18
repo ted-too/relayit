@@ -1,5 +1,5 @@
 import { Redis } from "@repo/redis";
-import { Effect } from "effect";
+import { type Duration, Effect, Schedule } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
 
 /** Publish / deps sync can run longer than a short edit lock. */
@@ -23,18 +23,20 @@ const lockKey = (workspaceId: string) => `templating:git-lock:${workspaceId}`;
 
 /**
  * Exclusive workspace Git lock via Redis Lua (NX + TTL).
- * Contended lock fails with TemplatingBuilderError code `"busy"`.
+ * A held lock fails with TemplatingBuilderError code `"busy"`: at once by default, so a
+ * write is never queued behind another, or only after polling for `waitFor`.
  */
 export const withWorkspaceGitLock = <A, E, R>(
   workspaceId: string,
   effect: Effect.Effect<A, E, R>,
+  options?: { readonly waitFor: Duration.Input },
 ): Effect.Effect<A, E | TemplatingBuilderError, R | Redis> =>
   Effect.gen(function* () {
     const redis = yield* Redis;
     const key = lockKey(workspaceId);
     const token = crypto.randomUUID();
 
-    const acquired = yield* redis
+    const acquire = redis
       .evaluateNumber({
         args: [token, String(LOCK_TTL_SECONDS)],
         keys: [key],
@@ -48,14 +50,25 @@ export const withWorkspaceGitLock = <A, E, R>(
               message: "Failed to acquire workspace lock.",
             }),
         ),
+        Effect.filterOrFail(
+          (acquired) => acquired === 1,
+          () =>
+            new TemplatingBuilderError({
+              code: "busy",
+              message: "Workspace is busy; retry shortly.",
+            }),
+        ),
       );
-
-    if (acquired !== 1) {
-      return yield* new TemplatingBuilderError({
-        code: "busy",
-        message: "Workspace is busy; retry shortly.",
-      });
-    }
+    yield* options
+      ? acquire.pipe(
+          Effect.retry({
+            schedule: Schedule.spaced("100 millis").pipe(
+              Schedule.upTo({ duration: options.waitFor }),
+            ),
+            while: (error) => error.code === "busy",
+          }),
+        )
+      : acquire;
 
     return yield* effect.pipe(
       Effect.ensuring(

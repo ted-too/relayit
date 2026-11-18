@@ -1,11 +1,11 @@
+import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Config, Effect, Layer, Redacted } from "effect";
+import { Cause, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { templateBuilderConfig } from "./env";
-import { loggingLive, makeAppLayers } from "./layers";
-import { logEffectFailure } from "./log-failure";
+import { makeAppLayers } from "./layers";
 
 const program = Effect.scoped(
   Effect.gen(function* () {
@@ -43,6 +43,13 @@ const program = Effect.scoped(
         Bun.serve({
           fetch: (request) => handler(request),
           hostname,
+          // Bun's server drops a connection that has been idle for 10 seconds by default.
+          // On Bun 1.4.4 that cuts a bodiless request or a streamed response whose handler
+          // takes 13 seconds; a POST with a body answered in one piece, as the Rpc calls
+          // are, was not cut in the same test. A first read that waits out another's
+          // scaffold, or a publish that installs dependencies, can run longer, so no call
+          // here should depend on that default or on that distinction. 255 is Bun's maximum.
+          idleTimeout: 255,
           port,
         }),
       ),
@@ -72,14 +79,4 @@ const reportFailure = Effect.catchCause((cause) => {
   );
 });
 
-Effect.runFork(
-  program.pipe(
-    reportFailure,
-    // Only LOG_LEVEL here: the rest of the config fails inside the program, where it is logged.
-    Effect.provide(
-      Layer.unwrap(
-        Effect.map(Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), loggingLive),
-      ),
-    ),
-  ),
-);
+Effect.runFork(program.pipe(reportFailure, Effect.provide(LoggingLive)));

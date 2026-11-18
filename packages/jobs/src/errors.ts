@@ -30,3 +30,11 @@ export class JobWorkerRuntimeError extends Data.TaggedError("JobWorkerRuntimeErr
     | "reconcile";
   readonly stream?: string;
 }> {}
+
+/**
+ * A handler died instead of failing: a bug in it or in something it calls. It counts as a
+ * failed attempt of its own job, retried and then dead-lettered like any other.
+ */
+export class JobHandlerDefect extends Data.TaggedError("JobHandlerDefect")<{
+  readonly cause: unknown;
+}> {}

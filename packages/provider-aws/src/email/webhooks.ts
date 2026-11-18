@@ -212,7 +212,9 @@ export const normalizeSesNotification = (
 ): SesNotificationResult => {
   const notificationType = String(payload.eventType ?? payload.notificationType ?? "");
   const kind = eventKind(notificationType);
-  const providerMessageId = asRecord(payload.mail)?.messageId;
+  const mail = asRecord(payload.mail);
+  const providerMessageId = mail?.messageId;
+  const sentAt = new Date(typeof mail?.timestamp === "string" ? mail.timestamp : Number.NaN);
 
   if (!kind || typeof providerMessageId !== "string") {
     return { type: "noop" };
@@ -229,6 +231,7 @@ export const normalizeSesNotification = (
         providerMessageId,
         raw: payload,
         recipients: recipientsFor(payload),
+        sentAt: Number.isNaN(sentAt.getTime()) ? null : sentAt,
         suppress,
       },
     ],

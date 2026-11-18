@@ -1,18 +1,10 @@
+import { loggingLive } from "@repo/logging";
 import { makeObjectStorageLayer } from "@repo/object-storage";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { makeRedisLive } from "@repo/redis";
 import { makeBuilderAuthServerLayer, TemplatingBuilderHandlersLive } from "@repo/templating";
-import { Layer, Logger, Redacted, References } from "effect";
+import { Layer, Redacted } from "effect";
 import type { TemplateBuilderConfig } from "./env";
-
-export const loggingLive = (logLevel: TemplateBuilderConfig["logLevel"]) =>
-  Layer.mergeAll(
-    Logger.layer([
-      Bun.env.NODE_ENV === "production" ? Logger.consoleJson : Logger.consolePretty(),
-      Logger.tracerLogger,
-    ]),
-    Layer.succeed(References.MinimumLogLevel, logLevel),
-  );
 
 export const makeAppLayers = (config: TemplateBuilderConfig) => {
   const logging = loggingLive(config.logLevel);
