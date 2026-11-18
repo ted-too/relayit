@@ -19,6 +19,7 @@ import {
   emailDelivery,
   emailDomainRegistration,
   member,
+  message,
   organization,
   organizationDomain,
   sandboxDomain,
@@ -29,7 +30,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { makeRedisLive, Redis } from "@repo/redis";
 import { webhookEventDefinitions } from "@repo/webhooks/events";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -1375,6 +1376,229 @@ describe("an accepted email send", () => {
       ]);
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
   });
+
+  it.live("is not sent to a Contact suppressed while the run was loading its attachments", () => {
+    const backend = makeBackend();
+    const storage = makeStorageWithDownloadHook();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so the skipped send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const bounced = `bounced-${project.organizationId}@example.com`;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, bounced, [ATTACHMENT]),
+      );
+      // The run has read the Delivery and found its recipient unsuppressed; the bounce lands
+      // before it claims.
+      storage.hook.whileLoading = db
+        .update(contact)
+        .set({
+          suppressedAt: new Date(),
+          suppressionReason: "hard_bounce",
+          suppressionSeverity: "all",
+        })
+        .where(eq(contact.email, bounced))
+        .pipe(Effect.orDie);
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { details: { reason: "suppression" } },
+        status: "skipped",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { reason: "suppression" }, type: "delivery.skipped" },
+      ]);
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
+  });
+
+  it.live(
+    "goes only to the recipients left when others are suppressed while its attachments load",
+    () => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const address = (name: string) => `${name}-${project.organizationId}@example.com`;
+        const input = sendInput(project, `hello@${project.fqdn}`, address("kept"), [ATTACHMENT]);
+        const accepted = yield* acceptTransactionalEmail({
+          ...input,
+          email: {
+            ...input.email,
+            bcc: [{ email: address("bcc") }],
+            cc: [{ email: address("cc") }],
+            // Stored as the Project wrote it; a Contact's address is lower-case.
+            to: [
+              { email: address("kept") },
+              { email: address("To").replace("example", "Example") },
+            ],
+          },
+        });
+        // One recipient of each kind is suppressed after the run stripped none.
+        storage.hook.whileLoading = db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "hard_bounce",
+            suppressionSeverity: "all",
+          })
+          .where(inArray(contact.email, [address("to"), address("cc"), address("bcc")]))
+          .pipe(Effect.orDie);
+
+        yield* runWorker;
+
+        expect(
+          backend.sendsFrom(project.fqdn).map(({ message }) => ({
+            bcc: message.bcc,
+            cc: message.cc,
+            to: message.to,
+          })),
+        ).toEqual([{ bcc: null, cc: null, to: [address("kept")] }]);
+        // The Delivery names who it went to, as one whose recipient was stripped at accept does.
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          bcc: [],
+          cc: [],
+          status: "sent",
+          to: [address("kept")],
+        });
+        expect(
+          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+        ).toEqual(["message.sent"]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live(
+    "is sent when the Suppression that refused its claim is lifted before the run reads why",
+    () => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const restored = `restored-${project.organizationId}@example.com`;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, restored, [ATTACHMENT]),
+        );
+        // Postgres lifts the Suppression right after any statement that updates Deliveries, the
+        // refused claim included (a statement trigger fires though no row matched): between the
+        // claim and the read that asks why it matched nothing.
+        const lift = `lift_${project.organizationId}`;
+        yield* db.execute(
+          sql.raw(`create function ${lift}() returns trigger language plpgsql as $$ begin
+          update contact set suppression_severity = null, suppression_reason = null,
+            suppressed_at = null where email = '${restored}' and suppression_severity is not null;
+          return null; end $$`),
+        );
+        yield* db.execute(
+          sql.raw(`create trigger ${lift} after update on email_delivery
+          for each statement execute function ${lift}()`),
+        );
+        storage.hook.whileLoading = db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "manual",
+            suppressionSeverity: "all",
+          })
+          .where(eq(contact.email, restored))
+          .pipe(Effect.orDie);
+
+        yield* runWorker.pipe(
+          Effect.ensuring(
+            db.execute(sql.raw(`drop function ${lift}() cascade`)).pipe(Effect.orDie),
+          ),
+        );
+
+        // No run holds the Delivery and nothing stops it any more, so it is not left `queued`.
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          status: "sent",
+          to: [restored],
+        });
+        expect(
+          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+        ).toEqual(["message.sent"]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live(
+    "a complaint landing while attachments load stops a marketing send, not a transactional one",
+    () => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      // No marketing send is accepted yet, so the Message is made a Campaign's. Its job still
+      // says transactional: the Message's purpose, not the job's, decides who is suppressed.
+      const handler = makeEmailDeliverHandler({ apiOrigin: "http://localhost", secret: "test" });
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const reader = `reader-${project.organizationId}@example.com`;
+        const marketing = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, reader, [ATTACHMENT]),
+        );
+        yield* db
+          .update(message)
+          .set({ purpose: "marketing" })
+          .where(eq(message.id, marketing.messageId));
+        const complain = db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "complaint",
+            suppressionSeverity: "marketing",
+          })
+          .where(eq(contact.email, reader))
+          .pipe(Effect.orDie);
+
+        storage.hook.whileLoading = complain;
+        yield* handler
+          .handle(
+            {
+              billingUserId: "unused",
+              deliveryId: marketing.deliveryId,
+              purpose: "transactional",
+              startDate: new Date().toISOString(),
+            },
+            { attempt: 1, enqueuedAt: Date.now(), id: "marketing" },
+          )
+          .pipe(Effect.flip);
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+        expect(yield* deliveryOf(marketing.deliveryId)).toMatchObject({ status: "skipped" });
+        expect(yield* eventsFor(project.organizationId, marketing.deliveryId)).toMatchObject([
+          { payload: { reason: "suppression" }, type: "delivery.skipped" },
+        ]);
+
+        // The same complaint, landing in the same place, leaves a transactional send alone.
+        yield* db
+          .update(contact)
+          .set({ suppressedAt: null, suppressionReason: null, suppressionSeverity: null })
+          .where(eq(contact.email, reader));
+        const transactional = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, reader, [ATTACHMENT]),
+        );
+        storage.hook.whileLoading = complain;
+
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(transactional.deliveryId)).toMatchObject({ status: "sent" });
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
 
   it.live("ends failed on the first attempt when SES rejects the message itself", () => {
     const backend = makeBackend(() =>

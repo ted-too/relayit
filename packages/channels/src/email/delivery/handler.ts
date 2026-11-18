@@ -1,6 +1,7 @@
 import { defineJobHandler } from "@repo/jobs";
 import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import {
+  contact,
   customDomain,
   emailDelivery,
   organizationDomain,
@@ -9,14 +10,14 @@ import {
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { Redis } from "@repo/redis";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, exists, isNull, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
   MessageDeliveryRetryableError,
   MessageDeliveryTerminalError,
 } from "../../messages/delivery";
-import { filterSuppressedContacts } from "../../messages/suppressions";
+import { filterSuppressedContacts, suppressedAmong } from "../../messages/suppressions";
 import { Usage } from "../../usage";
 import { EmailBackend, type EmailBackendRejected } from "../backend";
 import { mergeListUnsubscribeHeadersForSend } from "../deliverability";
@@ -48,15 +49,22 @@ const SES_SEND_TIMEOUT = Duration.seconds(30);
 const CLAIM_LEASE = Duration.minutes(2);
 
 /**
+ * How many times one run strips and claims before leaving the Delivery to the job's retry. A
+ * second pass needs a Suppression or a pause to change between two of the run's statements,
+ * so more than a few means something is flapping.
+ */
+const CLAIM_PASSES = 5;
+
+/**
  * Whether a Delivery's sender may send right now, as conditions on the Delivery's own row: its
  * Domain is not paused and its Project still holds it (a claim another Project proved, or the
  * Project removing the Domain, ends that), or its Sandbox Domain is active and not paused. The
  * claim carries them in its `WHERE`, so no gap separates the check from the claim; a claim
  * that matched nothing reads them back to say why.
  *
- * A removed Domain leaves its Deliveries naming no Domain at all, so `domainHeld` asks for a
- * Sandbox Domain or a held Domain and never passes on a missing one. The Project adding the
- * same FQDN again does not revive them: that is another Domain.
+ * A Delivery stops naming its Domain when its Project's link to it goes, so `domainHeld` asks
+ * for a Sandbox Domain or a held Domain and never passes on a missing one. The Project adding
+ * the same FQDN again does not revive it: that is another Domain.
  */
 const senderMaySend = (organizationId: string) => ({
   domainHeld: sql<boolean>`(${emailDelivery.sandboxDomainId} is not null or exists (
@@ -394,169 +402,158 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             return yield* releaseUsage(loaded.id);
         }
 
-        const suppressionInput = {
-          organizationAppEnvironmentId: message.organizationAppEnvironmentId,
-          organizationId: appEnvironment.organizationId,
-        };
-        const to = yield* filterSuppressedContacts(db, {
-          ...suppressionInput,
-          recipients: loaded.to.map((email) => ({ email })),
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new MessageDeliveryRetryableError({
-                cause: error,
-                deliveryId: loaded.id,
-                message: "Suppression lookup failed",
-                stage: "suppressions",
-              }),
-          ),
-        );
-        const cc = yield* filterSuppressedContacts(db, {
-          ...suppressionInput,
-          recipients: (loaded.cc ?? []).map((email) => ({ email })),
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new MessageDeliveryRetryableError({
-                cause: error,
-                deliveryId: loaded.id,
-                message: "Suppression lookup failed",
-                stage: "suppressions",
-              }),
-          ),
-        );
-        const bcc = yield* filterSuppressedContacts(db, {
-          ...suppressionInput,
-          recipients: (loaded.bcc ?? []).map((email) => ({ email })),
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new MessageDeliveryRetryableError({
-                cause: error,
-                deliveryId: loaded.id,
-                message: "Suppression lookup failed",
-                stage: "suppressions",
-              }),
-          ),
-        );
-
-        if (to.kept.length === 0 && cc.kept.length === 0 && bcc.kept.length === 0) {
-          yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              const skipped = yield* updateDelivery(
-                tx,
-                { claimedAt: null, id: loaded.id },
-                {
-                  completedAt: new Date(),
-                  error: {
-                    details: { reason: "suppression" },
-                    message: "All recipients suppressed at severity all",
-                    retryable: false,
-                  },
-                  status: "skipped",
-                },
-              );
-              if (!skipped) {
-                return yield* new MessageDeliveryRetryableError({
+        let attachments: Effect.Success<ReturnType<typeof loadEmailAttachmentsForSend>> | undefined;
+        // A claim refused while the Delivery is still `queued` and its sender may send means what
+        // this run checked changed before it claimed: a kept recipient was suppressed, or the
+        // Suppression or pause that refused the claim was lifted before the run read why. No
+        // other run holds it, so this one strips and claims again. A pass that only strips
+        // leaves a recipient fewer, but one that follows a lifted Suppression or pause does
+        // not, so nothing proves the passes end: hence the ceiling.
+        for (let pass = 0; pass < CLAIM_PASSES; pass += 1) {
+          const suppressionInput = {
+            organizationAppEnvironmentId: message.organizationAppEnvironmentId,
+            organizationId: appEnvironment.organizationId,
+            // What accept wrote with the Delivery, not what the job says: a job that named
+            // the wrong purpose must not get past a `marketing` Suppression.
+            purpose: message.purpose,
+          };
+          const to = yield* filterSuppressedContacts(db, {
+            ...suppressionInput,
+            recipients: loaded.to.map((email) => ({ email })),
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new MessageDeliveryRetryableError({
+                  cause: error,
                   deliveryId: loaded.id,
-                  message: "Another run claimed the Delivery",
-                  stage: "claim",
-                });
-              }
-              yield* emitWebhookEvent(tx, {
-                event: {
-                  data: {
-                    delivery_id: loaded.id,
-                    message_id: loaded.messageId,
-                    reason: "suppression",
-                  },
-                  type: deliverySkipped.type,
-                },
-                messageTags: message.tags,
-                organizationId: appEnvironment.organizationId,
-              }).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new MessageDeliveryRetryableError({
-                      cause,
-                      deliveryId: loaded.id,
-                      message: "Failed to emit delivery.skipped",
-                      stage: "webhooks",
-                    }),
-                ),
-              );
-            }),
+                  message: "Suppression lookup failed",
+                  stage: "suppressions",
+                }),
+            ),
           );
-          return yield* new MessageDeliveryTerminalError({
-            deliveryId: loaded.id,
-            message: "No deliverable recipients after suppression",
-            stage: "suppressions",
-          });
-        }
+          const cc = yield* filterSuppressedContacts(db, {
+            ...suppressionInput,
+            recipients: (loaded.cc ?? []).map((email) => ({ email })),
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new MessageDeliveryRetryableError({
+                  cause: error,
+                  deliveryId: loaded.id,
+                  message: "Suppression lookup failed",
+                  stage: "suppressions",
+                }),
+            ),
+          );
+          const bcc = yield* filterSuppressedContacts(db, {
+            ...suppressionInput,
+            recipients: (loaded.bcc ?? []).map((email) => ({ email })),
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new MessageDeliveryRetryableError({
+                  cause: error,
+                  deliveryId: loaded.id,
+                  message: "Suppression lookup failed",
+                  stage: "suppressions",
+                }),
+            ),
+          );
 
-        const identityFqdn = loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
-        if (!identityFqdn) {
-          // Its Domain was removed while it was queued.
-          return yield* new MessageDeliveryTerminalError({
-            deliveryId: loaded.id,
-            message: "The Project no longer holds the sending Domain",
-            stage: "domain",
-          });
-        }
-
-        const registration =
-          loaded.customDomain?.registration ?? loaded.sandboxDomain?.registration;
-        if (registration?.verificationStatus !== "verified") {
-          return yield* new MessageDeliveryTerminalError({
-            deliveryId: loaded.id,
-            message: "Sending domain is not verified with SES",
-            stage: "registration",
-          });
-        }
-
-        const attachments = yield* loadEmailAttachmentsForSend(db, loaded.id);
-
-        const toEmails = to.kept.map((recipient) => recipient.email);
-        const ccEmails = cc.kept.map((recipient) => recipient.email);
-        const bccEmails = bcc.kept.map((recipient) => recipient.email);
-        const topicId = payload.topicId ?? null;
-
-        let contactId: string | null = null;
-        let orgSlug: string | null = null;
-        if (
-          payload.purpose === "marketing" &&
-          topicId &&
-          toEmails.length === 1 &&
-          ccEmails.length === 0 &&
-          bccEmails.length === 0
-        ) {
-          const organization = yield* db.query.organization
-            .findFirst({
-              columns: { slug: true },
-              where: { id: appEnvironment.organizationId },
-            })
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new EmailDeliveryPersistenceError({
-                    cause,
+          if (to.kept.length === 0 && cc.kept.length === 0 && bcc.kept.length === 0) {
+            yield* db.transaction((tx) =>
+              Effect.gen(function* () {
+                const skipped = yield* updateDelivery(
+                  tx,
+                  { claimedAt: null, id: loaded.id },
+                  {
+                    completedAt: new Date(),
+                    error: {
+                      details: { reason: "suppression" },
+                      message: "All recipients suppressed",
+                      retryable: false,
+                    },
+                    status: "skipped",
+                  },
+                );
+                if (!skipped) {
+                  return yield* new MessageDeliveryRetryableError({
                     deliveryId: loaded.id,
-                    operation: "load_delivery",
-                  }),
-              ),
+                    message: "Another run claimed the Delivery",
+                    stage: "claim",
+                  });
+                }
+                yield* emitWebhookEvent(tx, {
+                  event: {
+                    data: {
+                      delivery_id: loaded.id,
+                      message_id: loaded.messageId,
+                      reason: "suppression",
+                    },
+                    type: deliverySkipped.type,
+                  },
+                  messageTags: message.tags,
+                  organizationId: appEnvironment.organizationId,
+                }).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new MessageDeliveryRetryableError({
+                        cause,
+                        deliveryId: loaded.id,
+                        message: "Failed to emit delivery.skipped",
+                        stage: "webhooks",
+                      }),
+                  ),
+                );
+              }),
             );
-          orgSlug = organization?.slug ?? null;
+            return yield* new MessageDeliveryTerminalError({
+              deliveryId: loaded.id,
+              message: "No deliverable recipients after suppression",
+              stage: "suppressions",
+            });
+          }
 
-          const recipientEmail = toEmails[0];
-          if (recipientEmail) {
-            const contactRow = yield* db.query.contact
+          const identityFqdn = loaded.customDomain?.fqdn ?? loaded.sandboxDomain?.rootDomain;
+          if (!identityFqdn) {
+            // Its Project's link to the Domain went while it was queued.
+            return yield* new MessageDeliveryTerminalError({
+              deliveryId: loaded.id,
+              message: "The Project no longer holds the sending Domain",
+              stage: "domain",
+            });
+          }
+
+          const registration =
+            loaded.customDomain?.registration ?? loaded.sandboxDomain?.registration;
+          if (registration?.verificationStatus !== "verified") {
+            return yield* new MessageDeliveryTerminalError({
+              deliveryId: loaded.id,
+              message: "Sending domain is not verified with SES",
+              stage: "registration",
+            });
+          }
+
+          attachments ??= yield* loadEmailAttachmentsForSend(db, loaded.id);
+
+          const toEmails = to.kept.map((recipient) => recipient.email);
+          const ccEmails = cc.kept.map((recipient) => recipient.email);
+          const bccEmails = bcc.kept.map((recipient) => recipient.email);
+          const topicId = payload.topicId ?? null;
+
+          let contactId: string | null = null;
+          let orgSlug: string | null = null;
+          if (
+            payload.purpose === "marketing" &&
+            topicId &&
+            toEmails.length === 1 &&
+            ccEmails.length === 0 &&
+            bccEmails.length === 0
+          ) {
+            const organization = yield* db.query.organization
               .findFirst({
-                columns: { id: true },
-                where: {
-                  email: normalizeContactEmail(recipientEmail),
-                  organizationAppEnvironmentId: message.organizationAppEnvironmentId,
-                },
+                columns: { slug: true },
+                where: { id: appEnvironment.organizationId },
               })
               .pipe(
                 Effect.mapError(
@@ -568,145 +565,18 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     }),
                 ),
               );
-            contactId = contactRow?.id ?? null;
-          }
-        }
+            orgSlug = organization?.slug ?? null;
 
-        const headers = mergeListUnsubscribeHeadersForSend({
-          bccCount: bccEmails.length,
-          ccCount: ccEmails.length,
-          contactId,
-          existing: loaded.headers,
-          messageId: loaded.messageId,
-          orgSlug,
-          purpose: payload.purpose,
-          secret: listUnsubscribe.secret,
-          toCount: toEmails.length,
-          topicId,
-          apiOrigin: listUnsubscribe.apiOrigin,
-        });
-
-        const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
-          Effect.gen(function* () {
-            const failureMessage = "SES paused sending for this Project";
-            yield* db.transaction((tx) =>
-              Effect.gen(function* () {
-                const failed = yield* updateDelivery(
-                  tx,
-                  { claimedAt, id: loaded.id },
-                  {
-                    completedAt: new Date(),
-                    error: { message: failureMessage, retryable: false },
-                    status: "failed",
+            const recipientEmail = toEmails[0];
+            if (recipientEmail) {
+              const contactRow = yield* db.query.contact
+                .findFirst({
+                  columns: { id: true },
+                  where: {
+                    email: normalizeContactEmail(recipientEmail),
+                    organizationAppEnvironmentId: message.organizationAppEnvironmentId,
                   },
-                );
-                if (!failed) {
-                  return;
-                }
-                if (loaded.customDomainId) {
-                  yield* tx
-                    .update(customDomain)
-                    .set({ isPaused: true, pausedReason: "bad_reputation" })
-                    .where(eq(customDomain.id, loaded.customDomainId))
-                    .pipe(
-                      Effect.mapError(
-                        (cause) =>
-                          new EmailDeliveryPersistenceError({
-                            cause,
-                            deliveryId: loaded.id,
-                            operation: "update_status",
-                          }),
-                      ),
-                    );
-                }
-                yield* emitWebhookEvent(tx, {
-                  event: {
-                    data: {
-                      delivery_id: loaded.id,
-                      error: failureMessage,
-                      message_id: loaded.messageId,
-                    },
-                    type: messageFailed.type,
-                  },
-                  messageTags: message.tags,
-                  organizationId: appEnvironment.organizationId,
-                }).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new MessageDeliveryRetryableError({
-                        cause,
-                        deliveryId: loaded.id,
-                        message: "Failed to emit message.failed",
-                        stage: "webhooks",
-                      }),
-                  ),
-                );
-              }),
-            );
-            return yield* new MessageDeliveryTerminalError({
-              cause: error,
-              deliveryId: loaded.id,
-              message: failureMessage,
-              stage: "send",
-            });
-          });
-
-        const backend = yield* EmailBackend;
-        const sendMessage = {
-          attachments: attachments.length > 0 ? [...attachments] : undefined,
-          bcc: bccEmails.length > 0 ? bccEmails : null,
-          cc: ccEmails.length > 0 ? ccEmails : null,
-          from: loaded.from,
-          headers: headers ?? loaded.headers,
-          html: loaded.html,
-          replyTo: loaded.replyTo,
-          sender: { identityFqdn, projectId: appEnvironment.organizationId },
-          subject: loaded.subject,
-          text: loaded.text,
-          to: toEmails,
-        };
-
-        // From the claim until SES's answer is kept nothing may interrupt the run, so a worker
-        // shutting down finishes the send (bounded by the SES timeout) rather than leaving an
-        // unknown outcome behind.
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            // Only a run that moves it from `queued` may send it, and only while its sender may
-            // send: a Domain paused or lost to another Project since accept is never sent from.
-            const sender = senderMaySend(appEnvironment.organizationId);
-            const [claimed] = yield* db
-              .update(emailDelivery)
-              .set({ startedAt: new Date(yield* Clock.currentTimeMillis), status: "sending" })
-              .where(
-                and(
-                  eq(emailDelivery.id, loaded.id),
-                  eq(emailDelivery.status, "queued"),
-                  sender.domainUnpaused,
-                  sender.domainHeld,
-                  sender.sandboxOpen,
-                ),
-              )
-              .returning({ startedAt: emailDelivery.startedAt })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new EmailDeliveryPersistenceError({
-                      cause,
-                      deliveryId: loaded.id,
-                      operation: "update_status",
-                    }),
-                ),
-              );
-            // Read back, so this claim's SES answer is keyed exactly as later runs will see it.
-            const claimedAt = claimed?.startedAt;
-            if (!claimedAt) {
-              // One read tells a sender that may not send from a claim another run made. The
-              // dead-letter step records the first and tells the Project; a duplicate run of
-              // the job retries later, to find what the other run did.
-              const [unclaimed] = yield* db
-                .select({ status: emailDelivery.status, ...sender })
-                .from(emailDelivery)
-                .where(eq(emailDelivery.id, loaded.id))
+                })
                 .pipe(
                   Effect.mapError(
                     (cause) =>
@@ -717,133 +587,354 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       }),
                   ),
                 );
-              if (unclaimed?.status === "queued") {
-                if (!unclaimed.domainUnpaused) {
-                  return yield* new MessageDeliveryTerminalError({
-                    deliveryId: loaded.id,
-                    message: "Domain is paused",
-                    stage: "domain",
-                  });
-                }
-                if (!unclaimed.sandboxOpen) {
-                  return yield* new MessageDeliveryTerminalError({
-                    deliveryId: loaded.id,
-                    message: "Sandbox Domain is paused or inactive",
-                    stage: "domain",
-                  });
-                }
-                if (!unclaimed.domainHeld) {
-                  return yield* new MessageDeliveryTerminalError({
-                    deliveryId: loaded.id,
-                    message: "The Project no longer holds the sending Domain",
-                    stage: "domain",
-                  });
-                }
-              }
-              return yield* new MessageDeliveryRetryableError({
-                deliveryId: loaded.id,
-                message: "Another run claimed the Delivery",
-                stage: "claim",
-              });
+              contactId = contactRow?.id ?? null;
             }
+          }
 
-            const sent = yield* backend
-              .send({ message: sendMessage, region: registration.region })
-              .pipe(
-                // Interruptible by the timeout alone: the region still holds off a shutdown.
-                Effect.interruptible,
-                Effect.timeout(SES_SEND_TIMEOUT),
-                Effect.catch((error) => {
-                  // SES refused it, or the request never reached SES (the backend reports a
-                  // 4xx or a DNS, connect or TLS failure as rejected), so nothing went out:
-                  // keep that answer and put the Delivery back as it was accepted. If the
-                  // requeue is not written, the kept answer tells the next run so.
-                  const refused = (
-                    failure: MessageDeliveryRetryableError | MessageDeliveryTerminalError,
-                  ) =>
-                    keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
-                      Effect.andThen(
-                        updateDelivery(
-                          db,
-                          { claimedAt, id: loaded.id },
-                          { startedAt: null, status: "queued" },
+          const headers = mergeListUnsubscribeHeadersForSend({
+            bccCount: bccEmails.length,
+            ccCount: ccEmails.length,
+            contactId,
+            existing: loaded.headers,
+            messageId: loaded.messageId,
+            orgSlug,
+            purpose: payload.purpose,
+            secret: listUnsubscribe.secret,
+            toCount: toEmails.length,
+            topicId,
+            apiOrigin: listUnsubscribe.apiOrigin,
+          });
+
+          const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
+            Effect.gen(function* () {
+              const failureMessage = "SES paused sending for this Project";
+              yield* db.transaction((tx) =>
+                Effect.gen(function* () {
+                  // The Domain's row before the Delivery, as removing a Domain or taking it
+                  // by a claim locks them, so neither waits on this while this waits on it.
+                  if (loaded.customDomainId) {
+                    yield* tx
+                      .select({ id: customDomain.id })
+                      .from(customDomain)
+                      .where(eq(customDomain.id, loaded.customDomainId))
+                      .for("update")
+                      .pipe(
+                        Effect.mapError(
+                          (cause) =>
+                            new EmailDeliveryPersistenceError({
+                              cause,
+                              deliveryId: loaded.id,
+                              operation: "update_status",
+                            }),
                         ),
-                      ),
-                      Effect.ignore,
-                      Effect.andThen(Effect.fail(failure)),
-                    );
-                  // What may pass by itself (a throttle, the account paused, credentials or
-                  // configuration ops are changing, a network failure) is sent again later.
-                  const retried = refused(
-                    new MessageDeliveryRetryableError({
-                      cause: error,
-                      deliveryId: loaded.id,
-                      message: SES_REFUSED,
-                      stage: "send",
-                    }),
-                  );
-                  // Nothing the job's few minutes of retries would change, so it fails now,
-                  // through the dead-letter step. `MessageRejected` is SES refusing the
-                  // content, and also SES not counting the sender (or, for an account still
-                  // in SES's sandbox, a recipient) as verified in the region: a state of the
-                  // Domain or the account that someone has to fix first.
-                  const rejected = refused(
-                    new MessageDeliveryTerminalError({
-                      cause: error,
-                      deliveryId: loaded.id,
-                      message: SES_REJECTED_MESSAGE,
-                      stage: "send",
-                    }),
-                  );
-                  switch (error._tag) {
-                    case "EmailBackendRejected":
-                      switch (error.reason) {
-                        // A Project Sending Pause is SES isolating this Project: retrying
-                        // cannot get past it, and other Projects keep sending.
-                        case "project_sending_paused":
-                          return keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
-                            Effect.andThen(failProjectSendingPaused(error, claimedAt)),
-                          );
-                        case "message_rejected":
-                          return rejected;
-                        default:
-                          return retried;
-                      }
-                    case "EmailBackendMessageError":
-                      return rejected;
-                    case "EmailBackendAuthenticationError":
-                    case "EmailBackendConfigurationError":
-                    case "EmailBackendRateLimited":
-                      return retried;
-                    default:
-                      // Our timeout, a connection dropped after the request went out, a 5xx
-                      // or an answer we could not read: SES may have taken it. It stays
-                      // claimed, and once the claim is older than its lease a later run fails
-                      // it rather than send twice.
-                      return Effect.fail(
-                        new MessageDeliveryRetryableError({
-                          cause: error,
-                          deliveryId: loaded.id,
-                          message: "SES did not confirm the send; the outcome is unknown",
-                          stage: "send",
-                        }),
                       );
                   }
+                  const failed = yield* updateDelivery(
+                    tx,
+                    { claimedAt, id: loaded.id },
+                    {
+                      completedAt: new Date(),
+                      error: { message: failureMessage, retryable: false },
+                      status: "failed",
+                    },
+                  );
+                  if (!failed) {
+                    return;
+                  }
+                  if (loaded.customDomainId) {
+                    // Only while the sending Project still holds it: the Domain this run
+                    // loaded may be another Project's by now, and its pause is not theirs.
+                    yield* tx
+                      .update(customDomain)
+                      .set({ isPaused: true, pausedReason: "bad_reputation" })
+                      .where(
+                        and(
+                          eq(customDomain.id, loaded.customDomainId),
+                          exists(
+                            tx
+                              .select({ organizationId: organizationDomain.organizationId })
+                              .from(organizationDomain)
+                              .where(
+                                and(
+                                  eq(organizationDomain.customDomainId, customDomain.id),
+                                  eq(
+                                    organizationDomain.organizationId,
+                                    appEnvironment.organizationId,
+                                  ),
+                                  eq(organizationDomain.ownershipVerificationStatus, "verified"),
+                                ),
+                              ),
+                          ),
+                        ),
+                      )
+                      .pipe(
+                        Effect.mapError(
+                          (cause) =>
+                            new EmailDeliveryPersistenceError({
+                              cause,
+                              deliveryId: loaded.id,
+                              operation: "update_status",
+                            }),
+                        ),
+                      );
+                  }
+                  yield* emitWebhookEvent(tx, {
+                    event: {
+                      data: {
+                        delivery_id: loaded.id,
+                        error: failureMessage,
+                        message_id: loaded.messageId,
+                      },
+                      type: messageFailed.type,
+                    },
+                    messageTags: message.tags,
+                    organizationId: appEnvironment.organizationId,
+                  }).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new MessageDeliveryRetryableError({
+                          cause,
+                          deliveryId: loaded.id,
+                          message: "Failed to emit message.failed",
+                          stage: "webhooks",
+                        }),
+                    ),
+                  );
                 }),
               );
-
-            yield* keepSesAnswer(loaded.id, claimedAt, `${ACCEPTED}${sent.providerMessageId}`);
-            yield* recordSent(db, {
-              claimedAt,
-              deliveryId: loaded.id,
-              messageId: loaded.messageId,
-              messageTags: message.tags,
-              organizationId: appEnvironment.organizationId,
-              providerMessageId: sent.providerMessageId,
+              return yield* new MessageDeliveryTerminalError({
+                cause: error,
+                deliveryId: loaded.id,
+                message: failureMessage,
+                stage: "send",
+              });
             });
-            yield* confirmUsage(loaded.id);
-          }),
-        );
+
+          const backend = yield* EmailBackend;
+          const sendMessage = {
+            attachments: attachments.length > 0 ? [...attachments] : undefined,
+            bcc: bccEmails.length > 0 ? bccEmails : null,
+            cc: ccEmails.length > 0 ? ccEmails : null,
+            from: loaded.from,
+            headers: headers ?? loaded.headers,
+            html: loaded.html,
+            replyTo: loaded.replyTo,
+            sender: { identityFqdn, projectId: appEnvironment.organizationId },
+            subject: loaded.subject,
+            text: loaded.text,
+            to: toEmails,
+          };
+
+          // From the claim until SES's answer is kept nothing may interrupt the run, so a worker
+          // shutting down finishes the send (bounded by the SES timeout) rather than leaving an
+          // unknown outcome behind.
+          const restrip = yield* Effect.uninterruptible(
+            Effect.gen(function* () {
+              // Only a run that moves it from `queued` may send it, and only while its sender may
+              // send and no recipient this run kept is suppressed: a Domain paused or lost to
+              // another Project since accept is never sent from, and a Contact a bounce or
+              // complaint suppressed since the strip above is never sent to. The claim also
+              // writes the recipients it sends to, so the Delivery names no one it stripped.
+              const sender = senderMaySend(appEnvironment.organizationId);
+              const recipientsUnsuppressed = sql<boolean>`not exists (select 1 from ${contact} where ${suppressedAmong(
+                {
+                  emails: [...toEmails, ...ccEmails, ...bccEmails].map(normalizeContactEmail),
+                  organizationAppEnvironmentId: message.organizationAppEnvironmentId,
+                  purpose: message.purpose,
+                },
+              )})`;
+              const [claimed] = yield* db
+                .update(emailDelivery)
+                .set({
+                  bcc: loaded.bcc && bccEmails,
+                  cc: loaded.cc && ccEmails,
+                  startedAt: new Date(yield* Clock.currentTimeMillis),
+                  status: "sending",
+                  to: toEmails,
+                })
+                .where(
+                  and(
+                    eq(emailDelivery.id, loaded.id),
+                    eq(emailDelivery.status, "queued"),
+                    sender.domainUnpaused,
+                    sender.domainHeld,
+                    sender.sandboxOpen,
+                    recipientsUnsuppressed,
+                  ),
+                )
+                .returning({ startedAt: emailDelivery.startedAt })
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new EmailDeliveryPersistenceError({
+                        cause,
+                        deliveryId: loaded.id,
+                        operation: "update_status",
+                      }),
+                  ),
+                );
+              // Read back, so this claim's SES answer is keyed exactly as later runs will see it.
+              const claimedAt = claimed?.startedAt;
+              if (!claimedAt) {
+                // One read tells a sender that may not send from a claim another run made. The
+                // dead-letter step records the first and tells the Project; a duplicate run of
+                // the job retries later, to find what the other run did. A Delivery still
+                // `queued` whose sender may send was refused for a recipient, or for something
+                // lifted since: either way no run has it, so this one goes round again.
+                const [unclaimed] = yield* db
+                  .select({ status: emailDelivery.status, ...sender })
+                  .from(emailDelivery)
+                  .where(eq(emailDelivery.id, loaded.id))
+                  .pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new EmailDeliveryPersistenceError({
+                          cause,
+                          deliveryId: loaded.id,
+                          operation: "load_delivery",
+                        }),
+                    ),
+                  );
+                if (unclaimed?.status === "queued") {
+                  if (!unclaimed.domainUnpaused) {
+                    return yield* new MessageDeliveryTerminalError({
+                      deliveryId: loaded.id,
+                      message: "Domain is paused",
+                      stage: "domain",
+                    });
+                  }
+                  if (!unclaimed.sandboxOpen) {
+                    return yield* new MessageDeliveryTerminalError({
+                      deliveryId: loaded.id,
+                      message: "Sandbox Domain is paused or inactive",
+                      stage: "domain",
+                    });
+                  }
+                  if (!unclaimed.domainHeld) {
+                    return yield* new MessageDeliveryTerminalError({
+                      deliveryId: loaded.id,
+                      message: "The Project no longer holds the sending Domain",
+                      stage: "domain",
+                    });
+                  }
+                  return true;
+                }
+                return yield* new MessageDeliveryRetryableError({
+                  deliveryId: loaded.id,
+                  message: "Another run claimed the Delivery",
+                  stage: "claim",
+                });
+              }
+
+              const sent = yield* backend
+                .send({ message: sendMessage, region: registration.region })
+                .pipe(
+                  // Interruptible by the timeout alone: the region still holds off a shutdown.
+                  Effect.interruptible,
+                  Effect.timeout(SES_SEND_TIMEOUT),
+                  Effect.catch((error) => {
+                    // SES refused it, or the request never reached SES (the backend reports a
+                    // 4xx or a DNS, connect or TLS failure as rejected), so nothing went out:
+                    // keep that answer and put the Delivery back as it was accepted. If the
+                    // requeue is not written, the kept answer tells the next run so.
+                    const refused = (
+                      failure: MessageDeliveryRetryableError | MessageDeliveryTerminalError,
+                    ) =>
+                      keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                        Effect.andThen(
+                          updateDelivery(
+                            db,
+                            { claimedAt, id: loaded.id },
+                            { startedAt: null, status: "queued" },
+                          ),
+                        ),
+                        Effect.ignore,
+                        Effect.andThen(Effect.fail(failure)),
+                      );
+                    // What may pass by itself (a throttle, the account paused, credentials or
+                    // configuration ops are changing, a network failure) is sent again later.
+                    const retried = refused(
+                      new MessageDeliveryRetryableError({
+                        cause: error,
+                        deliveryId: loaded.id,
+                        message: SES_REFUSED,
+                        stage: "send",
+                      }),
+                    );
+                    // Nothing the job's few minutes of retries would change, so it fails now,
+                    // through the dead-letter step. `MessageRejected` is SES refusing the
+                    // content, and also SES not counting the sender (or, for an account still
+                    // in SES's sandbox, a recipient) as verified in the region: a state of the
+                    // Domain or the account that someone has to fix first.
+                    const rejected = refused(
+                      new MessageDeliveryTerminalError({
+                        cause: error,
+                        deliveryId: loaded.id,
+                        message: SES_REJECTED_MESSAGE,
+                        stage: "send",
+                      }),
+                    );
+                    switch (error._tag) {
+                      case "EmailBackendRejected":
+                        switch (error.reason) {
+                          // A Project Sending Pause is SES isolating this Project: retrying
+                          // cannot get past it, and other Projects keep sending.
+                          case "project_sending_paused":
+                            return keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                              Effect.andThen(failProjectSendingPaused(error, claimedAt)),
+                            );
+                          case "message_rejected":
+                            return rejected;
+                          default:
+                            return retried;
+                        }
+                      case "EmailBackendMessageError":
+                        return rejected;
+                      case "EmailBackendAuthenticationError":
+                      case "EmailBackendConfigurationError":
+                      case "EmailBackendRateLimited":
+                        return retried;
+                      default:
+                        // Our timeout, a connection dropped after the request went out, a 5xx
+                        // or an answer we could not read: SES may have taken it. It stays
+                        // claimed, and once the claim is older than its lease a later run fails
+                        // it rather than send twice.
+                        return Effect.fail(
+                          new MessageDeliveryRetryableError({
+                            cause: error,
+                            deliveryId: loaded.id,
+                            message: "SES did not confirm the send; the outcome is unknown",
+                            stage: "send",
+                          }),
+                        );
+                    }
+                  }),
+                );
+
+              yield* keepSesAnswer(loaded.id, claimedAt, `${ACCEPTED}${sent.providerMessageId}`);
+              yield* recordSent(db, {
+                claimedAt,
+                deliveryId: loaded.id,
+                messageId: loaded.messageId,
+                messageTags: message.tags,
+                organizationId: appEnvironment.organizationId,
+                providerMessageId: sent.providerMessageId,
+              });
+              yield* confirmUsage(loaded.id);
+              return false;
+            }),
+          );
+          if (!restrip) {
+            return;
+          }
+        }
+        // Not stage `claim`: no other run has the Delivery, so on a last attempt the
+        // dead-letter step must fail it rather than leave it to one.
+        return yield* new MessageDeliveryRetryableError({
+          deliveryId: loaded.id,
+          message: "The Delivery's recipients or sender kept changing as it was claimed",
+          stage: "suppressions",
+        });
       }).pipe(
         Effect.mapError((error) => {
           switch (error._tag) {
