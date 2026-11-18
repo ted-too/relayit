@@ -12,6 +12,7 @@
       "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
       "@repo/persistence/*": ["../../packages/persistence/src/*"],
       "@repo/provider-aws/*": ["../../packages/provider-aws/src/*"],
+      "@repo/public-url": ["../../packages/public-url/src/index.ts"],
       "@repo/redis": ["../../packages/redis/src/index.ts"],
       "@repo/redis/*": ["../../packages/redis/src/*"],
       "@repo/template-render": ["../../packages/template-render/src/index.ts"],

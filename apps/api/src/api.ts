@@ -29,8 +29,9 @@ const json = HttpApiSchema.asJson({ contentType: "application/json;charset=utf-8
 const text = HttpApiSchema.asText({ contentType: "text/plain;charset=utf-8" });
 
 /**
- * The headers and JSON body each endpoint that takes a body declares. `RequestValidation`
- * checks a request against them before the endpoint's auth runs.
+ * The headers and JSON body each endpoint that takes a body declares. The endpoint's auth
+ * and `RequestValidation` check a request against them between them: its key before any
+ * of its body is read.
  */
 export const requestSchemas = {
   sendEmail: { headers: SendEmailHeaders, payload: SendEmailBody },
@@ -204,8 +205,8 @@ export class LegacyProject extends Context.Service<LegacyProject, { readonly id:
 ) {}
 
 /**
- * Checks a request against its endpoint's headers and JSON payload before anything else
- * runs, so a malformed or invalid request is refused the same way whatever its API key.
+ * Checks a request against its endpoint's path, headers and JSON payload once its API key
+ * has been verified, so only a request with a good key has its body read.
  */
 export class RequestValidation extends HttpApiMiddleware.Service<RequestValidation>()(
   "api/RequestValidation",
@@ -219,18 +220,31 @@ export class RequestValidation extends HttpApiMiddleware.Service<RequestValidati
   },
 ) {}
 
+/**
+ * What a request is refused with before its key is looked at (a body too large by its
+ * `Content-Length`) or in place of a key failure (a path or header that fails its schema,
+ * a missing `x-api-key` on `/messages/email` among them).
+ */
+const refusedUnread = [
+  RouteNotFound,
+  SchemaValidationFailed.pipe(HttpApiSchema.asJson()),
+  PayloadTooLarge.pipe(json),
+];
+
 /** Resolves `x-api-key` to its Project, refusing an unknown key with 403. */
 export class ApiKeyAuth extends HttpApiMiddleware.Service<
   ApiKeyAuth,
   { provides: CurrentProject }
->()("api/ApiKeyAuth", { error: [InvalidApiKey.pipe(json), InternalServerError.pipe(json)] }) {}
+>()("api/ApiKeyAuth", {
+  error: [InvalidApiKey.pipe(json), InternalServerError.pipe(json), ...refusedUnread],
+}) {}
 
 /** Resolves the legacy key to its Project and checks it is the one in the path. */
 export class LegacyApiKeyAuth extends HttpApiMiddleware.Service<
   LegacyApiKeyAuth,
   { provides: LegacyProject }
 >()("api/LegacyApiKeyAuth", {
-  error: [LegacyUnauthorized.pipe(json), LegacyProjectNotFound.pipe(json)],
+  error: [LegacyUnauthorized.pipe(json), LegacyProjectNotFound.pipe(json), ...refusedUnread],
 }) {}
 
 /** What both legacy endpoints share besides their body. */
@@ -278,6 +292,8 @@ export class Api extends HttpApi.make("relayit")
           }),
         ),
       )
+      // The one added last wraps the other and runs first: the key, then the body.
+      .middleware(RequestValidation)
       .middleware(ApiKeyAuth)
       .annotateMerge(OpenApi.annotations({ description: "Current send endpoints", title: "Send" })),
   )
@@ -305,6 +321,7 @@ export class Api extends HttpApi.make("relayit")
           }),
         ),
       )
+      .middleware(RequestValidation)
       .middleware(LegacyApiKeyAuth)
       .annotateMerge(
         OpenApi.annotations({
@@ -325,13 +342,34 @@ export class Api extends HttpApi.make("relayit")
       )
       .annotate(OpenApi.Exclude, true),
   )
-  // Added last, so it wraps the auth middleware and runs first.
-  .middleware(RequestValidation)
   .annotateMerge(
     OpenApi.annotations({
       description:
         "HTTP API for sending messages through Relayit. Prefer POST /messages/email for new integrations.",
       title: "Relayit API",
+      // The generator closes every object, but `/messages/email` drops a field it does not
+      // know rather than refuse it, at every depth: the body, a Contact, an attachment, a
+      // tag, `template`. Every object its body reaches is opened here so the document says
+      // what the route does; `topic_id`, the one field it refuses, stays declared as never
+      // valid.
+      transform: (spec) => {
+        const opened = new Set<unknown>();
+        const open = (schema: unknown): void => {
+          if (typeof schema !== "object" || schema === null || opened.has(schema)) {
+            return;
+          }
+          opened.add(schema);
+          if ("$ref" in schema && typeof schema.$ref === "string") {
+            open(spec.components.schemas[schema.$ref.replace("#/components/schemas/", "")]);
+          }
+          if ("additionalProperties" in schema && schema.additionalProperties === false) {
+            schema.additionalProperties = true;
+          }
+          Object.values(schema).forEach(open);
+        };
+        open(spec.paths["/messages/email"].post.requestBody.content["application/json"].schema);
+        return spec;
+      },
       version: "0.0.0",
     }),
   ) {}

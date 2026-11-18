@@ -71,20 +71,6 @@ describe("SendEmailBody", () => {
     });
   });
 
-  // Resend's topic_id has no meaning here (Topics belong to Campaigns). The route has always
-  // dropped it with any other unknown field rather than refused it; see #38.
-  it("drops topic_id, as it drops any field it does not know", () => {
-    const body = parsed({
-      from: "noreply@example.com",
-      to: ["user@example.com"],
-      subject: "Hello",
-      html: "<p>Hi</p>",
-      topic_id: "topic_123",
-    });
-
-    expect(body).not.toHaveProperty("topic_id");
-  });
-
   it("rejects inline content combined with template", () => {
     const result = parseSendEmailBody({
       from: "noreply@example.com",

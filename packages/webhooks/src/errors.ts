@@ -26,6 +26,7 @@ export class WebhookManagementError extends Data.TaggedError("WebhookManagementE
     | "endpoint_paused"
     | "endpoint_not_found"
     | "invalid_replay_state"
+    | "invalid_url"
     | "operation_failed";
   readonly message: string;
 }> {}

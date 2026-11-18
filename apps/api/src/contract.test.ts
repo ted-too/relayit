@@ -8,12 +8,10 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import { EmailAcceptInfrastructureError, EmailAcceptRejected } from "@repo/channels/email/accept";
-import {
-  AttachmentHostLookup,
-  resolveEmailAttachments,
-} from "@repo/channels/email/accept/attachments";
+import { resolveEmailAttachments } from "@repo/channels/email/accept/attachments";
 import { ATTACHMENTS_DEADLINE_SECONDS } from "@repo/channels/email/attachment-policy";
 import { UsageLimitExceeded } from "@repo/channels/usage";
+import { PublicHostLookup } from "@repo/public-url";
 import {
   AwsSnsTopicRejected,
   AwsSnsTopicsUnavailable,
@@ -70,6 +68,48 @@ const expectSchemaFailure = (
 };
 
 const refused = (message: string) => respond(422, { message, on: "body", type: "validation" });
+
+/**
+ * A request that announces 40 MiB and sends 1 KiB: an answer can only come from a handler
+ * that isn't waiting for the rest.
+ */
+const announced = (origin: string, path: string, headers: Record<string, string>) =>
+  Effect.promise(async () => {
+    let received = "";
+    const answered = Promise.withResolvers<string>();
+    const socket = await Bun.connect({
+      hostname: "127.0.0.1",
+      port: Number(new URL(origin).port),
+      socket: {
+        close: () => answered.resolve(received),
+        data: (_socket, chunk) => {
+          received += chunk.toString();
+          const [head, body] = received.split("\r\n\r\n");
+          const length = Number(/content-length: (\d+)/i.exec(head ?? "")?.[1]);
+          if (body !== undefined && body.length >= length) {
+            answered.resolve(received);
+          }
+        },
+      },
+    });
+    socket.write(
+      [
+        `POST ${path} HTTP/1.1`,
+        "host: api.test",
+        `content-length: ${40 * 1024 * 1024}`,
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        "",
+        `{"html":"${"a".repeat(1024)}`,
+      ].join("\r\n"),
+    );
+    const response = await Promise.race([
+      answered.promise,
+      Bun.sleep(2000).then(() => "no answer while the body is unread"),
+    ]);
+    socket.end();
+    const [head, body] = response.split("\r\n\r\n");
+    return { body, status: head?.split("\r\n")[0] };
+  });
 
 describe("the api's HTTP contract", () => {
   it.live("answers /health, and 404 NOT_FOUND to anything it does not route", () =>
@@ -231,15 +271,50 @@ describe("POST /messages/email", () => {
         "headers",
         "/x-api-key",
       );
-      // Headers are checked before the body.
-      expectSchemaFailure(
-        yield* request(origin, "POST", "/messages/email", {
-          body: email({ to: undefined }),
-          headers: asJson,
-        }),
-        "headers",
-        "/x-api-key",
-      );
+      // Without a key the body is never read, so nothing about it is answered: not that
+      // it fails the schema, nor that it isn't JSON.
+      for (const body of [email({ to: undefined }), "{not json"]) {
+        expectSchemaFailure(
+          yield* request(origin, "POST", "/messages/email", { body, headers: asJson }),
+          "headers",
+          "/x-api-key",
+        );
+      }
+    }),
+  );
+
+  it.live("answers a request whose key is missing or unknown without reading its body", () =>
+    Effect.gen(function* () {
+      const { accepted, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const unfinished = (path: string, key?: string) =>
+        announced(origin, path, {
+          "content-type": "application/json",
+          ...(key === undefined ? {} : { "x-api-key": key }),
+        });
+
+      expect(yield* unfinished("/messages/email")).toMatchObject({
+        body: expect.stringContaining('"property":"/x-api-key"'),
+        status: "HTTP/1.1 422 Unprocessable Entity",
+      });
+      expect(yield* unfinished("/messages/email", "rel_unknown")).toEqual({
+        body: JSON.stringify({ code: "invalid_api_key", message: "Invalid API key" }),
+        status: "HTTP/1.1 403 Forbidden",
+      });
+      expect(yield* unfinished("/send/acme/raw/email")).toEqual({
+        body: JSON.stringify({ details: [], message: "Unauthorized" }),
+        status: "HTTP/1.1 401 Unauthorized",
+      });
+      expect(yield* unfinished("/send/acme/raw/email", "rel_unknown")).toEqual({
+        body: JSON.stringify({ details: [], message: "Invalid API key" }),
+        status: "HTTP/1.1 401 Unauthorized",
+      });
+      // Another Project's key is refused for the path, its body unread too.
+      expect(yield* unfinished("/send/other/raw/email", GOOD_KEY)).toEqual({
+        body: JSON.stringify({ details: [], message: "Project not found" }),
+        status: "HTTP/1.1 404 Not Found",
+      });
+      expect(accepted).toEqual([]);
     }),
   );
 
@@ -257,13 +332,29 @@ describe("POST /messages/email", () => {
           }),
         ).toEqual(invalid);
       }
-      // Authentication comes before the body's cross-field checks and the App headers.
-      expect(
+      // Authentication comes before everything about the body (its JSON, its schema,
+      // its cross-field checks) and before the App headers.
+      for (const body of [
+        email({ template: { id: "tmpl_1" } }),
+        email({ to: undefined }),
+        "{not json",
+      ]) {
+        expect(
+          yield* request(origin, "POST", "/messages/email", {
+            body,
+            headers: { ...asJson, app: "web", "x-api-key": "rel_unknown" },
+          }),
+        ).toEqual(invalid);
+      }
+      // A header that fails its schema still comes before the key.
+      expectSchemaFailure(
         yield* request(origin, "POST", "/messages/email", {
-          body: email({ template: { id: "tmpl_1" } }),
-          headers: { ...asJson, app: "web", "x-api-key": "rel_unknown" },
+          body: email(),
+          headers: { ...asJson, "idempotency-key": "x".repeat(257), "x-api-key": "rel_unknown" },
         }),
-      ).toEqual(invalid);
+        "headers",
+        "/idempotency-key",
+      );
       expect(accepted).toEqual([]);
     }),
   );
@@ -287,10 +378,6 @@ describe("POST /messages/email", () => {
 
       expect(
         yield* request(origin, "POST", "/messages/email", { body: "{not json", headers: keyed }),
-      ).toEqual(badRequest);
-      // Parsing comes before the API key is looked at.
-      expect(
-        yield* request(origin, "POST", "/messages/email", { body: "{not json", headers: asJson }),
       ).toEqual(badRequest);
     }),
   );
@@ -413,13 +500,40 @@ describe("POST /messages/email", () => {
         "root",
       );
       expectSchemaFailure(yield* send(email(), { "x-api-key": GOOD_KEY }), "body", "root");
-      // The schema is checked before the API key.
-      expectSchemaFailure(
-        yield* send(email({ to: undefined }), { ...asJson, "x-api-key": "rel_unknown" }),
-        "body",
-        "/to",
-      );
       expect(accepted).toEqual([]);
+    }),
+  );
+
+  it.live("refuses topic_id with 422, and ignores any other field it does not know", () =>
+    Effect.gen(function* () {
+      const { accepted, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const send = (body: string) =>
+        request(origin, "POST", "/messages/email", { body, headers: keyed });
+
+      // A sender who names a Topic believes its consent was applied; it was not.
+      for (const topic of ["topic_123", "", null]) {
+        const refusal = yield* send(email({ topic_id: topic }));
+        expectSchemaFailure(refusal, "body", "/topic_id");
+        expect(JSON.parse(refusal.body)).toMatchObject({
+          message: "topic_id is not supported: this endpoint applies no Topic consent",
+        });
+      }
+      expect(accepted).toEqual([]);
+
+      // A Resend client sending a field Relayit doesn't know keeps working, at the top
+      // level and inside a Contact or an attachment.
+      expect(
+        yield* send(
+          email({
+            attachments: [{ content: "SGk=", filename: "hi.txt", size: 2 }],
+            audience_id: "aud_1",
+            to: [{ email: "jane@example.com", nickname: "J" }],
+          }),
+        ),
+      ).toEqual(respond(201, { id: "msg_1" }));
+      expect(accepted).toHaveLength(1);
+      expect(accepted[0]?.email).not.toHaveProperty("audience_id");
     }),
   );
 
@@ -520,7 +634,7 @@ describe("POST /messages/email", () => {
           accept: (input) =>
             resolveEmailAttachments(input.email.attachments, input.organizationId).pipe(
               Effect.provideService(FetchHttpClient.Fetch, neverAnswers),
-              Effect.provideService(AttachmentHostLookup, {
+              Effect.provideService(PublicHostLookup, {
                 resolve: () => Promise.resolve(["93.184.215.14"]),
               }),
               Effect.as({
@@ -755,6 +869,16 @@ describe("POST /send/:project/raw/email and /template/email", () => {
           headers: keyed,
         }),
       ).toEqual(respond(404, { details: [], message: "Project not found" }));
+      // The key comes before the body: one that fails the schema, or isn't JSON, changes
+      // none of these answers.
+      for (const body of [legacyRaw({ to: "bad" }), "{oops"]) {
+        expect(
+          yield* request(origin, "POST", "/send/acme/raw/email", { body, headers: asJson }),
+        ).toEqual(respond(401, { details: [], message: "Unauthorized" }));
+        expect(
+          yield* request(origin, "POST", "/send/other/raw/email", { body, headers: keyed }),
+        ).toEqual(respond(404, { details: [], message: "Project not found" }));
+      }
       expect(accepted).toEqual([]);
     }),
   );
@@ -777,7 +901,7 @@ describe("POST /send/:project/raw/email and /template/email", () => {
     }),
   );
 
-  it.live("refuses a body that fails the schema with 422 validation, before the key", () =>
+  it.live("refuses a body that fails the schema with 422 validation", () =>
     Effect.gen(function* () {
       const { accepted, stubs: boundary } = stubs();
       const origin = yield* serve(boundary);
@@ -820,16 +944,6 @@ describe("POST /send/:project/raw/email and /template/email", () => {
         ),
         "body",
         "/template/slug",
-      );
-      expectSchemaFailure(
-        yield* send("/send/acme/raw/email", legacyRaw({ to: "bad" }), asJson),
-        "body",
-        "/to",
-      );
-      expectSchemaFailure(
-        yield* send("/send/other/raw/email", legacyRaw({ payload: { subject: "Hi" } })),
-        "body",
-        "/payload",
       );
       expect(yield* send("/send/acme/raw/email", "{oops")).toEqual({
         body: "Bad Request",
@@ -934,6 +1048,42 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
         );
       }
       expect(received).toEqual([body, body, body]);
+    }),
+  );
+
+  it.live("answers 400 to a body larger than SNS sends, without reading it", () =>
+    Effect.gen(function* () {
+      const { received, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const rejected = { code: "bad_request", message: "SES notification handling failed" };
+
+      expect(yield* announced(origin, SES_NOTIFICATIONS_PATH, {})).toEqual({
+        body: JSON.stringify(rejected),
+        status: "HTTP/1.1 400 Bad Request",
+      });
+      // Without a Content-Length, reading stops once it passes the limit.
+      const chunked = yield* Effect.promise(async () => {
+        const response = await fetch(`${origin}${SES_NOTIFICATIONS_PATH}`, {
+          body: new ReadableStream({
+            start: (controller) => {
+              controller.enqueue(new TextEncoder().encode("a".repeat(2 * 1024 * 1024)));
+              controller.close();
+            },
+          }),
+          duplex: "half",
+          method: "POST",
+        });
+        return { body: await response.text(), status: response.status };
+      });
+      expect(chunked).toEqual({ body: JSON.stringify(rejected), status: 400 });
+      expect(received).toEqual([]);
+
+      // The most SNS sends, 256 KB of message escaped to twice that, is read.
+      const largest = "a".repeat(600 * 1024);
+      expect(yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, { body: largest })).toEqual(
+        respond(200, { ok: true }),
+      );
+      expect(received).toEqual([largest]);
     }),
   );
 

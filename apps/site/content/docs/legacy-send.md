@@ -24,6 +24,8 @@ Use them only if you already have code that calls them. New integrations should 
 | `401`  | `Unauthorized` or the key error | The key is missing or invalid.                                        |
 | `404`  | `Project not found`             | The key is valid but belongs to a different Project than `{project}`. |
 
+The API key is checked before the body is read. A request whose key is missing, invalid or for another Project gets that answer whatever its body holds, so fix the key first: only then does a body that is not JSON (`400`) or fails validation (`422`) say so.
+
 ## Raw email
 
 ```bash
