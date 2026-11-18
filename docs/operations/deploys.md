@@ -27,20 +27,51 @@ No app migrates. The api, the worker and the builder each check, before they ser
 
 ### Railway
 
-On the **api** service, Settings → Deploy → Pre-deploy Command:
-
-```
-bun run migrate.js
-```
-
-What Railway's documentation promises for it: it runs after the new image is ready and before the new deployment starts, in its own container from that image, on the private network with the service's variables (so `DATABASE_URL`), with no volumes. If it exits non-zero it is not retried and the deployment does not proceed; the previous api deployment keeps serving, since Railway stops a previous deployment only once the new one is online. It has no time limit unless Pre-deploy Timeout is set.
+The step is a pre-deploy command on the **api** service. Railway's documentation promises this much for one: it runs after the new image is ready and before the new deployment starts, in its own container from that image, on the private network with the service's variables (so `DATABASE_URL`), with no volumes; if it exits non-zero it is not retried and the deployment does not proceed; and it has no time limit unless Pre-deploy Timeout is set. Railway stops a previous deployment only once the new one is online, so when the step fails the previous api keeps serving.
 
 Two things it does not promise:
 
 - **How the command meets the image's entrypoint.** The documentation says a start command replaces an image's `ENTRYPOINT` and says nothing for a pre-deploy command. The api image therefore has a `CMD` and no `ENTRYPOINT` of its own, so the command runs whether Railway replaces the entrypoint or passes the command to it. The first deploy with the setting is the proof: the pre-deploy log ends with `Database migrations up to date`.
-- **That other services wait.** Railway deploys each service by itself; nothing holds the worker or the builder back until the api's pre-deploy command has finished. The apps' own check covers that: a new worker or builder that starts first waits for the step. While a new worker waits, no jobs run, because the worker has no healthcheck and Railway stops the previous one as soon as the new container starts; accepted sends stay queued and go out when it gets going. Give the api and the builder the healthcheck path `/health`, so that Railway keeps their previous deployment until the new one answers.
+- **That other services wait.** Railway deploys each service by itself; nothing holds the worker or the builder back until the api's pre-deploy command has finished. The apps' own check covers that: a new worker or builder that starts first waits for the step.
 
-What ordering is left: none to arrange by hand when the step succeeds, which is weaker than before, when the worker had to be rolled out after the api or it ran against a schema it did not match. What is left is the failure case. If the step fails, the api stays on the previous release, and the release's worker and builder wait five minutes, exit, are restarted by Railway (ten times by default) and then stay crashed, with nothing running jobs meanwhile. Fix the migration, redeploy the api so the step runs, then redeploy the worker and the builder if they have used up their restarts.
+#### The api's healthcheck comes first
+
+The api service must have `/health` as its healthcheck path before any of this is relied on. Railway marks a deployment with no healthcheck active as soon as its container starts, and then stops the previous one. An api that finds the database behind does not listen while it waits, so without the healthcheck a release whose migration was not applied (the command missing, or failing on a deploy that went ahead some other way) takes the api down: the new one replaces the old, waits five minutes, exits and is restarted, and for that time sends are refused, the dashboard is down and unsubscribe links fail. With the healthcheck, the new api never answers, Railway fails the deployment when the healthcheck times out (300 seconds by default), and the previous api keeps serving. The builder serves `/health` too and should have the same setting. The worker serves no HTTP and can have none.
+
+#### Setting it up
+
+Do these in order.
+
+1. On the api service, confirm Settings → Deploy → Healthcheck Path is `/health`, and set it if it is not. Do the same on the builder.
+2. Confirm the production database has every migration on `main`. The first deploy of an image that checks finds anything missing and waits rather than starts. Compare the folder names in `packages/persistence/drizzle/` with:
+
+   ```sql
+   select name from drizzle.__drizzle_migrations order by name;
+   ```
+
+   Every folder must be in the result. Rows the folder does not have are fine.
+
+3. Deploy the first release whose api image carries `migrate.js`, with no pre-deploy command yet. An image from before it has no `migrate.js`, so the command set early would fail and block the deploy.
+4. On the api service, set Settings → Deploy → Pre-deploy Command to:
+
+   ```
+   bun run migrate.js
+   ```
+
+5. Set Pre-deploy Timeout to 600 seconds. Without one a step that hangs holds the deployment open for good, and a step can hang: it waits without limit for the advisory lock while another run, or a session that died holding it, has it. Ten minutes is far longer than a migration here takes; raise it for a release with a slow one.
+6. Deploy the api and read the pre-deploy log. It ends with `Database migrations up to date`.
+
+All of this must be done before the first release that carries a migration.
+
+#### What a release does afterwards
+
+When the step succeeds, there is no ordering to arrange by hand, which is weaker than before, when the worker had to be rolled out after the api or it ran against a schema it did not match. A new worker or builder that starts before the step has finished waits for it. While a new worker waits no jobs run, because Railway has stopped the previous one; accepted sends stay queued and go out when it gets going.
+
+When the step fails, the api stays on the previous release. The release's worker and builder wait five minutes and exit non-zero. Railway's default restart policy is On Failure with at most ten restarts, so they are restarted and wait again, and once the restarts are used up they stay crashed. Nothing runs jobs meanwhile (#100). Fix the migration, redeploy the api so the step runs, then redeploy the worker and the builder if they have crashed.
+
+#### Rolling back
+
+With the command set, redeploying an api image from before the migrate step existed does not work: that image has no `migrate.js`, so the pre-deploy command fails, or runs until its timeout, and the deployment does not proceed. Clear the Pre-deploy Command first, roll back, and set it again when moving forward. Rolling back to any image that has the step needs nothing: the step finds the database ahead of it and exits 0, and the app starts.
 
 ### Docker Compose
 

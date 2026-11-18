@@ -35,9 +35,9 @@ RUN echo '{"dependencies":{"react": "^19.3.1", "react-dom": "^19.3.1", "@react-e
     bun install --production && \
     chown -R relayit:relayit /app /home/relayit
 
-# No migrations: the worker assumes the schema the api (or the builder) migrated.
 COPY --from=builder --chown=relayit:relayit /app/apps/worker/build ./
-# Read, never applied: the worker checks the database has them before it takes a job.
+# The migrations, read and never applied: the worker checks the database has them before it
+# takes a job. The api image's migrate step applies them.
 COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
 

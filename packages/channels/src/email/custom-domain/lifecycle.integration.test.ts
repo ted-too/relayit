@@ -8,7 +8,7 @@ import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
-import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { migrateDatabase } from "@repo/persistence/db/migrate";
 import {
   customDomain,
   emailDelivery,
@@ -1131,7 +1131,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         // Migrated here, so a migration that fails still has the database dropped. The
         // layer's pool is closed before it is.
         () =>
-          Effect.promise(() => migrateOnStartup(url.href)).pipe(
+          Effect.promise(() => migrateDatabase(url.href)).pipe(
             Effect.andThen(sweeps.pipe(Effect.provide(layer))),
           ),
         () => admin(`drop database "${name}" with (force)`),
