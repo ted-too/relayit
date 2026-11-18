@@ -10,8 +10,10 @@
  * Exit codes: 0 changed and confirmed, 2 usage, 3 no such user, 4 environment, 5 database,
  * 6 the sessions could not be confirmed.
  */
+import { JobsLive } from "@repo/jobs";
 import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { makeDbLive } from "@repo/persistence/db/effect";
+import { makeRedisLive } from "@repo/redis";
 import { Effect, Layer, Redacted } from "effect";
 import { apiConfig } from "./env";
 import { ApiAuth } from "./lib/auth";
@@ -36,16 +38,28 @@ const program = Effect.gen(function* () {
     return yield* setPlatformAdmin(auth, { admin: action === "grant", email });
   }).pipe(
     Effect.provide(
+      // What the api's better-auth hooks run with; nothing here reaches them.
       ApiAuth.layer({ ...config, rateLimit: false }).pipe(
-        Layer.provide(makeDbLive({ databaseUrl: Redacted.value(config.databaseUrl) })),
+        Layer.provide(
+          Layer.merge(
+            makeDbLive({ databaseUrl: Redacted.value(config.databaseUrl) }),
+            JobsLive.pipe(
+              Layer.provide(
+                makeRedisLive({
+                  keyPrefix: config.redisKeyPrefix,
+                  url: Redacted.value(config.redisUrl),
+                }),
+              ),
+            ),
+          ),
+        ),
       ),
     ),
   );
-  const count = `${sessions} open ${sessions === 1 ? "session" : "sessions"}`;
   console.log(
     action === "grant"
-      ? `${email} is a platform admin. ${count} of theirs now carry the role.`
-      : `${email} is no longer a platform admin. ${count} of theirs ended: they are signed out.`,
+      ? `${email} is a platform admin. Open sessions updated: ${sessions}.`
+      : `${email} is no longer a platform admin and is signed out. Open sessions ended: ${sessions}.`,
   );
 }).pipe(
   Effect.scoped,
@@ -71,6 +85,9 @@ const program = Effect.gen(function* () {
       }
       case "SqlError":
         return stop(5, "The database (DATABASE_URL) could not be reached. Nothing was changed.");
+      case "RedisCommandError":
+      case "RedisResponseError":
+        return stop(6, "The session store (REDIS_URL) could not be reached. Nothing was changed.");
       // What is left is the environment's: a variable missing, or a combination refused.
       default:
         return stop(
