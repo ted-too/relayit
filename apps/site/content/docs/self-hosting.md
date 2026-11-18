@@ -145,7 +145,7 @@ Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session coo
 | `SES_REGIONS`                                | The SES regions to send through, comma-separated, for example `us-east-1` or `eu-central-1,us-east-1`. New Domains are registered in the first. |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM credentials for the SES account.                                                                                                            |
 
-Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone.
+Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone. `CF_ROOT_DOMAIN` and every name under it are then reserved and can't be added as a Project's Domain, so give the Sandbox Domain a dedicated subdomain rather than a domain your Projects send from, and don't point it at a name a Project already holds.
 
 ### web (required)
 

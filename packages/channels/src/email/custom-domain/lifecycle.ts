@@ -385,7 +385,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     if (reserved) {
       return yield* new CustomDomainReserved({
         fqdn: input.fqdn,
-        message: "This domain is Relayit's own and can't be added to a Project.",
+        message: "This domain is reserved for the Sandbox Domain and can't be added to a Project.",
       });
     }
 

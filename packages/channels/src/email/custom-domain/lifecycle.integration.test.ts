@@ -361,7 +361,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     return payloads;
   });
 
-  it.live("a Sandbox Domain's root, or a name under it, can't be added or claimed", () => {
+  it.live("a Sandbox Domain's root, or a name under it, can't be added", () => {
     const { createdIdentities, enqueued, layer, scheduled } = boundaries();
     return Effect.gen(function* () {
       const db = yield* DB;
@@ -399,6 +399,65 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         organizationId: projectId,
       });
       expect(other.kind).toBe("created");
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a Domain already on a Sandbox Domain's root is not claimed or finished", () => {
+    const { createdIdentities, enqueued, layer, scheduled } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const holderId = yield* insertProject();
+      const claimantId = yield* insertProject();
+      const root = `${Bun.randomUUIDv7()}.sandbox.test`;
+      // As a deployment holds it if the root was added before it was refused: a row with its
+      // holder's link and no registration.
+      const [held] = yield* db
+        .insert(customDomain)
+        .values({
+          dkimPrivateKey: "private",
+          dkimPublicKey: "public",
+          dkimSelector: "s",
+          fqdn: root,
+        })
+        .returning({ id: customDomain.id });
+      const customDomainId = held?.id ?? "";
+      yield* db.insert(organizationDomain).values({
+        customDomainId,
+        organizationId: holderId,
+        ownershipToken: createOwnershipToken(),
+        ownershipVerificationStatus: "verified",
+      });
+      yield* db.insert(sandboxDomain).values({
+        cloudflareZoneId: "zone",
+        dkimPrivateKey: "private",
+        dkimPublicKey: "public",
+        dkimSelector: "relayit",
+        rootDomain: root,
+      });
+
+      for (const organizationId of [claimantId, holderId]) {
+        expect(
+          yield* Effect.flip(createCustomDomain({ fqdn: root, organizationId })),
+        ).toMatchObject({ _tag: "CustomDomainReserved" });
+      }
+
+      expect(
+        yield* db
+          .select({ organizationId: organizationDomain.organizationId })
+          .from(organizationDomain)
+          .where(eq(organizationDomain.customDomainId, customDomainId)),
+      ).toEqual([{ organizationId: holderId }]);
+      expect(
+        yield* db
+          .select({ id: emailDomainRegistration.id })
+          .from(emailDomainRegistration)
+          .where(eq(emailDomainRegistration.customDomainId, customDomainId)),
+      ).toEqual([]);
+      expect({ createdIdentities, enqueued, scheduled }).toEqual({
+        createdIdentities: [],
+        enqueued: [],
+        scheduled: [],
+      });
     }).pipe(Effect.provide(layer));
   });
 
