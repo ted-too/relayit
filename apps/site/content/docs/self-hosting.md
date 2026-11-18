@@ -125,6 +125,7 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 ## Production notes
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `APP_URL` to those URLs. Forward `X-Forwarded-For` to the api: sign-in is rate-limited per client address.
+- The web image sends `Strict-Transport-Security` with a one-year lifetime. Browsers apply it only to a dashboard they reached over https, so a plain-http setup such as the local Compose one is unaffected. Once a browser has opened the dashboard's hostname over https, it refuses plain http there for a year, so don't move that hostname back to http.
 - The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
 - If sign-in fails from the dashboard, check that the api's `APP_URL` is the URL you open the dashboard at, that web's `API_URL` is the api's public URL, and that the two are subdomains of one domain.
 - Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.

@@ -36,11 +36,12 @@ function RouteComponent() {
   const { mutate: signUpWithGitHub, isPending: isSigningUpWithGitHub } = useMutation({
     mutationFn: async () => {
       // GitHub returns to the api, which sends the browser back here: absolute URLs on this
-      // origin, which the api trusts. A failure comes back to sign-in, not to the api.
+      // origin, which the api trusts. A failure comes back to sign-in, not to the api, still
+      // knowing where the person was going.
       const { data, error } = await authClient.signIn.social({
         provider: "github",
         callbackURL,
-        errorCallbackURL: `${baseURL}/auth/sign-in`,
+        errorCallbackURL: `${baseURL}/auth/sign-in?${new URLSearchParams({ redirect: next })}`,
       });
 
       if (error) {

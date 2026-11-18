@@ -19,6 +19,9 @@ describe("returnPath", () => {
       "https://other.test/acme",
       "//other.test/acme",
       "/\\other.test/acme",
+      "/.//other.test/acme",
+      "/./\\other.test/acme",
+      `${ORIGIN}//other.test/acme`,
       "javascript:alert(1)",
     ]) {
       expect([redirect, returnPath(redirect, ORIGIN)]).toEqual([redirect, "/"]);
