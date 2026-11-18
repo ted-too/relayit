@@ -85,8 +85,12 @@ export function DomainPause({
       onSubmit: Schema.toStandardSchemaV1(PauseDomainInput),
     },
     onSubmit: async ({ value }) => {
-      await pauseDomain(value);
-      form.reset();
+      // A failure has been shown by the mutation's `onError`, and leaves the dialog open to
+      // try again; rethrown from here it would be nobody's to catch.
+      await pauseDomain(value).then(
+        () => form.reset(),
+        () => undefined,
+      );
     },
   });
 
@@ -149,7 +153,7 @@ export function DomainPause({
         confirm={{ text: "Unpause Domain", variant: "default" }}
         description={
           domain.pausedReason === "bad_reputation"
-            ? "This Domain was paused for its sending reputation. Unpause it only once what caused the bounces or complaints is fixed: sends from it are accepted and delivered again straight away."
+            ? "This Domain was paused for its sending reputation, by an admin or by Relayit itself when SES paused its Project's sending. Unpausing it here does not restore that: check the Project's tenant in SES and restore its sending there first, or the next send is accepted, fails for good and pauses the Domain again."
             : "Sends from this Domain are accepted and delivered again straight away."
         }
         // The mutation closes it on success and toasts on failure, which leaves it open.

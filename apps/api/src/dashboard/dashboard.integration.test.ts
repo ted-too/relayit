@@ -631,6 +631,49 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         expect(yield* unpause(owner)).toMatchObject(refused);
         expect((yield* send).status).toBe(422);
 
+        // An `admin` of the Project is no admin of the platform: the two share only a word.
+        const { auth } = yield* ApiAuth;
+        const projectAdmin = yield* signUp("pause-project-admin");
+        const projectAdminUser = yield* Effect.promise(() =>
+          auth.api.getSession({ headers: new Headers({ cookie: projectAdmin }) }),
+        );
+        yield* Effect.promise(() =>
+          auth.api.addMember({
+            body: {
+              organizationId: project.id,
+              role: "admin",
+              userId: projectAdminUser?.user.id ?? "",
+            },
+          }),
+        );
+        expect((yield* call("GET", `${p}/domains`, { as: projectAdmin })).status).toBe(200);
+        expect(yield* unpause(projectAdmin)).toMatchObject(refused);
+        expect(yield* pause(projectAdmin, "manual_admin_pause")).toMatchObject(refused);
+        expect(yield* call("GET", "/admin/projects", { as: projectAdmin })).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+
+        // An admin banned straight in the database keeps a session and loses this, until
+        // the ban lapses.
+        const bannedAdmin = yield* signUpAdmin("pause-banned");
+        const setBan = (banExpires: Date | null) =>
+          Effect.promise(async () => {
+            const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+            await db
+              .update(user)
+              .set({ banExpires, banned: true })
+              .where(eq(user.email, `pause-banned-${run}@example.test`));
+            await db.$client.end();
+          });
+        expect((yield* call("GET", "/admin/projects", { as: bannedAdmin })).status).toBe(200);
+        yield* setBan(null);
+        expect(yield* unpause(bannedAdmin)).toMatchObject(refused);
+        expect(yield* call("GET", "/admin/projects", { as: bannedAdmin })).toMatchObject(refused);
+        yield* setBan(new Date(Date.now() + 60 * 60 * 1000));
+        expect(yield* unpause(bannedAdmin)).toMatchObject(refused);
+        expect((yield* send).status).toBe(422);
+        yield* setBan(new Date(Date.now() - 1000));
+        expect((yield* call("GET", "/admin/projects", { as: bannedAdmin })).status).toBe(200);
+
         // An admin who is demoted loses it at once, whatever their session still says.
         const demoted = yield* signUpAdmin("pause-demoted");
         expect((yield* call("GET", "/admin/projects", { as: demoted })).status).toBe(200);

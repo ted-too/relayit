@@ -93,7 +93,7 @@ While a Domain is paused:
 - New sends from it fail with `422 invalid_from_address`.
 - Emails that were already queued fail at send time. They are not held for later.
 
-A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**.
+A Project's members cannot pause or unpause a Domain, whatever their role. Contact support if one of your Domains is paused. On a self-hosted deployment, a user with the platform admin role pauses and unpauses Domains under **Admin**, **Projects**. After a pause for sending reputation, restore the Project's sending in SES before unpausing the Domain: otherwise the next send fails and pauses it again.
 
 ## Claiming a domain from another Project
 

@@ -75,9 +75,12 @@ export const DashboardSessionLive = (appOrigin: string) =>
   );
 
 /**
- * Platform admins only, by better-auth's admin role on the user. The role is read from the
- * database on every request, not from the session: the session cookie caches the user for
- * minutes, and an admin who has been demoted must lose this at once.
+ * Platform admins only, by better-auth's admin role on the user. The role and the ban are
+ * read from the user's row on every request, not from the session: better-auth keeps a copy
+ * of the user beside the session in Redis for as long as the session lives, and answers
+ * `getSession` from that copy. A role removed or a ban set straight in the database never
+ * reaches it, so going by the session would leave a demoted or banned admin with this
+ * until they signed out.
  */
 export const PlatformAdminLive = (appOrigin: string) =>
   Layer.effect(
@@ -89,9 +92,16 @@ export const PlatformAdminLive = (appOrigin: string) =>
         Effect.gen(function* () {
           const user = yield* signedInUser(auth, appOrigin);
           const row = yield* db.query.user
-            .findFirst({ columns: { role: true }, where: { id: user.id } })
+            .findFirst({
+              columns: { banExpires: true, banned: true, role: true },
+              where: { id: user.id },
+            })
             .pipe(Effect.orDie);
-          if (!row?.role?.split(",").includes("admin")) {
+          // A ban with an expiry lapses at it, as better-auth treats one at sign-in.
+          const banned =
+            row?.banned === true &&
+            (row.banExpires === null || row.banExpires.getTime() > Date.now());
+          if (banned || !row?.role?.split(",").includes("admin")) {
             return yield* new Forbidden({ message: "Only a platform admin can do that." });
           }
           return yield* Effect.provideService(httpEffect, DashboardUser, {

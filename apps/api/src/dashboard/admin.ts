@@ -55,12 +55,11 @@ export const adminHandlers = HttpApiBuilder.group(DashboardApi, "admin", (handle
               },
             })
             .pipe(Effect.catch(operationFailed("Failed to list Projects.")));
+          const held = Map.groupBy(links, (link) => link.organizationId);
           return projects.map((project): AdminProject => ({
             ...project,
-            domains: links
-              .flatMap((link) =>
-                link.organizationId === project.id && link.customDomain ? [link.customDomain] : [],
-              )
+            domains: (held.get(project.id) ?? [])
+              .flatMap((link) => (link.customDomain ? [link.customDomain] : []))
               .sort((a, b) => a.fqdn.localeCompare(b.fqdn)),
           }));
         }),

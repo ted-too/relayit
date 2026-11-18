@@ -9,7 +9,8 @@ export const Route = createFileRoute("/_authd/admin")({
   beforeLoad: async ({ context }) => {
     const session = await context.queryClient.ensureQueryData(queries.session.me);
 
-    if (session.user.role !== "admin") {
+    // As the api decides it: better-auth stores several roles as one comma-separated string.
+    if (!session.user.role?.split(",").includes("admin")) {
       throw notFound();
     }
   },

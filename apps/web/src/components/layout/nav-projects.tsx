@@ -97,7 +97,7 @@ export function NavProject({ linkParams }: { linkParams?: { orgSlug: string } })
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
           >
-            {me.user.role === "admin" && (
+            {me.user.role?.split(",").includes("admin") && (
               <>
                 <MenuItem className="gap-2 p-2" render={<Link to="/admin" />}>
                   <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
