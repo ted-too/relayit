@@ -236,68 +236,16 @@ export const verifyCustomDomainOwnership = (input: {
         ),
       );
 
+    // Another claim took the Domain, or the Project removed its own: nothing left to check.
     if (!link) {
-      return yield* new VerifyCustomDomainError({
+      return {
         customDomainId: input.customDomain.id,
-        message: "Organization is not linked to this domain.",
-        operation: "persist",
         organizationId: input.organizationId,
-      });
+        ownershipVerificationStatus: "superseded" as const,
+      };
     }
 
-    const transfer = (proof: Parameters<typeof completeDomainClaimTransfer>[0]["proof"]) =>
-      completeDomainClaimTransfer({
-        customDomainId: input.customDomain.id,
-        db: input.db,
-        organizationId: input.organizationId,
-        proof,
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new VerifyCustomDomainError({
-              cause,
-              customDomainId: input.customDomain.id,
-              message: "Failed to complete domain claim transfer.",
-              operation: "claim",
-              organizationId: input.organizationId,
-            }),
-        ),
-      );
-
     if (link.ownershipVerificationStatus === "verified") {
-      // Before proofs were transactional, a proof could be recorded without the transfer that
-      // follows it, leaving two holders. The one proven last finishes taking the Domain.
-      const otherHolders = yield* input.db.query.organizationDomain
-        .findMany({
-          columns: { ownershipEverVerifiedAt: true },
-          where: {
-            customDomainId: input.customDomain.id,
-            organizationId: { ne: input.organizationId },
-            ownershipVerificationStatus: "verified",
-          },
-        })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new VerifyCustomDomainError({
-                cause,
-                customDomainId: input.customDomain.id,
-                message: "Failed to load the Domain's other holders.",
-                operation: "persist",
-                organizationId: input.organizationId,
-              }),
-          ),
-        );
-      const provenAt = (at: Date | null) => (at ? new Date(at).getTime() : 0);
-      if (
-        otherHolders.length > 0 &&
-        otherHolders.every(
-          (other) =>
-            provenAt(other.ownershipEverVerifiedAt) < provenAt(link.ownershipEverVerifiedAt),
-        )
-      ) {
-        yield* transfer({});
-      }
       return {
         customDomainId: input.customDomain.id,
         organizationId: input.organizationId,
@@ -312,6 +260,8 @@ export const verifyCustomDomainOwnership = (input: {
           and(
             eq(organizationDomain.organizationId, input.organizationId),
             eq(organizationDomain.customDomainId, input.customDomain.id),
+            // A refresh that proved the claim a moment ago keeps it.
+            eq(organizationDomain.ownershipVerificationStatus, "not_verified"),
           ),
         )
         .pipe(
@@ -368,7 +318,23 @@ export const verifyCustomDomainOwnership = (input: {
 
     // A link starts unverified only as a claim, so proving it takes the Domain.
     if (ownershipVerified) {
-      const took = yield* transfer({ ...checked, ownershipEverVerifiedAt: now });
+      const took = yield* completeDomainClaimTransfer({
+        customDomainId: input.customDomain.id,
+        db: input.db,
+        organizationId: input.organizationId,
+        proof: { ...checked, ownershipEverVerifiedAt: now },
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new VerifyCustomDomainError({
+              cause,
+              customDomainId: input.customDomain.id,
+              message: "Failed to complete domain claim transfer.",
+              operation: "claim",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
       return {
         customDomainId: input.customDomain.id,
         organizationId: input.organizationId,
