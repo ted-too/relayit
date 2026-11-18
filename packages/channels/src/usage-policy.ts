@@ -1,6 +1,6 @@
 import { DB } from "@repo/persistence/db/effect";
-import type { ChannelType, EmailLimits, MessagePurpose } from "@repo/persistence/db/schema";
-import { Context, Data, Effect, Layer } from "effect";
+import type { ChannelType, MessagePurpose } from "@repo/persistence/db/schema";
+import { Context, Data, Effect, Layer, Schema } from "effect";
 
 export interface UsagePolicyInput {
   readonly billingUserId?: string;
@@ -20,7 +20,11 @@ export interface UsagePolicyResult {
 
 export class UsagePolicyError extends Data.TaggedError("UsagePolicyError")<{
   readonly cause?: unknown;
-  readonly code: "billing_user_not_found" | "channel_limits_not_found" | "user_not_found";
+  readonly code:
+    | "billing_user_not_found"
+    | "channel_limits_invalid"
+    | "channel_limits_not_found"
+    | "user_not_found";
   readonly organizationId: string;
 }> {}
 
@@ -31,6 +35,21 @@ export interface UsagePolicyService {
 export class UsagePolicy extends Context.Service<UsagePolicy, UsagePolicyService>()(
   "Channels/UsagePolicy",
 ) {}
+
+// The ledger reads a negative limit as unlimited, so a cap is null or a count, nothing else.
+const SendCap = Schema.NullOr(
+  Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+);
+
+/**
+ * `user_channel.limits`, then one purpose's caps in it. Both caps are required: a row in
+ * any other shape (the `managed` level #34 dropped, a hand-edited one) fails the send
+ * instead of being read as having no caps.
+ */
+const decodeLimits = Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown));
+const decodePurposeCaps = Schema.decodeUnknownEffect(
+  Schema.Struct({ dailySends: SendCap, monthlySends: SendCap }),
+);
 
 const asDate = (value: Date | string) => (value instanceof Date ? value : new Date(value));
 
@@ -171,8 +190,17 @@ export const UsagePolicyLive = Layer.effect(
                   start: asDate(subscription.periodStart),
                 }
               : anniversaryPeriod(asDate(user.createdAt), reservedAt);
-          const limits = channel.limits as EmailLimits;
-          const bucket = limits[input.purpose].managed;
+          const bucket = yield* decodeLimits(channel.limits).pipe(
+            Effect.flatMap((limits) => decodePurposeCaps(limits[input.purpose])),
+            Effect.mapError(
+              (cause) =>
+                new UsagePolicyError({
+                  cause,
+                  code: "channel_limits_invalid",
+                  organizationId: input.organizationId,
+                }),
+            ),
+          );
 
           return {
             billingUserId,
