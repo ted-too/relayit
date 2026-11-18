@@ -1,12 +1,13 @@
 import { Jobs } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
-import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
+import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
 import {
   type CustomDomain,
   customDomain,
   type DomainPausedReason,
   emailDnsRecord,
   emailDomainRegistration,
+  type OrganizationDomainInsert,
   organizationDomain,
 } from "@repo/persistence/db/schema";
 import { and, eq, ne } from "drizzle-orm";
@@ -87,7 +88,14 @@ const loadCustomDomainKeyMaterial = (domain: CustomDomain) =>
     } satisfies DomainKeyMaterial;
   });
 
-const assertOrgDomainLink = (input: {
+/**
+ * How long a claim has to prove ownership. One left unproven lapses and its next check
+ * removes it, so abandoned claims don't pile up.
+ */
+export const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The Project holds the Domain: its link is ownership-verified, not a claim. */
+const assertDomainHolder = (input: {
   readonly customDomainId: string;
   readonly organizationId: string;
 }) =>
@@ -122,10 +130,22 @@ const assertOrgDomainLink = (input: {
       });
     }
 
+    if (link.ownershipVerificationStatus !== "verified") {
+      return yield* new CustomDomainError({
+        customDomainId: input.customDomainId,
+        message: "Prove ownership of this Domain before changing it.",
+        operation: "claim",
+        organizationId: input.organizationId,
+      });
+    }
+
     return link;
   });
 
-/** Registers the domain with SES in the default region and records where. */
+/**
+ * Records the Domain's root DNS records, registers it with SES in the default region and
+ * records where. Each step is safe to repeat, so a retry finishes a registration that failed.
+ */
 const registerCustomDomainIdentity = (input: {
   readonly customDomainId: string;
   readonly db: DatabaseExecutor;
@@ -136,6 +156,28 @@ const registerCustomDomainIdentity = (input: {
     const backend = yield* EmailBackend;
     const managedDns = yield* EmailManagedDns;
     const region = backend.defaultRegion;
+
+    yield* managedDns
+      .reconcile({
+        customDomainId: input.customDomainId,
+        owner: customDomainRootDnsOwner(input.customDomainId),
+        records: buildCustomDomainRootDnsRecords({
+          dkimPublicKey: input.keyMaterial.dkimPublicKey,
+          dkimSelector: input.keyMaterial.dkimSelector,
+          fqdn: input.fqdn,
+        }),
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new CustomDomainError({
+              cause,
+              customDomainId: input.customDomainId,
+              message: "Failed to materialize custom domain root DNS.",
+              operation: "create",
+            }),
+        ),
+      );
 
     const identity = yield* backend
       .createIdentity({
@@ -279,8 +321,9 @@ const createOrgDomainLink = (input: {
   });
 
 /**
- * Create or claim a Project Custom Domain. Customer publishes DNS (no CF
- * auto-manage). New FQDNs become owned immediately; held FQDNs enter a claim.
+ * Add a Domain to a Project. A new FQDN is the Project's at once. One already added, by
+ * another Project or by none that still holds it, becomes a claim the Project proves with
+ * a TXT record before it may send from or change the Domain.
  */
 export const createCustomDomain = (input: CreateCustomDomainInput) =>
   Effect.gen(function* () {
@@ -308,10 +351,23 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       );
 
     if (existing) {
-      const alreadyLinked = existing.organizations.some(
+      const ownLink = existing.organizations.find(
         (organization) => organization.organizationId === input.organizationId,
       );
-      if (alreadyLinked) {
+      if (ownLink) {
+        // A first add that failed after writing the Domain left it unregistered or never
+        // checked; adding it again finishes the job.
+        if (ownLink.ownershipVerificationStatus === "verified" && existing.lastCheckedAt === null) {
+          if (!existing.registration) {
+            yield* registerCustomDomainIdentity({
+              customDomainId: existing.id,
+              db,
+              fqdn: existing.fqdn,
+              keyMaterial: yield* loadCustomDomainKeyMaterial(existing),
+            });
+          }
+          yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
+        }
         return { customDomainId: existing.id, kind: "existing" as const };
       }
 
@@ -348,58 +404,34 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         }
       }
 
-      const verifiedOwner = existing.organizations.find(
-        (organization) => organization.ownershipVerificationStatus === "verified",
-      );
-      const pendingClaim = existing.organizations.find(
-        (organization) => organization.ownershipVerificationStatus !== "verified",
-      );
-
-      if (verifiedOwner) {
-        if (pendingClaim) {
-          return yield* new CustomDomainError({
-            customDomainId: existing.id,
-            message: "Another Project already has a pending claim on this domain.",
-            operation: "claim",
-            organizationId: input.organizationId,
-          });
-        }
-
-        yield* createOrgDomainLink({
-          customDomainId: existing.id,
-          db,
-          organizationId: input.organizationId,
-          ownershipVerified: false,
-        });
-
-        if (!existing.registration) {
-          yield* registerCustomDomainIdentity({
-            customDomainId: existing.id,
-            db,
-            fqdn: existing.fqdn,
-            keyMaterial: yield* loadCustomDomainKeyMaterial(existing),
-          });
-        }
-
-        yield* scheduleCustomDomainVerification({
-          customDomainId: existing.id,
-          ownership: { organizationId: input.organizationId },
-        });
-
-        return { customDomainId: existing.id, kind: "claim" as const };
-      }
-
+      // Proof is asked for even when no Project holds the Domain any more: one whose holder
+      // was deleted, or left while a claim was pending, is still someone's DNS and DKIM key.
+      // Claims run side by side: each has its own token, and the first proven takes the
+      // Domain from the rest, so one claim never blocks another.
       yield* createOrgDomainLink({
         customDomainId: existing.id,
         db,
         organizationId: input.organizationId,
-        ownershipVerified: true,
+        ownershipVerified: false,
       });
 
-      return { customDomainId: existing.id, kind: "existing" as const };
+      if (!existing.registration) {
+        yield* registerCustomDomainIdentity({
+          customDomainId: existing.id,
+          db,
+          fqdn: existing.fqdn,
+          keyMaterial: yield* loadCustomDomainKeyMaterial(existing),
+        });
+      }
+
+      yield* scheduleCustomDomainVerification({
+        customDomainId: existing.id,
+        ownership: { organizationId: input.organizationId },
+      });
+
+      return { customDomainId: existing.id, kind: "claim" as const };
     }
 
-    const managedDns = yield* EmailManagedDns;
     const crypto = yield* SymmetricCrypto;
     const keyMaterial = createDomainKeyMaterial();
     const encryptedPrivateKey = yield* crypto.encrypt(keyMaterial.dkimPrivateKey).pipe(
@@ -425,30 +457,49 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       try: () => dnsLookups.detectProvider(input.fqdn),
     });
 
-    const [row] = yield* db
-      .insert(customDomain)
-      .values({
-        dkimPrivateKey: encryptedPrivateKey,
-        dkimPublicKey: keyMaterial.dkimPublicKey,
-        dkimSelector: keyMaterial.dkimSelector,
-        fqdn: input.fqdn,
-        provider: detectedProvider,
-        verificationStatus: "not_verified",
-        verifyBackoffLevel: 0,
-      })
-      .returning()
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              message: "Failed to insert custom domain.",
-              operation: "persist",
+    // The Domain and the Project's link land together, so a registration that fails after
+    // this leaves the Domain with its holder, who finishes it by adding it again.
+    const row = yield* db
+      .transaction((tx) =>
+        Effect.gen(function* () {
+          const [inserted] = yield* tx
+            .insert(customDomain)
+            .values({
+              dkimPrivateKey: encryptedPrivateKey,
+              dkimPublicKey: keyMaterial.dkimPublicKey,
+              dkimSelector: keyMaterial.dkimSelector,
+              fqdn: input.fqdn,
+              provider: detectedProvider,
+              verificationStatus: "not_verified",
+              verifyBackoffLevel: 0,
+            })
+            .returning();
+          if (inserted) {
+            yield* createOrgDomainLink({
+              customDomainId: inserted.id,
+              db: tx,
               organizationId: input.organizationId,
-            }),
-        ),
+              ownershipVerified: true,
+            });
+          }
+          return inserted;
+        }),
+      )
+      .pipe(
+        Effect.mapError((error) => {
+          switch (error._tag) {
+            case "CustomDomainError":
+              return error;
+            default:
+              return new CustomDomainError({
+                cause: error,
+                message: "Failed to insert custom domain.",
+                operation: "persist",
+                organizationId: input.organizationId,
+              });
+          }
+        }),
       );
-
     if (!row) {
       return yield* new CustomDomainError({
         message: "Failed to insert custom domain.",
@@ -457,40 +508,11 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       });
     }
 
-    yield* managedDns
-      .reconcile({
-        customDomainId: row.id,
-        owner: customDomainRootDnsOwner(row.id),
-        records: buildCustomDomainRootDnsRecords({
-          dkimPublicKey: keyMaterial.dkimPublicKey,
-          dkimSelector: keyMaterial.dkimSelector,
-          fqdn: input.fqdn,
-        }),
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              customDomainId: row.id,
-              message: "Failed to materialize custom domain root DNS.",
-              operation: "create",
-            }),
-        ),
-      );
-
     yield* registerCustomDomainIdentity({
       customDomainId: row.id,
       db,
       fqdn: input.fqdn,
       keyMaterial,
-    });
-
-    yield* createOrgDomainLink({
-      customDomainId: row.id,
-      db,
-      organizationId: input.organizationId,
-      ownershipVerified: true,
     });
 
     yield* scheduleCustomDomainVerification({ customDomainId: row.id });
@@ -500,7 +522,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
 
 export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
   Effect.gen(function* () {
-    yield* assertOrgDomainLink(input);
+    yield* assertDomainHolder(input);
     const db = yield* DB;
 
     yield* db
@@ -528,7 +550,7 @@ export const pauseCustomDomain = (input: PauseCustomDomainInput) =>
 
 export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   Effect.gen(function* () {
-    yield* assertOrgDomainLink(input);
+    yield* assertDomainHolder(input);
     const db = yield* DB;
 
     yield* db
@@ -555,29 +577,63 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   });
 
 /**
- * After ownership verifies on a claim: every other Project loses the Domain. Its SES
- * registration and DNS records stay, since they belong to the domain, not the Project.
+ * A proven claim takes the Domain: its link is marked proven and every other Project's link
+ * goes, in one transaction holding the Domain's row. A failure leaves the claim unproven to
+ * be checked again, and of two claims proven at once the second finds its link gone. False
+ * when it is: another claim took the Domain first. The SES registration and DNS records
+ * stay, since they belong to the Domain, not the Project.
  */
 export const completeDomainClaimTransfer = (input: {
-  readonly customDomain: CustomDomain;
-  readonly db: DatabaseExecutor;
+  readonly customDomainId: string;
+  readonly db: Database;
   readonly organizationId: string;
+  readonly proof: Pick<
+    OrganizationDomainInsert,
+    | "ownershipBackoffLevel"
+    | "ownershipEverVerifiedAt"
+    | "ownershipLastCheckedAt"
+    | "ownershipNextVerifyAt"
+  >;
 }) =>
   input.db
-    .delete(organizationDomain)
-    .where(
-      and(
-        eq(organizationDomain.customDomainId, input.customDomain.id),
-        ne(organizationDomain.organizationId, input.organizationId),
-      ),
+    .transaction((tx) =>
+      Effect.gen(function* () {
+        yield* tx
+          .select({ id: customDomain.id })
+          .from(customDomain)
+          .where(eq(customDomain.id, input.customDomainId))
+          .for("update");
+        const [proven] = yield* tx
+          .update(organizationDomain)
+          .set({ ...input.proof, ownershipVerificationStatus: "verified" })
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              eq(organizationDomain.organizationId, input.organizationId),
+            ),
+          )
+          .returning({ organizationId: organizationDomain.organizationId });
+        if (!proven) {
+          return false;
+        }
+        yield* tx
+          .delete(organizationDomain)
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              ne(organizationDomain.organizationId, input.organizationId),
+            ),
+          );
+        return true;
+      }),
     )
     .pipe(
       Effect.mapError(
         (cause) =>
           new CustomDomainError({
             cause,
-            customDomainId: input.customDomain.id,
-            message: "Failed to remove source Project domain link.",
+            customDomainId: input.customDomainId,
+            message: "Failed to complete the Domain claim transfer.",
             operation: "claim",
             organizationId: input.organizationId,
           }),

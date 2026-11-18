@@ -106,7 +106,7 @@ export class DomainsApi extends HttpApiGroup.make("domains")
       payload: CreateDomainInput,
       success: Domain,
     }).annotate(RequiresPermission, { domain: ["create"] }),
-    // Checks SES, DNS and, for a claim, ownership now rather than on the worker's cadence.
+    // Checks SES and DNS now rather than on the worker's cadence; for a claim, only its proof.
     HttpApiEndpoint.post("refresh", "/:domainId/refresh", {
       error: failures,
       params: domain,

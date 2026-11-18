@@ -66,7 +66,7 @@ Type  Name                              Content
 TXT   _relayit-challenge.example.com    "relayit-domain-verification=<token>"
 ```
 
-This table only appears when you are claiming a domain that another Project holds.
+This table only appears when you are claiming a domain that was already added to Relayit.
 
 ## Verification
 
@@ -97,13 +97,15 @@ Pausing and unpausing are not available as dashboard actions yet. Contact suppor
 
 ## Claiming a domain from another Project
 
-If you add a domain that another Project already holds, Relayit starts a claim instead of failing:
+If you add a domain that was already added to Relayit, by another Project or by one that no longer exists, Relayit starts a claim instead of failing:
 
 1. The Domain appears in your list with a `claim pending` badge.
 2. The Domain page shows an **Ownership** table with a `_relayit-challenge` TXT record.
 3. Publish that record and select **Refresh**.
 
-When ownership verifies, the domain moves to your Project and the other Project loses it. If another Project already has a pending claim on the same domain, adding it fails until that claim is resolved.
+Until ownership verifies, the Domain is not yours: you cannot send from it, pause or unpause it, and its page shows only the ownership record.
+
+When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 
 ## Delete a Domain
 

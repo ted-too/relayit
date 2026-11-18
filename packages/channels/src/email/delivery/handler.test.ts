@@ -73,6 +73,8 @@ const makeDb = (overrides: {
   readonly delivery?: typeof baseDelivery | null;
   /** What a conditional update matches: the dead-letter path only fails an unfinished one. */
   readonly failedOnDeadLetter?: boolean;
+  /** Whether the sending Project's link to the Domain is ownership-verified. */
+  readonly holdsDomain?: boolean;
   readonly orgSlug?: string;
   readonly suppressedEmails?: readonly string[];
 }) => {
@@ -110,6 +112,16 @@ const makeDb = (overrides: {
       },
       organizationAppEnvironment: {
         findFirst: () => Effect.succeed({ organizationId: "org_test" }),
+      },
+      organizationDomain: {
+        findFirst: (query: { where: Record<string, unknown> }) =>
+          Effect.succeed(
+            (overrides.holdsDomain ?? true) &&
+              query.where.organizationId === "org_test" &&
+              query.where.ownershipVerificationStatus === "verified"
+              ? { organizationId: "org_test" }
+              : null,
+          ),
       },
     },
     select: () => ({
@@ -221,6 +233,23 @@ describe("emailDeliverHandler", () => {
           stage: "domain",
         });
         expect(updates[0]).toMatchObject({ status: "failed" });
+        return error;
+      }),
+    );
+  });
+
+  it.effect("fails, without sending, a Delivery whose Project no longer holds the Domain", () => {
+    // A claim proven between accept and send moved the Domain to another Project.
+    const { db } = makeDb({ holdsDomain: false });
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(testLayer(db, { send: () => Effect.die("sent on another Project's Domain") })),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryTerminalError",
+          message: "The Project no longer holds the sending Domain",
+          stage: "domain",
+        });
         return error;
       }),
     );
