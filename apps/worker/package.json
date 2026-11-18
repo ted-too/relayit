@@ -1,0 +1,22 @@
+{
+  "name": "@repo/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts bun --no-env-file run --watch ./src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./build --target bun",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/channels": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/logging": "workspace:*",
+    "@repo/object-storage": "workspace:*",
+    "@repo/persistence": "workspace:*",
+    "@repo/provider-aws": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "@repo/webhooks": "workspace:*",
+    "effect": "catalog:"
+  }
+}

@@ -5,11 +5,7 @@ import { Config, Effect, Option } from "effect";
 export const apiConfig = Effect.gen(function* () {
   const config = yield* Config.all({
     apiUrl: Config.url("API_URL"),
-    appUrl: Config.url("APP_URL"),
     betterAuthSecrets: Config.redacted("BETTER_AUTH_SECRETS"),
-    cfApiToken: Config.redacted("CF_API_TOKEN").pipe(Config.option),
-    cfRootDomain: Config.string("CF_ROOT_DOMAIN").pipe(Config.option),
-    cfZoneId: Config.string("CF_ZONE_ID").pipe(Config.option),
     databaseUrl: Config.redacted("DATABASE_URL"),
     emailBackend: Config.literals(["ses", "fake"], "EMAIL_BACKEND").pipe(Config.option),
     hostname: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),

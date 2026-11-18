@@ -18,7 +18,7 @@ const DEFAULT_LOCAL_DIRECTORY = NodePath.resolve(
 
 /**
  * `OBJECT_STORAGE` when set. Otherwise local only when NODE_ENV says development or test:
- * the api and builder images don't set NODE_ENV, so an unset one must keep meaning S3,
+ * the api, worker and builder images don't set NODE_ENV, so an unset one must keep meaning S3,
  * with the same required `S3_*` variables as before local mode existed.
  */
 export const objectStorageConfig = Effect.gen(function* () {

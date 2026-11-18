@@ -23,11 +23,11 @@
         "@opentelemetry/api": "^1.9.1",
         "@repo/channels": "workspace:*",
         "@repo/jobs": "workspace:*",
+        "@repo/logging": "workspace:*",
         "@repo/object-storage": "workspace:*",
         "@repo/persistence": "workspace:*",
         "@repo/provider-aws": "workspace:*",
         "@repo/redis": "workspace:*",
-        "@repo/webhooks": "workspace:*",
         "better-auth": "catalog:",
         "effect": "catalog:",
         "elysia": "^1.4.29",
@@ -124,6 +124,21 @@
         "vite": "catalog:",
       },
     },
+    "apps/worker": {
+      "name": "@repo/worker",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/channels": "workspace:*",
+        "@repo/jobs": "workspace:*",
+        "@repo/logging": "workspace:*",
+        "@repo/object-storage": "workspace:*",
+        "@repo/persistence": "workspace:*",
+        "@repo/provider-aws": "workspace:*",
+        "@repo/redis": "workspace:*",
+        "@repo/webhooks": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "packages/channels": {
       "name": "@repo/channels",
       "version": "0.0.0",
@@ -150,6 +165,13 @@
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "typeid-js": "catalog:",
+      },
+    },
+    "packages/logging": {
+      "name": "@repo/logging",
+      "version": "0.0.0",
+      "dependencies": {
+        "effect": "catalog:",
       },
     },
     "packages/object-storage": {
@@ -859,6 +881,8 @@
 
     "@repo/jobs": ["@repo/jobs@workspace:packages/jobs"],
 
+    "@repo/logging": ["@repo/logging@workspace:packages/logging"],
+
     "@repo/object-storage": ["@repo/object-storage@workspace:packages/object-storage"],
 
     "@repo/oxlint-plugin": ["@repo/oxlint-plugin@workspace:tooling/oxlint-plugin"],
@@ -884,6 +908,8 @@
     "@repo/web": ["@repo/web@workspace:apps/web"],
 
     "@repo/webhooks": ["@repo/webhooks@workspace:packages/webhooks"],
+
+    "@repo/worker": ["@repo/worker@workspace:apps/worker"],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.2.1", "", { "os": "android", "cpu": "arm64" }, "sha512-02hOeOSryYxVrOIphmLAsqnCJWxwlzFk+pEt/N/i6OgT3lShHO7xGCU5cpgchRDHboAEbSjzgGh+O/u1GswQmA=="],
 

@@ -4,7 +4,7 @@ import { Elysia, status } from "elysia";
 import { createApiKeyMiddleware } from "../../lib/api-key";
 import type { ApiAuth } from "../../lib/auth";
 import type { RunApiEffect } from "../../lib/effect";
-import { logEffectFailure } from "../../lib/log-failure";
+import { logEffectFailure } from "@repo/logging";
 import {
   type EmailContact,
   parseEmailFrom,

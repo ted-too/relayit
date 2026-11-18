@@ -7,15 +7,16 @@ description: "Run Relayit on your own infrastructure with Docker Compose: images
 
 Relayit is source-available under the Business Source License 1.1. You can run it on your own servers for your own use. You may not offer it as a competing hosted notification service. See the [LICENSE](https://github.com/ted-too/relayit/blob/main/LICENSE) for the full terms.
 
-A self-hosted install has two Relayit services plus Postgres, Redis, and S3-compatible storage:
+A self-hosted install has three Relayit services plus Postgres, Redis, and S3-compatible storage:
 
-| Service          | Image                                            | Role                                                                                                                        |
-| ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, provider webhooks) and the background job worker, in one process. |
-| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard and authentication.                                                                                           |
-| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                       |
-| postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                             |
-| redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                          |
+| Service          | Image                                            | Role                                                                                                                                    |
+| ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, provider webhooks).                                                           |
+| worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out. |
+| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard and authentication.                                                                                                       |
+| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                                   |
+| postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                                         |
+| redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                                      |
 
 You also need an S3-compatible bucket (for example Cloudflare R2, AWS S3, or a Bunny Storage zone) for attachments and template artifacts.
 
@@ -70,7 +71,7 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 
 ## Environment variables
 
-`env.example` mirrors what the services validate at startup. Compose maps `WEB_URL` to the api's `APP_URL` and the web's `VITE_BASE_URL`, and builds `DATABASE_URL` from the `POSTGRES_*` values.
+`env.example` mirrors what the services validate at startup. Compose maps `WEB_URL` to the worker's `APP_URL` and the web's `VITE_BASE_URL`, and builds `DATABASE_URL` from the `POSTGRES_*` values.
 
 ### api (required)
 
@@ -79,11 +80,22 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 | `DATABASE_URL`                                                                      | Postgres connection string.                                                                                                                               |
 | `REDIS_URL`                                                                         | Redis connection string.                                                                                                                                  |
 | `API_URL`                                                                           | Public URL of the API.                                                                                                                                    |
-| `APP_URL`                                                                           | Public URL of the dashboard. Used for trusted origins and cookies.                                                                                        |
 | `BETTER_AUTH_SECRETS`                                                               | Versioned secrets for auth and for sealing provider credentials and DKIM keys. Format `1:secret`, or `2:new,1:old` while rotating (the first is current). |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                                             |
 
-Optional: `LOG_LEVEL`, and `WEB_CONCURRENCY` (on Linux, the number of HTTP child processes; the job worker stays on the primary process).
+Optional: `LOG_LEVEL`. The api applies database migrations when it starts.
+
+### worker (required)
+
+| Variable                    | Description                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `REDIS_URL` | The same as the api.                                                                              |
+| `API_URL`                   | Public URL of the API. The worker points Provider delivery notifications (SES through SNS) at it. |
+| `APP_URL`                   | Public URL of the dashboard. Used in unsubscribe links.                                           |
+| `BETTER_AUTH_SECRETS`       | The same value as the api.                                                                        |
+| `S3_*`                      | The same as the api.                                                                              |
+
+Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone. The worker does not migrate the database; start it after the api, as the Compose file does.
 
 ### web (required)
 
@@ -110,9 +122,9 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 ## Production notes
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `WEB_URL` to those URLs.
-- The api process serves HTTP and runs the job worker. Scale by running more api replicas.
+- The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
 - If the dashboard points at the wrong origin, restart web with the corrected `VITE_BASE_URL` and `API_URL`. No rebuild is needed.
-- Check logs with `docker compose logs -f api` and `docker compose logs -f web`.
+- Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
 
 ## How self-hosted differs from Cloud
 

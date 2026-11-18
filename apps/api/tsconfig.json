@@ -7,6 +7,8 @@
       "@repo/channels/*": ["../../packages/channels/src/*"],
       "@repo/jobs": ["../../packages/jobs/src/index.ts"],
       "@repo/jobs/*": ["../../packages/jobs/src/*"],
+      "@repo/logging": ["../../packages/logging/src/index.ts"],
+      "@repo/logging/*": ["../../packages/logging/src/*"],
       "@repo/object-storage": ["../../packages/object-storage/src/index.ts"],
       "@repo/object-storage/*": ["../../packages/object-storage/src/*"],
       "@repo/persistence/*": ["../../packages/persistence/src/*"],

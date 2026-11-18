@@ -7,14 +7,14 @@ bun install          # also patches tsc and installs the commit hook
 cp .env.example .env # then point DATABASE_URL at an empty local database
 bun run db:migrate
 bun run db:seed      # a user, a Project, a Domain and an API key; it prints how to use them
-bun run dev          # dashboard :3000, site :3001, api :3005, builder :3006
+bun run dev          # dashboard :3000, site :3001, api :3005, builder :3006, and the worker
 ```
 
 For a fresh start, drop and recreate the database, then migrate and seed again. Tests need no `.env`.
 
 ## Environment
 
-Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/web/src/env.ts`, `apps/template-builder/src/env.ts`.
+Development reads one file, the root `.env`, made from `.env.example`. The apps' dev scripts, `db:migrate`, `db:seed` and the Drizzle scripts read it through `tooling/scripts/src/with-env.ts`, which gives each app its port as `PORT` and builds the URLs the apps reach each other by (`API_URL`, `APP_URL`, `VITE_BASE_URL`, `TEMPLATING_BUILDER_URL`) from `WEB_PORT`, `SITE_PORT`, `API_PORT` and `BUILDER_PORT`. Set ports, not URLs. `with-env.ts` refuses to start beside a `.env` inside an app or package, because Vite and Nitro would still load it under the root one. The variables each app accepts are in its schema: `apps/api/src/env.ts`, `apps/worker/src/env.ts`, `apps/web/src/env.ts`, `apps/template-builder/src/env.ts`. The worker has no port: it serves no HTTP.
 
 `env.example`, without the dot, is the Docker Compose file for self-hosting, and has nothing to do with this.
 
@@ -33,7 +33,7 @@ What the apps reach, and what `.env.example` sets so that none of it is real:
 
 ## The fake email backend
 
-With `EMAIL_BACKEND=fake` (`packages/provider-aws/src/email/fake.ts`) nothing reaches AWS. The fake accepts a send and returns a `fake-…` message id, so its Delivery ends `sent`. Adding a Domain makes no SES identity, and the Domain verifies at once without a DNS lookup. The api makes no SES or SNS infrastructure at startup. The api logs each send and each outcome.
+With `EMAIL_BACKEND=fake` (`packages/provider-aws/src/email/fake.ts`) nothing reaches AWS. The fake accepts a send and returns a `fake-…` message id, so its Delivery ends `sent`. Adding a Domain makes no SES identity, and the Domain verifies at once without a DNS lookup. The worker makes no SES or SNS infrastructure at startup, and logs each send and each outcome.
 
 Outcomes arrive a moment after the send, through the same ingest SES's notifications reach, so delivery events, suppression and Webhook Events behave as they would. The fake never pauses sending, so a Project Sending Pause can't be reproduced with it. Recipients are SES's mailbox simulator addresses, which act the same against real SES:
 
@@ -78,4 +78,4 @@ Most packages use `bun test`; `packages/template-render` and `tooling/oxlint-plu
 
 ## Schema changes
 
-Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate`, or the next app start, applies it. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.
+Change `packages/persistence/src/db/schema/` (or the jobs package's `*-schema.ts`), run `bun run db:generate`, and read the generated SQL. It loads the root `.env` for Drizzle's config but doesn't connect. `bun run db:migrate`, or the next start of the api, web or builder, applies it; the worker never migrates. If generate asks whether a column was renamed, or fails for want of a TTY, ask Ted to run it. Never edit a generated migration; if one is wrong before it merges, delete its folder and generate again.

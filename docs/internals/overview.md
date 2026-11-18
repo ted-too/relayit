@@ -7,10 +7,10 @@ How Relayit is put together, and why. [AGENTS.md](../../AGENTS.md) has the gloss
 ```
 customer's code ── x-api-key ──► apps/api (Elysia) ── POST /messages/email, /send/*
                                    │  accept: Message + Delivery + job, one transaction
-                                   │                    │
-                                   │              Postgres outbox ──► Redis Streams
-                                   │                                        │
-                                   └─ job worker (same process) ◄───────────┘
+                                   ▼
+                             Postgres outbox ──(relayed by the worker)──► Redis Streams
+                                                                              │
+                                   apps/worker (no HTTP): every job handler ◄─┘
                                         ├─► SES (packages/provider-aws) ─► recipient
                                         └─► customer's Webhook Endpoints
 SES ── SNS ──► apps/api /webhooks/providers/... ─► bounces, complaints, Suppression
@@ -22,21 +22,23 @@ browser ──► apps/web (TanStack Start) ── server functions, better-auth
 apps/site: marketing site and public docs
 ```
 
-The three apps share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
+The four apps share one Postgres and one Redis. The domain lives in `packages/*`, which the apps import through explicit subpaths; an app never imports another app's source.
 
 ## Decisions
 
-### Three deployables, one database
+### Four deployables, one database
 
-Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only web calls. Public ingress and background work share one runtime (`apps/api`) because they are one operational concern: the same composition root owns the Elysia server and the worker fibers. The cost, accepted, is that API and worker capacity scale together and fail together. In production on Linux the api forks `WEB_CONCURRENCY` HTTP children and runs the worker only on the primary.
+Template building installs npm packages and runs builds, so it has its own process and lifecycle (`apps/template-builder`) that only web calls. Public ingress (`apps/api`) and background work (`apps/worker`) are separate deployables too. They began as one process, and that was a mistake: request capacity and worker capacity scaled together and shared a failure domain, so a crash, or a burst of delivery work, hit the API too. Now each scales and fails alone; the price is a service to deploy, and a deployment without the worker accepts sends that queue and never go out.
+
+The api runs one process per replica and scales with replicas, not by forking: its `node:cluster` mode existed to keep the worker on one primary, never ran in production (it needed `NODE_ENV=production`, which the images don't set), and went with the worker. Several workers are safe: they share one Redis consumer group, and a dead one's claims are reclaimed after a minute.
 
 Everything a signed-in user does (Projects, members, API keys, Domains, Providers, Templates) is a web server function, so the api has no session surface at all: it authenticates API keys only, and each key resolves to one Project.
 
-All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. Each app applies pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do.
+All apps share one database and one migration history, in `packages/persistence/drizzle/`, aggregated from the persistence schema and the jobs package's tables. The api, web and builder each apply pending migrations on start under a Postgres advisory lock, so whichever starts first migrates and the others wait, then find nothing to do. The worker never migrates: it assumes a current schema, so a deploy that adds a migration rolls out the api before the worker.
 
 ### Work crosses processes as typed jobs
 
-A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. Web and the api import contracts and enqueue; only the api's worker imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
+A job's contract (`defineJob`: name, payload schema, retry and dead-letter policy, recurrence) belongs to its domain package, next to its handler. Web and the api import contracts and enqueue; only `apps/worker` imports and registers handlers, so producing a job never decides where it runs. An HTTP handler never does delivery or infrastructure work itself.
 
 A job that depends on rows being written is enqueued through the Postgres outbox in the same transaction, so a send is never accepted without its delivery job, nor a job left pointing at rows that rolled back. The outbox publishes to Redis Streams; a crashed worker's claims are reclaimed after a minute; a job that exhausts its retries is dead-lettered in Postgres.
 
@@ -89,7 +91,7 @@ Plans and Usage limits come from Stripe through better-auth's Stripe plugin. Wit
 
 `EMAIL_BACKEND=fake` replaces SES with a stand-in (`packages/provider-aws/src/email/fake.ts`): it accepts sends, verifies identities and Domain records at once without AWS or public DNS, and reports outcomes for SES's mailbox simulator addresses through the same ingest SES notifications reach, so suppression and Webhook Events behave as they would. It is chosen by environment rather than by Provider rows, because the Provider table is going (below) and the choice has to outlive it. `OBJECT_STORAGE=local` keeps objects under the checkout's `temp/`, and `REDIS_KEY_PREFIX` puts every Redis key under a prefix, better-auth's sessions included, so checkouts sharing one Redis never take each other's jobs.
 
-Left unset, the fake and local storage are chosen only when `NODE_ENV` is `development` or `test`. The api and builder images set no `NODE_ENV`, so an unset one has to keep meaning SES and S3; both refuse to start under `production`.
+Left unset, the fake and local storage are chosen only when `NODE_ENV` is `development` or `test`. The api, worker and builder images set no `NODE_ENV`, so an unset one has to keep meaning SES and S3; the fake and local storage refuse to start under `production`.
 
 ### React's `use-sync-external-store` shim in SSR
 
@@ -97,7 +99,7 @@ Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it 
 
 ## Migrations
 
-`packages/persistence/drizzle.config.ts` reads the schema from `packages/persistence/src/db/schema/` and the jobs package's two table files, and writes `packages/persistence/drizzle/<timestamp>_<name>/`. Generate with `vp run --filter @repo/persistence db:generate`; the config insists on a `DATABASE_URL` but generating never connects. Apps apply migrations on start (`packages/persistence/src/db/migrate.ts`); production images find them through `DRIZZLE_MIGRATIONS_FOLDER`.
+`packages/persistence/drizzle.config.ts` reads the schema from `packages/persistence/src/db/schema/` and the jobs package's two table files, and writes `packages/persistence/drizzle/<timestamp>_<name>/`. Generate with `vp run --filter @repo/persistence db:generate`; the config insists on a `DATABASE_URL` but generating never connects. The api, web and builder apply migrations on start (`packages/persistence/src/db/migrate.ts`); their images find them through `DRIZZLE_MIGRATIONS_FOLDER`. The worker image carries none.
 
 ## Being removed
 
@@ -106,5 +108,4 @@ Ted has decided these go. They are still in the code; don't build on them.
 - **Pluggable providers.** SES is the only email vendor; the provider registry and the `vendor.product` type ids (`aws.ses`, the `:vendorId/:productId` webhook path) go.
 - **BYO Providers.** A deployment's SES accounts become ops-only backends, possibly one per region, with no customer-owned credentials, and the BYO Plan limits and pricing with them.
 - **Multi-provider Domains.** A Domain belongs to exactly one backend: pairings with several Providers, failover between them, the provider circuit and switching a Domain's Provider go, as does choosing a Provider when creating a Domain.
-- **The worker in `apps/api`.** It moves into its own `apps/worker`.
 - **`bun test`.** Tests move to Vitest and `@effect/vitest`, once Effect is on 4.0.2.
