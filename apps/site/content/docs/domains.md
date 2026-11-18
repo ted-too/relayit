@@ -105,10 +105,10 @@ If you add a domain that another Project already added to Relayit, Relayit start
 
 Until ownership verifies, the Domain is not yours: you cannot send from it, and its page shows only the ownership record.
 
-When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
+When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. The Messages the other Project sent from the domain stay with that Project and are not attached to the domain in yours; bounces and complaints for them are still recorded for that Project. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 
 ## Delete a Domain
 
 Open the Domain menu and choose **Delete Domain**, then type the domain name to confirm. Deleting frees the domain so it can be added again. Emails already queued from it fail at send time. Past Messages keep their original `from`.
 
-Adding a deleted domain again adds it as new, to any Project: it gets a new DKIM key and new DNS records to publish, whether or not it had sent Messages. Nothing sent from the domain before is attached to it; those Messages stay with the Project that sent them.
+A deleted domain that no other Project is claiming is removed from Relayit. Adding it again then adds it as new, to any Project: it gets a new DKIM key and new DNS records to publish, whether or not it had sent Messages. If another Project had a claim pending when you deleted the domain, the domain stays for that claim with its DKIM key, and adding it again starts a claim of your own, as in [Claiming a domain from another Project](#claiming-a-domain-from-another-project). Either way, nothing you sent from the domain is attached to it afterwards: those Messages stay with your Project and keep their original `from`.

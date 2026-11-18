@@ -10,6 +10,7 @@ import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import {
+  contact,
   customDomain,
   emailDelivery,
   emailDeliveryEvent,
@@ -18,6 +19,8 @@ import {
   organization,
   organizationAppEnvironment,
   organizationDomain,
+  webhookEndpoint,
+  webhookEvent,
 } from "@repo/persistence/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Effect, Layer, Schedule } from "effect";
@@ -25,6 +28,7 @@ import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { ingestDeliveryEvents } from "../deliverability/notifications";
 import { createOwnershipToken, ownershipChallengeValue } from "./dns";
 import { emailDeleteDomainIdentityHandler } from "./handlers";
 import type { EmailDeleteDomainIdentityPayload } from "./jobs";
@@ -265,6 +269,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         customDomainId: input.customDomainId,
         from: { address: `hello@${input.fqdn}`, normalized: `hello@${input.fqdn}` },
         messageId,
+        providerMessageId: `ses-${Bun.randomUUIDv7()}`,
         status: "sent",
         subject: "Hi",
         text: "Hi",
@@ -1005,6 +1010,207 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       expect(yield* historyOf(nextId)).toMatchObject([
         { delivery: { customDomainId: null, id: sent.id, removedDomainFqdn: fqdn } },
       ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  /** What names a Domain's row: Deliveries, their events, and whether it is paused. */
+  const namingDomain = Effect.fn(function* (customDomainId: string) {
+    const db = yield* DB;
+    return {
+      deliveries: yield* db
+        .select({ id: emailDelivery.id })
+        .from(emailDelivery)
+        .where(eq(emailDelivery.customDomainId, customDomainId)),
+      events: yield* db
+        .select({ id: emailDeliveryEvent.id })
+        .from(emailDeliveryEvent)
+        .where(eq(emailDeliveryEvent.customDomainId, customDomainId)),
+      paused: (yield* db.query.customDomain.findFirst({
+        columns: { isPaused: true },
+        where: { id: customDomainId },
+      }))?.isPaused,
+    };
+  });
+
+  // The row outlives the sender's link when another Project takes the Domain by a claim:
+  // with the holder removing it while the claim is pending, and with the holder doing nothing.
+  it.live.each([true, false])(
+    "a Domain taken by a claim has none of its old holder's history (holder removed it first: %s)",
+    (holderRemoves) => {
+      const { layer, published } = boundaries();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const {
+          claimantIds: [claimantId],
+          customDomainId,
+          fqdn,
+          holderId,
+        } = yield* claimedDomain(1);
+        if (!claimantId) {
+          return yield* Effect.die("A claim was made");
+        }
+        const key = yield* dkimKeyOf(customDomainId);
+        yield* db.insert(webhookEndpoint).values(
+          [holderId, claimantId].map((organizationId) => ({
+            eventTypes: ["delivery.bounced"],
+            organizationId,
+            signingSecret: "secret",
+            url: "https://hooks.example.com/relayit",
+          })),
+        );
+        const webhooksOf = (organizationId: string) =>
+          db
+            .select({ type: webhookEvent.type })
+            .from(webhookEvent)
+            .where(eq(webhookEvent.organizationId, organizationId));
+        const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        const [before] = yield* historyOf(holderId);
+        if (!before?.event || !sent.providerMessageId) {
+          return yield* Effect.die("The Delivery and its event were read");
+        }
+        yield* db.insert(contact).values({
+          email: "to@example.com",
+          organizationAppEnvironmentId: before.message.organizationAppEnvironmentId,
+        });
+        const detached = {
+          delivery: { ...before.delivery, customDomainId: null, removedDomainFqdn: fqdn },
+          event: { ...before.event, customDomainId: null },
+          message: before.message,
+        };
+
+        if (holderRemoves) {
+          // The row stays for the claim, and already nothing the holder sent names it.
+          expect(yield* deleteCustomDomain({ customDomainId, organizationId: holderId })).toEqual({
+            deleted: false,
+          });
+          expect(yield* namingDomain(customDomainId)).toEqual({
+            deliveries: [],
+            events: [],
+            paused: false,
+          });
+          expect(yield* historyOf(holderId)).toEqual([detached]);
+        }
+        yield* publishProof(published, customDomainId, claimantId);
+        expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+          ownershipVerificationStatus: "verified",
+        });
+
+        // The claimant holds the same row under the same key, with none of that history.
+        expect(yield* linksOf(customDomainId)).toEqual([
+          { organizationId: claimantId, ownershipVerificationStatus: "verified" },
+        ]);
+        expect(yield* dkimKeyOf(customDomainId)).toEqual(key);
+        expect(yield* namingDomain(customDomainId)).toEqual({
+          deliveries: [],
+          events: [],
+          paused: false,
+        });
+        expect(yield* historyOf(holderId)).toEqual([detached]);
+        expect(yield* historyOf(claimantId)).toEqual([]);
+
+        // A bounce for the old send is the old holder's: recorded on its Delivery, heard by
+        // it, suppressing in its App Environment, and nothing to the Domain or its holder.
+        yield* ingestDeliveryEvents(db, {
+          events: [
+            {
+              kind: "bounced",
+              notificationId: Bun.randomUUIDv7(),
+              providerMessageId: sent.providerMessageId,
+              raw: { bounce: { bounceType: "Permanent" } },
+              recipients: ["to@example.com"],
+              sentAt: new Date(),
+              suppress: true,
+            },
+          ],
+        });
+        expect(
+          (yield* historyOf(holderId))
+            .map(({ delivery, event }) => ({
+              customDomainId: event?.customDomainId,
+              deliveryId: delivery.id,
+              kind: event?.kind,
+            }))
+            .toSorted((left, right) => (left.kind ?? "").localeCompare(right.kind ?? "")),
+        ).toEqual([
+          { customDomainId: null, deliveryId: sent.id, kind: "bounced" },
+          { customDomainId: null, deliveryId: sent.id, kind: "delivered" },
+        ]);
+        expect(
+          yield* db
+            .select({ reason: contact.suppressionReason })
+            .from(contact)
+            .where(
+              eq(contact.organizationAppEnvironmentId, before.message.organizationAppEnvironmentId),
+            ),
+        ).toEqual([{ reason: "hard_bounce" }]);
+        expect(yield* webhooksOf(holderId)).toEqual([{ type: "delivery.bounced" }]);
+        expect(yield* webhooksOf(claimantId)).toEqual([]);
+        expect(yield* namingDomain(customDomainId)).toEqual({
+          deliveries: [],
+          events: [],
+          paused: false,
+        });
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.live(
+    "a claimant's removed or lapsed claim leaves the holder's Deliveries on the Domain",
+    () => {
+      const { layer } = boundaries();
+      return Effect.gen(function* () {
+        const {
+          claimantIds: [removingId, lapsingId],
+          customDomainId,
+          fqdn,
+          holderId,
+        } = yield* claimedDomain(2);
+        if (!(removingId && lapsingId)) {
+          return yield* Effect.die("Two claims were made");
+        }
+        const db = yield* DB;
+        const sent = yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+        const history = yield* historyOf(holderId);
+
+        yield* deleteCustomDomain({ customDomainId, organizationId: removingId });
+        yield* db
+          .update(organizationDomain)
+          .set({ createdAt: new Date(Date.now() - CLAIM_TTL_MS - 60_000) })
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, customDomainId),
+              eq(organizationDomain.organizationId, lapsingId),
+            ),
+          );
+        expect(yield* checkOwnership(customDomainId, lapsingId)).toMatchObject({
+          ownershipVerificationStatus: "lapsed",
+        });
+
+        // Only a leaving Project's own Deliveries move.
+        expect(yield* historyOf(holderId)).toEqual(history);
+        expect(yield* namingDomain(customDomainId)).toMatchObject({
+          deliveries: [{ id: sent.id }],
+          events: [{}],
+        });
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.live("a deleted Project's Deliveries go with it, off a Domain another Project claims", () => {
+    const { layer } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const { customDomainId, fqdn, holderId } = yield* claimedDomain(1);
+      yield* sentFrom({ customDomainId, fqdn, organizationId: holderId });
+
+      // The Project's Messages, Deliveries and events are deleted with it by the database.
+      yield* db.delete(organization).where(eq(organization.id, holderId));
+
+      expect(yield* namingDomain(customDomainId)).toEqual({
+        deliveries: [],
+        events: [],
+        paused: false,
+      });
     }).pipe(Effect.provide(layer));
   });
 

@@ -3,7 +3,9 @@ import type { Database, DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type ContactSuppressionSeverity,
   contact,
+  customDomain,
   type EmailDeliveryEventKind,
+  emailDelivery,
   emailDeliveryEvent,
 } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
@@ -266,10 +268,38 @@ const ingestOne = (db: Database, event: NormalizedDeliveryEvent) =>
         // The id is derived from the notification's SNS MessageId, so a redelivery, or a
         // retry after this transaction committed, collides with the event it already
         // recorded and adds no second Webhook Event or Suppression.
+        // The Delivery was read before this transaction and may have been detached from its
+        // Domain since, by its Project's link going. That holds the Domain's row, so the row
+        // is taken here and the sender read again: the event names the Domain only while
+        // the Delivery does, and is detached with it afterwards.
+        const sender = delivery.customDomainId
+          ? yield* tx
+              .select({ id: customDomain.id })
+              .from(customDomain)
+              .where(eq(customDomain.id, delivery.customDomainId))
+              .for("key share")
+              .pipe(
+                Effect.andThen(
+                  tx
+                    .select({ customDomainId: emailDelivery.customDomainId })
+                    .from(emailDelivery)
+                    .where(eq(emailDelivery.id, delivery.id)),
+                ),
+                Effect.map(([current]) => current?.customDomainId ?? null),
+                Effect.mapError(
+                  (cause) =>
+                    new DeliveryEventIngestError({
+                      cause,
+                      operation: "load_delivery",
+                      providerMessageId: event.providerMessageId,
+                    }),
+                ),
+              )
+          : null;
         const recorded = yield* tx
           .insert(emailDeliveryEvent)
           .values({
-            customDomainId: delivery.customDomainId,
+            customDomainId: sender,
             data: event.raw as Record<string, unknown>,
             emailDeliveryId: delivery.id,
             id: TypeID.fromUUIDBytes(

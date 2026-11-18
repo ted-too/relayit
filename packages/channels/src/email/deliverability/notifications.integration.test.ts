@@ -16,7 +16,7 @@ import {
 } from "@repo/persistence/db/schema";
 import { makeRedisLive } from "@repo/redis";
 import { eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import { typeid } from "typeid-js";
 import { deleteCustomDomain } from "../custom-domain/lifecycle";
 import { ingestDeliveryEvents, type NormalizedDeliveryEvent } from "./notifications";
@@ -383,6 +383,78 @@ describe("ingestDeliveryEvents", () => {
             .from(webhookEvent)
             .where(eq(webhookEvent.organizationId, otherId)),
         ).toEqual([]);
+      }).pipe(Effect.provide(services)),
+  );
+
+  it.live(
+    "a bounce that read its Delivery before the Domain was taken from its Project names no Domain",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* DB;
+        const { deliveryId, ingest, organizationId } = yield* sentDelivery;
+        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+        const [domain] = yield* db
+          .insert(customDomain)
+          .values({
+            dkimPrivateKey: "private",
+            dkimPublicKey: "public",
+            dkimSelector: "relayit",
+            fqdn,
+            verificationStatus: "verified",
+          })
+          .returning({ id: customDomain.id });
+        if (!domain) {
+          return yield* Effect.die("The Domain was written");
+        }
+        yield* db.insert(organizationDomain).values({
+          customDomainId: domain.id,
+          organizationId,
+          ownershipToken: Bun.randomUUIDv7(),
+          ownershipVerificationStatus: "verified",
+        });
+        yield* db
+          .update(emailDelivery)
+          .set({ customDomainId: domain.id, sandboxDomainId: null })
+          .where(eq(emailDelivery.id, deliveryId));
+
+        // Another session is taking the Domain from the Project: it holds the Domain's row,
+        // as a removal or a claim transfer does, and detaches the Delivery before it commits.
+        // The ingest has read the Delivery, still naming the Domain, by then.
+        const sql = new Bun.SQL(testDatabaseUrl, { max: 1 });
+        const taking = yield* Effect.promise(async () => {
+          const session = await sql.reserve();
+          await session`begin`;
+          await session`select id from custom_domain where id = ${domain.id} for update`;
+          return session;
+        });
+        const bounce = yield* Effect.forkChild(
+          ingest({
+            kind: "bounced",
+            notificationId: Bun.randomUUIDv7(),
+            raw: { bounce: { bounceType: "Permanent" } },
+            recipients: ["to@example.com"],
+            suppress: true,
+          }),
+        );
+        yield* Effect.promise(async () => {
+          await Bun.sleep(400);
+          await taking`update email_delivery set custom_domain_id = null, removed_domain_fqdn = ${fqdn}
+            where id = ${deliveryId}`;
+          await taking`commit`;
+          taking.release();
+          await sql.close();
+        });
+        yield* Fiber.join(bounce);
+
+        expect(
+          yield* db
+            .select({
+              customDomainId: emailDeliveryEvent.customDomainId,
+              kind: emailDeliveryEvent.kind,
+            })
+            .from(emailDeliveryEvent)
+            .where(eq(emailDeliveryEvent.emailDeliveryId, deliveryId)),
+        ).toEqual([{ customDomainId: null, kind: "bounced" }]);
       }).pipe(Effect.provide(services)),
   );
 

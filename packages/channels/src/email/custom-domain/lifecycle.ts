@@ -11,10 +11,13 @@ import {
   customDomain,
   type DomainPausedReason,
   emailDelivery,
+  emailDeliveryEvent,
   emailDnsRecord,
   emailDomainRegistration,
   type OrganizationDomain,
+  message,
   type OrganizationDomainInsert,
+  organizationAppEnvironment,
   organizationDomain,
 } from "@repo/persistence/db/schema";
 import { and, eq, inArray, ne, notExists, sql } from "drizzle-orm";
@@ -665,11 +668,72 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
   });
 
 /**
+ * Detaches what Projects sent from a Domain they are no longer linked to, in the caller's
+ * transaction, which holds the Domain's row. The row can outlive a Project's link, for the
+ * Project that took the Domain by a claim or still has one pending, and what the leaving
+ * Project sent is not theirs: each of its Deliveries stops referring to the row and records
+ * the FQDN instead, and their events stop referring to it too. Found through the Delivery's
+ * Message and App Environment, so only these Projects' rows move.
+ *
+ * Whoever writes a Delivery or an event naming a Domain takes its row first (`KEY SHARE`),
+ * so none is written behind this.
+ */
+const detachDeliveries = (
+  tx: DatabaseTransaction,
+  input: {
+    readonly customDomainId: string;
+    readonly fqdn: string;
+    readonly organizationIds: readonly string[];
+  },
+) =>
+  Effect.gen(function* () {
+    if (input.organizationIds.length === 0) {
+      return;
+    }
+    const detached = yield* tx
+      .update(emailDelivery)
+      .set({ customDomainId: null, removedDomainFqdn: input.fqdn })
+      .where(
+        and(
+          eq(emailDelivery.customDomainId, input.customDomainId),
+          inArray(
+            emailDelivery.messageId,
+            tx
+              .select({ id: message.id })
+              .from(message)
+              .innerJoin(
+                organizationAppEnvironment,
+                eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
+              )
+              .where(inArray(organizationAppEnvironment.organizationId, input.organizationIds)),
+          ),
+        ),
+      )
+      .returning({ id: emailDelivery.id });
+    if (detached.length === 0) {
+      return;
+    }
+    yield* tx
+      .update(emailDeliveryEvent)
+      .set({ customDomainId: null })
+      .where(
+        and(
+          eq(emailDeliveryEvent.customDomainId, input.customDomainId),
+          inArray(
+            emailDeliveryEvent.emailDeliveryId,
+            detached.map(({ id }) => id),
+          ),
+        ),
+      );
+  });
+
+/**
  * A proven claim takes the Domain: its link is marked proven and every other Project's link
  * goes, in one transaction holding the Domain's row. A failure leaves the claim unproven to
  * be checked again, and of two claims proven at once the second finds its link gone. False
- * when it is: another claim took the Domain first. The SES registration and DNS records
- * stay, since they belong to the Domain, not the Project.
+ * when it is: another claim took the Domain first. The SES registration, DNS records and
+ * DKIM key stay, since they belong to the Domain, not the Project; what the Projects losing
+ * it sent from it does not, and is detached from it here.
  */
 export const completeDomainClaimTransfer = (input: {
   readonly customDomainId: string;
@@ -686,8 +750,8 @@ export const completeDomainClaimTransfer = (input: {
   input.db
     .transaction((tx) =>
       Effect.gen(function* () {
-        yield* tx
-          .select({ id: customDomain.id })
+        const [domain] = yield* tx
+          .select({ fqdn: customDomain.fqdn })
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
@@ -701,17 +765,23 @@ export const completeDomainClaimTransfer = (input: {
             ),
           )
           .returning({ organizationId: organizationDomain.organizationId });
-        if (!proven) {
+        if (!(proven && domain)) {
           return false;
         }
-        yield* tx
+        const lost = yield* tx
           .delete(organizationDomain)
           .where(
             and(
               eq(organizationDomain.customDomainId, input.customDomainId),
               ne(organizationDomain.organizationId, input.organizationId),
             ),
-          );
+          )
+          .returning({ organizationId: organizationDomain.organizationId });
+        yield* detachDeliveries(tx, {
+          customDomainId: input.customDomainId,
+          fqdn: domain.fqdn,
+          organizationIds: lost.map(({ organizationId }) => organizationId),
+        });
         return true;
       }),
     )
@@ -734,10 +804,11 @@ export const completeDomainClaimTransfer = (input: {
  * Project is linked, so a claim that arrived first keeps the Domain; the row is held, so
  * one arriving now waits for this to commit.
  *
- * What was sent from the Domain stays with the Project that sent it. Each Delivery stops
- * referring to the row and records the FQDN instead, and its events lose the reference by
- * their foreign key, so the FQDN added again is a new Domain with none of this history.
- * One still `queued` then fails in the delivery handler: no Project holds its Domain.
+ * What was sent from the Domain stays with the Project that sent it, so the FQDN added
+ * again is a new Domain with none of this history. A Project's Deliveries are detached as
+ * its link goes (`detachDeliveries`); the update here takes any still naming the row, of a
+ * Project whose link went where no code saw it, and their events lose the reference by
+ * their foreign key.
  */
 const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =>
   Effect.gen(function* () {
@@ -784,7 +855,9 @@ const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =
 /**
  * Removes a Project's link to a Domain and, when it was the last, the Domain with it.
  * `unprovenOnly` leaves a link that has been proven. The Domain's row is taken before the
- * link, as a claim transfer takes them, so the two never wait on each other.
+ * link, as a claim transfer takes them, so the two never wait on each other. What the
+ * Project sent from the Domain is detached from it, whether or not the row stays for
+ * another Project's claim.
  */
 export const removeDomainLink = (input: {
   readonly customDomainId: string;
@@ -795,8 +868,8 @@ export const removeDomainLink = (input: {
   input.db
     .transaction((tx) =>
       Effect.gen(function* () {
-        yield* tx
-          .select({ id: customDomain.id })
+        const [domain] = yield* tx
+          .select({ fqdn: customDomain.fqdn })
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
@@ -812,9 +885,14 @@ export const removeDomainLink = (input: {
             ),
           )
           .returning({ organizationId: organizationDomain.organizationId });
-        if (!unlinked) {
+        if (!(unlinked && domain)) {
           return { unlinked: false as const };
         }
+        yield* detachDeliveries(tx, {
+          customDomainId: input.customDomainId,
+          fqdn: domain.fqdn,
+          organizationIds: [input.organizationId],
+        });
         return {
           domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId),
           unlinked: true as const,
