@@ -1461,7 +1461,8 @@ describe("an accepted email send", () => {
     () => {
       const backend = makeBackend();
       const storage = makeStorageWithDownloadHook();
-      // No marketing send is accepted yet, so the Message and its job are made a Campaign's.
+      // No marketing send is accepted yet, so the Message is made a Campaign's. Its job still
+      // says transactional: the Message's purpose, not the job's, decides who is suppressed.
       const handler = makeEmailDeliverHandler({ apiOrigin: "http://localhost", secret: "test" });
       return Effect.gen(function* () {
         const db = yield* DB;
@@ -1490,7 +1491,7 @@ describe("an accepted email send", () => {
             {
               billingUserId: "unused",
               deliveryId: marketing.deliveryId,
-              purpose: "marketing",
+              purpose: "transactional",
               startDate: new Date().toISOString(),
             },
             { attempt: 1, enqueuedAt: Date.now(), id: "marketing" },
