@@ -68,11 +68,21 @@ const program = Effect.gen(function* () {
       (redis) => hasStoredSessions(redis, config.redisKeyPrefix),
       (redis) => Effect.sync(() => redis.close()),
     ));
+  // Bun's Redis client takes values `new URL` refuses or reads as no host (`redis`,
+  // `redis:6379`), and the change is already made by now, so naming the store must not throw.
+  // The database index is part of where it looked; the credentials are not.
+  const parsed = URL.canParse(redisUrl) ? new URL(redisUrl) : undefined;
   for (const line of changedLines({
     action,
     email,
     sessions,
-    store: { empty, host: new URL(redisUrl).host, keyPrefix: config.redisKeyPrefix },
+    store: {
+      empty,
+      host: parsed?.host
+        ? `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`
+        : redisUrl.replace(/^.*@/, ""),
+      keyPrefix: config.redisKeyPrefix,
+    },
   })) {
     console.log(line);
   }
