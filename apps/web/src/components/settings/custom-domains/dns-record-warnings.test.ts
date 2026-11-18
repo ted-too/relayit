@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { dnsRecordWarningCopy } from "./dns-record-warnings";
 
 describe("dnsRecordWarningCopy", () => {

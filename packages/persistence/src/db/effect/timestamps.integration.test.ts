@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { user } from "../schema";
@@ -17,40 +17,38 @@ describe("timestamp columns", () => {
     return;
   }
 
-  test(testName, () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* DB;
-        const written = new Date("2026-03-04T05:06:07.890Z");
+  it.live(testName, () =>
+    Effect.gen(function* () {
+      const db = yield* DB;
+      const written = new Date("2026-03-04T05:06:07.890Z");
 
-        for (const zone of ["UTC", "Pacific/Auckland"]) {
-          const email = `timestamps-${zone}-${Bun.randomUUIDv7()}@example.test`;
-          const read = yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx.execute(sql.raw(`set local time zone '${zone}'`));
-              const [returned] = yield* tx
-                .insert(user)
-                .values({ createdAt: written, email, name: zone, updatedAt: written })
-                .returning({ createdAt: user.createdAt });
-              const [selected] = yield* tx
-                .select({ createdAt: user.createdAt })
-                .from(user)
-                .where(eq(user.email, email));
-              const related = yield* tx.query.user.findFirst({ where: { email } });
-              const [text] = yield* tx
-                .select({ createdAt: sql<string>`${user.createdAt}::text` })
-                .from(user)
-                .where(eq(user.email, email));
-              return { related, returned, selected, text };
-            }),
-          );
+      for (const zone of ["UTC", "Pacific/Auckland"]) {
+        const email = `timestamps-${zone}-${Bun.randomUUIDv7()}@example.test`;
+        const read = yield* db.transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx.execute(sql.raw(`set local time zone '${zone}'`));
+            const [returned] = yield* tx
+              .insert(user)
+              .values({ createdAt: written, email, name: zone, updatedAt: written })
+              .returning({ createdAt: user.createdAt });
+            const [selected] = yield* tx
+              .select({ createdAt: user.createdAt })
+              .from(user)
+              .where(eq(user.email, email));
+            const related = yield* tx.query.user.findFirst({ where: { email } });
+            const [text] = yield* tx
+              .select({ createdAt: sql<string>`${user.createdAt}::text` })
+              .from(user)
+              .where(eq(user.email, email));
+            return { related, returned, selected, text };
+          }),
+        );
 
-          expect(read.returned?.createdAt.toISOString()).toBe(written.toISOString());
-          expect(read.selected?.createdAt.toISOString()).toBe(written.toISOString());
-          expect(read.related?.createdAt.toISOString()).toBe(written.toISOString());
-          expect(read.text?.createdAt).toBe("2026-03-04 05:06:07.89");
-        }
-      }).pipe(Effect.provide(makeDbLive({ databaseUrl: testDatabaseUrl }))),
-    ),
+        expect(read.returned?.createdAt.toISOString()).toBe(written.toISOString());
+        expect(read.selected?.createdAt.toISOString()).toBe(written.toISOString());
+        expect(read.related?.createdAt.toISOString()).toBe(written.toISOString());
+        expect(read.text?.createdAt).toBe("2026-03-04 05:06:07.89");
+      }
+    }).pipe(Effect.provide(makeDbLive({ databaseUrl: testDatabaseUrl }))),
   );
 });

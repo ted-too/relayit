@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import type {
   AcceptTransactionalEmailInput,
   acceptTransactionalEmail,
@@ -8,11 +8,11 @@ import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import type { Database } from "@repo/persistence/db/effect";
 import { DB } from "@repo/persistence/db/effect";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, FiberSet, Layer } from "effect";
 import { HttpClient } from "effect/http";
 import { Elysia } from "elysia";
 import type { ApiAuth } from "../../../lib/auth";
-import type { RunApiEffect } from "../../../lib/effect";
+import type { ApiServices, RunApiEffect } from "../../../lib/effect";
 import { createLegacySendRoutes } from "./index";
 
 const makeTestLayer = () => {
@@ -95,12 +95,11 @@ const makeTestAuth = (input?: {
   } as ApiAuth["db"],
 });
 
-const makeApp = (accept: typeof acceptTransactionalEmail, auth: ApiAuth = makeTestAuth()) => {
-  const runtime = ManagedRuntime.make(makeTestLayer());
-  const runEffect: RunApiEffect = runtime.runPromise;
-  const app = new Elysia().use(createLegacySendRoutes(auth, runEffect, accept));
-  return { app, runtime };
-};
+const makeApp = (accept: typeof acceptTransactionalEmail, auth: ApiAuth = makeTestAuth()) =>
+  Effect.gen(function* () {
+    const runEffect: RunApiEffect = yield* FiberSet.makeRuntimePromise<ApiServices>();
+    return new Elysia().use(createLegacySendRoutes(auth, runEffect, accept));
+  }).pipe(Effect.provide(makeTestLayer()));
 
 const postLegacy = async (
   app: { handle: (request: Request) => Response | Promise<Response> },
@@ -119,104 +118,11 @@ const postLegacy = async (
   );
 
 describe("POST /send/:project/raw/email", () => {
-  test("maps a legacy raw body to Accept and returns queued", () => {
+  it.live("maps a legacy raw body to Accept and returns queued", () => {
     let captured: AcceptTransactionalEmailInput | undefined;
-    const { app, runtime } = makeApp((input) => {
-      captured = input;
-      return Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
-      });
-    });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/raw/email", {
-            from: "sender@acme.test",
-            payload: { html: "<p>Hello</p>", subject: "Hello" },
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(201);
-        expect(body).toEqual({ id: "msg_test", status: "queued" });
-        expect(captured).toMatchObject({
-          attribution: { kind: "project" },
-          organizationId: "org_test",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("returns 404 when the API key Project slug does not match the path", () => {
-    const { app, runtime } = makeApp(
-      () =>
-        Effect.succeed({
-          deliveryId: "edlv_test",
-          messageId: "msg_test",
-          replayed: false,
-          stripped: [],
-        }),
-      makeTestAuth({ slug: "other" }),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/raw/email", {
-            from: "sender@acme.test",
-            payload: { html: "<p>Hello</p>", subject: "Hello" },
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(404);
-        expect(body).toEqual({
-          details: [],
-          message: "Project not found",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("returns 401 for an invalid API key", () => {
-    const { app, runtime } = makeApp(
-      () =>
-        Effect.succeed({
-          deliveryId: "edlv_test",
-          messageId: "msg_test",
-          replayed: false,
-          stripped: [],
-        }),
-      makeTestAuth({ valid: false }),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/raw/email", {
-            from: "sender@acme.test",
-            payload: { html: "<p>Hello</p>", subject: "Hello" },
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(401);
-        expect(body).toMatchObject({ message: "Unauthorized" });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
-  });
-
-  test("defaults from to noreply@ the Project's custom Domain when omitted", () => {
-    let captured: AcceptTransactionalEmailInput | undefined;
-    const { app, runtime } = makeApp(
-      (input) => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp((input) => {
         captured = input;
         return Effect.succeed({
           deliveryId: "edlv_test",
@@ -224,89 +130,167 @@ describe("POST /send/:project/raw/email", () => {
           replayed: false,
           stripped: [],
         });
-      },
-      makeTestAuth({ customDomainFqdn: "acme.test" }),
-    );
+      });
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/raw/email", {
+          from: "sender@acme.test",
+          payload: { html: "<p>Hello</p>", subject: "Hello" },
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/raw/email", {
-            payload: { html: "<p>Hello</p>", subject: "Hello" },
-            to: "recipient@example.com",
-          }),
-        );
-
-        expect(response.status).toBe(201);
-        expect(captured?.email.from).toEqual({
-          address: "noreply@acme.test",
-          normalized: "noreply@acme.test",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
+      expect(response.status).toBe(201);
+      expect(body).toEqual({ id: "msg_test", status: "queued" });
+      expect(captured).toMatchObject({
+        attribution: { kind: "project" },
+        organizationId: "org_test",
+      });
+    });
   });
 
-  test("returns 400 when from is omitted and sandbox is unavailable", () => {
-    const { app, runtime } = makeApp(() =>
-      Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
-      }),
-    );
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/raw/email", {
-            payload: { html: "<p>Hello</p>", subject: "Hello" },
-            to: "recipient@example.com",
+  it.live("returns 404 when the API key Project slug does not match the path", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(
+        () =>
+          Effect.succeed({
+            deliveryId: "edlv_test",
+            messageId: "msg_test",
+            replayed: false,
+            stripped: [],
           }),
-        );
-        const body = yield* Effect.promise(() => response.json());
+        makeTestAuth({ slug: "other" }),
+      );
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/raw/email", {
+          from: "sender@acme.test",
+          payload: { html: "<p>Hello</p>", subject: "Hello" },
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
 
-        expect(response.status).toBe(400);
-        expect(body).toMatchObject({
-          message: "No sender identity available; pass from or provision Sandbox Domain",
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
+      expect(response.status).toBe(404);
+      expect(body).toEqual({
+        details: [],
+        message: "Project not found",
+      });
+    });
+  });
+
+  it.live("returns 401 for an invalid API key", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(
+        () =>
+          Effect.succeed({
+            deliveryId: "edlv_test",
+            messageId: "msg_test",
+            replayed: false,
+            stripped: [],
+          }),
+        makeTestAuth({ valid: false }),
+      );
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/raw/email", {
+          from: "sender@acme.test",
+          payload: { html: "<p>Hello</p>", subject: "Hello" },
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(401);
+      expect(body).toMatchObject({ message: "Unauthorized" });
+    });
+  });
+
+  it.live("defaults from to noreply@ the Project's custom Domain when omitted", () => {
+    let captured: AcceptTransactionalEmailInput | undefined;
+
+    return Effect.gen(function* () {
+      const app = yield* makeApp(
+        (input) => {
+          captured = input;
+          return Effect.succeed({
+            deliveryId: "edlv_test",
+            messageId: "msg_test",
+            replayed: false,
+            stripped: [],
+          });
+        },
+        makeTestAuth({ customDomainFqdn: "acme.test" }),
+      );
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/raw/email", {
+          payload: { html: "<p>Hello</p>", subject: "Hello" },
+          to: "recipient@example.com",
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(captured?.email.from).toEqual({
+        address: "noreply@acme.test",
+        normalized: "noreply@acme.test",
+      });
+    });
+  });
+
+  it.live("returns 400 when from is omitted and sandbox is unavailable", () => {
+    return Effect.gen(function* () {
+      const app = yield* makeApp(() =>
+        Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
+        }),
+      );
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/raw/email", {
+          payload: { html: "<p>Hello</p>", subject: "Hello" },
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(400);
+      expect(body).toMatchObject({
+        message: "No sender identity available; pass from or provision Sandbox Domain",
+      });
+    });
   });
 });
 
 describe("POST /send/:project/template/email", () => {
-  test("resolves template.slug and returns queued", () => {
+  it.live("resolves template.slug and returns queued", () => {
     let captured: AcceptTransactionalEmailInput | undefined;
-    const { app, runtime } = makeApp((input) => {
-      captured = input;
-      return Effect.succeed({
-        deliveryId: "edlv_test",
-        messageId: "msg_test",
-        replayed: false,
-        stripped: [],
+
+    return Effect.gen(function* () {
+      const app = yield* makeApp((input) => {
+        captured = input;
+        return Effect.succeed({
+          deliveryId: "edlv_test",
+          messageId: "msg_test",
+          replayed: false,
+          stripped: [],
+        });
+      });
+      const response = yield* Effect.promise(() =>
+        postLegacy(app, "/send/acme/template/email", {
+          from: "sender@acme.test",
+          template: { props: { name: "Ada" }, slug: "welcome" },
+          to: "recipient@example.com",
+        }),
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(201);
+      expect(body).toEqual({ id: "msg_test", status: "queued" });
+      expect(captured?.email.content).toEqual({
+        idOrSlug: "welcome",
+        kind: "template",
+        values: { name: "Ada" },
       });
     });
-
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          postLegacy(app, "/send/acme/template/email", {
-            from: "sender@acme.test",
-            template: { props: { name: "Ada" }, slug: "welcome" },
-            to: "recipient@example.com",
-          }),
-        );
-        const body = yield* Effect.promise(() => response.json());
-
-        expect(response.status).toBe(201);
-        expect(body).toEqual({ id: "msg_test", status: "queued" });
-        expect(captured?.email.content).toEqual({
-          idOrSlug: "welcome",
-          kind: "template",
-          values: { name: "Ada" },
-        });
-      }).pipe(Effect.ensuring(runtime.disposeEffect)),
-    );
   });
 });

@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "db:studio": "bun --no-env-file ../../tooling/scripts/src/with-env.ts bunx --bun drizzle-kit studio",
     "db:generate": "bun --no-env-file ../../tooling/scripts/src/with-env.ts bunx --bun drizzle-kit generate",
-    "test": "bun --no-env-file test"
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@better-auth/api-key": "^1.6.25",
@@ -23,6 +23,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/pg": "^8.20.4",
     "drizzle-kit": "1.0.0-rc.5",
     "vitest": "catalog:"

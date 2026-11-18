@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { type AcceptedTransactionalEmail, EmailAcceptRejected } from "@repo/channels/email/accept";
 import { UsageLimitExceeded } from "@repo/channels/usage";
 import {

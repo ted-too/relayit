@@ -75,7 +75,7 @@ In T3 Code, the project's actions run these:
 
 `bun run test` (`tooling/scripts/src/test.ts`) starts a throwaway Postgres 18 and Redis 7 in Docker, migrates the database, runs every package's tests against them with the integration tests on, removes the containers, and lists every package that failed. CI runs the same command. Set both `TEST_DATABASE_URL` and `TEST_REDIS_URL` to use your own instead; a test may write anything to them.
 
-Most packages use `bun test`; `packages/template-render` and `tooling/oxlint-plugin` use Vitest. Run alone (`bun test <file>` in a package), a Postgres or Redis integration test skips unless those two are set.
+Tests are Vitest, run through Vite+ under Bun: each package's `test` script is `bun --bun vp test run` with the root `vite.config.ts`, which resolves `@repo/*` through the packages' tsconfig paths as Bun does. Under plain `vp test` Vitest would run on Node, where Bun's Redis client, `Bun.spawn` and `Bun.build` don't exist. Run alone (`bun run test <file>` in a package), a Postgres or Redis integration test skips unless those two are set.
 
 ## Schema changes
 

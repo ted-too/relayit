@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { makeRedisLive } from "@repo/redis";
 import { Effect, Layer } from "effect";
 import { Usage, UsageLive, UsagePolicy, type UsagePolicyService } from "./usage";
@@ -24,16 +24,14 @@ const makePolicy = (limit: number | null): UsagePolicyService => {
   };
 };
 
-const runWithUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A, E, Usage>) =>
-  Effect.runPromise(
-    effect.pipe(
-      Effect.provide(
-        UsageLive.pipe(
-          Layer.provide(
-            Layer.merge(
-              makeRedisLive({ url: testRedisUrl ?? "" }),
-              Layer.succeed(UsagePolicy, policy),
-            ),
+const withUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A, E, Usage>) =>
+  effect.pipe(
+    Effect.provide(
+      UsageLive.pipe(
+        Layer.provide(
+          Layer.merge(
+            makeRedisLive({ url: testRedisUrl ?? "" }),
+            Layer.succeed(UsagePolicy, policy),
           ),
         ),
       ),
@@ -56,12 +54,12 @@ describe("Usage reservation lifecycle", () => {
     return;
   }
 
-  test("reserving the same Delivery twice consumes one place", () => {
+  it.live("reserving the same Delivery twice consumes one place", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
     const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
     const second = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
-    return runWithUsage(
+    return withUsage(
       makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;
@@ -82,11 +80,11 @@ describe("Usage reservation lifecycle", () => {
     );
   });
 
-  test("releasing twice cannot release another Delivery's Usage", () => {
+  it.live("releasing twice cannot release another Delivery's Usage", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
     const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
-    return runWithUsage(
+    return withUsage(
       makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;
@@ -108,11 +106,11 @@ describe("Usage reservation lifecycle", () => {
     );
   });
 
-  test("confirmed Usage remains consumed when cleanup is replayed", () => {
+  it.live("confirmed Usage remains consumed when cleanup is replayed", () => {
     const organizationId = `organization_${Bun.randomUUIDv7()}`;
     const first = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
 
-    return runWithUsage(
+    return withUsage(
       makePolicy(1),
       Effect.gen(function* () {
         const usage = yield* Usage;

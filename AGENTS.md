@@ -89,10 +89,10 @@ Bun installs and runs the apps; Vite+ (`vp`) runs lint, format and the workspace
 - `bun run db:migrate`, `bun run db:seed`: migrate and seed the root `.env`'s local database; the seed prints how to sign in and an API key.
 - `bun run db:generate`: a migration from the schema. The api, web and builder apply migrations when they start; the worker doesn't.
 - `bun run worktree:setup` (`--reset`), `bun run worktree:prune` (`--dry-run`): see Worktrees.
-- `vp lint <files>`, `vp run --filter <pkg> test`, `vp run --filter <pkg> typecheck`, `bun test <file>` inside a package: targeted checks.
+- `vp lint <files>`, `vp run --filter <pkg> test`, `vp run --filter <pkg> typecheck`, `bun run test <file>` inside a package: targeted checks.
 - `vp check` (format + lint, `--fix` to fix), `bun run typecheck`, `bun run test`, `bun run build`, `bun run knip`: repo-wide.
 
-Tests run on `bun test`, except `packages/template-render` and `tooling/oxlint-plugin` (Vitest). `bun run test` needs Docker and no `.env`: it starts a throwaway Postgres and Redis, runs every package's tests with the integration tests on, and reports every failing package; CI runs it the same way. Run alone, an integration test skips unless `TEST_DATABASE_URL` and `TEST_REDIS_URL` are set; point them at a database and Redis you can throw away.
+Tests run on Vitest through Vite+ and are written with `@effect/vitest`: `it.effect` (with the test clock), `it.live` when the code under test needs the real clock or does real I/O, `it.layer` to share a layer; never `Effect.run*` or `ManagedRuntime` in a test (lint refuses it). Each package's `test` script runs Vitest under Bun (`bun --bun vp test`), because the code under test uses Bun's Redis client, `Bun.spawn` and `Bun.build`; `tooling/oxlint-plugin` runs on Node. `bun run test` needs Docker and no `.env`: it starts a throwaway Postgres and Redis, runs every package's tests with the integration tests on, and reports every failing package; CI runs it the same way. Run alone, an integration test skips unless `TEST_DATABASE_URL` and `TEST_REDIS_URL` are set; point them at a database and Redis you can throw away.
 
 The commit hook formats and lints staged files and blocks the commit on a lint error. Lint as you go rather than finding out at commit.
 

@@ -16,6 +16,9 @@ const IGNORED = [
 ];
 
 export default defineConfig({
+  // Workspace packages have no `exports`: each package's tsconfig `paths` resolve
+  // `@repo/*` to source, as Bun does when the apps run and build.
+  resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
     exclude: ["**/temp/**", "**/node_modules/**", "**/dist/**", "**/build/**", "**/.output/**"],
@@ -53,9 +56,7 @@ export default defineConfig({
       "relayit/no-empty-job-payload": "error",
       "relayit/no-erased-job-requirements": "error",
       "relayit/no-inline-schema-compile": "warn",
-      // Tests run on `bun test` and drive Effect by hand; moving them to @effect/vitest is
-      // its own change, so the existing runners stay flagged until then.
-      "relayit/no-manual-effect-runtime-in-tests": "warn",
+      "relayit/no-manual-effect-runtime-in-tests": "error",
       "relayit/no-tagged-error-factory": "error",
       "relayit/no-test-in-loop": "error",
       "relayit/prefer-catch-tags": "error",

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { makeObjectStorageLive, ObjectStorage } from "./client";
 
@@ -63,142 +63,134 @@ const makeTestLive = (endpoint: string) =>
   });
 
 describe("ObjectStorage.exists", () => {
-  test("returns false when S3 reports that the object is missing", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          expect(yield* storage.exists("missing")).toBe(false);
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
+  it.live("returns false when S3 reports that the object is missing", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        expect(yield* storage.exists("missing")).toBe(false);
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
 
-  test("preserves non-missing S3 failures", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          const exit = yield* Effect.exit(storage.exists("denied"));
+  it.live("preserves non-missing S3 failures", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        const exit = yield* Effect.exit(storage.exists("denied"));
 
-          expect(exit._tag).toBe("Failure");
-          if (exit._tag === "Failure") {
-            const reason = exit.cause.reasons[0];
-            expect(reason && Cause.isFailReason(reason)).toBe(true);
-            if (reason && Cause.isFailReason(reason)) {
-              expect(reason.error).toMatchObject({
-                _tag: "ObjectStorageError",
-                key: "denied",
-                operation: "exists",
-              });
-            }
+        expect(exit._tag).toBe("Failure");
+        if (exit._tag === "Failure") {
+          const reason = exit.cause.reasons[0];
+          expect(reason && Cause.isFailReason(reason)).toBe(true);
+          if (reason && Cause.isFailReason(reason)) {
+            expect(reason.error).toMatchObject({
+              _tag: "ObjectStorageError",
+              key: "denied",
+              operation: "exists",
+            });
           }
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
+        }
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
 });
 
 describe("ObjectStorage live operations", () => {
-  test("uploads bytes without optional vendor-specific checksums", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint, requests }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          expect(
-            yield* storage.upload("upload", new Uint8Array([1, 2, 3]), {
-              contentType: "application/octet-stream",
-            }),
-          ).toEqual({ key: "upload" });
-
-          const upload = requests.find((request) => request.method === "PUT");
-          expect(upload?.path).toBe("/test-bucket/upload");
-          expect(upload?.headers["x-amz-checksum-crc32"]).toBeUndefined();
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
-
-  test("downloads bytes and content type", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          const result = yield* storage.download("download");
-
-          expect(Array.from(result.body)).toEqual([1, 2, 3]);
-          expect(result.contentType).toBe("application/octet-stream");
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
-
-  test("downloads zero-byte objects", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          const result = yield* storage.download("empty");
-
-          expect(result.body.byteLength).toBe(0);
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
-
-  test("deletes objects", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint, requests }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          yield* storage.delete("delete");
-
-          expect(
-            requests.some(
-              (request) => request.method === "DELETE" && request.path === "/test-bucket/delete",
-            ),
-          ).toBe(true);
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
-
-  test("creates namespaced presigned URLs", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          const upload = yield* storage.signedUploadUrl("signed-upload", {
+  it.live("uploads bytes without optional vendor-specific checksums", () =>
+    withTestServer(({ endpoint, requests }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        expect(
+          yield* storage.upload("upload", new Uint8Array([1, 2, 3]), {
             contentType: "application/octet-stream",
-            expiresInSeconds: 60,
-          });
-          const download = yield* storage.signedDownloadUrl("signed-download", {
-            expiresInSeconds: 120,
-          });
-          const uploadUrl = new URL(upload.url);
-          const downloadUrl = new URL(download.url);
+          }),
+        ).toEqual({ key: "upload" });
 
-          expect(upload.key).toBe("signed-upload");
-          expect(uploadUrl.pathname).toBe("/test-bucket/signed-upload");
-          expect(uploadUrl.searchParams.get("X-Amz-Expires")).toBe("60");
-          expect(uploadUrl.searchParams.get("X-Amz-Credential")).toContain("/de/s3/aws4_request");
-          expect(downloadUrl.pathname).toBe("/test-bucket/signed-download");
-          expect(downloadUrl.searchParams.get("X-Amz-Expires")).toBe("120");
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
+        const upload = requests.find((request) => request.method === "PUT");
+        expect(upload?.path).toBe("/test-bucket/upload");
+        expect(upload?.headers["x-amz-checksum-crc32"]).toBeUndefined();
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
 
-  test("rejects presigned URL expiries outside SigV4 limits", () =>
-    Effect.runPromise(
-      withTestServer(({ endpoint }) =>
-        Effect.gen(function* () {
-          const storage = yield* ObjectStorage;
-          const tooShort = yield* Effect.exit(
-            storage.signedUploadUrl("signed-upload", { expiresInSeconds: 0 }),
-          );
-          const tooLong = yield* Effect.exit(
-            storage.signedDownloadUrl("signed-download", {
-              expiresInSeconds: 604_801,
-            }),
-          );
+  it.live("downloads bytes and content type", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        const result = yield* storage.download("download");
 
-          expect(tooShort._tag).toBe("Failure");
-          expect(tooLong._tag).toBe("Failure");
-        }).pipe(Effect.provide(makeTestLive(endpoint))),
-      ),
-    ));
+        expect(Array.from(result.body)).toEqual([1, 2, 3]);
+        expect(result.contentType).toBe("application/octet-stream");
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
+
+  it.live("downloads zero-byte objects", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        const result = yield* storage.download("empty");
+
+        expect(result.body.byteLength).toBe(0);
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
+
+  it.live("deletes objects", () =>
+    withTestServer(({ endpoint, requests }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        yield* storage.delete("delete");
+
+        expect(
+          requests.some(
+            (request) => request.method === "DELETE" && request.path === "/test-bucket/delete",
+          ),
+        ).toBe(true);
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
+
+  it.live("creates namespaced presigned URLs", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        const upload = yield* storage.signedUploadUrl("signed-upload", {
+          contentType: "application/octet-stream",
+          expiresInSeconds: 60,
+        });
+        const download = yield* storage.signedDownloadUrl("signed-download", {
+          expiresInSeconds: 120,
+        });
+        const uploadUrl = new URL(upload.url);
+        const downloadUrl = new URL(download.url);
+
+        expect(upload.key).toBe("signed-upload");
+        expect(uploadUrl.pathname).toBe("/test-bucket/signed-upload");
+        expect(uploadUrl.searchParams.get("X-Amz-Expires")).toBe("60");
+        expect(uploadUrl.searchParams.get("X-Amz-Credential")).toContain("/de/s3/aws4_request");
+        expect(downloadUrl.pathname).toBe("/test-bucket/signed-download");
+        expect(downloadUrl.searchParams.get("X-Amz-Expires")).toBe("120");
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
+
+  it.live("rejects presigned URL expiries outside SigV4 limits", () =>
+    withTestServer(({ endpoint }) =>
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        const tooShort = yield* Effect.exit(
+          storage.signedUploadUrl("signed-upload", { expiresInSeconds: 0 }),
+        );
+        const tooLong = yield* Effect.exit(
+          storage.signedDownloadUrl("signed-download", {
+            expiresInSeconds: 604_801,
+          }),
+        );
+
+        expect(tooShort._tag).toBe("Failure");
+        expect(tooLong._tag).toBe("Failure");
+      }).pipe(Effect.provide(makeTestLive(endpoint))),
+    ),
+  );
 });

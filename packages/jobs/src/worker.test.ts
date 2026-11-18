@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { makeSchemaJsonCodec, Redis, RedisCommandError, type RedisService } from "@repo/redis";
 import { Data, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -125,7 +125,7 @@ const makeDeadLetterRecorder = () => {
 };
 
 describe("job execution", () => {
-  test("executes a valid job and acknowledges it", () => {
+  it.live("executes a valid job and acknowledges it", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const handled: Array<{
@@ -141,27 +141,25 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_1" }, 1000);
+    return Effect.gen(function* () {
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_1" }, 1000);
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "10-0",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "10-0",
+      });
 
-        expect(handled).toEqual([
-          {
-            execution: { attempt: 1, enqueuedAt: 1000, id: "10-0" },
-            payload: { deliveryId: "delivery_1" },
-          },
-        ]);
-        expect(redis.acknowledged).toEqual(["10-0"]);
-      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer))),
-    );
+      expect(handled).toEqual([
+        {
+          execution: { attempt: 1, enqueuedAt: 1000, id: "10-0" },
+          payload: { deliveryId: "delivery_1" },
+        },
+      ]);
+      expect(redis.acknowledged).toEqual(["10-0"]);
+    }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
   });
 
-  test("adds job context when acknowledgement fails", () => {
+  it.live("adds job context when acknowledgement fails", () => {
     const cause = new RedisCommandError({
       cause: new TypeError("Connection closed"),
       operation: "acknowledge",
@@ -174,26 +172,24 @@ describe("job execution", () => {
       handle: () => Effect.void,
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_1" }, 1000);
-        const error = yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "10-1",
-        }).pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_1" }, 1000);
+      const error = yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "10-1",
+      }).pipe(Effect.flip);
 
-        expect(error).toMatchObject({
-          _tag: "JobProcessingError",
-          cause,
-          entryId: "10-1",
-          jobName: "email.deliver",
-          stage: "acknowledge",
-        });
-      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer))),
-    );
+      expect(error).toMatchObject({
+        _tag: "JobProcessingError",
+        cause,
+        entryId: "10-1",
+        jobName: "email.deliver",
+        stage: "acknowledge",
+      });
+    }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
   });
 
-  test("schedules a failed job for retry before acknowledging it", () => {
+  it.live("schedules a failed job for retry before acknowledging it", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const handler = defineJobHandler({
@@ -202,31 +198,29 @@ describe("job execution", () => {
       handle: () => Effect.fail(new TestJobFailure({ message: "SES unavailable" })),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_2" }, 1000);
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_2" }, 1000);
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "11-0",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "11-0",
+      });
 
-        expect(redis.acknowledged).toEqual(["11-0"]);
-        expect(redis.delayed).toHaveLength(1);
-        expect(redis.delayed[0]?.key).toBe("relayit:jobs:email.deliver:delayed");
-        expect(redis.delayed[0]?.score).toBe(6000);
+      expect(redis.acknowledged).toEqual(["11-0"]);
+      expect(redis.delayed).toHaveLength(1);
+      expect(redis.delayed[0]?.key).toBe("relayit:jobs:email.deliver:delayed");
+      expect(redis.delayed[0]?.score).toBe(6000);
 
-        const retry = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
-          redis.delayed[0]?.member ?? "",
-        );
-        expect(retry.attempts).toBe(1);
-        expect(retry.firstEnqueuedAt).toBe(1000);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+      const retry = yield* makeSchemaJsonCodec(jobEnvelopeSchema).decode(
+        redis.delayed[0]?.member ?? "",
+      );
+      expect(retry.attempts).toBe(1);
+      expect(retry.firstEnqueuedAt).toBe(1000);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("cleans up a terminal failure before dead-lettering without retrying", () => {
+  it.live("cleans up a terminal failure before dead-lettering without retrying", () => {
     const redis = makeRedisRecorder();
     const events: string[] = [];
     const deadLetters = {
@@ -253,24 +247,22 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_terminal" }, 1000);
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_terminal" }, 1000);
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "11-1",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "11-1",
+      });
 
-        expect(events).toEqual(["cleanup", "dead-letter"]);
-        expect(redis.delayed).toHaveLength(0);
-        expect(redis.acknowledged).toEqual(["11-1"]);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+      expect(events).toEqual(["cleanup", "dead-letter"]);
+      expect(redis.delayed).toHaveLength(0);
+      expect(redis.acknowledged).toEqual(["11-1"]);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("leaves a terminal job pending when dead-letter cleanup fails", () => {
+  it.live("leaves a terminal job pending when dead-letter cleanup fails", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const cleanupFailure = new TestJobFailure({
@@ -288,32 +280,30 @@ describe("job execution", () => {
       onDeadLetter: () => Effect.fail(cleanupFailure),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const payload = yield* encodeJob(
-          deliverEmail,
-          { deliveryId: "delivery_cleanup_failure" },
-          1000,
-        );
-        const error = yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "11-2",
-        }).pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const payload = yield* encodeJob(
+        deliverEmail,
+        { deliveryId: "delivery_cleanup_failure" },
+        1000,
+      );
+      const error = yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "11-2",
+      }).pipe(Effect.flip);
 
-        expect(error).toMatchObject({
-          _tag: "JobProcessingError",
-          cause: cleanupFailure,
-          entryId: "11-2",
-          jobName: "email.deliver",
-          stage: "dead-letter-cleanup",
-        });
-        expect(deadLetters.records).toHaveLength(0);
-        expect(redis.acknowledged).toHaveLength(0);
-      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer))),
-    );
+      expect(error).toMatchObject({
+        _tag: "JobProcessingError",
+        cause: cleanupFailure,
+        entryId: "11-2",
+        jobName: "email.deliver",
+        stage: "dead-letter-cleanup",
+      });
+      expect(deadLetters.records).toHaveLength(0);
+      expect(redis.acknowledged).toHaveLength(0);
+    }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
   });
 
-  test("dead-letters an exhausted job before acknowledging it", () => {
+  it.live("dead-letters an exhausted job before acknowledging it", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const cleanedUp: string[] = [];
@@ -335,50 +325,48 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        const initial = yield* encodeJob(deliverEmail, { deliveryId: "delivery_3" }, 1000);
-        const envelopeCodec = makeSchemaJsonCodec(jobEnvelopeSchema);
-        const envelope = yield* envelopeCodec.decode(initial);
-        const exhausted = yield* envelopeCodec.encode({
-          ...envelope,
-          attempts: 2,
-        });
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      const initial = yield* encodeJob(deliverEmail, { deliveryId: "delivery_3" }, 1000);
+      const envelopeCodec = makeSchemaJsonCodec(jobEnvelopeSchema);
+      const envelope = yield* envelopeCodec.decode(initial);
+      const exhausted = yield* envelopeCodec.encode({
+        ...envelope,
+        attempts: 2,
+      });
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, exhausted],
-          id: "12-0",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, exhausted],
+        id: "12-0",
+      });
 
-        expect(deadLetters.records).toEqual([
-          {
-            attempts: 3,
-            failedAt: 5000,
-            failure: {
-              code: "ses_unavailable",
-              details: {
-                region: "eu-central-1",
-                retryAfterMs: 5000,
-              },
-              message: "SES unavailable",
-              name: "TestJobFailure",
+      expect(deadLetters.records).toEqual([
+        {
+          attempts: 3,
+          failedAt: 5000,
+          failure: {
+            code: "ses_unavailable",
+            details: {
+              region: "eu-central-1",
+              retryAfterMs: 5000,
             },
-            firstEnqueuedAt: 1000,
-            jobName: "email.deliver",
-            originalStreamId: "12-0",
-            payload: envelope.data,
-            wireVersion: 1,
+            message: "SES unavailable",
+            name: "TestJobFailure",
           },
-        ]);
-        expect(cleanedUp).toEqual(["delivery_3"]);
-        expect(redis.acknowledged).toEqual(["12-0"]);
-        expect(redis.delayed).toHaveLength(0);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+          firstEnqueuedAt: 1000,
+          jobName: "email.deliver",
+          originalStreamId: "12-0",
+          payload: envelope.data,
+          wireVersion: 1,
+        },
+      ]);
+      expect(cleanedUp).toEqual(["delivery_3"]);
+      expect(redis.acknowledged).toEqual(["12-0"]);
+      expect(redis.delayed).toHaveLength(0);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("dead-letters an invalid payload without calling its handler", () => {
+  it.live("dead-letters an invalid payload without calling its handler", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     let handled = false;
@@ -391,44 +379,42 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        const malformed = yield* makeSchemaJsonCodec(jobEnvelopeSchema).encode({
-          attempts: 0,
-          data: '{"deliveryId":42}',
-          firstEnqueuedAt: 1000,
-          wireVersion: 1,
-        });
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      const malformed = yield* makeSchemaJsonCodec(jobEnvelopeSchema).encode({
+        attempts: 0,
+        data: '{"deliveryId":42}',
+        firstEnqueuedAt: 1000,
+        wireVersion: 1,
+      });
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, malformed],
-          id: "13-0",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, malformed],
+        id: "13-0",
+      });
 
-        expect(handled).toBe(false);
-        expect(deadLetters.records).toEqual([
-          {
-            attempts: 1,
-            failedAt: 5000,
-            failure: {
-              code: "JOB_PAYLOAD_INVALID",
-              message: "Job payload could not be decoded",
-              name: "JobDecodeFailure",
-            },
-            firstEnqueuedAt: 1000,
-            jobName: "email.deliver",
-            originalStreamId: "13-0",
-            payload: '{"deliveryId":42}',
-            wireVersion: 1,
+      expect(handled).toBe(false);
+      expect(deadLetters.records).toEqual([
+        {
+          attempts: 1,
+          failedAt: 5000,
+          failure: {
+            code: "JOB_PAYLOAD_INVALID",
+            message: "Job payload could not be decoded",
+            name: "JobDecodeFailure",
           },
-        ]);
-        expect(redis.acknowledged).toEqual(["13-0"]);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+          firstEnqueuedAt: 1000,
+          jobName: "email.deliver",
+          originalStreamId: "13-0",
+          payload: '{"deliveryId":42}',
+          wireVersion: 1,
+        },
+      ]);
+      expect(redis.acknowledged).toEqual(["13-0"]);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("dead-letters an invalid envelope so it cannot poison the stream", () => {
+  it.live("dead-letters an invalid envelope so it cannot poison the stream", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const handler = defineJobHandler({
@@ -437,36 +423,34 @@ describe("job execution", () => {
       handle: () => Effect.void,
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, "not-json"],
-          id: "14-0",
-        });
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, "not-json"],
+        id: "14-0",
+      });
 
-        expect(deadLetters.records).toEqual([
-          {
-            attempts: 1,
-            failedAt: 5000,
-            failure: {
-              code: "JOB_ENVELOPE_INVALID",
-              message: "Job envelope could not be decoded",
-              name: "JobDecodeFailure",
-            },
-            firstEnqueuedAt: 5000,
-            jobName: "email.deliver",
-            originalStreamId: "14-0",
-            payload: "not-json",
-            wireVersion: 0,
+      expect(deadLetters.records).toEqual([
+        {
+          attempts: 1,
+          failedAt: 5000,
+          failure: {
+            code: "JOB_ENVELOPE_INVALID",
+            message: "Job envelope could not be decoded",
+            name: "JobDecodeFailure",
           },
-        ]);
-        expect(redis.acknowledged).toEqual(["14-0"]);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+          firstEnqueuedAt: 5000,
+          jobName: "email.deliver",
+          originalStreamId: "14-0",
+          payload: "not-json",
+          wireVersion: 0,
+        },
+      ]);
+      expect(redis.acknowledged).toEqual(["14-0"]);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("dispatches entries from registered streams in one blocking batch", () => {
+  it.live("dispatches entries from registered streams in one blocking batch", () => {
     const deadLetters = makeDeadLetterRecorder();
     const handled: string[] = [];
     const handler = defineJobHandler({
@@ -478,40 +462,38 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_4" }, 1000);
-        const redis = makeRedisRecorder([
-          {
-            fields: [REDIS_PAYLOAD_FIELD, payload],
-            id: "15-0",
-            stream: "relayit:jobs:email.deliver:ready",
-          },
-        ]);
+    return Effect.gen(function* () {
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_4" }, 1000);
+      const redis = makeRedisRecorder([
+        {
+          fields: [REDIS_PAYLOAD_FIELD, payload],
+          id: "15-0",
+          stream: "relayit:jobs:email.deliver:ready",
+        },
+      ]);
 
-        yield* processJobBatch([registerJobHandler(handler)], {
+      yield* processJobBatch([registerJobHandler(handler)], {
+        blockMs: 5000,
+        concurrency: 4,
+        consumer: "api-1",
+        count: 10,
+      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+
+      expect(handled).toEqual(["delivery_4"]);
+      expect(redis.reads).toEqual([
+        {
           blockMs: 5000,
-          concurrency: 4,
           consumer: "api-1",
           count: 10,
-        }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
-
-        expect(handled).toEqual(["delivery_4"]);
-        expect(redis.reads).toEqual([
-          {
-            blockMs: 5000,
-            consumer: "api-1",
-            count: 10,
-            group: "relayit:jobs:workers",
-            streams: ["relayit:jobs:email.deliver:ready"],
-          },
-        ]);
-        expect(redis.acknowledged).toEqual(["15-0"]);
-      }),
-    );
+          group: "relayit:jobs:workers",
+          streams: ["relayit:jobs:email.deliver:ready"],
+        },
+      ]);
+      expect(redis.acknowledged).toEqual(["15-0"]);
+    });
   });
 
-  test("promotes due delayed jobs for every registered stream", () => {
+  it.live("promotes due delayed jobs for every registered stream", () => {
     const redis = makeRedisRecorder();
     const handler = defineJobHandler({
       classifyFailure: () => "retryable",
@@ -519,24 +501,22 @@ describe("job execution", () => {
       handle: () => Effect.void,
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(5000);
-        yield* promoteDelayedJobs([registerJobHandler(handler)], {
-          limit: 25,
-        });
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(5000);
+      yield* promoteDelayedJobs([registerJobHandler(handler)], {
+        limit: 25,
+      });
 
-        expect(redis.evaluations).toHaveLength(1);
-        expect(redis.evaluations[0]?.keys).toEqual([
-          "relayit:jobs:email.deliver:delayed",
-          "relayit:jobs:email.deliver:ready",
-        ]);
-        expect(redis.evaluations[0]?.args).toEqual(["5000", "25"]);
-      }).pipe(Effect.provide(Layer.merge(redis.layer, TestClock.layer()))),
-    );
+      expect(redis.evaluations).toHaveLength(1);
+      expect(redis.evaluations[0]?.keys).toEqual([
+        "relayit:jobs:email.deliver:delayed",
+        "relayit:jobs:email.deliver:ready",
+      ]);
+      expect(redis.evaluations[0]?.args).toEqual(["5000", "25"]);
+    }).pipe(Effect.provide(Layer.merge(redis.layer, TestClock.layer())));
   });
 
-  test("registers recurring jobs with scheduled keys and runs reconcile once", () => {
+  it.live("registers recurring jobs with scheduled keys and runs reconcile once", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const reconciles: string[] = [];
@@ -553,17 +533,15 @@ describe("job execution", () => {
     expect(registration.scheduledKey).toBe("relayit:jobs:email.verify-domain:scheduled");
     expect(registration.payloadsKey).toBe("relayit:jobs:email.verify-domain:payloads");
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* (registration.reconcile ?? Effect.void).pipe(
-          Effect.provide(Layer.merge(redis.layer, deadLetters.layer)),
-        );
-        expect(reconciles).toEqual(["verify-domain"]);
-      }),
-    );
+    return Effect.gen(function* () {
+      yield* (registration.reconcile ?? Effect.void).pipe(
+        Effect.provide(Layer.merge(redis.layer, deadLetters.layer)),
+      );
+      expect(reconciles).toEqual(["verify-domain"]);
+    });
   });
 
-  test("promotes due scheduled recurring jobs for every recurring registration", () => {
+  it.live("promotes due scheduled recurring jobs for every recurring registration", () => {
     const redis = makeRedisRecorder();
     const recurring = defineJobHandler({
       classifyFailure: () => "retryable",
@@ -576,25 +554,23 @@ describe("job execution", () => {
       handle: () => Effect.void,
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(7000);
-        yield* promoteScheduledJobs([registerJobHandler(ordinary), registerJobHandler(recurring)], {
-          limit: 10,
-        });
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(7000);
+      yield* promoteScheduledJobs([registerJobHandler(ordinary), registerJobHandler(recurring)], {
+        limit: 10,
+      });
 
-        expect(redis.evaluations).toHaveLength(1);
-        expect(redis.evaluations[0]?.keys).toEqual([
-          "relayit:jobs:email.verify-domain:scheduled",
-          "relayit:jobs:email.verify-domain:payloads",
-          "relayit:jobs:email.verify-domain:ready",
-        ]);
-        expect(redis.evaluations[0]?.args).toEqual(["7000", "10"]);
-      }).pipe(Effect.provide(Layer.merge(redis.layer, TestClock.layer()))),
-    );
+      expect(redis.evaluations).toHaveLength(1);
+      expect(redis.evaluations[0]?.keys).toEqual([
+        "relayit:jobs:email.verify-domain:scheduled",
+        "relayit:jobs:email.verify-domain:payloads",
+        "relayit:jobs:email.verify-domain:ready",
+      ]);
+      expect(redis.evaluations[0]?.args).toEqual(["7000", "10"]);
+    }).pipe(Effect.provide(Layer.merge(redis.layer, TestClock.layer())));
   });
 
-  test("retries a failed recurring job through the normal delayed path", () => {
+  it.live("retries a failed recurring job through the normal delayed path", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     const handler = defineJobHandler({
@@ -608,26 +584,24 @@ describe("job execution", () => {
         ),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(2000);
-        const payload = yield* encodeJob(verifyDomain, { domainId: "domain_1" }, 1000);
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(2000);
+      const payload = yield* encodeJob(verifyDomain, { domainId: "domain_1" }, 1000);
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, payload],
-          id: "20-0",
-        });
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, payload],
+        id: "20-0",
+      });
 
-        expect(deadLetters.records).toHaveLength(0);
-        expect(redis.delayed).toHaveLength(1);
-        expect(redis.delayed[0]?.key).toBe("relayit:jobs:email.verify-domain:delayed");
-        expect(redis.delayed[0]?.score).toBe(3000);
-        expect(redis.acknowledged).toEqual(["20-0"]);
-      }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer()))),
-    );
+      expect(deadLetters.records).toHaveLength(0);
+      expect(redis.delayed).toHaveLength(1);
+      expect(redis.delayed[0]?.key).toBe("relayit:jobs:email.verify-domain:delayed");
+      expect(redis.delayed[0]?.score).toBe(3000);
+      expect(redis.acknowledged).toEqual(["20-0"]);
+    }).pipe(Effect.provide(Layer.mergeAll(redis.layer, deadLetters.layer, TestClock.layer())));
   });
 
-  test("dead-letters an invalid recurring payload without calling its handler", () => {
+  it.live("dead-letters an invalid recurring payload without calling its handler", () => {
     const redis = makeRedisRecorder();
     const deadLetters = makeDeadLetterRecorder();
     let handled = 0;
@@ -640,29 +614,27 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const envelope = yield* makeSchemaJsonCodec(jobEnvelopeSchema).encode({
-          attempts: 0,
-          data: '{"not":"valid"}',
-          firstEnqueuedAt: 1000,
-          wireVersion: 1,
-        });
+    return Effect.gen(function* () {
+      const envelope = yield* makeSchemaJsonCodec(jobEnvelopeSchema).encode({
+        attempts: 0,
+        data: '{"not":"valid"}',
+        firstEnqueuedAt: 1000,
+        wireVersion: 1,
+      });
 
-        yield* processJob(handler, {
-          fields: [REDIS_PAYLOAD_FIELD, envelope],
-          id: "21-0",
-        }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+      yield* processJob(handler, {
+        fields: [REDIS_PAYLOAD_FIELD, envelope],
+        id: "21-0",
+      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
 
-        expect(handled).toBe(0);
-        expect(deadLetters.records).toHaveLength(1);
-        expect(deadLetters.records[0]?.failure.code).toBe("JOB_PAYLOAD_INVALID");
-        expect(redis.acknowledged).toEqual(["21-0"]);
-      }),
-    );
+      expect(handled).toBe(0);
+      expect(deadLetters.records).toHaveLength(1);
+      expect(deadLetters.records[0]?.failure.code).toBe("JOB_PAYLOAD_INVALID");
+      expect(redis.acknowledged).toEqual(["21-0"]);
+    });
   });
 
-  test("reclaims stale pending jobs and processes them normally", () => {
+  it.live("reclaims stale pending jobs and processes them normally", () => {
     const deadLetters = makeDeadLetterRecorder();
     const handled: string[] = [];
     const handler = defineJobHandler({
@@ -674,39 +646,37 @@ describe("job execution", () => {
         }),
     });
 
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_5" }, 1000);
-        const redis = makeRedisRecorder(
-          [],
-          [
-            {
-              fields: [REDIS_PAYLOAD_FIELD, payload],
-              id: "16-0",
-            },
-          ],
-        );
+    return Effect.gen(function* () {
+      const payload = yield* encodeJob(deliverEmail, { deliveryId: "delivery_5" }, 1000);
+      const redis = makeRedisRecorder(
+        [],
+        [
+          {
+            fields: [REDIS_PAYLOAD_FIELD, payload],
+            id: "16-0",
+          },
+        ],
+      );
 
-        yield* reclaimStaleJobs([registerJobHandler(handler)], {
-          concurrency: 4,
+      yield* reclaimStaleJobs([registerJobHandler(handler)], {
+        concurrency: 4,
+        consumer: "api-1",
+        count: 10,
+        minIdleMs: 30_000,
+      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+
+      expect(handled).toEqual(["delivery_5"]);
+      expect(redis.claims).toEqual([
+        {
           consumer: "api-1",
           count: 10,
+          group: "relayit:jobs:workers",
           minIdleMs: 30_000,
-        }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
-
-        expect(handled).toEqual(["delivery_5"]);
-        expect(redis.claims).toEqual([
-          {
-            consumer: "api-1",
-            count: 10,
-            group: "relayit:jobs:workers",
-            minIdleMs: 30_000,
-            start: "0-0",
-            stream: "relayit:jobs:email.deliver:ready",
-          },
-        ]);
-        expect(redis.acknowledged).toEqual(["16-0"]);
-      }),
-    );
+          start: "0-0",
+          stream: "relayit:jobs:email.deliver:ready",
+        },
+      ]);
+      expect(redis.acknowledged).toEqual(["16-0"]);
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { EmailBackendMessageError } from "@repo/channels/email/backend";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { AwsUnexpectedResponseError, createAwsErrorMapper } from "./errors";
 
 const context = { region: "eu-central-1" } as const;

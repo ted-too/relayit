@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import {
   detachSesIdentityFromTenants,
@@ -74,51 +74,56 @@ const identity = (fqdn: string) => `arn:aws:ses:${REGION}:${ACCOUNT}:identity/${
 const configurationSet = `arn:aws:ses:${REGION}:${ACCOUNT}:configuration-set/relayit-delivery-events`;
 
 describe("ensureSesTenant", () => {
-  test("creates the Project tenant and associates identity + configuration set, idempotently", async () => {
-    const fake = makeSes();
-    const tenantName = sesTenantNameFor("orgn_01kzxymmwxe8grtge77p0gr1g2");
-    const ensure = ensureSesTenant(fake.ses, {
-      identityFqdn: "tsavaro.com",
-      region: REGION,
-      tenantName,
-    });
+  it.effect(
+    "creates the Project tenant and associates identity + configuration set, idempotently",
+    () =>
+      Effect.gen(function* () {
+        const fake = makeSes();
+        const tenantName = sesTenantNameFor("orgn_01kzxymmwxe8grtge77p0gr1g2");
+        const ensure = ensureSesTenant(fake.ses, {
+          identityFqdn: "tsavaro.com",
+          region: REGION,
+          tenantName,
+        });
 
-    await Effect.runPromise(ensure);
-    await Effect.runPromise(ensure);
+        yield* ensure;
+        yield* ensure;
 
-    expect(tenantName.length).toBeLessThanOrEqual(64);
-    expect([...fake.tenants]).toEqual([tenantName]);
-    expect(new Set(fake.associations)).toEqual(
-      new Set([`${tenantName}|${identity("tsavaro.com")}`, `${tenantName}|${configurationSet}`]),
-    );
-  });
+        expect(tenantName.length).toBeLessThanOrEqual(64);
+        expect([...fake.tenants]).toEqual([tenantName]);
+        expect(new Set(fake.associations)).toEqual(
+          new Set([
+            `${tenantName}|${identity("tsavaro.com")}`,
+            `${tenantName}|${configurationSet}`,
+          ]),
+        );
+      }),
+  );
 });
 
 describe("detachSesIdentityFromTenants", () => {
-  test("removes a shared identity from every tenant and leaves other resources", async () => {
-    const fake = makeSes();
-    for (const project of ["orgn_a", "orgn_b"]) {
-      await Effect.runPromise(
-        ensureSesTenant(fake.ses, {
+  it.effect("removes a shared identity from every tenant and leaves other resources", () =>
+    Effect.gen(function* () {
+      const fake = makeSes();
+      for (const project of ["orgn_a", "orgn_b"]) {
+        yield* ensureSesTenant(fake.ses, {
           identityFqdn: "sandbox.relayit.io",
           region: REGION,
           tenantName: sesTenantNameFor(project),
-        }),
-      );
-    }
+        });
+      }
 
-    await Effect.runPromise(
-      detachSesIdentityFromTenants(fake.ses, {
+      yield* detachSesIdentityFromTenants(fake.ses, {
         fqdn: "sandbox.relayit.io",
         region: REGION,
-      }),
-    );
+      });
 
-    expect(new Set(fake.associations)).toEqual(
-      new Set([
-        `${sesTenantNameFor("orgn_a")}|${configurationSet}`,
-        `${sesTenantNameFor("orgn_b")}|${configurationSet}`,
-      ]),
-    );
-  });
+      expect(new Set(fake.associations)).toEqual(
+        new Set([
+          `${sesTenantNameFor("orgn_a")}|${configurationSet}`,
+          `${sesTenantNameFor("orgn_b")}|${configurationSet}`,
+        ]),
+      );
+    }),
+  );
 });

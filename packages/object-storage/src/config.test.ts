@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Redacted } from "effect";
 import { objectStorageConfig } from "./config";
 
@@ -10,42 +10,50 @@ const S3 = {
 };
 
 const resolve = (env: Record<string, string>) =>
-  Effect.runPromise(
-    objectStorageConfig.pipe(
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(env))),
-      Effect.result,
-    ),
+  objectStorageConfig.pipe(
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(env))),
+    Effect.result,
   );
 
 describe("objectStorageConfig", () => {
-  test("keeps S3, with the same variables required, when nothing selects local", async () => {
-    const result = await resolve({ ...S3, NODE_ENV: "production" });
-    expect(result).toMatchObject({ success: { bucket: "relayit", kind: "s3", region: "auto" } });
-    if (result._tag === "Success" && result.success.kind === "s3") {
-      expect(Redacted.value(result.success.accessKeyId)).toBe("key");
-    }
-    expect(await resolve(S3)).toMatchObject({ success: { kind: "s3" } });
-    expect(await resolve({})).toMatchObject({ _tag: "Failure" });
-  });
+  it.effect("keeps S3, with the same variables required, when nothing selects local", () =>
+    Effect.gen(function* () {
+      const result = yield* resolve({ ...S3, NODE_ENV: "production" });
+      expect(result).toMatchObject({ success: { bucket: "relayit", kind: "s3", region: "auto" } });
+      if (result._tag === "Success" && result.success.kind === "s3") {
+        expect(Redacted.value(result.success.accessKeyId)).toBe("key");
+      }
+      expect(yield* resolve(S3)).toMatchObject({ success: { kind: "s3" } });
+      expect(yield* resolve({})).toMatchObject({ _tag: "Failure" });
+    }),
+  );
 
-  test("uses local storage under development, test or OBJECT_STORAGE=local", async () => {
-    expect(await resolve({ NODE_ENV: "development" })).toMatchObject({
-      success: { kind: "local" },
-    });
-    expect(await resolve({ NODE_ENV: "test", OBJECT_STORAGE_DIR: "/tmp/objects" })).toMatchObject({
-      success: { directory: "/tmp/objects", kind: "local" },
-    });
-    expect(await resolve({ OBJECT_STORAGE: "local" })).toMatchObject({
-      success: { kind: "local" },
-    });
-    expect(await resolve({ ...S3, NODE_ENV: "development", OBJECT_STORAGE: "s3" })).toMatchObject({
-      success: { kind: "s3" },
-    });
-  });
+  it.effect("uses local storage under development, test or OBJECT_STORAGE=local", () =>
+    Effect.gen(function* () {
+      expect(yield* resolve({ NODE_ENV: "development" })).toMatchObject({
+        success: { kind: "local" },
+      });
+      expect(
+        yield* resolve({ NODE_ENV: "test", OBJECT_STORAGE_DIR: "/tmp/objects" }),
+      ).toMatchObject({
+        success: { directory: "/tmp/objects", kind: "local" },
+      });
+      expect(yield* resolve({ OBJECT_STORAGE: "local" })).toMatchObject({
+        success: { kind: "local" },
+      });
+      expect(
+        yield* resolve({ ...S3, NODE_ENV: "development", OBJECT_STORAGE: "s3" }),
+      ).toMatchObject({
+        success: { kind: "s3" },
+      });
+    }),
+  );
 
-  test("refuses local storage under NODE_ENV=production", async () => {
-    expect(await resolve({ NODE_ENV: "production", OBJECT_STORAGE: "local" })).toMatchObject({
-      failure: { _tag: "LocalObjectStorageInProduction" },
-    });
-  });
+  it.effect("refuses local storage under NODE_ENV=production", () =>
+    Effect.gen(function* () {
+      expect(yield* resolve({ NODE_ENV: "production", OBJECT_STORAGE: "local" })).toMatchObject({
+        failure: { _tag: "LocalObjectStorageInProduction" },
+      });
+    }),
+  );
 });

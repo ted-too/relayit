@@ -9,8 +9,7 @@
     "./react-email": "./src/react-email/index.ts"
   },
   "scripts": {
-    "test": "bun --bun vitest run",
-    "test:watch": "bun --bun vitest",
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,6 +18,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "vitest": "catalog:"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import { type Database, DB } from "@repo/persistence/db/effect";
@@ -38,81 +38,79 @@ const baseInput = {
 };
 
 describe("acceptTransactionalEmail", () => {
-  test("rejects a Message without recipients before using infrastructure", () =>
-    Effect.runPromise(
-      acceptTransactionalEmail({
-        ...baseInput,
-        email: {
-          attachments: [],
-          bcc: [],
-          cc: [],
-          content: {
-            html: "<p>Hello</p>",
-            kind: "inline",
-            subject: "Hello",
-          },
-          from: {
-            address: "sender@example.com",
-            normalized: "sender@example.com",
-          },
-          headers: {},
-          replyTo: [],
-          to: [],
+  it.live("rejects a Message without recipients before using infrastructure", () =>
+    acceptTransactionalEmail({
+      ...baseInput,
+      email: {
+        attachments: [],
+        bcc: [],
+        cc: [],
+        content: {
+          html: "<p>Hello</p>",
+          kind: "inline",
+          subject: "Hello",
         },
-      }).pipe(
-        Effect.provide(testServices),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "EmailAcceptRejected",
-            code: "no_recipients",
-          });
-          return error;
-        }),
-      ),
-    ));
+        from: {
+          address: "sender@example.com",
+          normalized: "sender@example.com",
+        },
+        headers: {},
+        replyTo: [],
+        to: [],
+      },
+    }).pipe(
+      Effect.provide(testServices),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "EmailAcceptRejected",
+          code: "no_recipients",
+        });
+        return error;
+      }),
+    ),
+  );
 
-  test("rejects blocked attachment filenames before using infrastructure", () =>
-    Effect.runPromise(
-      acceptTransactionalEmail({
-        ...baseInput,
-        email: {
-          attachments: [
-            {
-              filename: "payload.exe",
-              source: { content: "QQ==", kind: "base64" },
-            },
-          ],
-          bcc: [],
-          cc: [],
-          content: {
-            html: "<p>Hello</p>",
-            kind: "inline",
-            subject: "Hello",
+  it.live("rejects blocked attachment filenames before using infrastructure", () =>
+    acceptTransactionalEmail({
+      ...baseInput,
+      email: {
+        attachments: [
+          {
+            filename: "payload.exe",
+            source: { content: "QQ==", kind: "base64" },
           },
-          from: {
-            address: "sender@example.com",
-            normalized: "sender@example.com",
-          },
-          headers: {},
-          replyTo: [],
-          to: [{ email: "recipient@example.com" }],
+        ],
+        bcc: [],
+        cc: [],
+        content: {
+          html: "<p>Hello</p>",
+          kind: "inline",
+          subject: "Hello",
         },
-      }).pipe(
-        Effect.provide(testServices),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "EmailAcceptRejected",
-            code: "invalid_attachment",
-            details: {
-              filename: "payload.exe",
-              reason: "blocked_extension",
-            },
-            message: "This file type isn't allowed for security reasons.",
-          });
-          return error;
-        }),
-      ),
-    ));
+        from: {
+          address: "sender@example.com",
+          normalized: "sender@example.com",
+        },
+        headers: {},
+        replyTo: [],
+        to: [{ email: "recipient@example.com" }],
+      },
+    }).pipe(
+      Effect.provide(testServices),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "EmailAcceptRejected",
+          code: "invalid_attachment",
+          details: {
+            filename: "payload.exe",
+            reason: "blocked_extension",
+          },
+          message: "This file type isn't allowed for security reasons.",
+        });
+        return error;
+      }),
+    ),
+  );
 });

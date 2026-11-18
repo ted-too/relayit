@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { computeNextCheckAt, mergeVerificationStatus } from "./cadence";
 
 describe("computeNextCheckAt", () => {

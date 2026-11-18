@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun --no-env-file test"
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@effect-aws/client-sesv2": "2.0.0",
@@ -17,7 +17,9 @@
     "sns-validator": "^0.3.5"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/sns-validator": "^0.3.3",
-    "typeid-js": "catalog:"
+    "typeid-js": "catalog:",
+    "vitest": "catalog:"
   }
 }

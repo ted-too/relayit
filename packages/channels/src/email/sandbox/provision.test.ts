@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
@@ -47,7 +47,7 @@ const sandbox = {
 };
 
 describe("ensureSandboxDomain", () => {
-  test("only sweeps when the sandbox is already registered", () => {
+  it.effect("only sweeps when the sandbox is already registered", () => {
     const db = {
       query: {
         sandboxDomain: {
@@ -56,37 +56,36 @@ describe("ensureSandboxDomain", () => {
       },
     };
 
-    return Effect.runPromise(
-      ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
-        Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
-        Effect.map((allocated) => {
-          expect(allocated).toBe(0);
-          return allocated;
-        }),
-      ),
+    return ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
+      Effect.provide(Layer.mergeAll(unusedServices, Layer.succeed(DB, db as never))),
+      Effect.map((allocated) => {
+        expect(allocated).toBe(0);
+        return allocated;
+      }),
     );
   });
 
-  test("registers an unregistered sandbox in the default region and schedules its verify", () => {
-    const registrations: unknown[] = [];
-    const owners: string[] = [];
-    const scheduled: unknown[] = [];
-    const db = {
-      insert: () => ({
-        values: (values: unknown) => {
-          registrations.push(values);
-          return Effect.void;
+  it.effect(
+    "registers an unregistered sandbox in the default region and schedules its verify",
+    () => {
+      const registrations: unknown[] = [];
+      const owners: string[] = [];
+      const scheduled: unknown[] = [];
+      const db = {
+        insert: () => ({
+          values: (values: unknown) => {
+            registrations.push(values);
+            return Effect.void;
+          },
+        }),
+        query: {
+          sandboxDomain: {
+            findFirst: () => Effect.succeed({ ...sandbox, registration: null }),
+          },
         },
-      }),
-      query: {
-        sandboxDomain: {
-          findFirst: () => Effect.succeed({ ...sandbox, registration: null }),
-        },
-      },
-    };
+      };
 
-    return Effect.runPromise(
-      ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
+      return ensureSandboxDomain({ cloudflareZoneId: "zone_1", rootDomain: "relayit.fyi" }).pipe(
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(DB, db as never),
@@ -135,7 +134,7 @@ describe("ensureSandboxDomain", () => {
           expect(scheduled).toEqual([{ sandboxDomainId: "sbxd_1" }]);
           return null;
         }),
-      ),
-    );
-  });
+      );
+    },
+  );
 });

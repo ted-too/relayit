@@ -108,9 +108,3 @@ Nitro's bundled server can keep a runtime `require("react")` inside CommonJS it 
 ## Migrations
 
 `packages/persistence/drizzle.config.ts` reads the schema from `packages/persistence/src/db/schema/` and the jobs package's two table files, and writes `packages/persistence/drizzle/<timestamp>_<name>/`. Generate with `vp run --filter @repo/persistence db:generate`; the config insists on a `DATABASE_URL` but generating never connects. The api, web and builder apply migrations on start (`packages/persistence/src/db/migrate.ts`); their images find them through `DRIZZLE_MIGRATIONS_FOLDER`. The worker image carries none.
-
-## Being removed
-
-Ted has decided these go. They are still in the code; don't build on them.
-
-- **`bun test`.** Tests move to Vitest and `@effect/vitest`, once Effect is on 4.0.2.

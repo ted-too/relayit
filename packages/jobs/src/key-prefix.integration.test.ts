@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { makeRedisClient, makeRedisLive, Redis } from "@repo/redis";
 import { Effect, Layer, Schema } from "effect";
 import { Jobs, JobsLive } from "./client";
@@ -24,7 +24,7 @@ describe("Redis key prefixes", () => {
     return;
   }
 
-  test(testName, async () => {
+  it.live(testName, () => {
     const run = Bun.randomUUIDv7();
     const prefixes = { a: `test:${run}:a:`, b: `test:${run}:b:` };
     const consumed: Record<"a" | "b", string[]> = { a: [], b: [] };
@@ -55,24 +55,24 @@ describe("Redis key prefixes", () => {
         });
       }).pipe(Effect.provide(checkout(name)));
 
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const jobs = yield* Jobs;
-          yield* jobs.enqueue(isolationJob, { sentFrom: "a" });
-        }).pipe(Effect.provide(checkout("a"))),
-      );
-
-      await Effect.runPromise(consume("b"));
-      expect(consumed.b).toEqual([]);
-
-      await Effect.runPromise(consume("a"));
-      expect(consumed.a).toEqual(["a"]);
-    } finally {
+    const cleanUp = Effect.promise(async () => {
       const client = makeRedisClient({ url: testRedisUrl });
       const stream = jobKeys(isolationJob.name).ready;
       await client.send("DEL", [prefixes.a + stream, prefixes.b + stream]);
       client.close();
-    }
+    });
+
+    return Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        const jobs = yield* Jobs;
+        yield* jobs.enqueue(isolationJob, { sentFrom: "a" });
+      }).pipe(Effect.provide(checkout("a")));
+
+      yield* consume("b");
+      expect(consumed.b).toEqual([]);
+
+      yield* consume("a");
+      expect(consumed.a).toEqual(["a"]);
+    }).pipe(Effect.ensuring(cleanUp));
   });
 });

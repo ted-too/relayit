@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { ObjectStorage, type ObjectStorageService } from "@repo/object-storage";
 import { type Database, DB } from "@repo/persistence/db/effect";
@@ -187,22 +187,20 @@ const payload = {
 const execution = { attempt: 1, enqueuedAt: Date.now(), id: "job_1" };
 
 describe("emailDeliverHandler", () => {
-  test("no-ops when the Delivery is already sent", () => {
+  it.effect("no-ops when the Delivery is already sent", () => {
     const { db, updates } = makeDb({
       delivery: { ...baseDelivery, status: "sent" },
     });
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(testLayer(db)),
-        Effect.map(() => {
-          expect(updates).toEqual([]);
-          return true;
-        }),
-      ),
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(testLayer(db)),
+      Effect.map(() => {
+        expect(updates).toEqual([]);
+        return true;
+      }),
     );
   });
 
-  test("marks paused domains failed and terminates", () => {
+  it.effect("marks paused domains failed and terminates", () => {
     const { db, updates } = makeDb({
       delivery: {
         ...baseDelivery,
@@ -214,45 +212,41 @@ describe("emailDeliverHandler", () => {
         },
       },
     });
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(testLayer(db)),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryTerminalError",
-            stage: "domain",
-          });
-          expect(updates[0]).toMatchObject({ status: "failed" });
-          return error;
-        }),
-      ),
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(testLayer(db)),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryTerminalError",
+          stage: "domain",
+        });
+        expect(updates[0]).toMatchObject({ status: "failed" });
+        return error;
+      }),
     );
   });
 
-  test("skips when every recipient is suppressed", () => {
+  it.effect("skips when every recipient is suppressed", () => {
     const { db, updates } = makeDb({
       suppressedEmails: ["recipient@example.com"],
     });
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(testLayer(db)),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryTerminalError",
-            stage: "suppressions",
-          });
-          expect(
-            updates.some((update) => (update as { status?: string }).status === "skipped"),
-          ).toBe(true);
-          return error;
-        }),
-      ),
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(testLayer(db)),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryTerminalError",
+          stage: "suppressions",
+        });
+        expect(updates.some((update) => (update as { status?: string }).status === "skipped")).toBe(
+          true,
+        );
+        return error;
+      }),
     );
   });
 
-  test("stops when the sending domain is not verified with SES", () => {
+  it.effect("stops when the sending domain is not verified with SES", () => {
     const { db } = makeDb({
       delivery: {
         ...baseDelivery,
@@ -264,59 +258,55 @@ describe("emailDeliverHandler", () => {
         },
       },
     });
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(testLayer(db)),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryTerminalError",
-            stage: "registration",
-          });
-          return error;
-        }),
-      ),
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(testLayer(db)),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryTerminalError",
+          stage: "registration",
+        });
+        return error;
+      }),
     );
   });
 
-  test("sends through the region the domain is registered in, as the sending Project", () => {
+  it.effect("sends through the region the domain is registered in, as the sending Project", () => {
     const { db, updates } = makeDb({});
     let confirmed = false;
     let sentWith: Parameters<EmailBackendService["send"]>[0] | undefined;
 
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            send: (input) => {
-              sentWith = input;
-              return Effect.succeed({ providerMessageId: "ses_msg_1" });
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(
+        testLayer(db, {
+          send: (input) => {
+            sentWith = input;
+            return Effect.succeed({ providerMessageId: "ses_msg_1" });
+          },
+          usage: {
+            confirm: () => {
+              confirmed = true;
+              return Effect.void;
             },
-            usage: {
-              confirm: () => {
-                confirmed = true;
-                return Effect.void;
-              },
-            },
-          }),
-        ),
-        Effect.map(() => {
-          expect(sentWith?.region).toBe("eu-central-1");
-          expect(sentWith?.message.sender).toEqual({
-            identityFqdn: "example.com",
-            projectId: "org_test",
-          });
-          expect(confirmed).toBe(true);
-          expect(updates).toContainEqual(
-            expect.objectContaining({ providerMessageId: "ses_msg_1", status: "sent" }),
-          );
-          return true;
+          },
         }),
       ),
+      Effect.map(() => {
+        expect(sentWith?.region).toBe("eu-central-1");
+        expect(sentWith?.message.sender).toEqual({
+          identityFqdn: "example.com",
+          projectId: "org_test",
+        });
+        expect(confirmed).toBe(true);
+        expect(updates).toContainEqual(
+          expect.objectContaining({ providerMessageId: "ses_msg_1", status: "sent" }),
+        );
+        return true;
+      }),
     );
   });
 
-  test("sends a domain registered before regions were recorded in the default region", () => {
+  it.effect("sends a domain registered before regions were recorded in the default region", () => {
     const { db } = makeDb({
       delivery: {
         ...baseDelivery,
@@ -330,99 +320,94 @@ describe("emailDeliverHandler", () => {
     });
     let region: string | null | undefined;
 
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            send: (input) => {
-              region = input.region;
-              return Effect.succeed({ providerMessageId: "ses_msg_1" });
-            },
-          }),
-        ),
-        Effect.map(() => {
-          // The backend reads a null region as its default one.
-          expect(region).toBeNull();
-          return true;
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(
+        testLayer(db, {
+          send: (input) => {
+            region = input.region;
+            return Effect.succeed({ providerMessageId: "ses_msg_1" });
+          },
         }),
       ),
+      Effect.map(() => {
+        // The backend reads a null region as its default one.
+        expect(region).toBeNull();
+        return true;
+      }),
     );
   });
 
-  test("a Project Sending Pause pauses the Domain and fails terminally", () => {
+  it.effect("a Project Sending Pause pauses the Domain and fails terminally", () => {
     const { db, updates } = makeDb({});
 
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            send: ({ region }) =>
-              Effect.fail(
-                new EmailBackendRejected({
-                  reason: "project_sending_paused",
-                  region: region ?? "eu-central-1",
-                }),
-              ),
-          }),
-        ),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryTerminalError",
-            stage: "send",
-          });
-          expect(emailDeliverHandler.classifyFailure(error)).toBe("terminal");
-          expect(updates).toContainEqual({
-            isPaused: true,
-            pausedReason: "bad_reputation",
-          });
-          expect(updates).toContainEqual(
-            expect.objectContaining({
-              error: expect.objectContaining({ retryable: false }),
-              status: "failed",
-            }),
-          );
-          return true;
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(
+        testLayer(db, {
+          send: ({ region }) =>
+            Effect.fail(
+              new EmailBackendRejected({
+                reason: "project_sending_paused",
+                region: region ?? "eu-central-1",
+              }),
+            ),
         }),
       ),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryTerminalError",
+          stage: "send",
+        });
+        expect(emailDeliverHandler.classifyFailure(error)).toBe("terminal");
+        expect(updates).toContainEqual({
+          isPaused: true,
+          pausedReason: "bad_reputation",
+        });
+        expect(updates).toContainEqual(
+          expect.objectContaining({
+            error: expect.objectContaining({ retryable: false }),
+            status: "failed",
+          }),
+        );
+        return true;
+      }),
     );
   });
 
-  test("retries any other SES failure, leaving the Delivery sending", () => {
+  it.effect("retries any other SES failure, leaving the Delivery sending", () => {
     const { db, updates } = makeDb({});
 
-    return Effect.runPromise(
-      emailDeliverHandler.handle(payload, execution).pipe(
-        Effect.provide(
-          testLayer(db, {
-            send: () => Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" })),
-          }),
-        ),
-        Effect.flip,
-        Effect.map((error) => {
-          expect(error).toMatchObject({
-            _tag: "MessageDeliveryRetryableError",
-            stage: "send",
-          });
-          expect(emailDeliverHandler.classifyFailure(error)).toBe("retryable");
-          expect(updates.map((update) => (update as { status?: string }).status)).toEqual([
-            "sending",
-          ]);
-          return error;
+    return emailDeliverHandler.handle(payload, execution).pipe(
+      Effect.provide(
+        testLayer(db, {
+          send: () => Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" })),
         }),
       ),
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toMatchObject({
+          _tag: "MessageDeliveryRetryableError",
+          stage: "send",
+        });
+        expect(emailDeliverHandler.classifyFailure(error)).toBe("retryable");
+        expect(updates.map((update) => (update as { status?: string }).status)).toEqual([
+          "sending",
+        ]);
+        return error;
+      }),
     );
   });
 
-  test("on dead letter, fails an unfinished Delivery with its reason and releases Usage", () => {
-    let released = false;
-    const { db, inserts, updates } = makeDb({ failedOnDeadLetter: true });
-    const onDeadLetter = emailDeliverHandler.onDeadLetter;
-    if (!onDeadLetter) {
-      throw new Error("expected onDeadLetter");
-    }
-    return Effect.runPromise(
-      onDeadLetter(
+  it.effect(
+    "on dead letter, fails an unfinished Delivery with its reason and releases Usage",
+    () => {
+      let released = false;
+      const { db, inserts, updates } = makeDb({ failedOnDeadLetter: true });
+      const onDeadLetter = emailDeliverHandler.onDeadLetter;
+      if (!onDeadLetter) {
+        throw new Error("expected onDeadLetter");
+      }
+      return onDeadLetter(
         payload,
         execution,
         new MessageDeliveryRetryableError({
@@ -453,46 +438,44 @@ describe("emailDeliverHandler", () => {
           expect(released).toBe(true);
           return true;
         }),
-      ),
-    );
-  });
+      );
+    },
+  );
 
-  test("on dead letter, leaves a finished Delivery as it is", () => {
+  it.effect("on dead letter, leaves a finished Delivery as it is", () => {
     let released = false;
     const { db } = makeDb({ failedOnDeadLetter: false });
     const onDeadLetter = emailDeliverHandler.onDeadLetter;
     if (!onDeadLetter) {
       throw new Error("expected onDeadLetter");
     }
-    return Effect.runPromise(
-      onDeadLetter(
-        payload,
-        execution,
-        new MessageDeliveryTerminalError({
-          deliveryId: "edlv_test",
-          message: "No deliverable recipients after suppression",
-          stage: "suppressions",
-        }),
-      ).pipe(
-        Effect.provide(
-          testLayer(db, {
-            usage: {
-              release: () => {
-                released = true;
-                return Effect.void;
-              },
+    return onDeadLetter(
+      payload,
+      execution,
+      new MessageDeliveryTerminalError({
+        deliveryId: "edlv_test",
+        message: "No deliverable recipients after suppression",
+        stage: "suppressions",
+      }),
+    ).pipe(
+      Effect.provide(
+        testLayer(db, {
+          usage: {
+            release: () => {
+              released = true;
+              return Effect.void;
             },
-          }),
-        ),
-        Effect.map(() => {
-          expect(released).toBe(true);
-          return true;
+          },
         }),
       ),
+      Effect.map(() => {
+        expect(released).toBe(true);
+        return true;
+      }),
     );
   });
 
-  test("attaches List-Unsubscribe headers for marketing single-recipient sends", () => {
+  it.effect("attaches List-Unsubscribe headers for marketing single-recipient sends", () => {
     let sentHeaders: Record<string, string> | null | undefined;
     const { db } = makeDb({
       contactId: "cont_test",
@@ -503,38 +486,36 @@ describe("emailDeliverHandler", () => {
       webOrigin: "https://app.example.com",
     });
 
-    return Effect.runPromise(
-      handler
-        .handle(
-          {
-            ...payload,
-            purpose: "marketing",
-            topicId: "topc_test",
-          },
-          execution,
-        )
-        .pipe(
-          Effect.provide(
-            testLayer(db, {
-              send: ({ message }) => {
-                sentHeaders = message.headers;
-                return Effect.succeed({ providerMessageId: "pm_unsub" });
-              },
-            }),
-          ),
-          Effect.map(() => {
-            expect(sentHeaders).toEqual(
-              expect.objectContaining({
-                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-              }),
-            );
-            expect(sentHeaders?.["List-Unsubscribe"]).toContain(
-              "https://app.example.com/unsubscribe/acme/cont_test?",
-            );
-            expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
-            return true;
+    return handler
+      .handle(
+        {
+          ...payload,
+          purpose: "marketing",
+          topicId: "topc_test",
+        },
+        execution,
+      )
+      .pipe(
+        Effect.provide(
+          testLayer(db, {
+            send: ({ message }) => {
+              sentHeaders = message.headers;
+              return Effect.succeed({ providerMessageId: "pm_unsub" });
+            },
           }),
         ),
-    );
+        Effect.map(() => {
+          expect(sentHeaders).toEqual(
+            expect.objectContaining({
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }),
+          );
+          expect(sentHeaders?.["List-Unsubscribe"]).toContain(
+            "https://app.example.com/unsubscribe/acme/cont_test?",
+          );
+          expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
+          return true;
+        }),
+      );
   });
 });

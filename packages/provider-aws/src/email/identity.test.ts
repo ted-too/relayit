@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import { ensureSesDomainIdentity, type SesIdentityClient } from "./identity";
 
@@ -102,55 +102,65 @@ const makeSes = (options: {
 };
 
 describe("ensureSesDomainIdentity", () => {
-  test("creates a BYODKIM identity when SES has none", async () => {
-    const fake = makeSes({});
+  it.effect("creates a BYODKIM identity when SES has none", () =>
+    Effect.gen(function* () {
+      const fake = makeSes({});
 
-    const result = await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
+      const result = yield* ensureSesDomainIdentity(fake.ses, input);
 
-    expect(result).toEqual({ mailFrom });
-    expect(fake.origin).toBe("EXTERNAL");
-    expect(fake.deleted).toBe(false);
-  });
+      expect(result).toEqual({ mailFrom });
+      expect(fake.origin).toBe("EXTERNAL");
+      expect(fake.deleted).toBe(false);
+    }),
+  );
 
-  test("rewrites an existing Easy DKIM identity to BYODKIM", async () => {
-    const fake = makeSes({ existingOrigin: "AWS_SES" });
+  it.effect("rewrites an existing Easy DKIM identity to BYODKIM", () =>
+    Effect.gen(function* () {
+      const fake = makeSes({ existingOrigin: "AWS_SES" });
 
-    await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
+      yield* ensureSesDomainIdentity(fake.ses, input);
 
-    expect(fake.origin).toBe("EXTERNAL");
-    expect(fake.deleted).toBe(false);
-  });
+      expect(fake.origin).toBe("EXTERNAL");
+      expect(fake.deleted).toBe(false);
+    }),
+  );
 
-  test("replaces Easy DKIM when SES rejects the BYODKIM conversion", async () => {
-    const fake = makeSes({
-      existingOrigin: "AWS_SES",
-      rejectExternalPut: "BadRequestException",
-    });
+  it.effect("replaces Easy DKIM when SES rejects the BYODKIM conversion", () =>
+    Effect.gen(function* () {
+      const fake = makeSes({
+        existingOrigin: "AWS_SES",
+        rejectExternalPut: "BadRequestException",
+      });
 
-    await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
+      yield* ensureSesDomainIdentity(fake.ses, input);
 
-    expect(fake.origin).toBe("EXTERNAL");
-    expect(fake.deleted).toBe(true);
-  });
+      expect(fake.origin).toBe("EXTERNAL");
+      expect(fake.deleted).toBe(true);
+    }),
+  );
 
-  test("replaces Easy DKIM when the conversion error is wrapped as SdkError", async () => {
-    const fake = makeSes({
-      existingOrigin: "AWS_SES",
-      rejectExternalPut: "SdkError",
-    });
+  it.effect("replaces Easy DKIM when the conversion error is wrapped as SdkError", () =>
+    Effect.gen(function* () {
+      const fake = makeSes({
+        existingOrigin: "AWS_SES",
+        rejectExternalPut: "SdkError",
+      });
 
-    await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
+      yield* ensureSesDomainIdentity(fake.ses, input);
 
-    expect(fake.origin).toBe("EXTERNAL");
-    expect(fake.deleted).toBe(true);
-  });
+      expect(fake.origin).toBe("EXTERNAL");
+      expect(fake.deleted).toBe(true);
+    }),
+  );
 
-  test("updates DKIM keys on an existing BYODKIM identity", async () => {
-    const fake = makeSes({ existingOrigin: "EXTERNAL" });
+  it.effect("updates DKIM keys on an existing BYODKIM identity", () =>
+    Effect.gen(function* () {
+      const fake = makeSes({ existingOrigin: "EXTERNAL" });
 
-    await Effect.runPromise(ensureSesDomainIdentity(fake.ses, input));
+      yield* ensureSesDomainIdentity(fake.ses, input);
 
-    expect(fake.origin).toBe("EXTERNAL");
-    expect(fake.deleted).toBe(false);
-  });
+      expect(fake.origin).toBe("EXTERNAL");
+      expect(fake.deleted).toBe(false);
+    }),
+  );
 });

@@ -7,7 +7,7 @@
     "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app api bun --no-env-file run --watch ./src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./build --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun --no-env-file test"
+    "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@elysia/openapi": "^1.4.15",
@@ -24,6 +24,8 @@
     "elysia": "^1.4.29"
   },
   "devDependencies": {
-    "typeid-js": "catalog:"
+    "@effect/vitest": "catalog:",
+    "typeid-js": "catalog:",
+    "vitest": "catalog:"
   }
 }
