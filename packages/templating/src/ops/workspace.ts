@@ -49,7 +49,12 @@ export const ensureScaffolded = (input: { readonly workspaceId: string }) =>
       }
     }
 
-    return yield* withWorkspaceGitLock(input.workspaceId, seedAndSyncEntries(input.workspaceId));
+    // A page's first reads arrive together and each finds no tree. A read needs the
+    // scaffold finished, not the lock to itself, so it waits out whoever is seeding
+    // (their lockfile install can take seconds) and then finds the tree already there.
+    return yield* withWorkspaceGitLock(input.workspaceId, seedAndSyncEntries(input.workspaceId), {
+      waitFor: "30 seconds",
+    });
   });
 
 export const listFiles = (input: { readonly ref?: string; readonly workspaceId: string }) =>

@@ -110,9 +110,10 @@ export const previewHostedWorkspaceEntry = (input: {
         });
 
         const rendered = yield* Effect.tryPromise({
-          catch: () =>
+          catch: (cause) =>
             new TemplatingBuilderError({
               code: "failed",
+              detail: String(cause),
               message: "Preview render failed.",
             }),
           try: () =>
@@ -128,6 +129,7 @@ export const previewHostedWorkspaceEntry = (input: {
         if (!rendered.ok) {
           return yield* new TemplatingBuilderError({
             code: "failed",
+            detail: rendered.error.message,
             message: "Preview render failed.",
           });
         }

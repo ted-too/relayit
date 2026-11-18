@@ -73,6 +73,53 @@ describe("renderSealedReactEmailArtifact", () => {
     expect(result.value.html).toContain("USD");
   });
 
+  it("gives the artifact the renderer's React, so its hooks work", async () => {
+    const result = await renderSealedReactEmailArtifact({
+      artifact: `
+import * as React from "react";
+export default function Email() {
+  return React.createElement("div", { id: React.useId() }, "Hooked");
+}
+`,
+      subject: "Hello",
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { text: "Hooked" } });
+  });
+
+  it("refuses an artifact that imports a package it did not seal, rather than installing it", async () => {
+    const result = await renderSealedReactEmailArtifact({
+      artifact: `
+import isNumber from "is-number";
+export default function Email() {
+  return String(isNumber(1));
+}
+`,
+      subject: "Hello",
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "render_failed" } });
+  });
+
+  it("gives the artifact's process.env only what the runner needs", async () => {
+    process.env.RELAYIT_TEST_SERVER_SECRET = "from-the-server";
+    try {
+      const result = await renderSealedReactEmailArtifact({
+        artifact: `
+import * as React from "react";
+export default function Email() {
+  return React.createElement("div", null, "secret=", String(process.env.RELAYIT_TEST_SERVER_SECRET));
+}
+`,
+        subject: "Hello",
+      });
+
+      expect(result).toMatchObject({ ok: true, value: { text: "secret=undefined" } });
+    } finally {
+      delete process.env.RELAYIT_TEST_SERVER_SECRET;
+    }
+  });
+
   it("fails when subject is missing", async () => {
     const result = await renderSealedReactEmailArtifact({
       artifact: ARTIFACT,
