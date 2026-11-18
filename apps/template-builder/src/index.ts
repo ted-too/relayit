@@ -1,7 +1,7 @@
-import { LoggingLive, logEffectFailure } from "@repo/logging";
+import { logged } from "@repo/logging";
 import { requireMigrated } from "@repo/persistence/db/migrate";
 import { TemplatingBuilderRpcs } from "@repo/templating";
-import { Cause, Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { templateBuilderConfig } from "./env";
@@ -64,18 +64,4 @@ const program = Effect.scoped(
   }),
 );
 
-const reportFailure = Effect.catchCause((cause) => {
-  if (cause.reasons.every(Cause.isInterruptReason)) {
-    return Effect.void;
-  }
-
-  return logEffectFailure("Process failed")(cause).pipe(
-    Effect.andThen(
-      Effect.sync(() => {
-        process.exitCode = 1;
-      }),
-    ),
-  );
-});
-
-Effect.runFork(program.pipe(reportFailure, Effect.provide(LoggingLive)));
+Effect.runFork(program.pipe(logged("Process failed")));

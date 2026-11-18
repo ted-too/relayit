@@ -14,12 +14,12 @@ import {
   emailVerifySandboxDomainHandler,
 } from "@repo/channels/email/verification";
 import { registerJobHandler, runJobWorker } from "@repo/jobs";
-import { LoggingLive, logEffectFailure } from "@repo/logging";
+import { logged, logEffectFailure } from "@repo/logging";
 import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
 import { requireMigrated } from "@repo/persistence/db/migrate";
 import { sesNotificationsUrl } from "@repo/provider-aws/email/webhooks";
 import { webhookDeliverHandler } from "@repo/webhooks";
-import { Cause, Effect, Fiber, Redacted } from "effect";
+import { Effect, Fiber, Redacted } from "effect";
 import { workerConfig } from "./env";
 import { cloudflareFromConfig, makeWorkerLayer } from "./layers";
 
@@ -112,21 +112,7 @@ const workerProgram = Effect.gen(function* () {
   );
 });
 
-const reportFailure = Effect.catchCause((cause) => {
-  if (cause.reasons.every(Cause.isInterruptReason)) {
-    return Effect.void;
-  }
-
-  return logEffectFailure("Process failed")(cause).pipe(
-    Effect.andThen(
-      Effect.sync(() => {
-        process.exitCode = 1;
-      }),
-    ),
-  );
-});
-
-const fiber = Effect.runFork(workerProgram.pipe(reportFailure, Effect.provide(LoggingLive)));
+const fiber = Effect.runFork(workerProgram.pipe(logged("Process failed")));
 let shuttingDown = false;
 
 const shutdown = (signal: NodeJS.Signals) => {

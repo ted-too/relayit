@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.29
 
-FROM oven/bun:1 AS builder
+FROM oven/bun:1.4.4 AS builder
 WORKDIR /app
 # Installs skip dependencies' own install scripts, as CI's do, and the root `prepare`
 # (it patches tsc and installs the git hook, neither of which a build uses).

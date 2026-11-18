@@ -1,2 +1,2 @@
 export { failureAnnotations, logEffectFailure } from "./log-failure";
-export { LoggingLive, loggingLive } from "./logger";
+export { logged, loggingLive, logLevelConfig } from "./logger";

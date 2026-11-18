@@ -4,7 +4,7 @@
  * every migration this image carries, whether it applied them or found them applied, and
  * non-zero when it could not.
  */
-import { LoggingLive, logEffectFailure } from "@repo/logging";
+import { logged } from "@repo/logging";
 import { migrateDatabase } from "@repo/persistence/db/migrate";
 import { Config, Effect, Redacted } from "effect";
 
@@ -14,19 +14,4 @@ const program = Effect.gen(function* () {
   yield* Effect.logInfo("Database migrations up to date");
 });
 
-Effect.runFork(
-  program.pipe(
-    Effect.provide(LoggingLive),
-    // Outside the logging layer: a LOG_LEVEL it rejects must fail the step too, not end it
-    // with exit 0 and nothing migrated.
-    Effect.catchCause((cause) =>
-      logEffectFailure("Migration failed")(cause).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            process.exitCode = 1;
-          }),
-        ),
-      ),
-    ),
-  ),
-);
+Effect.runFork(program.pipe(logged("Migration failed")));

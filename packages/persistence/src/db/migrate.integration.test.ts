@@ -3,7 +3,12 @@ import * as NodePath from "node:path";
 import { describe, expect, it, test } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { Client } from "pg";
-import { DatabaseBehindError, migrateDatabase, requireMigrated } from "./migrate";
+import {
+  DatabaseBehindError,
+  DatabaseUnreachableError,
+  migrateDatabase,
+  requireMigrated,
+} from "./migrate";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 
@@ -80,7 +85,7 @@ describe("the migrate step and the apps' check for it", () => {
 
       const never = yield* requireMigrated({ databaseUrl, waitFor: 0 }).pipe(Effect.flip);
       expect(never).toBeInstanceOf(DatabaseBehindError);
-      expect(never.missing).toEqual(carried);
+      expect(never).toMatchObject({ missing: carried });
 
       yield* Effect.promise(() => migrateDatabase(databaseUrl));
       const newest = carried.at(-1);
@@ -89,7 +94,7 @@ describe("the migrate step and the apps' check for it", () => {
         `delete from drizzle.__drizzle_migrations where name = '${newest}'`,
       );
       const behind = yield* requireMigrated({ databaseUrl, waitFor: 0 }).pipe(Effect.flip);
-      expect(behind.missing).toEqual([newest]);
+      expect(behind).toMatchObject({ missing: [newest] });
     }).pipe(Effect.scoped),
   );
 
@@ -118,5 +123,39 @@ describe("the migrate step and the apps' check for it", () => {
       yield* Effect.promise(() => migrateDatabase(databaseUrl));
       yield* Fiber.join(app);
     }).pipe(Effect.scoped),
+  );
+
+  it.live("an app started before its database takes connections waits, then starts", () =>
+    Effect.gen(function* () {
+      const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+      const name = new URL(databaseUrl).pathname.slice(1);
+      yield* query(testDatabaseUrl, `alter database "${name}" allow_connections false`);
+
+      const app = yield* Effect.forkChild(requireMigrated({ databaseUrl, waitFor: "30 seconds" }));
+      yield* Effect.sleep("500 millis");
+      expect(app.pollUnsafe()).toBeUndefined();
+
+      yield* query(testDatabaseUrl, `alter database "${name}" allow_connections true`);
+      yield* Effect.promise(() => migrateDatabase(databaseUrl));
+      yield* Fiber.join(app);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    "an app whose database never takes connections fails with why, once its wait is over",
+    () =>
+      Effect.gen(function* () {
+        const started = Date.now();
+        // Nothing listens on port 1.
+        const error = yield* requireMigrated({
+          databaseUrl: "postgres://postgres:postgres@127.0.0.1:1/relayit",
+          waitFor: "1 second",
+        }).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(DatabaseUnreachableError);
+        expect(error).toMatchObject({ cause: { code: "ECONNREFUSED" } });
+        // Not at the first refusal: it tried again two seconds later.
+        expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+      }).pipe(Effect.scoped),
   );
 });
