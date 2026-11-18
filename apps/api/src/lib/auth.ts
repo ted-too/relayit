@@ -36,6 +36,7 @@ export class ApiAuth extends Context.Service<
       | "apiUrl"
       | "appUrl"
       | "authCookieDomain"
+      | "clientIpHeader"
       | "databaseUrl"
       | "github"
       | "redisKeyPrefix"
@@ -139,6 +140,7 @@ export class ApiAuth extends Context.Service<
 
         const auth = createAuth({
           baseUrl: config.apiUrl.origin,
+          clientIpHeader: Option.getOrUndefined(config.clientIpHeader),
           cookieDomain: Option.getOrUndefined(config.authCookieDomain),
           db,
           errorUrl: new URL("/auth/sign-in", config.appUrl.origin).href,

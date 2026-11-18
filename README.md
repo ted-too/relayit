@@ -116,7 +116,7 @@ Validated at process start (`apps/api/src/env.ts`).
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                             | Same as worker; the api registers Domains with SES                                          |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported               |
 
-Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`.
+Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`; `CLIENT_IP_HEADER` (the header the proxy in front of the api puts the client's IP in, for per-client sign-in rate limits).
 
 ### Required environment (worker)
 

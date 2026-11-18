@@ -91,7 +91,7 @@ Sign up in the dashboard, create a Project, and follow the [Quickstart](/docs/qu
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                         | The same as the worker. The api registers new Domains with SES.                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
-Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
+Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in; `CLIENT_IP_HEADER`, the header your reverse proxy puts the visitor's IP in (`X-Real-IP` from nginx or Railway, `CF-Connecting-IP` from Cloudflare), so sign-in is rate limited per visitor rather than for everyone at once. Name only a header your proxy overwrites, and keep the api reachable only through that proxy, or a visitor can send the header themselves. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
 
 ### worker (required)
 
