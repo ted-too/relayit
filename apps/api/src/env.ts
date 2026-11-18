@@ -30,6 +30,9 @@ export const apiConfig = Effect.gen(function* () {
     // tell a visitor is signed in. Unset, the cookie is host-only, on the api's host.
     authCookieDomain: Config.String("AUTH_COOKIE_DOMAIN").pipe(Config.option),
     betterAuthSecrets: Config.Redacted("BETTER_AUTH_SECRETS"),
+    // The header the proxy in front of the api puts the client's IP in, for better-auth's
+    // per-client rate limits. Only a header the proxy overwrites is safe to name.
+    clientIpHeader: Config.String("CLIENT_IP_HEADER").pipe(Config.option),
     databaseUrl: Config.Redacted("DATABASE_URL"),
     emailBackend: Config.Literals(["ses", "fake"], "EMAIL_BACKEND").pipe(Config.option),
     github: Config.all({
@@ -59,6 +62,7 @@ export const apiConfig = Effect.gen(function* () {
     ...config,
     // An optional group set to empty strings, as a platform's form leaves it, is unset.
     authCookieDomain: Option.filter(config.authCookieDomain, (domain) => domain !== ""),
+    clientIpHeader: Option.filter(config.clientIpHeader, (header) => header !== ""),
     github: Option.filter(config.github, (github) => filled(github)),
     stripe: Option.filter(config.stripe, (stripe) => filled(stripe)),
     templatingBuilder: Option.filter(config.templatingBuilder, (builder) => filled(builder)),

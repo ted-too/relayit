@@ -12,6 +12,7 @@ services:
       - API_URL=${API_URL:-http://localhost:3005}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - AUTH_COOKIE_DOMAIN=${AUTH_COOKIE_DOMAIN:-}
+      - CLIENT_IP_HEADER=${CLIENT_IP_HEADER:-}
       - BETTER_AUTH_SECRETS=${BETTER_AUTH_SECRETS:?set BETTER_AUTH_SECRETS in .env}
       - SES_REGIONS=${SES_REGIONS:?set SES_REGIONS in .env}
       - SES_ACCESS_KEY_ID=${SES_ACCESS_KEY_ID:?set SES_ACCESS_KEY_ID in .env}

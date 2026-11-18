@@ -39,6 +39,13 @@ export interface AuthConfig {
   /** The api's public origin (`API_URL`); better-auth is at `/auth` on it. */
   baseUrl?: string;
   /**
+   * The request header holding the client's IP, set by the proxy in front of the api
+   * (`X-Real-IP` on Railway, `CF-Connecting-IP` behind Cloudflare). Rate limits and
+   * sessions key on it. Unset, no header is trusted: any could come from the client, so
+   * every visitor shares one rate-limit bucket per path.
+   */
+  clientIpHeader?: string;
+  /**
    * Parent domain for the session cookie (e.g. `relayit.io`), so sibling
    * subdomains like the marketing site can see that a user is signed in.
    * Omit to keep cookies host-only (the api's host).
@@ -94,6 +101,7 @@ const refuseInvalidSlug = (slug: string | undefined) => {
 
 export const createAuth = ({
   baseUrl,
+  clientIpHeader,
   cookieDomain,
   db,
   errorUrl,
@@ -163,6 +171,9 @@ export const createAuth = ({
         generateId: false,
       },
       cookiePrefix: COOKIE_PREFIX,
+      // An empty list, not better-auth's default of a single-valued X-Forwarded-For,
+      // which a client reaching the api without a proxy could set to anything.
+      ipAddress: { ipAddressHeaders: clientIpHeader ? [clientIpHeader] : [] },
       // better-auth skips its origin and callback URL checks under NODE_ENV=test; the
       // integration tests must see the trusted origins production enforces.
       disableOriginCheck: false,
