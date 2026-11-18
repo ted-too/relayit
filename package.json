@@ -28,7 +28,6 @@
       "@vitejs/plugin-react": "^6.0.5",
       "babel-plugin-react-compiler": "^1.0.0",
       "better-auth": "^1.6.26",
-      "dotenv": "^17.4.2",
       "drizzle-orm": "1.0.0-rc.5-ab785fc",
       "effect": "4.0.0-rc.108",
       "nitro": "^3.0.260610-beta",
@@ -49,11 +48,16 @@
     "dev": "vp run -r --parallel dev",
     "build": "vp run --filter './apps/*' build",
     "typecheck": "vp run -r typecheck",
-    "test": "vp run -r test",
+    "test": "bun --no-env-file tooling/scripts/src/test.ts",
     "lint": "vp lint --report-unused-disable-directives",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
-    "knip": "knip --no-config-hints"
+    "knip": "knip --no-config-hints",
+    "db:generate": "vp run --filter @repo/persistence db:generate",
+    "db:migrate": "bun --no-env-file tooling/scripts/src/db-migrate.ts",
+    "db:seed": "bun --no-env-file tooling/scripts/src/db-seed.ts",
+    "worktree:setup": "bash tooling/scripts/worktree-setup.sh",
+    "worktree:prune": "bash tooling/scripts/worktree-prune.sh"
   },
   "devDependencies": {
     "@effect/language-service": "^0.87.1",

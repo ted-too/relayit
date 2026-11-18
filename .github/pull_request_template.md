@@ -1,13 +1,19 @@
-<!-- The problem in a sentence or two. -->
+## Problem
 
-## Changes
+<!-- What is wrong or missing, and why it matters. One line per paragraph. -->
 
-## Verified
+## Fix
 
-<!-- The tests and runs that prove it. Screenshots for dashboard changes. -->
+<!-- What changed and why this way. End with "Worth a look:" for judgment calls Ted should check. -->
 
-## Decided without Ted
+## Deploy
 
-<!-- Judgment calls made along the way, so they can be overruled. Delete if none. -->
+<!-- Only when a Dockerfile, a workflow, an env variable an app reads, the Bun or runtime version, or a migration changes. Delete otherwise. -->
+
+## Verification
+
+<!-- The tests and runs that prove it, and what wasn't verified. Screenshots optional. -->
 
 Closes #
+
+Model: <!-- The model and harness that did the work. -->

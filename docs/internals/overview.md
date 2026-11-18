@@ -107,4 +107,4 @@ Ted has decided these go. They are still in the code; don't build on them.
 - **BYO Providers.** A deployment's SES accounts become ops-only backends, possibly one per region, with no customer-owned credentials, and the BYO Plan limits and pricing with them.
 - **Multi-provider Domains.** A Domain belongs to exactly one backend: pairings with several Providers, failover between them, the provider circuit and switching a Domain's Provider go, as does choosing a Provider when creating a Domain.
 - **The worker in `apps/api`.** It moves into its own `apps/worker`.
-- **portless and `bun test`.** Dev servers stop going through portless; tests move to Vitest with their own Postgres and Redis.
+- **`bun test`.** Tests move to Vitest and `@effect/vitest`, once Effect is on 4.0.2.

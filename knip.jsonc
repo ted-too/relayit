@@ -5,8 +5,6 @@
   // An export its own file also uses is over-exported at worst, not dead code.
   "ignoreExportsUsedInFile": true,
   "ignore": ["temp/**"],
-  // Portless runs each app's dev server; it is installed globally, not per package.
-  "ignoreBinaries": ["portless"],
   "workspaces": {
     ".": {
       "project": ["*.{js,mjs,cjs,ts,mts,cts}"],
@@ -66,6 +64,10 @@
         "@dnd-kit/utilities",
         "@tanstack/react-virtual",
       ],
+    },
+    "tooling/scripts": {
+      // Run by path from the root package.json and from each app's dev script.
+      "entry": ["src/*.ts"],
     },
     "tooling/oxlint-plugin": {
       "entry": ["index.ts"],

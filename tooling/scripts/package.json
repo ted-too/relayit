@@ -1,0 +1,17 @@
+{
+  "name": "@repo/scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/channels": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/persistence": "workspace:*",
+    "@repo/provider-aws": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  }
+}
