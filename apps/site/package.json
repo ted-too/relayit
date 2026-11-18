@@ -15,12 +15,12 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
-    "marked": "^18.1.2",
-    "motion": "^14.8.0",
+    "marked": "^18.2.1",
+    "motion": "^14.14.0",
     "nitro": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "shiki": "^4.5.0"
+    "shiki": "^4.6.0"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
