@@ -3,8 +3,9 @@ import { type Database, type DatabaseExecutor, DB } from "@repo/persistence/db/e
 import { customDomain, emailDelivery } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
-import { and, eq, inArray } from "drizzle-orm";
-import { Effect } from "effect";
+import { Redis } from "@repo/redis";
+import { and, eq, isNull } from "drizzle-orm";
+import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
   MessageDeliveryRetryableError,
@@ -23,29 +24,137 @@ export interface EmailDeliverHandlerOptions {
   readonly apiOrigin: string;
 }
 
+/** What the Project reads in `message.failed` for each way a send can fail. */
+const SES_REFUSED = "SES send failed";
+const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
+
+/**
+ * SES answers within this or the send counts as unanswered: a hung connection must not hold
+ * a worker slot, or its shutdown, for ever.
+ */
+const SES_SEND_TIMEOUT = Duration.seconds(30);
+
+/**
+ * How long a claim (`sending` since `startedAt`) belongs to the run that made it. Comfortably
+ * longer than the SES timeout and the write after it, so a run that finds a claim this fresh
+ * knows its owner may still be sending and retries later instead of failing it.
+ */
+const CLAIM_LEASE = Duration.minutes(2);
+
+/**
+ * Writes `values` only while the Delivery is still in the state this run saw (`queued`, or
+ * the claim made at `claimedAt`), so a run that lost a race never overwrites another's outcome.
+ */
 const updateDelivery = (
   db: DatabaseExecutor,
-  deliveryId: string,
+  delivery: { readonly id: string; readonly claimedAt: Date | null },
   values: Partial<typeof emailDelivery.$inferInsert>,
 ) =>
   db
     .update(emailDelivery)
     .set(values)
-    .where(eq(emailDelivery.id, deliveryId))
+    .where(
+      and(
+        eq(emailDelivery.id, delivery.id),
+        delivery.claimedAt
+          ? and(
+              eq(emailDelivery.status, "sending"),
+              eq(emailDelivery.startedAt, delivery.claimedAt),
+            )
+          : eq(emailDelivery.status, "queued"),
+      ),
+    )
+    .returning({ messageId: emailDelivery.messageId })
     .pipe(
+      Effect.map(([updated]) => updated !== undefined),
       Effect.mapError(
         (cause) =>
           new EmailDeliveryPersistenceError({
             cause,
-            deliveryId,
+            deliveryId: delivery.id,
             operation: "update_status",
           }),
       ),
     );
 
-const markSent = (
+/**
+ * SES's answer to one claim: kept in Redis the moment it arrives, before Postgres, so a run
+ * that finds the Delivery still `sending` (its write failed, or its worker died) finishes it
+ * from the answer instead of sending again. Keyed by the claim, so an answer to an earlier
+ * claim never speaks for a later one.
+ */
+const sesAnswerKey = (deliveryId: string, claimedAt: Date) =>
+  `email:delivery:${deliveryId}:ses-answer:${claimedAt.getTime()}`;
+
+const ACCEPTED = "accepted:";
+const REFUSED = "refused";
+
+const keepSesAnswer = (deliveryId: string, claimedAt: Date, answer: string) =>
+  Effect.gen(function* () {
+    const redis = yield* Redis;
+    yield* redis.evaluateNumber({
+      args: [answer, String(7 * 24 * 60 * 60)],
+      keys: [sesAnswerKey(deliveryId, claimedAt)],
+      script: 'redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2]) return 1',
+    });
+  }).pipe(
+    // Postgres is written next; the answer only matters if that write fails too.
+    Effect.catch((error) =>
+      Effect.logError("Failed to keep SES's answer for a Delivery", error).pipe(
+        Effect.annotateLogs({ deliveryId }),
+      ),
+    ),
+  );
+
+/** What a Delivery found `sending` is waiting on, from its claim's SES answer and age. */
+const sendingState = (delivery: { readonly id: string; readonly startedAt: Date | null }) =>
+  Effect.gen(function* () {
+    const claimedAt = delivery.startedAt;
+    if (!claimedAt) {
+      return { claimedAt, kind: "stale" } as const;
+    }
+    const redis = yield* Redis;
+    const answer = yield* redis
+      .evaluateString({
+        args: [],
+        keys: [sesAnswerKey(delivery.id, claimedAt)],
+        script: 'return redis.call("GET", KEYS[1]) or ""',
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new MessageDeliveryRetryableError({
+              cause,
+              deliveryId: delivery.id,
+              message: "SES's answer could not be read",
+              stage: "send",
+            }),
+        ),
+      );
+    if (answer.startsWith(ACCEPTED)) {
+      return {
+        claimedAt,
+        kind: "accepted",
+        providerMessageId: answer.slice(ACCEPTED.length),
+      } as const;
+    }
+    if (answer === REFUSED) {
+      return { claimedAt, kind: "refused" } as const;
+    }
+    const now = yield* Clock.currentTimeMillis;
+    return claimedAt.getTime() > now - Duration.toMillis(CLAIM_LEASE)
+      ? ({ claimedAt, kind: "live" } as const)
+      : ({ claimedAt, kind: "stale" } as const);
+  });
+
+/**
+ * Records a Delivery SES has accepted as sent, with its message.sent event. Only the claim
+ * SES answered changes, so recording it twice emits nothing twice.
+ */
+const recordSent = (
   db: Database,
   input: {
+    readonly claimedAt: Date;
     readonly deliveryId: string;
     readonly messageId: string;
     readonly messageTags: Record<string, string> | null;
@@ -53,16 +162,17 @@ const markSent = (
     readonly providerMessageId: string;
   },
 ) =>
-  Effect.gen(function* () {
-    const usage = yield* Usage;
-    yield* usage.confirm({ deliveryId: input.deliveryId });
-    yield* db.transaction((tx) =>
+  db
+    .transaction((tx) =>
       Effect.gen(function* () {
-        yield* updateDelivery(tx, input.deliveryId, {
-          completedAt: new Date(),
-          providerMessageId: input.providerMessageId,
-          status: "sent",
-        });
+        const sent = yield* updateDelivery(
+          tx,
+          { claimedAt: input.claimedAt, id: input.deliveryId },
+          { completedAt: new Date(), providerMessageId: input.providerMessageId, status: "sent" },
+        );
+        if (!sent) {
+          return;
+        }
         yield* emitWebhookEvent(tx, {
           event: {
             data: {
@@ -74,17 +184,73 @@ const markSent = (
           },
           messageTags: input.messageTags,
           organizationId: input.organizationId,
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
+        });
+      }),
+    )
+    .pipe(
+      Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
+      // SES's answer is in Redis: the retry finishes it from there.
+      Effect.mapError(
+        (cause) =>
+          new MessageDeliveryRetryableError({
+            cause,
+            deliveryId: input.deliveryId,
+            message: "SES accepted the send but it could not be recorded yet",
+            stage: "record",
+          }),
+      ),
+    );
+
+/**
+ * Usage is bookkeeping: once SES has a send, nothing here may fail the Delivery or send it
+ * again. A Redis outage is retried through the job; a reservation Redis lost or already
+ * released cannot be confirmed by retrying, so the send stands uncounted.
+ */
+const confirmUsage = (deliveryId: string) =>
+  Effect.gen(function* () {
+    const usage = yield* Usage;
+    yield* usage.confirm({ deliveryId }).pipe(
+      Effect.catch((error) => {
+        switch (error._tag) {
+          case "UsageInfrastructureError":
+            return Effect.fail(
               new MessageDeliveryRetryableError({
-                cause,
-                deliveryId: input.deliveryId,
-                message: "Failed to emit message.sent",
-                stage: "webhooks",
+                cause: error,
+                deliveryId,
+                message: "Usage could not be confirmed",
+                stage: "usage",
               }),
-          ),
-        );
+            );
+          default:
+            return Effect.logError("Usage could not be confirmed for a sent Delivery", error).pipe(
+              Effect.annotateLogs({ deliveryId }),
+            );
+        }
+      }),
+    );
+  });
+
+/** As `confirmUsage`, for a Delivery that ended without sending. */
+const releaseUsage = (deliveryId: string) =>
+  Effect.gen(function* () {
+    const usage = yield* Usage;
+    yield* usage.release({ deliveryId }).pipe(
+      Effect.catch((error) => {
+        switch (error._tag) {
+          case "UsageInfrastructureError":
+            return Effect.fail(
+              new MessageDeliveryRetryableError({
+                cause: error,
+                deliveryId,
+                message: "Usage could not be released",
+                stage: "usage",
+              }),
+            );
+          default:
+            return Effect.logError("Usage could not be released for a Delivery", error).pipe(
+              Effect.annotateLogs({ deliveryId }),
+            );
+        }
       }),
     );
   });
@@ -103,9 +269,11 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 columns: { fqdn: true, id: true, isPaused: true },
                 with: { registration: true },
               },
-              message: true,
+              message: {
+                with: { appEnvironment: { columns: { organizationId: true } } },
+              },
               sandboxDomain: {
-                columns: { rootDomain: true },
+                columns: { isActive: true, isPaused: true, rootDomain: true },
                 with: { registration: true },
               },
             },
@@ -129,48 +297,88 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           });
         }
         const message = loaded.message;
-
-        if (
-          loaded.status === "sent" ||
-          loaded.status === "skipped" ||
-          loaded.status === "canceled"
-        ) {
-          return;
+        const appEnvironment = message.appEnvironment;
+        if (!appEnvironment) {
+          return yield* new MessageDeliveryTerminalError({
+            deliveryId: loaded.id,
+            message: "App Environment missing for Email Delivery",
+            stage: "load",
+          });
         }
 
+        switch (loaded.status) {
+          case "queued":
+            break;
+          case "sent":
+            // SES has it: a retry or a duplicate job only finishes the bookkeeping.
+            return yield* confirmUsage(loaded.id);
+          case "sending": {
+            // A claim this run did not make: another run is sending it, or one stopped
+            // before Postgres had SES's answer. Never send it again from here.
+            const state = yield* sendingState(loaded);
+            switch (state.kind) {
+              case "accepted":
+                yield* recordSent(db, {
+                  claimedAt: state.claimedAt,
+                  deliveryId: loaded.id,
+                  messageId: loaded.messageId,
+                  messageTags: message.tags,
+                  organizationId: appEnvironment.organizationId,
+                  providerMessageId: state.providerMessageId,
+                });
+                return yield* confirmUsage(loaded.id);
+              case "refused":
+                // SES did not take it, so a later run may claim and send it again.
+                yield* updateDelivery(
+                  db,
+                  { claimedAt: state.claimedAt, id: loaded.id },
+                  {
+                    startedAt: null,
+                    status: "queued",
+                  },
+                );
+                return yield* new MessageDeliveryRetryableError({
+                  deliveryId: loaded.id,
+                  message: SES_REFUSED,
+                  stage: "send",
+                });
+              case "live":
+                return yield* new MessageDeliveryRetryableError({
+                  deliveryId: loaded.id,
+                  message: "Another run is sending the Delivery",
+                  stage: "claim",
+                });
+              case "stale":
+                return yield* new MessageDeliveryTerminalError({
+                  deliveryId: loaded.id,
+                  message: OUTCOME_UNKNOWN,
+                  stage: "send",
+                });
+            }
+          }
+          default:
+            // skipped, canceled or failed: nothing to send. Its Usage goes back here too, so a
+            // release the dead-letter step could not make is made when the job runs again.
+            return yield* releaseUsage(loaded.id);
+        }
+
+        // A paused or inactive sender rejects new sends at accept; one queued before that
+        // fails here. The dead-letter step records it and tells the Project.
         if (loaded.customDomain?.isPaused) {
-          yield* updateDelivery(db, loaded.id, {
-            completedAt: new Date(),
-            error: { message: "Domain is paused", retryable: false },
-            status: "failed",
-          });
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
             message: "Domain is paused",
             stage: "domain",
           });
         }
-
-        const appEnvironment = yield* db.query.organizationAppEnvironment
-          .findFirst({
-            columns: { organizationId: true },
-            where: { id: message.organizationAppEnvironmentId },
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new EmailDeliveryPersistenceError({
-                  cause,
-                  deliveryId: loaded.id,
-                  operation: "load_delivery",
-                }),
-            ),
-          );
-        if (!appEnvironment) {
+        if (
+          loaded.sandboxDomain &&
+          (loaded.sandboxDomain.isPaused || !loaded.sandboxDomain.isActive)
+        ) {
           return yield* new MessageDeliveryTerminalError({
             deliveryId: loaded.id,
-            message: "App Environment missing for Email Delivery",
-            stage: "load",
+            message: "Sandbox Domain is paused or inactive",
+            stage: "domain",
           });
         }
 
@@ -255,15 +463,26 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
         if (to.kept.length === 0 && cc.kept.length === 0 && bcc.kept.length === 0) {
           yield* db.transaction((tx) =>
             Effect.gen(function* () {
-              yield* updateDelivery(tx, loaded.id, {
-                completedAt: new Date(),
-                error: {
-                  details: { reason: "suppression" },
-                  message: "All recipients suppressed at severity all",
-                  retryable: false,
+              const skipped = yield* updateDelivery(
+                tx,
+                { claimedAt: null, id: loaded.id },
+                {
+                  completedAt: new Date(),
+                  error: {
+                    details: { reason: "suppression" },
+                    message: "All recipients suppressed at severity all",
+                    retryable: false,
+                  },
+                  status: "skipped",
                 },
-                status: "skipped",
-              });
+              );
+              if (!skipped) {
+                return yield* new MessageDeliveryRetryableError({
+                  deliveryId: loaded.id,
+                  message: "Another run claimed the Delivery",
+                  stage: "claim",
+                });
+              }
               yield* emitWebhookEvent(tx, {
                 event: {
                   data: {
@@ -315,10 +534,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
         }
 
         const attachments = yield* loadEmailAttachmentsForSend(db, loaded.id);
-        yield* updateDelivery(db, loaded.id, {
-          startedAt: new Date(),
-          status: "sending",
-        });
 
         const toEmails = to.kept.map((recipient) => recipient.email);
         const ccEmails = cc.kept.map((recipient) => recipient.email);
@@ -389,11 +604,23 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           apiOrigin: listUnsubscribe.apiOrigin,
         });
 
-        const failProjectSendingPaused = (error: EmailBackendRejected) =>
+        const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
           Effect.gen(function* () {
             const failureMessage = "SES paused sending for this Project";
             yield* db.transaction((tx) =>
               Effect.gen(function* () {
+                const failed = yield* updateDelivery(
+                  tx,
+                  { claimedAt, id: loaded.id },
+                  {
+                    completedAt: new Date(),
+                    error: { message: failureMessage, retryable: false },
+                    status: "failed",
+                  },
+                );
+                if (!failed) {
+                  return;
+                }
                 if (loaded.customDomainId) {
                   yield* tx
                     .update(customDomain)
@@ -410,11 +637,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       ),
                     );
                 }
-                yield* updateDelivery(tx, loaded.id, {
-                  completedAt: new Date(),
-                  error: { message: failureMessage, retryable: false },
-                  status: "failed",
-                });
                 yield* emitWebhookEvent(tx, {
                   event: {
                     data: {
@@ -448,47 +670,126 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           });
 
         const backend = yield* EmailBackend;
-        const sent = yield* backend
-          .send({
-            message: {
-              attachments: attachments.length > 0 ? [...attachments] : undefined,
-              bcc: bccEmails.length > 0 ? bccEmails : null,
-              cc: ccEmails.length > 0 ? ccEmails : null,
-              from: loaded.from,
-              headers: headers ?? loaded.headers,
-              html: loaded.html,
-              replyTo: loaded.replyTo,
-              sender: { identityFqdn, projectId: appEnvironment.organizationId },
-              subject: loaded.subject,
-              text: loaded.text,
-              to: toEmails,
-            },
-            region: registration.region,
-          })
-          .pipe(
-            Effect.catch((error) =>
-              // A Project Sending Pause is SES isolating this Project: retrying cannot get
-              // past it, and other Projects keep sending.
-              error._tag === "EmailBackendRejected" && error.reason === "project_sending_paused"
-                ? failProjectSendingPaused(error)
-                : Effect.fail(
-                    new MessageDeliveryRetryableError({
-                      cause: error,
-                      deliveryId: loaded.id,
-                      message: "SES send failed",
-                      stage: "send",
-                    }),
-                  ),
-            ),
-          );
+        const sendMessage = {
+          attachments: attachments.length > 0 ? [...attachments] : undefined,
+          bcc: bccEmails.length > 0 ? bccEmails : null,
+          cc: ccEmails.length > 0 ? ccEmails : null,
+          from: loaded.from,
+          headers: headers ?? loaded.headers,
+          html: loaded.html,
+          replyTo: loaded.replyTo,
+          sender: { identityFqdn, projectId: appEnvironment.organizationId },
+          subject: loaded.subject,
+          text: loaded.text,
+          to: toEmails,
+        };
 
-        yield* markSent(db, {
-          deliveryId: loaded.id,
-          messageId: loaded.messageId,
-          messageTags: message.tags,
-          organizationId: appEnvironment.organizationId,
-          providerMessageId: sent.providerMessageId,
-        });
+        // From the claim until SES's answer is kept nothing may interrupt the run, so a worker
+        // shutting down finishes the send (bounded by the SES timeout) rather than leaving an
+        // unknown outcome behind.
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            // Only a run that moves it from `queued` may send it. A duplicate run of the job
+            // finds nothing to claim and retries later, to find what this run did.
+            const [claimed] = yield* db
+              .update(emailDelivery)
+              .set({ startedAt: new Date(yield* Clock.currentTimeMillis), status: "sending" })
+              .where(and(eq(emailDelivery.id, loaded.id), eq(emailDelivery.status, "queued")))
+              .returning({ startedAt: emailDelivery.startedAt })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new EmailDeliveryPersistenceError({
+                      cause,
+                      deliveryId: loaded.id,
+                      operation: "update_status",
+                    }),
+                ),
+              );
+            // Read back, so this claim's SES answer is keyed exactly as later runs will see it.
+            const claimedAt = claimed?.startedAt;
+            if (!claimedAt) {
+              return yield* new MessageDeliveryRetryableError({
+                deliveryId: loaded.id,
+                message: "Another run claimed the Delivery",
+                stage: "claim",
+              });
+            }
+
+            const sent = yield* backend
+              .send({ message: sendMessage, region: registration.region })
+              .pipe(
+                // Interruptible by the timeout alone: the region still holds off a shutdown.
+                Effect.interruptible,
+                Effect.timeout(SES_SEND_TIMEOUT),
+                Effect.catch((error) => {
+                  // SES refused it, or the request never reached SES (the backend reports a
+                  // 4xx or a DNS, connect or TLS failure as rejected), so nothing went out:
+                  // keep that answer and put the Delivery back for a later run to claim and
+                  // send. If the requeue is not written, the kept answer tells that run so.
+                  const refused = keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                    Effect.andThen(
+                      updateDelivery(
+                        db,
+                        { claimedAt, id: loaded.id },
+                        { startedAt: null, status: "queued" },
+                      ),
+                    ),
+                    Effect.ignore,
+                    Effect.andThen(
+                      Effect.fail(
+                        new MessageDeliveryRetryableError({
+                          cause: error,
+                          deliveryId: loaded.id,
+                          message: SES_REFUSED,
+                          stage: "send",
+                        }),
+                      ),
+                    ),
+                  );
+                  switch (error._tag) {
+                    case "EmailBackendRejected":
+                      // A Project Sending Pause is SES isolating this Project: retrying cannot
+                      // get past it, and other Projects keep sending.
+                      return error.reason === "project_sending_paused"
+                        ? keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                            Effect.andThen(failProjectSendingPaused(error, claimedAt)),
+                          )
+                        : refused;
+                    case "EmailBackendAuthenticationError":
+                    case "EmailBackendConfigurationError":
+                    case "EmailBackendMessageError":
+                    case "EmailBackendRateLimited":
+                      return refused;
+                    default:
+                      // Our timeout, a connection dropped after the request went out, a 5xx
+                      // or an answer we could not read: SES may have taken it. It stays
+                      // claimed, and once the claim is older than its lease a later run fails
+                      // it rather than send twice.
+                      return Effect.fail(
+                        new MessageDeliveryRetryableError({
+                          cause: error,
+                          deliveryId: loaded.id,
+                          message: "SES did not confirm the send; the outcome is unknown",
+                          stage: "send",
+                        }),
+                      );
+                  }
+                }),
+              );
+
+            yield* keepSesAnswer(loaded.id, claimedAt, `${ACCEPTED}${sent.providerMessageId}`);
+            yield* recordSent(db, {
+              claimedAt,
+              deliveryId: loaded.id,
+              messageId: loaded.messageId,
+              messageTags: message.tags,
+              organizationId: appEnvironment.organizationId,
+              providerMessageId: sent.providerMessageId,
+            });
+            yield* confirmUsage(loaded.id);
+          }),
+        );
       }).pipe(
         Effect.mapError((error) => {
           switch (error._tag) {
@@ -516,14 +817,75 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
       }
     },
     // A Delivery that out-ran its retries, or stopped on an error that left it unfinished,
-    // ends failed here, so it is never left queued or sending and the Project hears of it.
+    // ends failed here and the Project hears of it; one SES accepted ends sent. If that, or
+    // the Usage that goes with it, cannot be written yet (Postgres or Redis down, or another
+    // run's claim still live), this fails, so the job stays pending and runs again until it can.
     onDeadLetter: ({ deliveryId }, _execution, failure) =>
       Effect.gen(function* () {
         const db = yield* DB;
-        const failureMessage =
-          failure._tag === "EmailDeliveryPersistenceError"
-            ? "The Delivery could not be recorded"
-            : failure.message;
+        const delivery = yield* db.query.emailDelivery.findFirst({
+          columns: { id: true, messageId: true, startedAt: true, status: true },
+          where: { id: deliveryId },
+          with: {
+            message: {
+              columns: { tags: true },
+              with: { appEnvironment: { columns: { organizationId: true } } },
+            },
+          },
+        });
+        const organizationId = delivery?.message?.appEnvironment?.organizationId;
+        if (!delivery || !organizationId) {
+          return yield* releaseUsage(deliveryId);
+        }
+        // Only text written for the Project reaches its message.failed.
+        let failureMessage =
+          failure._tag === "MessageDeliveryTerminalError" ||
+          (failure._tag === "MessageDeliveryRetryableError" && failure.stage === "send")
+            ? failure.message
+            : "The Delivery could not be processed";
+        switch (delivery.status) {
+          case "sent":
+            return yield* confirmUsage(deliveryId);
+          case "sending": {
+            const state = yield* sendingState(delivery);
+            switch (state.kind) {
+              case "accepted":
+                yield* recordSent(db, {
+                  claimedAt: state.claimedAt,
+                  deliveryId,
+                  messageId: delivery.messageId,
+                  messageTags: delivery.message?.tags ?? null,
+                  organizationId,
+                  providerMessageId: state.providerMessageId,
+                });
+                return yield* confirmUsage(deliveryId);
+              case "live":
+                return yield* new MessageDeliveryRetryableError({
+                  deliveryId,
+                  message: "Another run is sending the Delivery",
+                  stage: "claim",
+                });
+              case "refused":
+                failureMessage = SES_REFUSED;
+                break;
+              case "stale":
+                failureMessage = OUTCOME_UNKNOWN;
+                break;
+            }
+            break;
+          }
+          case "queued":
+            // A run that only lost the claim to another leaves the Delivery to that run,
+            // which has retries of its own.
+            if (failure._tag === "MessageDeliveryRetryableError" && failure.stage === "claim") {
+              return;
+            }
+            break;
+          default:
+            // skipped, canceled or failed: the outcome is written.
+            return yield* releaseUsage(deliveryId);
+        }
+
         yield* db.transaction((tx) =>
           Effect.gen(function* () {
             const [failed] = yield* tx
@@ -536,42 +898,35 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               .where(
                 and(
                   eq(emailDelivery.id, deliveryId),
-                  inArray(emailDelivery.status, ["queued", "sending"]),
+                  eq(emailDelivery.status, delivery.status),
+                  delivery.startedAt
+                    ? eq(emailDelivery.startedAt, delivery.startedAt)
+                    : isNull(emailDelivery.startedAt),
                 ),
               )
-              .returning({ messageId: emailDelivery.messageId });
+              .returning({ id: emailDelivery.id });
             if (!failed) {
-              return;
-            }
-            const message = yield* tx.query.message.findFirst({
-              columns: { tags: true },
-              where: { id: failed.messageId },
-              with: { appEnvironment: { columns: { organizationId: true } } },
-            });
-            if (!message?.appEnvironment) {
-              return;
+              // Another run moved it meanwhile; settle it on the next run.
+              return yield* new MessageDeliveryRetryableError({
+                deliveryId,
+                message: "The Delivery changed while it was being failed",
+                stage: "dead_letter",
+              });
             }
             yield* emitWebhookEvent(tx, {
               event: {
                 data: {
                   delivery_id: deliveryId,
                   error: failureMessage,
-                  message_id: failed.messageId,
+                  message_id: delivery.messageId,
                 },
                 type: messageFailed.type,
               },
-              messageTags: message.tags,
-              organizationId: message.appEnvironment.organizationId,
+              messageTags: delivery.message?.tags ?? null,
+              organizationId,
             });
           }),
         );
-        const usage = yield* Usage;
-        yield* usage.release({ deliveryId });
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logError("Failed to record a dead-lettered Delivery", cause).pipe(
-            Effect.annotateLogs({ deliveryId }),
-          ),
-        ),
-      ),
+        yield* releaseUsage(deliveryId);
+      }),
   });

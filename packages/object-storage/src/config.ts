@@ -4,8 +4,8 @@ import { Config, Data, Effect, Option, Redacted } from "effect";
 import { makeObjectStorageLive } from "./client";
 import { makeLocalObjectStorageLive } from "./local";
 
-export class LocalObjectStorageInProduction extends Data.TaggedError(
-  "LocalObjectStorageInProduction",
+export class LocalObjectStorageOutsideDevelopment extends Data.TaggedError(
+  "LocalObjectStorageOutsideDevelopment",
 )<{
   readonly message: string;
 }> {}
@@ -17,24 +17,22 @@ const DEFAULT_LOCAL_DIRECTORY = NodePath.resolve(
 );
 
 /**
- * `OBJECT_STORAGE` when set. Otherwise local only when NODE_ENV says development or test:
- * the api, worker and builder images don't set NODE_ENV, so an unset one must keep meaning S3,
- * with the same required `S3_*` variables as before local mode existed.
+ * Local only when NODE_ENV says development or test, whether `OBJECT_STORAGE` asks for it or
+ * is unset; otherwise S3. The images don't set NODE_ENV, so a deployment never keeps objects on
+ * one container's disk, and an unset `OBJECT_STORAGE` there needs the `S3_*` variables.
  */
 export const objectStorageConfig = Effect.gen(function* () {
   const configured = Option.getOrUndefined(
     yield* Config.Literals(["local", "s3"], "OBJECT_STORAGE").pipe(Config.option),
   );
   const nodeEnv = Option.getOrUndefined(yield* Config.String("NODE_ENV").pipe(Config.option));
-  if (configured === "local" && nodeEnv === "production") {
-    return yield* new LocalObjectStorageInProduction({
-      message: "OBJECT_STORAGE=local cannot run with NODE_ENV=production; use a bucket.",
+  const development = nodeEnv === "development" || nodeEnv === "test";
+  if (configured === "local" && !development) {
+    return yield* new LocalObjectStorageOutsideDevelopment({
+      message: "OBJECT_STORAGE=local runs only with NODE_ENV=development or test; use a bucket.",
     });
   }
-  const local =
-    configured === "local" ||
-    (configured === undefined && (nodeEnv === "development" || nodeEnv === "test"));
-  if (local) {
+  if ((configured ?? (development ? "local" : "s3")) === "local") {
     return {
       directory: yield* Config.String("OBJECT_STORAGE_DIR").pipe(
         Config.withDefault(DEFAULT_LOCAL_DIRECTORY),

@@ -7,7 +7,9 @@ import { makeSesEmailBackend, type SesConfig } from "./ses";
 /** What email goes through: SES, or the local stand-in in `./fake.ts`. */
 export type EmailBackendKind = "fake" | "ses";
 
-export class FakeEmailBackendInProduction extends Data.TaggedError("FakeEmailBackendInProduction")<{
+export class FakeEmailBackendOutsideDevelopment extends Data.TaggedError(
+  "FakeEmailBackendOutsideDevelopment",
+)<{
   readonly message: string;
 }> {}
 
@@ -17,26 +19,23 @@ export class SesConfigInvalid extends Data.TaggedError("SesConfigInvalid")<{
 }> {}
 
 /**
- * `EMAIL_BACKEND` when set. Otherwise fake only when NODE_ENV says development or test:
- * the api, worker and builder images don't set NODE_ENV, so an unset one must keep meaning SES.
+ * The fake only when NODE_ENV says development or test, whether `EMAIL_BACKEND` asks for it
+ * or is unset; otherwise SES. The images don't set NODE_ENV, so a deployment can never run
+ * the fake: it marks every Delivery sent while delivering nothing, and passes every DNS check.
  */
 export const selectEmailBackend = (input: {
   readonly configured: EmailBackendKind | undefined;
   readonly nodeEnv: string | undefined;
 }) =>
   Effect.gen(function* () {
-    if (input.configured === "fake" && input.nodeEnv === "production") {
-      return yield* new FakeEmailBackendInProduction({
+    const development = input.nodeEnv === "development" || input.nodeEnv === "test";
+    if (input.configured === "fake" && !development) {
+      return yield* new FakeEmailBackendOutsideDevelopment({
         message:
-          "EMAIL_BACKEND=fake cannot run with NODE_ENV=production: it accepts sends and never delivers them.",
+          "EMAIL_BACKEND=fake runs only with NODE_ENV=development or test: it accepts sends and never delivers them.",
       });
     }
-    if (input.configured) {
-      return input.configured;
-    }
-    return input.nodeEnv === "development" || input.nodeEnv === "test"
-      ? ("fake" as const)
-      : ("ses" as const);
+    return input.configured ?? (development ? ("fake" as const) : ("ses" as const));
   });
 
 const REGION = /^[a-z]{2}(-[a-z]+)+-\d+$/;

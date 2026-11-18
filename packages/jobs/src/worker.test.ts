@@ -52,7 +52,7 @@ const makeRedisRecorder = (
     readonly fields: readonly string[];
     readonly id: string;
   }[] = [],
-  acknowledgeFailure?: RedisCommandError,
+  acknowledgeFailure?: RedisCommandError | ((id: string) => RedisCommandError | undefined),
 ) => {
   const acknowledged: string[] = [];
   const delayed: Array<{
@@ -71,7 +71,9 @@ const makeRedisRecorder = (
   const service = {
     acknowledge: ({ id }) => {
       acknowledged.push(id);
-      return acknowledgeFailure ? Effect.fail(acknowledgeFailure) : Effect.succeed(1);
+      const failure =
+        typeof acknowledgeFailure === "function" ? acknowledgeFailure(id) : acknowledgeFailure;
+      return failure ? Effect.fail(failure) : Effect.succeed(1);
     },
     append: () => Effect.succeed("1-0"),
     autoClaim: (input) => {
@@ -490,6 +492,49 @@ describe("job execution", () => {
         },
       ]);
       expect(redis.acknowledged).toEqual(["15-0"]);
+    });
+  });
+
+  it.live("leaves a job whose acknowledge fails pending without interrupting the rest", () => {
+    const deadLetters = makeDeadLetterRecorder();
+    const finished: string[] = [];
+    const handler = defineJobHandler({
+      classifyFailure: () => "retryable",
+      contract: deliverEmail,
+      handle: ({ deliveryId }) =>
+        (deliveryId === "slow" ? Effect.sleep("50 millis") : Effect.void).pipe(
+          Effect.andThen(Effect.sync(() => finished.push(deliveryId))),
+        ),
+    });
+
+    return Effect.gen(function* () {
+      const stream = "relayit:jobs:email.deliver:ready";
+      const fast = yield* encodeJob(deliverEmail, { deliveryId: "fast" }, 1000);
+      const slow = yield* encodeJob(deliverEmail, { deliveryId: "slow" }, 1000);
+      const redis = makeRedisRecorder(
+        [
+          { fields: [REDIS_PAYLOAD_FIELD, fast], id: "16-0", stream },
+          { fields: [REDIS_PAYLOAD_FIELD, slow], id: "16-1", stream },
+        ],
+        [],
+        (id) =>
+          id === "16-0"
+            ? new RedisCommandError({
+                cause: new TypeError("Connection closed"),
+                operation: "acknowledge",
+              })
+            : undefined,
+      );
+
+      yield* processJobBatch([registerJobHandler(handler)], {
+        blockMs: 5000,
+        concurrency: 4,
+        consumer: "api-1",
+        count: 10,
+      }).pipe(Effect.provide(Layer.merge(redis.layer, deadLetters.layer)));
+
+      expect(finished).toEqual(["fast", "slow"]);
+      expect(redis.acknowledged).toEqual(["16-0", "16-1"]);
     });
   });
 

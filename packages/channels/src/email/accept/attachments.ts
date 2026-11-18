@@ -420,8 +420,7 @@ export const stageEmailAttachments = (
       }),
     { concurrency: 1 },
   ).pipe(
-    Effect.catch((error) =>
-      deleteStagedEmailAttachments(staged).pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
-    ),
+    // Also on an interrupt: what this uploaded is not yet the caller's to clean up.
+    Effect.onError(() => deleteStagedEmailAttachments(staged).pipe(Effect.ignore)),
   );
 };

@@ -28,7 +28,7 @@ describe("objectStorageConfig", () => {
     }),
   );
 
-  it.effect("uses local storage under development, test or OBJECT_STORAGE=local", () =>
+  it.effect("uses local storage under development or test", () =>
     Effect.gen(function* () {
       expect(yield* resolve({ NODE_ENV: "development" })).toMatchObject({
         success: { kind: "local" },
@@ -38,7 +38,7 @@ describe("objectStorageConfig", () => {
       ).toMatchObject({
         success: { directory: "/tmp/objects", kind: "local" },
       });
-      expect(yield* resolve({ OBJECT_STORAGE: "local" })).toMatchObject({
+      expect(yield* resolve({ NODE_ENV: "test", OBJECT_STORAGE: "local" })).toMatchObject({
         success: { kind: "local" },
       });
       expect(
@@ -49,10 +49,13 @@ describe("objectStorageConfig", () => {
     }),
   );
 
-  it.effect("refuses local storage under NODE_ENV=production", () =>
+  it.effect("refuses local storage outside development and test, as in a deployed image", () =>
     Effect.gen(function* () {
+      expect(yield* resolve({ OBJECT_STORAGE: "local" })).toMatchObject({
+        failure: { _tag: "LocalObjectStorageOutsideDevelopment" },
+      });
       expect(yield* resolve({ NODE_ENV: "production", OBJECT_STORAGE: "local" })).toMatchObject({
-        failure: { _tag: "LocalObjectStorageInProduction" },
+        failure: { _tag: "LocalObjectStorageOutsideDevelopment" },
       });
     }),
   );

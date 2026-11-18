@@ -24,12 +24,66 @@ export interface SesConfig {
   readonly secretAccessKey: string;
 }
 
+/** Network failures before the request is written: resolving SES's host or connecting. */
+const NOT_SENT_SYSCALLS = new Set(["connect", "getaddrinfo"]);
+
+/**
+ * TLS handshake and certificate-verification failures: the request is never written. Other
+ * TLS errors can arrive mid-connection, after SES has the request, so they are not here.
+ */
+const NOT_SENT_TLS_CODES = new Set([
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_REVOKED",
+  "CERT_SIGNATURE_FAILURE",
+  "CERT_UNTRUSTED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "ERR_TLS_HANDSHAKE_TIMEOUT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+
+/**
+ * Whether a failed SendEmail proves SES never took the message: SES answered with a 4xx, or
+ * the request never left (DNS or connect failed, by the failing syscall, or a listed TLS
+ * handshake error). A network code on its own proves nothing: `EHOSTUNREACH` can come from a
+ * read on a kept-alive connection after the request went out. Anything else, a reset or
+ * timeout after the request was written, a 5xx or an unreadable answer, is unknown.
+ */
+export const provesNotSent = (error: unknown) => {
+  const fields =
+    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+  const status = (fields.$metadata as { readonly httpStatusCode?: number } | undefined)
+    ?.httpStatusCode;
+  if (status !== undefined) {
+    return status >= 400 && status < 500;
+  }
+  return (
+    (typeof fields.syscall === "string" && NOT_SENT_SYSCALLS.has(fields.syscall)) ||
+    (typeof fields.code === "string" && NOT_SENT_TLS_CODES.has(fields.code))
+  );
+};
+
 /** `${region}:${tenantName}:${fqdn}` already ensured by this process. */
 const ensuredTenants = new Set<string>();
 
 const clientsFor = (config: SesConfig, region: string) =>
   Effect.gen(function* () {
-    return { ses: yield* SESv2, sns: yield* SNS };
+    return {
+      // Only for SendEmail: a send the SDK retried after a reset or a 5xx could reach the
+      // recipient twice. The delivery job decides what happens after an unanswered send.
+      sendOnce: yield* Effect.gen(function* () {
+        return yield* SESv2;
+      }).pipe(
+        // Fresh, or the client the layer below built (with the SDK's retries) is shared.
+        Effect.provide(Layer.fresh(SESv2.layer({ credentials: config, maxAttempts: 1, region }))),
+      ),
+      ses: yield* SESv2,
+      sns: yield* SNS,
+    };
   }).pipe(
     Effect.provide(
       Layer.merge(
@@ -146,7 +200,7 @@ export const makeSesEmailBackend = (config: SesConfig) =>
         }),
       send: ({ message, region: recorded }) =>
         Effect.gen(function* () {
-          const { mapAwsError, region, ses } = yield* inRegion(recorded);
+          const { mapAwsError, region, sendOnce, ses } = yield* inRegion(recorded);
           return yield* Effect.gen(function* () {
             const attachments = yield* Effect.forEach(message.attachments ?? [], (attachment) =>
               Effect.try({
@@ -174,7 +228,7 @@ export const makeSesEmailBackend = (config: SesConfig) =>
               region,
               tenantName: sesTenantNameFor(message.sender.projectId),
             });
-            const result = yield* ses
+            const result = yield* sendOnce
               .sendEmail({
                 ConfigurationSetName: SES_CONFIGURATION_SET_NAME,
                 TenantName: tenantName,
@@ -230,7 +284,16 @@ export const makeSesEmailBackend = (config: SesConfig) =>
               });
             }
             return { providerMessageId: result.MessageId };
-          }).pipe(Effect.mapError(mapAwsError));
+          }).pipe(
+            Effect.mapError((error) => {
+              const mapped = mapAwsError(error);
+              // The shared mapper calls anything it does not model unavailable. For a send that
+              // means "SES may have it", unless the error proves SES never took it.
+              return mapped._tag === "EmailBackendUnavailable" && provesNotSent(error)
+                ? new EmailBackendRejected({ cause: error, reason: "not_sent", region })
+                : mapped;
+            }),
+          );
         }),
     } satisfies EmailBackendService;
   });

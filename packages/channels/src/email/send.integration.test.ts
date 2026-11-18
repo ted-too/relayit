@@ -1,0 +1,1183 @@
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import { describe, expect, it, test } from "@effect/vitest";
+import {
+  DeadLetterStoreLive,
+  Jobs,
+  JobsLive,
+  promoteDelayedJobs,
+  registerJobHandler,
+} from "@repo/jobs";
+import { publishOutboxBatch } from "@repo/jobs/outbox";
+import { JOB_WORKER_GROUP } from "@repo/jobs/storage";
+import { processJobBatch, reclaimStaleJobs } from "@repo/jobs/worker";
+import { makeLocalObjectStorageLive, ObjectStorage } from "@repo/object-storage";
+import { DB, makeDbLive } from "@repo/persistence/db/effect";
+import {
+  contact,
+  customDomain,
+  emailDelivery,
+  emailDomainRegistration,
+  member,
+  organization,
+  organizationDomain,
+  sandboxDomain,
+  user,
+  userChannel,
+  webhookEndpoint,
+  webhookEvent,
+} from "@repo/persistence/db/schema";
+import { makeRedisLive, Redis } from "@repo/redis";
+import { webhookEventDefinitions } from "@repo/webhooks/events";
+import { eq } from "drizzle-orm";
+import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { TestClock } from "effect/testing";
+import { typeid } from "typeid-js";
+import { Usage, UsageLive, UsagePolicyLive } from "../usage";
+import { acceptTransactionalEmail } from "./accept";
+import type { AcceptTransactionalEmailInput } from "./accept/contracts";
+import {
+  EmailBackend,
+  type EmailBackendError,
+  EmailBackendRateLimited,
+  EmailBackendRejected,
+  type EmailBackendService,
+  EmailBackendUnavailable,
+} from "./backend";
+import { emailDeliverJob } from "./delivery/job";
+import { makeEmailDeliverHandler } from "./delivery/handler";
+import { MessageDeliveryRetryableError } from "../messages/delivery";
+import { SANDBOX_FROM_LOCAL_PART } from "./sender";
+
+const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
+const testRedisUrl = Bun.env.TEST_REDIS_URL;
+
+const unsupported = () => Effect.die("unused");
+
+/**
+ * SES, the boundary: records every send and answers with `answer`. `sendsFrom` counts one
+ * Project's, since a job another test left in the shared outbox may run here too.
+ */
+const makeBackend = (
+  answer: (
+    sender: string,
+  ) => Effect.Effect<{ readonly providerMessageId: string }, EmailBackendError> = () => accept,
+) => {
+  const sends: Parameters<EmailBackendService["send"]>[0][] = [];
+  const service = {
+    createIdentity: unsupported,
+    defaultRegion: "eu-central-1",
+    deleteIdentity: unsupported,
+    ensureInfrastructure: unsupported,
+    getIdentityStatus: unsupported,
+    send: (input) =>
+      Effect.suspend(() => {
+        sends.push(input);
+        return answer(input.message.sender.identityFqdn);
+      }),
+  } satisfies EmailBackendService;
+  return {
+    layer: Layer.succeed(EmailBackend, service),
+    sendsFrom: (fqdn: string) =>
+      sends.filter(({ message }) => message.sender.identityFqdn === fqdn),
+  };
+};
+
+const accept = Effect.sync(() => ({ providerMessageId: `ses-${Bun.randomUUIDv7()}` }));
+
+const services = (
+  databaseUrl: string,
+  redisUrl: string,
+  backend: Layer.Layer<EmailBackend>,
+  storage: Layer.Layer<ObjectStorage> = makeLocalObjectStorageLive(
+    NodePath.join(NodeOS.tmpdir(), "relayit-send-integration"),
+  ),
+) =>
+  Layer.mergeAll(
+    JobsLive,
+    UsageLive.pipe(Layer.provide(UsagePolicyLive)),
+    DeadLetterStoreLive,
+    FetchHttpClient.layer,
+    storage,
+    backend,
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        makeDbLive({ databaseUrl }),
+        // Its own prefix, so this run's jobs and Usage never meet another's.
+        makeRedisLive({ keyPrefix: `test:${Bun.randomUUIDv7()}:`, url: redisUrl }),
+      ),
+    ),
+  );
+
+const deliverer = registerJobHandler(
+  makeEmailDeliverHandler({ apiOrigin: "http://localhost", secret: "test-secret" }),
+);
+
+/**
+ * One pass of the worker: publish the outbox, promote retries (with the clock a day ahead,
+ * so every backoff is due) and run what is ready.
+ */
+const runWorker = Effect.gen(function* () {
+  const redis = yield* Redis;
+  yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: deliverer.stream });
+  yield* publishOutboxBatch({ batchSize: 1000, claimTtlMs: 30_000, concurrency: 1 });
+  yield* Effect.gen(function* () {
+    yield* TestClock.setTime(Date.now() + 86_400_000);
+    yield* promoteDelayedJobs([deliverer], { limit: 100 });
+  }).pipe(Effect.provide(TestClock.layer()));
+  yield* processJobBatch([deliverer], {
+    blockMs: 100,
+    concurrency: 1,
+    consumer: "test",
+    count: 10,
+  });
+});
+
+/** The reclaim loop of another worker, taking whatever this one still holds. */
+const reclaimAll = reclaimStaleJobs([deliverer], {
+  concurrency: 1,
+  consumer: "test-reclaimer",
+  count: 10,
+  minIdleMs: 0,
+});
+
+/**
+ * Postgres failing one Delivery's writes: another session holds its row lock, and `endWaiters`
+ * ends every statement left waiting on it, as a dropped connection would.
+ */
+const makeRowLock = (databaseUrl: string) => {
+  const sql = new Bun.SQL(databaseUrl, { max: 2 });
+  let holder: Bun.ReservedSQL | undefined;
+  let holderPid: number | undefined;
+  return {
+    endWaiters: Effect.promise(async () => {
+      if (holderPid !== undefined) {
+        await sql`select pg_terminate_backend(pid) from pg_stat_activity
+          where ${holderPid} = any(pg_blocking_pids(pid))`;
+      }
+    }),
+    lock: (deliveryId: string) =>
+      Effect.promise(async () => {
+        holder = await sql.reserve();
+        await holder`begin`;
+        await holder`select id from email_delivery where id = ${deliveryId} for update`;
+        const [row] = await holder`select pg_backend_pid() as pid`;
+        holderPid = (row as { readonly pid: number }).pid;
+      }),
+    release: Effect.promise(async () => {
+      if (holder) {
+        await holder`rollback`;
+        holder.release();
+      }
+      await sql.close();
+    }),
+  };
+};
+
+/**
+ * Postgres reached through a local proxy that can hold the next COMMIT on the wire, so a
+ * test can act while a commit is in flight, or drop the server's answer to it.
+ */
+const makeCommitGate = (databaseUrl: string) => {
+  const target = new URL(databaseUrl);
+  let armed: { readonly held: () => void; readonly released: Promise<void> } | undefined;
+  let dropArmed = false;
+  const server = Bun.listen<{
+    dropAnswer?: boolean;
+    pending: Uint8Array[];
+    upstream?: Bun.Socket;
+  }>({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      close: (client) => {
+        client.data.upstream?.end();
+      },
+      data: async (client, chunk) => {
+        const bytes = Uint8Array.from(chunk);
+        const gate = armed;
+        const commit = Buffer.from(bytes).includes("COMMIT");
+        if (gate && commit) {
+          armed = undefined;
+          gate.held();
+          await gate.released;
+        }
+        if (dropArmed && commit) {
+          dropArmed = false;
+          client.data.dropAnswer = true;
+        }
+        if (client.data.upstream) {
+          client.data.upstream.write(bytes);
+        } else {
+          client.data.pending.push(bytes);
+        }
+      },
+      open: (client) => {
+        client.data = { pending: [] };
+        void Bun.connect({
+          hostname: target.hostname,
+          port: Number(target.port),
+          socket: {
+            close: () => {
+              client.end();
+            },
+            data: (_upstream, chunk) => {
+              if (client.data.dropAnswer) {
+                // The server has committed; the client only sees its connection go.
+                client.terminate();
+                return;
+              }
+              client.write(Uint8Array.from(chunk));
+            },
+            error: () => {
+              client.end();
+            },
+            open: (upstream) => {
+              client.data.upstream = upstream;
+              for (const bytes of client.data.pending.splice(0)) {
+                upstream.write(bytes);
+              }
+            },
+          },
+        });
+      },
+    },
+  });
+  const url = new URL(databaseUrl);
+  url.host = `127.0.0.1:${server.port}`;
+  return {
+    close: Effect.sync(() => server.stop(true)),
+    /** The next COMMIT reaches the server, and its answer never reaches the client. */
+    dropNextCommitAnswer: Effect.sync(() => {
+      dropArmed = true;
+    }),
+    /** Holds the next COMMIT until `release`; `held` resolves once it is held. */
+    holdNextCommit: () => {
+      const { promise: held, resolve: onHeld } = Promise.withResolvers<void>();
+      const { promise: released, resolve: release } = Promise.withResolvers<void>();
+      armed = { held: onHeld, released };
+      return { held: Effect.promise(() => held), release: Effect.sync(() => release()) };
+    },
+    url: url.toString(),
+  };
+};
+
+/** Runs `effect` while every statement waiting on `lock` is ended. */
+const whileFailing = <A, E, R>(
+  lock: ReturnType<typeof makeRowLock>,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const ender = yield* lock.endWaiters.pipe(
+      Effect.andThen(Effect.sleep("50 millis")),
+      Effect.forever,
+      Effect.forkChild,
+    );
+    const result = yield* effect;
+    yield* Fiber.interrupt(ender);
+    return result;
+  });
+
+const NO_LIMITS = { dailySends: null, monthlySends: null };
+
+/**
+ * A Project whose owner pays for it, a verified Domain it sends from, and a Webhook Endpoint
+ * taking every event.
+ */
+const seedProject = (options: { readonly dailySends?: number } = {}) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    const userId = typeid("user").toString();
+    const organizationId = typeid("orgn").toString();
+    const customDomainId = typeid("domn").toString();
+    const ownerEmail = `${userId}@members.relayit.test`;
+    const fqdn = `${organizationId}.relayit.test`;
+
+    yield* db.insert(user).values({ email: ownerEmail, id: userId, name: "Owner" });
+    yield* db.insert(organization).values({
+      billingUserId: userId,
+      id: organizationId,
+      name: "Send integration",
+      slug: organizationId.replaceAll("_", "-"),
+    });
+    yield* db.insert(member).values({ organizationId, role: "owner", userId });
+    yield* db.insert(userChannel).values({
+      channelType: "email",
+      limits: {
+        customDomains: null,
+        marketing: { managed: NO_LIMITS },
+        transactional: {
+          managed: { dailySends: options.dailySends ?? null, monthlySends: null },
+        },
+      },
+      userId,
+    });
+    yield* db.insert(customDomain).values({
+      dkimPrivateKey: "unused",
+      dkimPublicKey: "unused",
+      dkimSelector: "relayit",
+      fqdn,
+      id: customDomainId,
+      verificationStatus: "verified",
+    });
+    yield* db.insert(organizationDomain).values({
+      customDomainId,
+      organizationId,
+      ownershipToken: Bun.randomUUIDv7(),
+      ownershipVerificationStatus: "verified",
+    });
+    yield* db.insert(emailDomainRegistration).values({
+      customDomainId,
+      region: "eu-central-1",
+      verificationStatus: "verified",
+    });
+    yield* db.insert(webhookEndpoint).values({
+      eventTypes: Object.keys(webhookEventDefinitions),
+      organizationId,
+      signingSecret: "whsec_test",
+      url: "https://hooks.relayit.test/events",
+    });
+    return { customDomainId, fqdn, organizationId, ownerEmail };
+  });
+
+const sendInput = (
+  project: { readonly organizationId: string },
+  from: string,
+  to: string,
+  attachments: AcceptTransactionalEmailInput["email"]["attachments"] = [],
+) =>
+  ({
+    attribution: { kind: "project" },
+    email: {
+      attachments,
+      bcc: [],
+      cc: [],
+      content: { kind: "inline", subject: "Hello", text: "Hello" },
+      from: { address: from, normalized: from },
+      headers: {},
+      replyTo: [],
+      to: [{ email: to }],
+    },
+    organizationId: project.organizationId,
+  }) satisfies AcceptTransactionalEmailInput;
+
+const deliveryOf = (deliveryId: string) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    return yield* db.query.emailDelivery.findFirst({ where: { id: deliveryId } });
+  });
+
+/** The Project's Webhook Events about this Delivery, oldest first. */
+const eventsFor = (organizationId: string, deliveryId: string) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    const rows = yield* db
+      .select({ payload: webhookEvent.payload, type: webhookEvent.type })
+      .from(webhookEvent)
+      .where(eq(webhookEvent.organizationId, organizationId))
+      .orderBy(webhookEvent.createdAt);
+    return rows.filter(
+      (row) => (row.payload as { readonly delivery_id?: string }).delivery_id === deliveryId,
+    );
+  });
+
+describe("an accepted email send", () => {
+  if (!testDatabaseUrl || !testRedisUrl) {
+    process.emitWarning(
+      "Skipping send integration tests: TEST_DATABASE_URL and TEST_REDIS_URL are not set",
+    );
+    // The PostgreSQL and Redis tests are opt-in.
+    test.skip("ends sent, skipped or failed, and the Project hears of it", () => undefined);
+    return;
+  }
+
+  it.live("ends sent with message.sent", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      // One send a day: the sent one keeps its Usage, so the next is refused.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+
+      const delivery = yield* deliveryOf(accepted.deliveryId);
+      expect(delivery).toMatchObject({ status: "sent" });
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { provider_message_id: delivery?.providerMessageId }, type: "message.sent" },
+      ]);
+      const refused = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      ).pipe(Effect.flip);
+      expect(refused).toMatchObject({ _tag: "UsageLimitExceeded" });
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is never sent twice when the bookkeeping after SES fails or the job repeats", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Usage can no longer be confirmed, as when Redis loses the reservation.
+      const usage = yield* Usage;
+      yield* usage.release({ deliveryId: accepted.deliveryId });
+
+      yield* runWorker;
+      // A duplicate of the job, as a reclaimed or re-published entry would be.
+      const db = yield* DB;
+      const jobs = yield* Jobs;
+      yield* db.transaction((tx) =>
+        jobs.enqueue(
+          emailDeliverJob,
+          {
+            billingUserId: "unused",
+            deliveryId: accepted.deliveryId,
+            purpose: "transactional",
+            startDate: new Date().toISOString(),
+          },
+          tx,
+        ),
+      );
+      for (let pass = 0; pass < 5; pass += 1) {
+        yield* runWorker;
+      }
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sent" });
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed, never sent again, when a worker died while sending it long ago", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // What a run that claimed it an hour ago and died before SES answered leaves.
+      yield* db
+        .update(emailDelivery)
+        .set({ startedAt: new Date(Date.now() - 3_600_000), status: "sending" })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends sent once when a reclaimed duplicate runs while SES is still answering", () =>
+    Effect.gen(function* () {
+      const sendStarted = yield* Deferred.make<void>();
+      const answer = yield* Deferred.make<void>();
+      let ours = "";
+      const backend = makeBackend((sender) =>
+        sender === ours
+          ? Deferred.succeed(sendStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(answer)),
+              Effect.andThen(accept),
+            )
+          : accept,
+      );
+      yield* Effect.gen(function* () {
+        const project = yield* seedProject();
+        ours = project.fqdn;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+
+        const first = yield* runWorker.pipe(Effect.forkChild);
+        yield* Deferred.await(sendStarted);
+        // Another worker reclaims the entry the first still holds and runs it alongside.
+        yield* reclaimAll;
+        yield* Deferred.succeed(answer, undefined);
+        yield* Fiber.join(first);
+        // The duplicate's retry, which finds what the first run did.
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sent" });
+        expect(
+          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+        ).toEqual(["message.sent"]);
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    }),
+  );
+
+  it.live("leaves a send SES never answers claimed until its lease runs out, then fails it", () =>
+    Effect.gen(function* () {
+      const sendStarted = yield* Deferred.make<void>();
+      let ours = "";
+      const backend = makeBackend((sender) =>
+        sender === ours
+          ? Deferred.succeed(sendStarted, undefined).pipe(Effect.andThen(Effect.never))
+          : accept,
+      );
+      yield* Effect.gen(function* () {
+        yield* TestClock.setTime(Date.now());
+        const project = yield* seedProject();
+        ours = project.fqdn;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+
+        const pass = yield* runWorker.pipe(Effect.forkChild);
+        yield* Deferred.await(sendStarted);
+        yield* TestClock.withLive(Effect.sleep("50 millis"));
+        yield* TestClock.adjust(Duration.seconds(31));
+        yield* Fiber.join(pass);
+        // SES may have taken it, so it is neither requeued nor failed yet.
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
+
+        // Its retry, inside the lease, leaves the claim to the run that made it.
+        yield* runWorker;
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
+
+        yield* TestClock.adjust(Duration.minutes(2));
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+        expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+          { type: "message.failed" },
+        ]);
+      }).pipe(
+        Effect.provide(
+          Layer.merge(services(testDatabaseUrl, testRedisUrl, backend.layer), TestClock.layer()),
+        ),
+      );
+    }),
+  );
+
+  it.live("ends sent when Postgres fails right after SES accepts and then comes back", () => {
+    const lock = makeRowLock(testDatabaseUrl);
+    let ours = "";
+    let deliveryId = "";
+    // SES accepts, and from then on Postgres refuses this Delivery's writes.
+    const backend = makeBackend((sender) =>
+      sender === ours ? lock.lock(deliveryId).pipe(Effect.andThen(accept)) : accept,
+    );
+    return Effect.gen(function* () {
+      const project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      deliveryId = accepted.deliveryId;
+
+      yield* whileFailing(lock, runWorker);
+      yield* lock.release;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      const delivery = yield* deliveryOf(accepted.deliveryId);
+      expect(delivery).toMatchObject({
+        providerMessageId: expect.stringMatching(/^ses-/),
+        status: "sent",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { provider_message_id: delivery?.providerMessageId }, type: "message.sent" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed once Postgres takes the outcome of a Domain paused after accept", () => {
+    const lock = makeRowLock(testDatabaseUrl);
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      yield* db
+        .update(customDomain)
+        .set({ isPaused: true, pausedReason: "manual_admin_pause" })
+        .where(eq(customDomain.id, project.customDomainId));
+
+      yield* lock.lock(accepted.deliveryId);
+      yield* whileFailing(lock, runWorker);
+      yield* lock.release;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+      // The job stayed pending, so the reclaim loop runs it again.
+      yield* reclaimAll;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "Domain is paused" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "Domain is paused" }, type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("a run SES refuses never overwrites an outcome written while it waited", () =>
+    Effect.gen(function* () {
+      const sendStarted = yield* Deferred.make<void>();
+      const answer = yield* Deferred.make<void>();
+      let ours = "";
+      const backend = makeBackend((sender) =>
+        sender === ours
+          ? Deferred.succeed(sendStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(answer)),
+              Effect.andThen(Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" }))),
+            )
+          : accept,
+      );
+      yield* Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        ours = project.fqdn;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+
+        const pass = yield* runWorker.pipe(Effect.forkChild);
+        yield* Deferred.await(sendStarted);
+        // Another run settled it meanwhile.
+        yield* db
+          .update(emailDelivery)
+          .set({ status: "failed" })
+          .where(eq(emailDelivery.id, accepted.deliveryId));
+        yield* Deferred.succeed(answer, undefined);
+        yield* Fiber.join(pass);
+
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    }),
+  );
+
+  it.live("ends failed for a Project Sending Pause even when its first write fails", () => {
+    const lock = makeRowLock(testDatabaseUrl);
+    let deliveryId = "";
+    let calls = 0;
+    const paused = new EmailBackendRejected({
+      reason: "project_sending_paused",
+      region: "eu-central-1",
+    });
+    // The first time SES pauses the Project, Postgres refuses the Delivery's writes.
+    let ours = "";
+    const backend = makeBackend((sender) => {
+      if (sender !== ours) {
+        return accept;
+      }
+      calls += 1;
+      return (calls === 1 ? lock.lock(deliveryId) : Effect.void).pipe(
+        Effect.andThen(Effect.fail(paused)),
+      );
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      deliveryId = accepted.deliveryId;
+
+      yield* whileFailing(lock, runWorker);
+      yield* lock.release;
+      for (let pass = 0; pass < 3; pass += 1) {
+        yield* runWorker;
+      }
+
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "SES paused sending for this Project" },
+        status: "failed",
+      });
+      const domain = yield* db.query.customDomain.findFirst({
+        where: { id: project.customDomainId },
+      });
+      expect(domain).toMatchObject({ isPaused: true, pausedReason: "bad_reputation" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "SES paused sending for this Project" }, type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("an SES error after it may have taken the send ends failed, never sent again", () => {
+    let ours = "";
+    // SES takes the send, and the connection drops before its answer arrives.
+    const backend = makeBackend((sender) =>
+      sender === ours
+        ? Effect.fail(new EmailBackendUnavailable({ region: "eu-central-1" }))
+        : accept,
+    );
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(Date.now());
+      const project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
+      // Within the claim's lease the retry leaves it alone.
+      yield* runWorker;
+      yield* TestClock.adjust(Duration.minutes(3));
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { type: "message.failed" },
+      ]);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(services(testDatabaseUrl, testRedisUrl, backend.layer), TestClock.layer()),
+      ),
+    );
+  });
+
+  it.live("a send SES refused is sent again and delivered", () => {
+    let ours = "";
+    let refusals = 0;
+    const backend = makeBackend((sender) => {
+      if (sender !== ours || refusals > 0) {
+        return accept;
+      }
+      refusals += 1;
+      return Effect.fail(new EmailBackendRateLimited({ region: "eu-central-1" }));
+    });
+    return Effect.gen(function* () {
+      const project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(2);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sent" });
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("a run that lost the claim on its last attempt leaves the Delivery to the winner", () =>
+    Effect.gen(function* () {
+      const sendStarted = yield* Deferred.make<void>();
+      const answer = yield* Deferred.make<void>();
+      let ours = "";
+      let calls = 0;
+      // The winner's first send is refused once it has been held; its retry delivers.
+      const backend = makeBackend((sender) => {
+        if (sender !== ours) {
+          return accept;
+        }
+        calls += 1;
+        return calls === 1
+          ? Deferred.succeed(sendStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(answer)),
+              Effect.andThen(Effect.fail(new EmailBackendRateLimited({ region: "eu-central-1" }))),
+            )
+          : accept;
+      });
+      const handler = makeEmailDeliverHandler({ apiOrigin: "http://localhost", secret: "test" });
+      yield* Effect.gen(function* () {
+        const project = yield* seedProject();
+        ours = project.fqdn;
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+        const payload = {
+          billingUserId: "unused",
+          deliveryId: accepted.deliveryId,
+          purpose: "transactional" as const,
+          startDate: new Date().toISOString(),
+        };
+
+        const winner = yield* runWorker.pipe(Effect.forkChild);
+        yield* Deferred.await(sendStarted);
+        // A duplicate run on its last attempt finds the claim taken...
+        const lost = yield* handler
+          .handle(payload, { attempt: 5, enqueuedAt: Date.now(), id: "duplicate" })
+          .pipe(Effect.flip);
+        expect(lost).toBeInstanceOf(MessageDeliveryRetryableError);
+        // ...SES refuses the winner, which puts it back for its retry...
+        yield* Deferred.succeed(answer, undefined);
+        yield* Fiber.join(winner);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+        // ...and the duplicate's dead-letter step, run as the worker would, leaves it there.
+        const onDeadLetter = handler.onDeadLetter;
+        expect(onDeadLetter).toBeDefined();
+        yield* (
+          onDeadLetter?.(payload, { attempt: 5, enqueuedAt: Date.now(), id: "duplicate" }, lost) ??
+          Effect.void
+        );
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+        yield* runWorker;
+
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sent" });
+        expect(
+          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+        ).toEqual(["message.sent"]);
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    }),
+  );
+
+  it.live(
+    "an interrupt while the accept commits leaves the send accepted, counted and whole",
+    () => {
+      const gate = makeCommitGate(testDatabaseUrl);
+      const uploaded: string[] = [];
+      const deleted: string[] = [];
+      // Object storage, the boundary.
+      const storage = Layer.succeed(ObjectStorage, {
+        delete: (key) => Effect.sync(() => void deleted.push(key)),
+        download: unsupported,
+        exists: unsupported,
+        signedDownloadUrl: unsupported,
+        signedUploadUrl: unsupported,
+        upload: (key) => Effect.sync(() => (uploaded.push(key), { key })),
+      });
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        // One send a day, so a released reservation would let the next through.
+        const project = yield* seedProject({ dailySends: 1 });
+        const committing = gate.holdNextCommit();
+        const accepting = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [
+            { filename: "notes.txt", source: { content: "SGVsbG8=", kind: "base64" } },
+          ]),
+        ).pipe(Effect.forkChild);
+        yield* committing.held;
+        const interrupting = yield* Fiber.interrupt(accepting).pipe(Effect.forkChild);
+        yield* Effect.sleep("50 millis");
+        yield* committing.release;
+        yield* Fiber.join(interrupting);
+
+        const [delivery] = yield* db
+          .select({ status: emailDelivery.status })
+          .from(emailDelivery)
+          .where(eq(emailDelivery.customDomainId, project.customDomainId));
+        expect(delivery).toMatchObject({ status: "queued" });
+        expect(uploaded).toHaveLength(1);
+        expect(deleted).toEqual([]);
+        const refused = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        ).pipe(Effect.flip);
+        expect(refused).toMatchObject({ _tag: "UsageLimitExceeded" });
+      }).pipe(
+        Effect.provide(services(gate.url, testRedisUrl, makeBackend().layer, storage)),
+        Effect.ensuring(gate.close),
+      );
+    },
+  );
+
+  it.live("a COMMIT the server took but whose answer was lost keeps the send whole", () => {
+    const gate = makeCommitGate(testDatabaseUrl);
+    const uploaded: string[] = [];
+    const deleted: string[] = [];
+    // Object storage, the boundary.
+    const storage = Layer.succeed(ObjectStorage, {
+      delete: (key) => Effect.sync(() => void deleted.push(key)),
+      download: unsupported,
+      exists: unsupported,
+      signedDownloadUrl: unsupported,
+      signedUploadUrl: unsupported,
+      upload: (key) => Effect.sync(() => (uploaded.push(key), { key })),
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so a released reservation would let the next through.
+      const project = yield* seedProject({ dailySends: 1 });
+      yield* gate.dropNextCommitAnswer;
+      const exit = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [
+          { filename: "notes.txt", source: { content: "SGVsbG8=", kind: "base64" } },
+        ]),
+      ).pipe(Effect.exit);
+      // The client saw the COMMIT fail...
+      expect(exit._tag).toBe("Failure");
+
+      // ...but it committed, so nothing of the send is given back.
+      const [delivery] = yield* db
+        .select({ status: emailDelivery.status })
+        .from(emailDelivery)
+        .where(eq(emailDelivery.customDomainId, project.customDomainId));
+      expect(delivery).toMatchObject({ status: "queued" });
+      expect(uploaded).toHaveLength(1);
+      expect(deleted).toEqual([]);
+      const refused = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      ).pipe(Effect.flip);
+      expect(refused).toMatchObject({ _tag: "UsageLimitExceeded" });
+    }).pipe(
+      Effect.provide(services(gate.url, testRedisUrl, makeBackend().layer, storage)),
+      Effect.ensuring(gate.close),
+    );
+  });
+
+  it.live("gives back the Usage of a failed Delivery when its job runs again", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so Usage still held would refuse the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // What a dead-letter step leaves when it wrote the outcome but Redis refused the
+      // release: the job stays pending and runs again.
+      yield* db
+        .update(emailDelivery)
+        .set({ completedAt: new Date(), status: "failed" })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      const next = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      expect(next.replayed).toBe(false);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends skipped with delivery.skipped when its Contact is suppressed after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so the skipped send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "Bounced@Example.com"),
+      );
+      const [suppressed] = yield* db
+        .update(contact)
+        .set({
+          suppressedAt: new Date(),
+          suppressionReason: "hard_bounce",
+          suppressionSeverity: "all",
+        })
+        .where(eq(contact.email, "bounced@example.com"))
+        .returning({ id: contact.id });
+      expect(suppressed).toBeDefined();
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "skipped" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { reason: "suppression" }, type: "delivery.skipped" },
+      ]);
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed with message.failed when its Domain is paused after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      yield* db
+        .update(customDomain)
+        .set({ isPaused: true, pausedReason: "manual_admin_pause" })
+        .where(eq(customDomain.id, project.customDomainId));
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "Domain is paused" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "Domain is paused" }, type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed, unsent, when its Project loses the Domain after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so the failed send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Another Project's claim proven, or this Project removing the Domain, ends its link.
+      const [link] = yield* db
+        .delete(organizationDomain)
+        .where(eq(organizationDomain.customDomainId, project.customDomainId))
+        .returning();
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "The Project no longer holds the sending Domain" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+      // Given the Domain back, the Project can send again: the failed send's Usage was freed.
+      if (link) {
+        yield* db.insert(organizationDomain).values(link);
+      }
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed when its Sandbox Domain is paused after accept", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const sandboxDomainId = typeid("sbxd").toString();
+      const rootDomain = `${sandboxDomainId}.sandbox.relayit.test`;
+      yield* db.insert(sandboxDomain).values({
+        cloudflareZoneId: "unused",
+        dkimPrivateKey: "unused",
+        dkimPublicKey: "unused",
+        dkimSelector: "relayit",
+        id: sandboxDomainId,
+        isActive: true,
+        rootDomain,
+        verificationStatus: "verified",
+      });
+      yield* db.insert(emailDomainRegistration).values({
+        region: "eu-central-1",
+        sandboxDomainId,
+        verificationStatus: "verified",
+      });
+      yield* db
+        .update(organization)
+        .set({ sandboxDomainId })
+        .where(eq(organization.id, project.organizationId));
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `${SANDBOX_FROM_LOCAL_PART}@${rootDomain}`, project.ownerEmail),
+      );
+      yield* db
+        .update(sandboxDomain)
+        .set({ isPaused: true })
+        .where(eq(sandboxDomain.id, sandboxDomainId));
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(rootDomain)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed with message.failed once SES has refused every retry", () => {
+    const backend = makeBackend(() =>
+      Effect.fail(new EmailBackendRateLimited({ region: "eu-central-1" })),
+    );
+    return Effect.gen(function* () {
+      // One send a day, so the failed send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+      // SES did not take it, so it waits for its retry as it was accepted.
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+      for (let pass = 1; pass < emailDeliverJob.retry.maxAttempts; pass += 1) {
+        yield* runWorker;
+      }
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(emailDeliverJob.retry.maxAttempts);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "SES send failed" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "SES send failed" }, type: "message.failed" },
+      ]);
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("gives back Usage and staged attachments when the client disconnects mid-accept", () => {
+    const uploaded: string[] = [];
+    const deleted: string[] = [];
+    return Effect.gen(function* () {
+      const secondUpload = yield* Deferred.make<void>();
+      // Object storage, the boundary: the second upload never finishes.
+      const storage = Layer.succeed(ObjectStorage, {
+        delete: (key) => Effect.sync(() => void deleted.push(key)),
+        download: unsupported,
+        exists: unsupported,
+        signedDownloadUrl: unsupported,
+        signedUploadUrl: unsupported,
+        upload: (key) =>
+          Effect.suspend(() => {
+            uploaded.push(key);
+            return uploaded.length === 1
+              ? Effect.succeed({ key })
+              : Deferred.succeed(secondUpload, undefined).pipe(Effect.andThen(Effect.never));
+          }),
+      });
+
+      yield* Effect.gen(function* () {
+        // One send a day, so a leaked reservation would refuse the next.
+        const project = yield* seedProject({ dailySends: 1 });
+        const attachment = {
+          filename: "notes.txt",
+          source: { content: "SGVsbG8=", kind: "base64" as const },
+        };
+        const accepting = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [
+            attachment,
+            attachment,
+          ]),
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(secondUpload);
+        yield* Fiber.interrupt(accepting);
+
+        expect(uploaded).toHaveLength(2);
+        expect(deleted).toEqual([uploaded[0]]);
+        const next = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+        expect(next.replayed).toBe(false);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, makeBackend().layer, storage)),
+      );
+    });
+  });
+});
