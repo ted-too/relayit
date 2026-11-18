@@ -1,97 +1,32 @@
-import openapi from "@elysia/openapi";
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { migrateOnStartup } from "@repo/persistence/db/migrate";
-import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
-import { Cause, Effect, Fiber, Redacted } from "effect";
-import { Elysia } from "elysia";
+import { Cause, Effect, Fiber, Layer, Redacted } from "effect";
 import { apiConfig } from "./env";
-import { makeRuntime } from "./layers";
-import { type ApiAuth, createAuth } from "./lib/auth";
-import type { RunApiEffect } from "./lib/effect";
-import { createLegacySendRoutes } from "./routes/compat/send";
-import { createEmailRoutes } from "./routes/messages/email";
-import { createSesNotificationRoutes } from "./routes/webhooks/ses";
+import { apiServer } from "./http";
+import { makeApiServices } from "./layers";
+import { ApiAuth } from "./lib/auth";
 
-export function createHttpApp(auth: ApiAuth, runEffect: RunApiEffect) {
-  return new Elysia()
-    .use(
-      openapi({
-        documentation: {
-          info: {
-            description:
-              "HTTP API for sending messages through Relayit. Prefer POST /messages/email for new integrations.",
-            title: "Relayit API",
-            version: "0.0.0",
-          },
-          tags: [
-            {
-              description: "Current send endpoints",
-              name: "Send",
-            },
-            {
-              description: "Compatibility send endpoints for existing integrations",
-              name: "Legacy Send",
-            },
-          ],
-        },
-        exclude: {
-          paths: ["/health", SES_NOTIFICATIONS_PATH],
-        },
-        path: "/docs",
-        specPath: "/openapi.json",
-        provider: "scalar",
+const apiProgram = Effect.gen(function* () {
+  const config = yield* apiConfig;
+  yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
+  yield* Effect.logInfo("Database migrations up to date");
+
+  const server = apiServer({ hostname: config.hostname, port: config.port }).pipe(
+    Layer.provide(
+      ApiAuth.layer({
+        apiUrl: config.apiUrl.toString(),
+        databaseUrl: Redacted.value(config.databaseUrl),
+        redisKeyPrefix: config.redisKeyPrefix,
+        redisUrl: Redacted.value(config.redisUrl),
       }),
-    )
-    .get("/health", () => ({ status: "ok" as const }), {
-      detail: {
-        hide: true,
-      },
-    })
-    .use(createLegacySendRoutes(auth, runEffect))
-    .group("/messages", (group) => group.use(createEmailRoutes(auth, runEffect)))
-    .use(createSesNotificationRoutes(runEffect));
-}
+    ),
+    Layer.provide(makeApiServices(config)),
+  );
 
-const apiProgram = Effect.scoped(
-  Effect.gen(function* () {
-    const config = yield* apiConfig;
-    yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
-    yield* Effect.logInfo("Database migrations up to date");
-    const services = yield* Effect.context<never>();
-    const auth = yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        createAuth({
-          apiUrl: config.apiUrl.toString(),
-          databaseUrl: Redacted.value(config.databaseUrl),
-          redisKeyPrefix: config.redisKeyPrefix,
-          redisUrl: Redacted.value(config.redisUrl),
-          runLog: Effect.runForkWith(services),
-        }),
-      ),
-      (apiAuth) => Effect.promise(apiAuth.close),
-    );
-    const runtime = yield* Effect.acquireRelease(
-      Effect.sync(() => makeRuntime(config)),
-      (apiRuntime) => apiRuntime.disposeEffect,
-    );
-    yield* Effect.promise(runtime.context);
-    const runEffect: RunApiEffect = (effect, options) =>
-      runtime.runPromise(
-        effect.pipe(Effect.tapCause(logEffectFailure("API request failed"))),
-        options,
-      );
-
-    const app = createHttpApp(auth, runEffect);
-
-    yield* Effect.acquireRelease(
-      Effect.sync(() => app.listen({ hostname: config.hostname, port: config.port })),
-      () => Effect.promise(() => app.stop()),
-    );
-    yield* Effect.logInfo(`Relayit API listening on ${config.hostname}:${config.port}`);
-
-    return yield* Effect.never;
-  }),
-);
+  yield* Layer.build(server);
+  yield* Effect.logInfo(`Relayit API listening on ${config.hostname}:${config.port}`);
+  return yield* Effect.never;
+}).pipe(Effect.scoped);
 
 const reportFailure = Effect.catchCause((cause) => {
   if (cause.reasons.every(Cause.isInterruptReason)) {

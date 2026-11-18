@@ -1,26 +1,19 @@
 import { acceptTransactionalEmail } from "@repo/channels/email/accept";
-import { Cause, DateTime, Effect } from "effect";
-import { Elysia, status } from "elysia";
-import { createApiKeyMiddleware } from "../../lib/api-key";
-import type { ApiAuth } from "../../lib/auth";
-import type { RunApiEffect } from "../../lib/effect";
 import { logEffectFailure } from "@repo/logging";
+import { Cause, DateTime, Effect } from "effect";
+import { HttpApiBuilder } from "effect/http-api";
 import {
-  type EmailContact,
-  parseEmailFrom,
-  refineSendEmailBody,
-  type SendEmailBody,
-  sendEmailBodySchema,
-  sendEmailHeadersSchema,
-  sendEmailOpenApiModels,
-} from "./validators/email";
+  AcceptRefused,
+  Api,
+  CurrentProject,
+  InternalServerError,
+  InvalidAppEnvironment,
+  SendLimitExceeded,
+  SendRefused,
+} from "../../api";
+import { type EmailContact, parseEmailFrom, refineSendEmailBody } from "./validators/email";
 
-const contactInput = (contact: {
-  readonly email: string;
-  readonly first_name?: string;
-  readonly last_name?: string;
-  readonly properties?: Readonly<Record<string, string>>;
-}) => ({
+const contactInput = (contact: EmailContact) => ({
   email: contact.email,
   firstName: contact.first_name,
   lastName: contact.last_name,
@@ -32,36 +25,28 @@ const asContactList = (value: EmailContact | string | readonly (EmailContact | s
   return items.map((item) => (typeof item === "string" ? { email: item } : item));
 };
 
-export const createEmailRoutes = (
-  auth: ApiAuth,
-  runEffect: RunApiEffect,
-  accept = acceptTransactionalEmail,
-) =>
-  new Elysia({ prefix: "/email", tags: ["Send"] })
-    .model(sendEmailOpenApiModels)
-    .use(createApiKeyMiddleware(auth))
-    .post(
-      "/",
-      ({ body: rawBody, headers, organizationId, request }) => {
-        const body = rawBody as SendEmailBody;
-        const hasApp = Boolean(headers.app);
-        const hasEnvironment = Boolean(headers.environment);
-        if (hasApp !== hasEnvironment) {
-          return status(400, {
-            code: "invalid_app_environment",
-            message: "App and Environment headers must both be present, or both omitted.",
-          });
-        }
+/** `POST /messages/email`. `accept` is the one the api sends with, unless a test swaps it. */
+export const sendHandlers = (accept = acceptTransactionalEmail) =>
+  HttpApiBuilder.group(Api, "send", (handlers) =>
+    Effect.succeed(
+      handlers.handle("sendEmail", ({ headers, payload: body }) =>
+        Effect.gen(function* () {
+          const refused = refineSendEmailBody(body);
+          if (refused !== undefined) {
+            return yield* new SendRefused({ message: refused, on: "body", type: "validation" });
+          }
+          if (Boolean(headers.app) !== Boolean(headers.environment)) {
+            return yield* new InvalidAppEnvironment({
+              code: "invalid_app_environment",
+              message: "App and Environment headers must both be present, or both omitted.",
+            });
+          }
+          const { organizationId } = yield* CurrentProject;
 
-        return runEffect(
-          accept({
+          const accepted = yield* accept({
             attribution:
               headers.app && headers.environment
-                ? {
-                    app: headers.app,
-                    environment: headers.environment,
-                    kind: "appEnvironment",
-                  }
+                ? { app: headers.app, environment: headers.environment, kind: "appEnvironment" }
                 : { kind: "project" },
             email: {
               attachments: (body.attachments ?? []).map((attachment) => ({
@@ -69,9 +54,9 @@ export const createEmailRoutes = (
                 contentType: attachment.content_type,
                 filename: attachment.filename,
                 source:
-                  "path" in attachment
-                    ? { kind: "url" as const, url: attachment.path }
-                    : { content: attachment.content, kind: "base64" as const },
+                  attachment.path === undefined
+                    ? { content: attachment.content, kind: "base64" as const }
+                    : { kind: "url" as const, url: attachment.path },
               })),
               bcc: (body.bcc === undefined ? [] : asContactList(body.bcc)).map(contactInput),
               cc: (body.cc === undefined ? [] : asContactList(body.cc)).map(contactInput),
@@ -93,9 +78,9 @@ export const createEmailRoutes = (
               replyTo:
                 body.reply_to === undefined
                   ? []
-                  : Array.isArray(body.reply_to)
-                    ? [...body.reply_to]
-                    : [body.reply_to],
+                  : typeof body.reply_to === "string"
+                    ? [body.reply_to]
+                    : [...body.reply_to],
               to: asContactList(body.to).map(contactInput),
             },
             idempotencyKey: headers["idempotency-key"],
@@ -106,52 +91,44 @@ export const createEmailRoutes = (
                 ? undefined
                 : Object.fromEntries(body.tags.map((tag) => [tag.name, tag.value])),
           }).pipe(
-            Effect.annotateLogs({ organizationId }),
-            Effect.map((accepted) =>
-              status(201, {
-                id: accepted.messageId,
-                ...(accepted.stripped.length > 0 ? { stripped: accepted.stripped } : {}),
-              }),
-            ),
             Effect.catch((error) =>
               Effect.gen(function* () {
                 switch (error._tag) {
-                  case "EmailAcceptRejected":
-                    return status(422, {
+                  case "EmailAcceptRejected": {
+                    const details = error.details;
+                    return yield* new AcceptRefused({
                       code: error.code,
                       message: error.message,
-                      ...(error.details
+                      ...(details
                         ? {
                             details: {
-                              ...(error.details.detail === undefined
+                              ...(details.detail === undefined ? {} : { detail: details.detail }),
+                              ...(details.filename === undefined
                                 ? {}
-                                : { detail: error.details.detail }),
-                              ...(error.details.filename === undefined
+                                : { filename: details.filename }),
+                              ...(details.maxBytes === undefined
                                 ? {}
-                                : { filename: error.details.filename }),
-                              ...(error.details.maxBytes === undefined
+                                : { max_bytes: details.maxBytes }),
+                              ...(details.reason === undefined ? {} : { reason: details.reason }),
+                              ...(details.status === undefined ? {} : { status: details.status }),
+                              ...(details.variable === undefined
                                 ? {}
-                                : { max_bytes: error.details.maxBytes }),
-                              ...(error.details.reason === undefined
-                                ? {}
-                                : { reason: error.details.reason }),
-                              ...(error.details.status === undefined
-                                ? {}
-                                : { status: error.details.status }),
-                              ...(error.details.variable === undefined
-                                ? {}
-                                : { variable: error.details.variable }),
+                                : { variable: details.variable }),
                             },
                           }
                         : {}),
                     });
+                  }
                   case "UsageLimitExceeded":
-                    return status(429, {
+                    return yield* new SendLimitExceeded({
                       code:
                         error.window === "daily"
                           ? "daily_limit_exceeded"
                           : "monthly_limit_exceeded",
-                      message: `${error.window === "daily" ? "Daily" : "Monthly"} email send limit exceeded`,
+                      message:
+                        error.window === "daily"
+                          ? "Daily email send limit exceeded"
+                          : "Monthly email send limit exceeded",
                       retry_after_seconds: Math.max(
                         1,
                         Math.ceil(
@@ -162,35 +139,21 @@ export const createEmailRoutes = (
                     });
                   default:
                     yield* logEffectFailure("Email acceptance failed")(Cause.fail(error));
-                    return status(500, {
+                    return yield* new InternalServerError({
                       code: "internal_server_error",
                       message: "Failed to accept email message.",
                     });
                 }
               }),
             ),
-          ),
-          { signal: request.signal },
-        );
-      },
-      {
-        apiKey: true,
-        beforeHandle: ({ body, status }) => {
-          const message = refineSendEmailBody(body as SendEmailBody);
-          if (message !== undefined) {
-            return status(422, {
-              message,
-              on: "body",
-              type: "validation",
-            });
-          }
-        },
-        body: sendEmailBodySchema,
-        detail: {
-          description:
-            "Create a transactional email. Provide inline html/text or a template, not both.",
-          summary: "Send email",
-        },
-        headers: sendEmailHeadersSchema,
-      },
-    );
+            Effect.annotateLogs({ organizationId }),
+          );
+
+          return {
+            id: accepted.messageId,
+            ...(accepted.stripped.length > 0 ? { stripped: accepted.stripped } : {}),
+          };
+        }),
+      ),
+    ),
+  );

@@ -12,6 +12,7 @@
     "catalog": {
       "@babel/core": "^8.0.1",
       "@effect-aws/client-s3": "2.0.0",
+      "@effect/platform-bun": "4.1.4",
       "@effect/sql-pg": "4.1.4",
       "@effect/tsgo": "^0.68.1",
       "@effect/vitest": "4.1.4",

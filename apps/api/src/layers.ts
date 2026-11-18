@@ -4,11 +4,12 @@ import { loggingLive } from "@repo/logging";
 import { makeObjectStorageLayer } from "@repo/object-storage";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { makeRedisLive } from "@repo/redis";
-import { Layer, ManagedRuntime, Redacted } from "effect";
+import { Layer, Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type { ApiConfig } from "./env";
 
-export const makeRuntime = (config: ApiConfig) => {
+/** What the routes need beyond `ApiAuth`, and the app logger, for the length of the server. */
+export const makeApiServices = (config: ApiConfig) => {
   const logging = loggingLive(config.logLevel);
   const dbLive = makeDbLive({
     databaseUrl: Redacted.value(config.databaseUrl),
@@ -30,7 +31,13 @@ export const makeRuntime = (config: ApiConfig) => {
     ),
   );
 
-  return ManagedRuntime.make(
-    Layer.mergeAll(dbLive, redisLive, objectStorageLive, usageLive, jobsLive, httpLive, logging),
+  return Layer.mergeAll(
+    dbLive,
+    redisLive,
+    objectStorageLive,
+    usageLive,
+    jobsLive,
+    httpLive,
+    logging,
   );
 };

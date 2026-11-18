@@ -49,7 +49,7 @@ When a choice is ambiguous, take the conservative option, keep going, and flag i
 
 ## How it works
 
-Four deployables share one Postgres and one Redis. `apps/web` is a TanStack Start app: the dashboard, better-auth at `/api/auth/*`, and every session-authenticated operation as a server function. `apps/api` is an Elysia server for API-key traffic (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`) and nothing else. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only web calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
+Four deployables share one Postgres and one Redis. `apps/web` is a TanStack Start app: the dashboard, better-auth at `/api/auth/*`, and every session-authenticated operation as a server function. `apps/api` serves API-key traffic (`POST /messages/email`, the legacy `/send/*`, SES notifications, `/health`, `/docs`) and nothing else, as an Effect `HttpApi` on Bun: the routes, schemas and every response are declared in `apps/api/src/api.ts`, and the OpenAPI document is generated from it. `apps/worker` runs the jobs: delivery, retries, Domain verification, outbound webhooks, and at startup the SES infrastructure in each region and the Sandbox Domain; it has no port and never migrates. `apps/template-builder` builds and publishes Email Workspaces; only web calls it, over Effect Rpc with a shared secret. `apps/site` is the marketing site and public docs.
 
 The domain lives in packages the apps import through explicit subpaths (`@repo/channels/email/delivery`): `channels` holds accept, delivery, Domains, the `EmailBackend` contract and Usage; `webhooks` the outbound events; `jobs` the queue (Redis Streams, with a Postgres outbox so a job is enqueued in the same transaction as the rows it acts on). Code reaches Postgres through Drizzle v1 on `@effect/sql-pg`, SES through `packages/provider-aws`.
 
@@ -58,7 +58,7 @@ Architecture, decisions and their reasons: [docs/internals/overview.md](docs/int
 ## Where code lives
 
 ```
-apps/api/                 Elysia ingress, HTTP only
+apps/api/                 HttpApi ingress, HTTP only
 apps/worker/              the job worker: every job handler, no HTTP
 apps/web/                 TanStack Start dashboard, better-auth, server functions
 apps/template-builder/    Email Workspace build and publish, Effect Rpc
@@ -113,7 +113,7 @@ Each task gets its own git worktree: T3 Code makes it under `~/.t3/worktrees/` a
 - **Errors.** Construct a tagged error where it is raised, with a static `message` and the varying data in fields; lint enforces both. Classify failures with a `switch` on `_tag` listing what is retryable, `default` terminal, rather than an `isX` guard or `instanceof`. Map a shared function's error where you call it; don't wrap it under a new name to remap it.
 - **Services.** Take the service at the call site (`const usage = yield* Usage`) and call it; no helper that only yields a service and forwards one method.
 - **Jobs.** A job's contract and handler live in their domain package. Producers enqueue in the transaction that writes the rows the job reads; only `apps/worker` registers handlers.
-- **Schemas.** Zod for the web app's env, forms and server-function inputs; Effect Schema for job payloads, Rpc and config. Use the one the module around you uses.
+- **Schemas.** Zod for the web app's env, forms and server-function inputs; Effect Schema for job payloads, Rpc, the api's `HttpApi` and config. Use the one the module around you uses.
 - **Types.** Inferred over annotated; `satisfies` over `as`. Never cast away an Effect's requirements.
 - **Comments** say why, not what, and move with the code. No narration ("added X").
 - **Lint suppressions** need a reason: end the directive with `-- reason` or put a comment on the line above.

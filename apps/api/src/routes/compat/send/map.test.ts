@@ -1,8 +1,5 @@
 import { describe, expect, test } from "@effect/vitest";
-import { type AcceptedTransactionalEmail, EmailAcceptRejected } from "@repo/channels/email/accept";
-import { UsageLimitExceeded } from "@repo/channels/usage";
 import {
-  mapAcceptResultToLegacyResponse,
   mapLegacyRawToAccept,
   mapLegacyTemplateToAccept,
   resolveLegacyDefaultFromAddress,
@@ -262,53 +259,5 @@ describe("resolveLegacyDefaultFromAddress", () => {
         organizationId: "org_1",
       }),
     ).toBeNull();
-  });
-});
-
-describe("mapAcceptResultToLegacyResponse", () => {
-  test("returns queued for an accepted message", () => {
-    expect(
-      mapAcceptResultToLegacyResponse({
-        deliveryId: "edlv_1",
-        messageId: "msg_1",
-        replayed: false,
-        stripped: [],
-      } satisfies AcceptedTransactionalEmail),
-    ).toEqual({
-      body: { id: "msg_1", status: "queued" },
-      status: 201,
-    });
-  });
-
-  test("maps EmailAcceptRejected to the legacy error envelope", () => {
-    expect(
-      mapAcceptResultToLegacyResponse(
-        new EmailAcceptRejected({
-          code: "template_not_found",
-          message: "Template not found.",
-        }),
-      ),
-    ).toEqual({
-      body: { details: ["template_not_found"], message: "Template not found." },
-      status: 400,
-    });
-  });
-
-  test("maps UsageLimitExceeded to 429", () => {
-    expect(
-      mapAcceptResultToLegacyResponse(
-        new UsageLimitExceeded({
-          deliveryId: "edlv_1",
-          retryAt: new Date("2026-08-15T00:00:00.000Z"),
-          window: "daily",
-        }),
-      ),
-    ).toEqual({
-      body: {
-        details: ["daily_limit_exceeded"],
-        message: "Daily email send limit exceeded",
-      },
-      status: 429,
-    });
   });
 });

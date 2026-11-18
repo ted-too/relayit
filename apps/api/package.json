@@ -10,7 +10,7 @@
     "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
-    "@elysia/openapi": "^1.4.15",
+    "@effect/platform-bun": "catalog:",
     "@opentelemetry/api": "^1.9.1",
     "@repo/channels": "workspace:*",
     "@repo/jobs": "workspace:*",
@@ -20,8 +20,7 @@
     "@repo/provider-aws": "workspace:*",
     "@repo/redis": "workspace:*",
     "better-auth": "catalog:",
-    "effect": "catalog:",
-    "elysia": "^1.4.29"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

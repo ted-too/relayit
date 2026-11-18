@@ -3,89 +3,79 @@ import {
   isBlockedAttachmentFilename,
 } from "@repo/channels/email/attachment-policy";
 import type { EmailFrom } from "@repo/persistence/db/validators/channels/email";
-import { getSchemaValidator, type Static, t } from "elysia";
+import { Schema } from "effect";
 
 /** Max recipients per to/cc/bcc field. */
 const MAX_RECIPIENTS = 50;
 
 /** Tag name/value charset. */
-const TAG_TOKEN = "^[a-zA-Z0-9_-]+$";
+const TAG_TOKEN = /^[a-zA-Z0-9_-]+$/;
 
 const FROM_ANGLE_ADDR = /^(.*?)\s*<([^<>]+)>\s*$/;
 const FROM_QUOTED_NAME = /^"(.*)"$/;
 
-const emailAddress = t.String({
-  format: "email",
-  title: "Email address",
-});
+// The `email` and `uri` formats the api validated against before it moved to Effect
+// (Elysia's, from ajv-formats). Kept as they were, so no address or attachment URL a
+// customer sends changes between accepted and refused.
+const EMAIL_FORMAT =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+const NOT_URI_FRAGMENT = /\/|:/;
+const URI_FORMAT =
+  /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
 
-const emailAddressCheck = getSchemaValidator(emailAddress);
-if (!emailAddressCheck) {
-  throw new Error("email address validator failed to compile");
-}
+export const isEmailAddress = (value: string) => EMAIL_FORMAT.test(value);
 
-const componentId = {
-  Attachment: "#/components/schemas/Attachment",
-  Contact: "#/components/schemas/Contact",
-  EmailAddressList: "#/components/schemas/EmailAddressList",
-  Recipient: "#/components/schemas/Recipient",
-} as const;
-
-const stringMap = t.Object({}, { additionalProperties: t.String() });
-
-/** Recipients may be address strings or Contact objects. */
-export const emailContactSchema = t.Object(
-  {
-    email: t.String({ format: "email" }),
-    first_name: t.Optional(t.String()),
-    last_name: t.Optional(t.String()),
-    properties: t.Optional(stringMap),
-  },
-  {
-    $id: componentId.Contact,
-    additionalProperties: false,
-    title: "Contact",
-  },
+/** A string in the `email` format; the legacy endpoints use it too. */
+export const EmailAddressString = Schema.String.check(
+  Schema.makeFilter(isEmailAddress, {
+    expected: "an email address",
+    toJsonSchema: () => [{ format: "email" }, true],
+  }),
 );
 
-export type EmailContact = Static<typeof emailContactSchema>;
+/** A string in the `uri` format. */
+export const UriString = Schema.String.check(
+  Schema.makeFilter((value: string) => NOT_URI_FRAGMENT.test(value) && URI_FORMAT.test(value), {
+    expected: "a URI",
+    toJsonSchema: () => [{ format: "uri" }, true],
+  }),
+);
+
+const emailAddress = EmailAddressString.annotate({ title: "Email address" });
+
+const emailAddresses = Schema.Array(EmailAddressString)
+  .check(Schema.isMaxLength(MAX_RECIPIENTS))
+  .annotate({ title: "Email addresses" });
+
+const stringMap = Schema.Record(Schema.String, Schema.String);
+
+/** A recipient as an object, with what Relayit stores on its Contact. */
+export const Contact = Schema.Struct({
+  email: EmailAddressString,
+  first_name: Schema.optionalKey(Schema.String),
+  last_name: Schema.optionalKey(Schema.String),
+  properties: Schema.optionalKey(stringMap),
+}).annotate({ identifier: "Contact", title: "Contact" });
+
+export type EmailContact = typeof Contact.Type;
 
 /** Wire address list: email or email[]. */
-export const emailAddressListSchema = t.Union(
-  [
-    emailAddress,
-    t.Array(t.String({ format: "email" }), {
-      maxItems: MAX_RECIPIENTS,
-      title: "Email addresses",
-    }),
-  ],
-  { $id: componentId.EmailAddressList, title: "Email address list" },
-);
-
-export type EmailAddressListWire = Static<typeof emailAddressListSchema>;
+const EmailAddressList = Schema.Union([emailAddress, emailAddresses]).annotate({
+  identifier: "EmailAddressList",
+  title: "Email address list",
+});
 
 /** Recipients: address, address list, or contact objects. */
-export const emailRecipientSchema = t.Union(
-  [
-    emailAddress,
-    t.Array(t.String({ format: "email" }), {
-      maxItems: MAX_RECIPIENTS,
-      title: "Email addresses",
-    }),
-    t.Ref(componentId.Contact),
-    t.Array(t.Ref(componentId.Contact), {
-      maxItems: MAX_RECIPIENTS,
-      title: "Contacts",
-    }),
-  ],
-  {
-    $id: componentId.Recipient,
-    description: "Address, address list, or contact objects.",
-    title: "Recipient",
-  },
-);
-
-export type EmailContactRecipient = string | string[] | EmailContact | EmailContact[];
+const Recipient = Schema.Union([
+  emailAddress,
+  emailAddresses,
+  Contact,
+  Schema.Array(Contact).check(Schema.isMaxLength(MAX_RECIPIENTS)).annotate({ title: "Contacts" }),
+]).annotate({
+  description: "Address, address list, or contact objects.",
+  identifier: "Recipient",
+  title: "Recipient",
+});
 
 export function parseEmailFrom(value: string): EmailFrom {
   const trimmed = value.trim();
@@ -107,180 +97,118 @@ export function parseEmailFrom(value: string): EmailFrom {
 
 export function tryParseEmailFrom(value: string): EmailFrom | undefined {
   const parsed = parseEmailFrom(value);
-  if (!emailAddressCheck.Check(parsed.address)) {
+  if (!isEmailAddress(parsed.address)) {
     return;
   }
   return parsed;
 }
 
-const filenameSchema = t.String({
-  description: "Attachment filename including extension (used for MIME type).",
-  minLength: 1,
-});
-
 const attachmentMeta = {
-  content_id: t.Optional(
-    t.String({
+  content_id: Schema.optionalKey(
+    Schema.String.annotate({
       description: 'Inline image id for HTML, e.g. <img src="cid:your-id">.',
     }),
   ),
-  content_type: t.Optional(
-    t.String({
-      description: "MIME type; derived from filename when omitted.",
+  content_type: Schema.optionalKey(
+    Schema.String.annotate({ description: "MIME type; derived from filename when omitted." }),
+  ),
+  filename: Schema.String.check(Schema.isMinLength(1)).annotate({
+    description: "Attachment filename including extension (used for MIME type).",
+  }),
+};
+
+/**
+ * Attachment: base64 `content` or hosted `path`, plus filename. Never both: neither member
+ * may carry the other's field, so one with both is refused rather than read as either.
+ */
+const Attachment = Schema.Union([
+  Schema.Struct({
+    ...attachmentMeta,
+    content: Schema.String.annotate({ description: "Base64-encoded file contents." }),
+    path: Schema.optionalKey(Schema.Never),
+  }).annotate({ title: "Base64 attachment" }),
+  Schema.Struct({
+    ...attachmentMeta,
+    content: Schema.optionalKey(Schema.Never),
+    path: UriString.annotate({ description: "HTTPS URL of a hosted file to attach." }),
+  }).annotate({ title: "Hosted attachment" }),
+]).annotate({ identifier: "Attachment", title: "Attachment" });
+
+const tagToken = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(256),
+  Schema.isPattern(TAG_TOKEN),
+);
+
+/**
+ * `POST /messages/email` body. Fields it does not know, `topic_id` among them, are
+ * dropped, as they were before.
+ */
+export const SendEmailBody = Schema.Struct({
+  from: Schema.String.check(Schema.isMinLength(1)).annotate({
+    description: 'Sender. Email or "Name <email@example.com>".',
+  }),
+  to: Recipient,
+  subject: Schema.optionalKey(
+    Schema.String.annotate({
+      description:
+        "Email subject line. Required for inline html/text; optional with template (overrides template subject when set).",
     }),
   ),
-  filename: filenameSchema,
-};
-
-/** Attachment: base64 `content` or hosted `path`, plus filename. */
-export const emailAttachmentSchema = t.Union(
-  [
-    t.Object(
-      {
-        ...attachmentMeta,
-        content: t.String({
-          description: "Base64-encoded file contents.",
-        }),
-      },
-      { additionalProperties: false, title: "Base64 attachment" },
-    ),
-    t.Object(
-      {
-        ...attachmentMeta,
-        path: t.String({
-          description: "HTTPS URL of a hosted file to attach.",
-          format: "uri",
-        }),
-      },
-      { additionalProperties: false, title: "Hosted attachment" },
-    ),
-  ],
-  { $id: componentId.Attachment, title: "Attachment" },
-);
-
-export type SendEmailAttachmentBody = Static<typeof emailAttachmentSchema>;
-
-/**
- * Template send ref. XOR with inline html/text — see
- * {@link refineSendEmailBody}.
- */
-export const emailTemplateRefSchema = t.Object(
-  {
-    id: t.String({
-      description: "Template id (`tmpl_…`) or active Template slug.",
-      minLength: 1,
+  bcc: Schema.optionalKey(Recipient),
+  cc: Schema.optionalKey(Recipient),
+  scheduled_at: Schema.optionalKey(
+    Schema.String.check(Schema.isMinLength(1)).annotate({
+      description: "When to send. ISO 8601 preferred.",
     }),
-    variables: t.Optional(
-      t.Object(
-        {},
-        {
-          additionalProperties: t.Any(),
+  ),
+  reply_to: Schema.optionalKey(EmailAddressList),
+  html: Schema.optionalKey(Schema.String),
+  text: Schema.optionalKey(Schema.String),
+  headers: Schema.optionalKey(
+    stringMap.annotate({ description: "Custom headers to add to the email." }),
+  ),
+  attachments: Schema.optionalKey(Schema.Array(Attachment)),
+  tags: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({ name: tagToken, value: tagToken }).annotate({ title: "Tag" }),
+    ).annotate({
+      description: "Tags as { name, value } pairs.",
+    }),
+  ),
+  template: Schema.optionalKey(
+    Schema.Struct({
+      id: Schema.String.check(Schema.isMinLength(1)).annotate({
+        description: "Template id (`tmpl_…`) or active Template slug.",
+      }),
+      variables: Schema.optionalKey(
+        Schema.Record(Schema.String, Schema.Unknown).annotate({
           description:
             "Primitive Template variable values (string|number) or reactEmail props (structured JSON).",
-        },
+        }),
       ),
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export type EmailTemplateRef = Static<typeof emailTemplateRefSchema>;
-
-const emailTagItemSchema = t.Object(
-  {
-    name: t.String({
-      maxLength: 256,
-      minLength: 1,
-      pattern: TAG_TOKEN,
     }),
-    value: t.String({
-      maxLength: 256,
-      minLength: 1,
-      pattern: TAG_TOKEN,
+  ),
+});
+
+export type SendEmailBody = typeof SendEmailBody.Type;
+
+export const SendEmailHeaders = Schema.Struct({
+  app: Schema.optionalKey(
+    Schema.String.annotate({ description: "App attribution (must pair with environment)." }),
+  ),
+  environment: Schema.optionalKey(
+    Schema.String.annotate({ description: "App Environment attribution (must pair with app)." }),
+  ),
+  "idempotency-key": Schema.optionalKey(
+    Schema.String.check(Schema.isMaxLength(256)).annotate({
+      description: "Idempotency Key — same key returns the original Message.",
     }),
-  },
-  { additionalProperties: false, title: "Tag" },
-);
+  ),
+  "x-api-key": Schema.String.annotate({ description: "The API key to use for the request." }),
+});
 
-export const emailTagsSchema = t.Array(emailTagItemSchema);
-
-export type EmailTags = Static<typeof emailTagsSchema>;
-
-/**
- * Named OpenAPI components for send-email unions. Register with `.model()`
- * before using {@link sendEmailBodySchema} on a route.
- */
-export const sendEmailOpenApiModels = {
-  Attachment: emailAttachmentSchema,
-  Contact: emailContactSchema,
-  EmailAddressList: emailAddressListSchema,
-  Recipient: emailRecipientSchema,
-};
-
-/**
- * `POST /messages/email` body. Extra properties (including campaign
- * `topic_id`) are rejected.
- */
-export const sendEmailBodySchema = t.Object(
-  {
-    from: t.String({
-      description: 'Sender. Email or "Name <email@example.com>".',
-      minLength: 1,
-    }),
-    to: t.Ref(componentId.Recipient),
-    subject: t.Optional(
-      t.String({
-        description:
-          "Email subject line. Required for inline html/text; optional with template (overrides template subject when set).",
-      }),
-    ),
-    bcc: t.Optional(t.Ref(componentId.Recipient)),
-    cc: t.Optional(t.Ref(componentId.Recipient)),
-    scheduled_at: t.Optional(
-      t.String({
-        description: "When to send. ISO 8601 preferred.",
-        minLength: 1,
-      }),
-    ),
-    reply_to: t.Optional(t.Ref(componentId.EmailAddressList)),
-    html: t.Optional(t.String()),
-    text: t.Optional(t.String()),
-    headers: t.Optional(
-      t.Object(
-        {},
-        {
-          additionalProperties: t.String(),
-          description: "Custom headers to add to the email.",
-        },
-      ),
-    ),
-    attachments: t.Optional(t.Array(t.Ref(componentId.Attachment))),
-    tags: t.Optional(
-      t.Array(emailTagItemSchema, {
-        description: "Tags as { name, value } pairs.",
-      }),
-    ),
-    template: t.Optional(emailTemplateRefSchema),
-  },
-  { additionalProperties: false },
-);
-
-export interface SendEmailBody {
-  attachments?: SendEmailAttachmentBody[];
-  bcc?: EmailContactRecipient;
-  cc?: EmailContactRecipient;
-  from: string;
-  headers?: Record<string, string>;
-  html?: string;
-  reply_to?: EmailAddressListWire;
-  scheduled_at?: string;
-  subject?: string;
-  tags?: EmailTags;
-  template?: EmailTemplateRef;
-  text?: string;
-  to: EmailContactRecipient;
-}
-
+/** What the schema can't say: the checks that span fields, with the message each fails with. */
 export function refineSendEmailBody(body: SendEmailBody): string | undefined {
   if (tryParseEmailFrom(body.from) === undefined) {
     return "Invalid from address";
@@ -310,27 +238,3 @@ export function refineSendEmailBody(body: SendEmailBody): string | undefined {
     }
   }
 }
-
-export const sendEmailHeadersSchema = t.Object({
-  app: t.Optional(
-    t.String({
-      description: "App attribution (must pair with environment).",
-    }),
-  ),
-  environment: t.Optional(
-    t.String({
-      description: "App Environment attribution (must pair with app).",
-    }),
-  ),
-  "idempotency-key": t.Optional(
-    t.String({
-      description: "Idempotency Key — same key returns the original Message.",
-      maxLength: 256,
-    }),
-  ),
-  "x-api-key": t.String({
-    description: "The API key to use for the request.",
-  }),
-});
-
-export type SendEmailHeaders = Static<typeof sendEmailHeadersSchema>;
