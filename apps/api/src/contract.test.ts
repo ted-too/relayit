@@ -19,7 +19,8 @@ import {
   AwsSubscriptionConfirmationError,
 } from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
-import { Effect, Fiber } from "effect";
+import type { Database } from "@repo/persistence/db/effect";
+import { Effect, Fiber, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { GOOD_KEY, request, serve, stubs } from "./testing";
@@ -1169,6 +1170,57 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
           respond(400, { code: "bad_request", message: "SES notification handling failed" }),
         );
       }),
+  );
+
+  it.live(
+    "answers 500, without logging an error, to a notification that beat its Delivery's record",
+    () => {
+      const logged: { readonly level: string; readonly message: unknown }[] = [];
+      return Effect.gen(function* () {
+        const origin = yield* serve(
+          stubs({
+            // No Delivery carries the message id yet.
+            db: {
+              query: { emailDelivery: { findFirst: () => Effect.succeed(undefined) } },
+            } as unknown as Database,
+            handleSes: () =>
+              Effect.succeed({
+                events: [
+                  {
+                    kind: "accepted",
+                    notificationId: "sns-message-id",
+                    providerMessageId: "ses-message-id",
+                    raw: {},
+                    recipients: ["jane@example.com"],
+                    sentAt: new Date(),
+                    suppress: false,
+                  },
+                ],
+                type: "events",
+              }),
+          }).stubs,
+        );
+
+        expect(
+          yield* request(origin, "POST", SES_NOTIFICATIONS_PATH, {
+            body: '{"Type":"Notification"}',
+            headers: { "content-type": "text/plain" },
+          }),
+        ).toEqual(
+          respond(500, {
+            code: "internal_server_error",
+            message: "SES notification handling failed",
+          }),
+        );
+        expect(logged.map(({ level }) => level)).toEqual(["Info"]);
+      }).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make(({ logLevel, message }) => void logged.push({ level: logLevel, message })),
+          ]),
+        ),
+      );
+    },
   );
 
   it.live("answers 500 when it cannot record the outcome, so SNS retries", () =>

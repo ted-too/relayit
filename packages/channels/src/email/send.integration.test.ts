@@ -176,6 +176,8 @@ const makeRowLock = (databaseUrl: string) => {
   };
 };
 
+const LATE_COMMIT_MILLIS = 400;
+
 /**
  * Postgres reached through a local proxy that can hold the next COMMIT on the wire, so a
  * test can act while a commit is in flight, or drop the server's answer to it.
@@ -184,8 +186,10 @@ const makeCommitGate = (databaseUrl: string) => {
   const target = new URL(databaseUrl);
   let armed: { readonly held: () => void; readonly released: Promise<void> } | undefined;
   let dropArmed = false;
+  let lateArmed: { readonly landed: () => void } | undefined;
   const server = Bun.listen<{
     dropAnswer?: boolean;
+    late?: boolean;
     pending: Uint8Array[];
     upstream?: Bun.Socket;
   }>({
@@ -193,12 +197,25 @@ const makeCommitGate = (databaseUrl: string) => {
     port: 0,
     socket: {
       close: (client) => {
-        client.data.upstream?.end();
+        if (!client.data.late) {
+          client.data.upstream?.end();
+        }
       },
       data: async (client, chunk) => {
         const bytes = Uint8Array.from(chunk);
         const gate = armed;
         const commit = Buffer.from(bytes).includes("COMMIT");
+        const late = lateArmed;
+        if (late && commit) {
+          lateArmed = undefined;
+          client.data.late = true;
+          client.terminate();
+          await Bun.sleep(LATE_COMMIT_MILLIS);
+          client.data.upstream?.write(bytes);
+          client.data.upstream?.end();
+          late.landed();
+          return;
+        }
         if (gate && commit) {
           armed = undefined;
           gate.held();
@@ -249,6 +266,16 @@ const makeCommitGate = (databaseUrl: string) => {
   url.host = `127.0.0.1:${server.port}`;
   return {
     close: Effect.sync(() => server.stop(true)),
+    /**
+     * The client's connection goes as it sends its next COMMIT, and the server only gets that
+     * COMMIT a moment later: to the client, a failed commit the server is still finishing.
+     * `landed` resolves once the server has been sent it.
+     */
+    commitNextAfterClientIsGone: () => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      lateArmed = { landed: resolve };
+      return { landed: Effect.promise(() => promise) };
+    },
     /** The next COMMIT reaches the server, and its answer never reaches the client. */
     dropNextCommitAnswer: Effect.sync(() => {
       dropArmed = true;
@@ -279,6 +306,37 @@ const whileFailing = <A, E, R>(
     yield* Fiber.interrupt(ender);
     return result;
   });
+
+/**
+ * Object storage whose next download first runs `whileLoading`: what happens to a Delivery's
+ * sender while a run is loading its attachments, between reading the Delivery and claiming it.
+ */
+const makeStorageWithDownloadHook = () => {
+  const hook = { whileLoading: Effect.void as Effect.Effect<void> };
+  return {
+    hook,
+    layer: Layer.effect(
+      ObjectStorage,
+      Effect.gen(function* () {
+        const storage = yield* ObjectStorage;
+        return {
+          ...storage,
+          download: (key) =>
+            Effect.suspend(() => hook.whileLoading).pipe(Effect.andThen(storage.download(key))),
+        } satisfies typeof storage;
+      }),
+    ).pipe(
+      Layer.provide(
+        makeLocalObjectStorageLive(NodePath.join(NodeOS.tmpdir(), "relayit-send-integration")),
+      ),
+    ),
+  };
+};
+
+const ATTACHMENT = {
+  filename: "notes.txt",
+  source: { content: "SGVsbG8=", kind: "base64" as const },
+};
 
 const NO_LIMITS = { dailySends: null, monthlySends: null };
 
@@ -749,6 +807,38 @@ describe("an accepted email send", () => {
     );
   });
 
+  it.live("ends failed, never sent again, when the run sending it died of a defect", () => {
+    let ours = "";
+    // A bug somewhere under the send: the run dies holding its claim, SES's answer unknown.
+    const backend = makeBackend((sender) =>
+      sender === ours ? Effect.die(new TypeError("undefined is not a function")) : accept,
+    );
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(Date.now());
+      const project = yield* seedProject();
+      ours = project.fqdn;
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      // The worker's pass survives it, and the job has its retries.
+      yield* runWorker;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
+      yield* TestClock.adjust(Duration.minutes(3));
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { type: "message.failed" },
+      ]);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(services(testDatabaseUrl, testRedisUrl, backend.layer), TestClock.layer()),
+      ),
+    );
+  });
+
   it.live("a send SES refused is sent again and delivered", () => {
     let ours = "";
     let refusals = 0;
@@ -933,6 +1023,52 @@ describe("an accepted email send", () => {
     );
   });
 
+  it.live(
+    "a COMMIT that fails for the client and lands a moment later keeps the send whole",
+    () => {
+      const gate = makeCommitGate(testDatabaseUrl);
+      const uploaded: string[] = [];
+      const deleted: string[] = [];
+      // Object storage, the boundary.
+      const storage = Layer.succeed(ObjectStorage, {
+        delete: (key) => Effect.sync(() => void deleted.push(key)),
+        download: unsupported,
+        exists: unsupported,
+        signedDownloadUrl: unsupported,
+        signedUploadUrl: unsupported,
+        upload: (key) => Effect.sync(() => (uploaded.push(key), { key })),
+      });
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        // One send a day, so a released reservation would let the next through.
+        const project = yield* seedProject({ dailySends: 1 });
+        const commit = gate.commitNextAfterClientIsGone();
+        const exit = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [ATTACHMENT]),
+        ).pipe(Effect.exit);
+        // The client saw the COMMIT fail before the server had finished it...
+        expect(exit._tag).toBe("Failure");
+        yield* commit.landed;
+
+        // ...and waited to learn it committed, so nothing of the send is given back.
+        const [delivery] = yield* db
+          .select({ status: emailDelivery.status })
+          .from(emailDelivery)
+          .where(eq(emailDelivery.customDomainId, project.customDomainId));
+        expect(delivery).toMatchObject({ status: "queued" });
+        expect(uploaded).toHaveLength(1);
+        expect(deleted).toEqual([]);
+        const refused = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        ).pipe(Effect.flip);
+        expect(refused).toMatchObject({ _tag: "UsageLimitExceeded" });
+      }).pipe(
+        Effect.provide(services(gate.url, testRedisUrl, makeBackend().layer, storage)),
+        Effect.ensuring(gate.close),
+      );
+    },
+  );
+
   it.live("gives back the Usage of a failed Delivery when its job runs again", () => {
     const backend = makeBackend();
     return Effect.gen(function* () {
@@ -1093,10 +1229,104 @@ describe("an accepted email send", () => {
       yield* runWorker;
 
       expect(backend.sendsFrom(rootDomain)).toHaveLength(0);
-      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "Sandbox Domain is paused or inactive" },
+        status: "failed",
+      });
       expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
-        { type: "message.failed" },
+        { payload: { error: "Sandbox Domain is paused or inactive" }, type: "message.failed" },
       ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is not sent from a Domain paused while the run was loading its attachments", () => {
+    const backend = makeBackend();
+    const storage = makeStorageWithDownloadHook();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [ATTACHMENT]),
+      );
+      // The run has read the Delivery and found its Domain sending; the pause lands before
+      // it claims.
+      storage.hook.whileLoading = db
+        .update(customDomain)
+        .set({ isPaused: true, pausedReason: "manual_admin_pause" })
+        .where(eq(customDomain.id, project.customDomainId))
+        .pipe(Effect.orDie);
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "Domain is paused" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "Domain is paused" }, type: "message.failed" },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
+  });
+
+  it.live("is not sent on a Domain its Project lost while the run was loading attachments", () => {
+    const backend = makeBackend();
+    const storage = makeStorageWithDownloadHook();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com", [ATTACHMENT]),
+      );
+      // Another Project proves its claim after the run has read the Delivery.
+      storage.hook.whileLoading = db
+        .delete(organizationDomain)
+        .where(eq(organizationDomain.customDomainId, project.customDomainId))
+        .pipe(Effect.orDie);
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "The Project no longer holds the sending Domain" },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        {
+          payload: { error: "The Project no longer holds the sending Domain" },
+          type: "message.failed",
+        },
+      ]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)));
+  });
+
+  it.live("ends failed on the first attempt when SES rejects the message itself", () => {
+    const backend = makeBackend(() =>
+      Effect.fail(new EmailBackendRejected({ reason: "message_rejected", region: "eu-central-1" })),
+    );
+    return Effect.gen(function* () {
+      // One send a day, so the failed send's Usage must be given back for the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: "SES rejected the message", retryable: false },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: "SES rejected the message" }, type: "message.failed" },
+      ]);
+      // Nothing is left to send it again.
+      yield* runWorker;
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
@@ -1169,8 +1399,9 @@ describe("an accepted email send", () => {
         yield* Deferred.await(secondUpload);
         yield* Fiber.interrupt(accepting);
 
+        // The second, cut off mid-flight, may have landed all the same: it is deleted too.
         expect(uploaded).toHaveLength(2);
-        expect(deleted).toEqual([uploaded[0]]);
+        expect(deleted.toSorted()).toEqual(uploaded.toSorted());
         const next = yield* acceptTransactionalEmail(
           sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
         );

@@ -72,6 +72,7 @@
       "name": "@repo/template-builder",
       "version": "0.0.0",
       "dependencies": {
+        "@repo/logging": "workspace:*",
         "@repo/object-storage": "workspace:*",
         "@repo/persistence": "workspace:*",
         "@repo/redis": "workspace:*",

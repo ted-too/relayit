@@ -69,7 +69,7 @@ type SesOperation =
   | "sendEmail"
   | "updateConfigurationSetEventDestination";
 
-type SnsOperation = "createTopic" | "listSubscriptionsByTopic" | "subscribe";
+type SnsOperation = "createTopic" | "listSubscriptionsByTopic" | "setTopicAttributes" | "subscribe";
 
 type AwsError =
   | AwsUnexpectedResponseError
