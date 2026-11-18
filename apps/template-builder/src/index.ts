@@ -43,11 +43,12 @@ const program = Effect.scoped(
         Bun.serve({
           fetch: (request) => handler(request),
           hostname,
-          // Bun's server drops a connection that has been idle for 10 seconds by default,
-          // and on Bun 1.4.4 a plain handler that takes 13 seconds to answer is cut that
-          // way. A first read that waits out another's scaffold, or a publish that installs
-          // dependencies, can run longer, so no call here should depend on that default.
-          // 255 is Bun's maximum.
+          // Bun's server drops a connection that has been idle for 10 seconds by default.
+          // On Bun 1.4.4 that cuts a bodiless request or a streamed response whose handler
+          // takes 13 seconds; a POST with a body answered in one piece, as the Rpc calls
+          // are, was not cut in the same test. A first read that waits out another's
+          // scaffold, or a publish that installs dependencies, can run longer, so no call
+          // here should depend on that default or on that distinction. 255 is Bun's maximum.
           idleTimeout: 255,
           port,
         }),
