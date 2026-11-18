@@ -42,7 +42,7 @@ function RouteComponent() {
           You have access to the following projects:
         </p>
         <div className="flex w-full flex-col gap-4">
-          {me.user.role === "admin" && (
+          {me.user.role?.split(",").includes("admin") && (
             <Link
               className="flex w-full items-center gap-4 rounded-lg bg-background p-3 ring-1 ring-foreground/10 transition-shadow hover:shadow-sm"
               to="/admin"

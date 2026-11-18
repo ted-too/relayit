@@ -2,10 +2,11 @@ import { DashboardApi } from "@repo/contracts/dashboard";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { HttpApi, HttpApiBuilder } from "effect/http-api";
+import { adminHandlers } from "./admin";
 import { apiKeyHandlers } from "./api-keys";
 import { domainHandlers } from "./domains";
 import { projectHandlers } from "./projects";
-import { DashboardSessionLive, ProjectAccessLive } from "./session";
+import { DashboardSessionLive, PlatformAdminLive, ProjectAccessLive } from "./session";
 import { templateHandlers } from "./templates";
 import { workspaceHandlers } from "./workspaces";
 
@@ -45,6 +46,7 @@ export const dashboardRoutes = (options: {
           projectHandlers,
           apiKeyHandlers,
           domainHandlers,
+          adminHandlers,
           templateHandlers,
           workspaceHandlers,
         ),
@@ -53,6 +55,7 @@ export const dashboardRoutes = (options: {
       Layer.provideMerge(
         Layer.mergeAll(
           DashboardSessionLive(options.appOrigin),
+          PlatformAdminLive(options.appOrigin),
           ProjectAccessLive(options.appOrigin),
         ),
       ),

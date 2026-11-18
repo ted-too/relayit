@@ -11,6 +11,7 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   DashboardApi,
   DashboardSession,
+  PlatformAdmin,
   ProjectAccess,
   RequiresPermission,
 } from "@repo/contracts/dashboard";
@@ -90,7 +91,9 @@ describe("the auth rule", () => {
   it("puts every dashboard endpoint but /config behind the session, and none in the public API", () => {
     for (const endpoint of endpointsOf(DashboardApi)) {
       const sessioned =
-        endpoint.middleware.has(DashboardSession.key) || endpoint.middleware.has(ProjectAccess.key);
+        endpoint.middleware.has(DashboardSession.key) ||
+        endpoint.middleware.has(ProjectAccess.key) ||
+        endpoint.middleware.has(PlatformAdmin.key);
       expect([endpoint.name, sessioned]).toEqual([endpoint.name, !SESSIONLESS.has(endpoint.name)]);
       expect([endpoint.name, endpoint.middleware.has(ApiKeyAuth.key)]).toEqual([
         endpoint.name,
@@ -103,7 +106,9 @@ describe("the auth rule", () => {
       expect([endpoint.name, keyed]).toEqual([endpoint.name, !KEYLESS.has(endpoint.name)]);
       expect([
         endpoint.name,
-        endpoint.middleware.has(DashboardSession.key) || endpoint.middleware.has(ProjectAccess.key),
+        endpoint.middleware.has(DashboardSession.key) ||
+          endpoint.middleware.has(ProjectAccess.key) ||
+          endpoint.middleware.has(PlatformAdmin.key),
       ]).toEqual([endpoint.name, false]);
     }
   });

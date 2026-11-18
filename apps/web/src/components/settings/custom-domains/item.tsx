@@ -10,6 +10,7 @@ import {
 import { formatDateTime } from "@repo/ui/lib/utils";
 import { Link, useParams } from "@tanstack/react-router";
 import { DomainMenu } from "./domain-actions";
+import { PAUSED_REASONS } from "./paused-reasons";
 import { DOMAIN_PROVIDER_ICONS } from "./provider-icons";
 import type { Domain } from "./types";
 
@@ -46,6 +47,8 @@ export function DomainItem({ domain }: { domain: Domain }) {
           {domain.isPaused && (
             <Badge size="sm" variant="destructive-light">
               paused
+              {domain.pausedReason &&
+                ` · ${PAUSED_REASONS[domain.pausedReason].label.toLowerCase()}`}
             </Badge>
           )}
         </ItemTitle>
@@ -55,9 +58,22 @@ export function DomainItem({ domain }: { domain: Domain }) {
           {verification.label}
         </Badge>
         <span className="tabular-nums">{formatDateTime(domain.createdAt)}</span>
-        <DomainMenu domain={domain}>
-          <RiMoreFill />
-        </DomainMenu>
+        {/* The row is a link, and the menu and its dialogs are its children in React's tree
+            wherever they are drawn: without this a click on any of them opens the Domain. */}
+        <span
+          onClick={(event) => {
+            event.stopPropagation();
+            // Only the trigger is inside the anchor in the DOM; the menu and the delete
+            // dialog are drawn elsewhere and keep their own defaults.
+            if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <DomainMenu domain={domain}>
+            <RiMoreFill />
+          </DomainMenu>
+        </span>
       </ItemActions>
     </Item>
   );

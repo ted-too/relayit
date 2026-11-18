@@ -12,6 +12,7 @@ export { type EmailDeleteDomainIdentityPayload, emailDeleteDomainIdentityJob } f
 export {
   type CreateCustomDomainInput,
   CustomDomainError,
+  CustomDomainNotFound,
   completeDomainClaimTransfer,
   createCustomDomain,
   type DeleteCustomDomainInput,
