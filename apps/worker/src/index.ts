@@ -1,7 +1,6 @@
 import * as NodeOS from "node:os";
 import { EmailBackend } from "@repo/channels/email/backend";
 import {
-  detachStrayDeliveries,
   emailDeleteDomainIdentityHandler,
   removeUnlinkedDomains,
 } from "@repo/channels/email/custom-domain";
@@ -54,18 +53,6 @@ const workerProgram = Effect.gen(function* () {
     // deleted as the api stopped, or deleted in the database.
     yield* removeUnlinkedDomains().pipe(
       Effect.catchCause(logEffectFailure("Failed to remove Domains without a link")),
-    );
-
-    // Deliveries from before a Project's were detached as it lost a Domain to a claim. Beside
-    // the jobs, not before them: on a long history the pass takes minutes, each batch
-    // re-checks under the Domain's row so nothing depends on it having finished, and no send
-    // should wait for it.
-    yield* Effect.forkChild(
-      detachStrayDeliveries.pipe(
-        Effect.catchCause(
-          logEffectFailure("Failed to detach Deliveries from Domains their Projects lost"),
-        ),
-      ),
     );
 
     // A Delivery whose job was lost while it was `sending` has no run left to end it. Beside

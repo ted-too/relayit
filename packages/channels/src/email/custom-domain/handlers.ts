@@ -1,7 +1,12 @@
 import { defineJobHandler } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
-import { customDomain, emailDomainRegistration, sandboxDomain } from "@repo/persistence/db/schema";
-import { eq, sql } from "drizzle-orm";
+import {
+  customDomain,
+  emailDomainRegistration,
+  removedDomainIdentity,
+  sandboxDomain,
+} from "@repo/persistence/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emailDeleteDomainIdentityJob } from "./jobs";
@@ -29,6 +34,16 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
         .transaction((tx) =>
           Effect.gen(function* () {
             yield* lockDomainIdentity(tx, payload.fqdn);
+            // The record of the identity goes with it, however this ends without failing:
+            // deleted here, left to the Domain that has it now, or never the Domain's.
+            yield* tx
+              .delete(removedDomainIdentity)
+              .where(
+                and(
+                  eq(removedDomainIdentity.fqdn, payload.fqdn),
+                  eq(removedDomainIdentity.dkimSelector, payload.dkimSelector),
+                ),
+              );
             const registered = yield* tx
               .select({ region: emailDomainRegistration.region })
               .from(emailDomainRegistration)
@@ -52,7 +67,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
             }
             // A call that never answers would hold this connection and the FQDN's identity
             // lock, and with it every registration of the FQDN. The retry deletes it.
-            yield* backend.deleteIdentity({ fqdn: payload.fqdn, region: payload.region }).pipe(
+            yield* backend.deleteIdentity(payload).pipe(
               Effect.timeoutOrElse({
                 duration: IDENTITY_CALL_TIMEOUT,
                 orElse: () =>
@@ -73,6 +88,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
               case "DeleteDomainIdentityHandlerError":
               case "EmailBackendAuthenticationError":
               case "EmailBackendConfigurationError":
+              case "EmailBackendIdentityConflict":
               case "EmailBackendMessageError":
               case "EmailBackendRateLimited":
               case "EmailBackendRejected":

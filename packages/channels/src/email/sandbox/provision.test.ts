@@ -80,6 +80,8 @@ describe("ensureSandboxDomain", () => {
           },
         }),
         query: {
+          // No Project holds the root or a name under it.
+          customDomain: { findFirst: () => Effect.succeed(undefined) },
           sandboxDomain: {
             findFirst: () => Effect.succeed({ ...sandbox, registration: null }),
           },

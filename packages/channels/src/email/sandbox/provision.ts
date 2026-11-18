@@ -12,6 +12,7 @@ import type { DomainKeyMaterial } from "../dkim";
 import { EmailManagedDns } from "../managed-dns";
 import { emailVerifySandboxDomainJob } from "../verification/jobs";
 import { sweepIfSandboxAllocatable } from "./allocate";
+import { isAtOrUnderRoot } from "./reserved";
 import {
   buildSandboxRootDnsRecords,
   createDomainKeyMaterial,
@@ -33,6 +34,14 @@ export class SandboxDomainError extends Data.TaggedError("SandboxDomainError")<{
     | "register_identity"
     | "schedule";
   readonly sandboxDomainId?: string;
+}> {}
+
+/** A Project holds the root, or a name under it, as a custom Domain: no Sandbox Domain there. */
+export class SandboxDomainRootHeld extends Data.TaggedError("SandboxDomainRootHeld")<{
+  readonly customDomainId: string;
+  readonly fqdn: string;
+  readonly message: string;
+  readonly rootDomain: string;
 }> {}
 
 export interface EnsureSandboxDomainInput {
@@ -255,6 +264,38 @@ export const ensureSandboxDomain = (input: EnsureSandboxDomainInput) =>
             }),
         ),
       );
+
+    // SES names an identity by its FQDN alone, so a Sandbox Domain on a root a Project holds
+    // as a custom Domain would be registered as that Domain's identity, and a custom Domain
+    // under the root has its DNS in the zone the sandbox publishes to. `createCustomDomain`
+    // refuses the reverse. Checked before anything is made, and only until the Sandbox
+    // Domain is registered: one already sending is not stopped by a Domain found later.
+    if (!existing?.registration) {
+      const held = yield* db.query.customDomain
+        .findFirst({
+          columns: { fqdn: true, id: true },
+          where: { RAW: (table) => isAtOrUnderRoot(table.fqdn, input.rootDomain) },
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new SandboxDomainError({
+                cause,
+                message: "Failed to check the sandbox root against the custom Domains.",
+                operation: "persist",
+              }),
+          ),
+        );
+      if (held) {
+        return yield* new SandboxDomainRootHeld({
+          customDomainId: held.id,
+          fqdn: held.fqdn,
+          message:
+            "The Sandbox Domain's root, or a name under it, is a Project's custom Domain. Remove that Domain or configure another root; nothing was created.",
+          rootDomain: input.rootDomain,
+        });
+      }
+    }
 
     let sandboxDomainId: string;
     if (existing) {

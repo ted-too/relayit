@@ -36,6 +36,7 @@ const lifecycleFailure =
     readonly operation?: string;
   }): Effect.Effect<never, Conflict | Invalid | NotFound | OperationFailed> => {
     switch (error._tag) {
+      case "CustomDomainIdentityConflict":
       case "CustomDomainReserved":
         return Effect.fail(new Invalid({ message: error.message }));
       case "CustomDomainError":

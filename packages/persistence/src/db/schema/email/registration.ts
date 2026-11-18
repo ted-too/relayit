@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import { customDomain } from "./custom-domain";
 import { domainVerificationStatusEnum } from "./domain";
@@ -51,3 +51,25 @@ export const emailDomainRegistration = pgTable(
 );
 
 export type EmailDomainRegistration = typeof emailDomainRegistration.$inferSelect;
+
+/**
+ * The SES identity of a Domain that was removed, until SES has deleted it. The identity
+ * outlives the Domain's row by as long as its delete job takes, and SES names it by FQDN
+ * alone, so an add of the same FQDN in that time finds an identity signing with a selector
+ * that is not its own. This row is what says the identity was Relayit's, and so may be
+ * deleted to make way for the new Domain's, where one nobody recorded is left alone.
+ */
+export const removedDomainIdentity = pgTable(
+  "removed_domain_identity",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => typeid("rmid").toString()),
+    fqdn: text("fqdn").notNull(),
+    /** As on the registration: null is the deployment's default region. */
+    region: text("region"),
+    dkimSelector: text("dkim_selector").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("removed_domain_identity_fqdn_idx").on(t.fqdn)],
+);

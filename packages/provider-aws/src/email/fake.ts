@@ -1,4 +1,8 @@
-import type { EmailBackendService, OutboundEmail } from "@repo/channels/email/backend";
+import {
+  EmailBackendIdentityConflict,
+  type EmailBackendService,
+  type OutboundEmail,
+} from "@repo/channels/email/backend";
 import {
   ingestDeliveryEvents,
   type NormalizedDeliveryEvent,
@@ -130,30 +134,41 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
     // Nothing pauses a Project here by itself: `setProjectSendingPaused` is the SES console.
     const pausedProjects = new Set<string>();
 
+    // Identities in the account that Relayit did not make, as `addOutsideIdentity` puts
+    // them there. They are all the fake remembers: the api registers a Domain and the worker
+    // deletes its identity, in two processes that share no memory, so an identity Relayit
+    // made is taken to exist for as long as its Domain says so and no longer.
+    const outsideIdentities = new Set<string>();
+    const identityKey = (input: { readonly fqdn: string; readonly region: string | null }) =>
+      `${input.region ?? defaultRegion}:${input.fqdn.toLowerCase()}`;
+
     const backend = {
-      createIdentity: ({ fqdn }) =>
-        Effect.succeed({
-          mailFrom: {
-            domain: `send.${fqdn}`,
-            records: [
-              {
-                name: `send.${fqdn}`,
-                priority: 10,
-                purpose: "mail_from_mx",
-                recordType: "MX",
-                value: "feedback-smtp.fake.amazonses.com",
+      createIdentity: ({ fqdn, region }) =>
+        outsideIdentities.has(identityKey({ fqdn, region }))
+          ? Effect.fail(new EmailBackendIdentityConflict({ fqdn, region: region ?? defaultRegion }))
+          : Effect.succeed({
+              mailFrom: {
+                domain: `send.${fqdn}`,
+                records: [
+                  {
+                    name: `send.${fqdn}`,
+                    priority: 10,
+                    purpose: "mail_from_mx",
+                    recordType: "MX",
+                    value: "feedback-smtp.fake.amazonses.com",
+                  },
+                  {
+                    name: `send.${fqdn}`,
+                    priority: null,
+                    purpose: "mail_from_spf",
+                    recordType: "TXT",
+                    value: '"v=spf1 include:amazonses.com ~all"',
+                  },
+                ],
               },
-              {
-                name: `send.${fqdn}`,
-                priority: null,
-                purpose: "mail_from_spf",
-                recordType: "TXT",
-                value: '"v=spf1 include:amazonses.com ~all"',
-              },
-            ],
-          },
-        }),
+            }),
       defaultRegion,
+      // An outside identity never signs with a Domain's selector, so none is ever deleted.
       deleteIdentity: () => Effect.void,
       ensureInfrastructure: () => Effect.void,
       getIdentityStatus: () => Effect.succeed({ dkimVerified: true, verified: true }),
@@ -181,6 +196,14 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
 
     return {
       ...backend,
+      /**
+       * Puts an identity in the account as something other than Relayit would: made by
+       * hand in the SES console, or by another system sharing the account.
+       */
+      addOutsideIdentity: (identity: { readonly fqdn: string; readonly region: string | null }) =>
+        Effect.sync(() => {
+          outsideIdentities.add(identityKey(identity));
+        }),
       /** What SES's reputation policy, or a person in its console, does to a Project's tenant. */
       setProjectSendingPaused: (projectId: string, paused: boolean) =>
         Effect.sync(() => {

@@ -17,6 +17,7 @@ const unsupported = () => Effect.die("unused");
 const db: any = {
   transaction: (run: (tx: unknown) => Effect.Effect<unknown, unknown>) =>
     run({
+      delete: () => ({ where: () => Effect.void }),
       execute: () => Effect.void,
       select: () => ({
         // Not registered again, and no Sandbox Domain's FQDN.
@@ -31,7 +32,7 @@ const db: any = {
 const deleteIdentity = (deleteIdentity: EmailBackendService["deleteIdentity"]) =>
   emailDeleteDomainIdentityHandler
     .handle(
-      { fqdn: "acme.test", region: "eu-central-1" },
+      { dkimSelector: "relayit0a1b2c3d", fqdn: "acme.test", region: "eu-central-1" },
       { attempt: 1, enqueuedAt: 0, id: "job_1" },
     )
     .pipe(
