@@ -4,7 +4,10 @@ export const ATTACHMENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Max resolved attachment size (SES-aligned). */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-/** Attachment URL fetch timeout. */
+/** Max attachments on one send. */
+export const MAX_ATTACHMENTS = 20;
+
+/** Attachment URL fetch timeout, from the request to the last byte of the body. */
 export const ATTACHMENT_FETCH_TIMEOUT = "30 seconds" as const;
 
 export const ATTACHMENT_CONTENT_TYPES: Readonly<Record<string, string>> = {

@@ -282,6 +282,59 @@ describe("POST /messages/email", () => {
     }),
   );
 
+  it.live("answers 413 payload_too_large to a body over 50 MiB, before reading it or the key", () =>
+    Effect.gen(function* () {
+      const { accepted, stubs: boundary } = stubs();
+      const origin = yield* serve(boundary);
+      const tooLarge = respond(413, {
+        code: "payload_too_large",
+        message: "Request body exceeds the 50 MiB limit.",
+      });
+      const withAttachment = (bytes: number) =>
+        email({ attachments: [{ content: "A".repeat(bytes), filename: "big.pdf" }] });
+      const over = withAttachment(50 * 1024 * 1024);
+
+      for (const path of ["/messages/email", "/send/acme/raw/email"]) {
+        expect(yield* request(origin, "POST", path, { body: over, headers: keyed })).toEqual(
+          tooLarge,
+        );
+      }
+      expect(
+        yield* request(origin, "POST", "/messages/email", { body: over, headers: asJson }),
+      ).toEqual(tooLarge);
+      // Without a Content-Length, reading stops once it passes the limit.
+      const chunked = yield* Effect.promise(async () => {
+        const bytes = new TextEncoder().encode(over);
+        const response = await fetch(`${origin}/messages/email`, {
+          body: new ReadableStream({
+            start: (controller) => {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+          duplex: "half",
+          headers: keyed,
+          method: "POST",
+        });
+        return {
+          body: await response.text(),
+          contentType: response.headers.get("content-type"),
+          status: response.status,
+        };
+      });
+      expect(chunked).toEqual(tooLarge);
+      expect(accepted).toEqual([]);
+
+      // Every deliverable send fits: SES refuses a message over 40 MB.
+      expect(
+        yield* request(origin, "POST", "/messages/email", {
+          body: withAttachment(40 * 1024 * 1024),
+          headers: keyed,
+        }),
+      ).toEqual(respond(201, { id: "msg_1" }));
+    }),
+  );
+
   it.live("refuses a body that fails the schema with 422 validation on the failing property", () =>
     Effect.gen(function* () {
       const { accepted, stubs: boundary } = stubs();
@@ -291,6 +344,18 @@ describe("POST /messages/email", () => {
 
       expectSchemaFailure(yield* send(email({ to: undefined })), "body", "/to");
       expectSchemaFailure(yield* send(email({ to: "not-an-email" })), "body", "/to");
+      expectSchemaFailure(
+        yield* send(
+          email({
+            attachments: Array.from({ length: 21 }, (_, i) => ({
+              content: "QQ==",
+              filename: `${i}.txt`,
+            })),
+          }),
+        ),
+        "body",
+        "/attachments",
+      );
       expectSchemaFailure(
         yield* send(email({ to: Array.from({ length: 51 }, (_, i) => `r${i}@example.com`) })),
         "body",

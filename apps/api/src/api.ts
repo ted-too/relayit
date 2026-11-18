@@ -66,6 +66,22 @@ export class SchemaValidationFailed extends Schema.Error<SchemaValidationFailed>
   { httpApiStatus: 422 },
 ) {}
 
+/**
+ * The largest body a send endpoint reads. SES refuses a message over 40 MB, base64
+ * attachments included, and a send's JSON is about the size of the message it becomes, so
+ * no deliverable send comes near this.
+ */
+export const MAX_SEND_BODY_BYTES = 50 * 1024 * 1024;
+
+/** A send whose body is over `MAX_SEND_BODY_BYTES`, refused without reading the rest. */
+export class PayloadTooLarge extends Schema.Error<PayloadTooLarge>("PayloadTooLarge")(
+  {
+    code: Schema.Literal("payload_too_large"),
+    message: Schema.Literal("Request body exceeds the 50 MiB limit."),
+  },
+  { httpApiStatus: 413 },
+) {}
+
 /** A body the schema accepts but a send can't use, with a message saying which rule it broke. */
 export class SendRefused extends Schema.Error<SendRefused>("SendRefused")(
   {
@@ -193,7 +209,14 @@ export class LegacyProject extends Context.Service<LegacyProject, { readonly id:
  */
 export class RequestValidation extends HttpApiMiddleware.Service<RequestValidation>()(
   "api/RequestValidation",
-  { error: [RouteNotFound, MalformedBody, SchemaValidationFailed.pipe(HttpApiSchema.asJson())] },
+  {
+    error: [
+      RouteNotFound,
+      MalformedBody,
+      SchemaValidationFailed.pipe(HttpApiSchema.asJson()),
+      PayloadTooLarge.pipe(json),
+    ],
+  },
 ) {}
 
 /** Resolves `x-api-key` to its Project, refusing an unknown key with 403. */

@@ -32,6 +32,8 @@ Schema failures (wrong types, unknown fields, more than 50 recipients, a missing
 
 **Limit error.** `429` responses add `retry_after_seconds`.
 
+A body over 50 MiB gets `413` with `code: "payload_too_large"` on every send endpoint, the legacy ones included. A body far over the limit may be refused with an empty `413` before it is read.
+
 Treat `message` as human-readable text that may change. Branch on `code` or `type`.
 
 ## Status codes
@@ -41,6 +43,7 @@ Treat `message` as human-readable text that may change. Branch on `code` or `typ
 | `201`  |                           | Accepted. Body is `{ "id": "msg_..." }`, plus `stripped` if any recipients were removed. |
 | `400`  | `invalid_app_environment` | Only one of the `app` and `environment` headers was sent.                                |
 | `403`  | `invalid_api_key`         | The key is missing from the store, expired, deleted, or its Project no longer exists.    |
+| `413`  | `payload_too_large`       | The request body is over 50 MiB.                                                         |
 | `422`  | (validation)              | The body or headers failed validation. See [Validation messages](#validation-messages).  |
 | `422`  | see below                 | The request was valid but could not be accepted.                                         |
 | `429`  | `daily_limit_exceeded`    | The daily send limit for this bucket is used up.                                         |
@@ -88,11 +91,23 @@ When present, `details` contains some of these fields:
 | Field       | Used by                                                       | Description                                                                     |
 | ----------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `filename`  | `invalid_attachment`                                          | The attachment that failed.                                                     |
-| `reason`    | `invalid_attachment`                                          | `blocked_extension`, `exceeds_size_limit`, `invalid_base64`, or `fetch_failed`. |
+| `reason`    | `invalid_attachment`                                          | See [Attachment reasons](#attachment-reasons).                                  |
 | `max_bytes` | `invalid_attachment`                                          | The size limit in bytes (10485760) when `reason` is `exceeds_size_limit`.       |
 | `status`    | `invalid_attachment`                                          | The HTTP status returned by the attachment URL when `reason` is `fetch_failed`. |
 | `variable`  | `missing_variable`, `type_mismatch`, `undeclared_placeholder` | The variable name.                                                              |
 | `detail`    | `react_email_render_failed`                                   | The renderer's error message.                                                   |
+
+### Attachment reasons
+
+| `reason`             | Meaning                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `blocked_extension`  | The filename has a blocked extension.                                                             |
+| `exceeds_size_limit` | The attachment is over 10 MB after decoding or download.                                          |
+| `invalid_base64`     | `content` is not valid base64.                                                                    |
+| `unsupported_url`    | `path` is not an `https:` URL.                                                                    |
+| `unresolvable_host`  | The host in `path` has no DNS address.                                                            |
+| `blocked_address`    | The host in `path` is, or resolves to, a loopback, private, link-local or other internal address. |
+| `fetch_failed`       | The URL answered with a non-2xx status, given in `status`.                                        |
 
 Example:
 
@@ -123,7 +138,7 @@ Example:
 ## Retrying safely
 
 - Retry `500` responses and network errors with exponential backoff. Always send an `Idempotency-Key` so a retry never sends the email twice.
-- Do not retry `400`, `403`, or `422` without changing the request.
+- Do not retry `400`, `403`, `413`, or `422` without changing the request.
 - For `429`, wait `retry_after_seconds`.
 
 ## Plan limits

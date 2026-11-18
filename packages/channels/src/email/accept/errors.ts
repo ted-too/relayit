@@ -1,10 +1,13 @@
 import { Data } from "effect";
 
 export type EmailAcceptAttachmentReason =
+  | "blocked_address"
   | "blocked_extension"
   | "exceeds_size_limit"
   | "fetch_failed"
-  | "invalid_base64";
+  | "invalid_base64"
+  | "unresolvable_host"
+  | "unsupported_url";
 
 export interface EmailAcceptRejectedDetails {
   /** Opaque secondary text (e.g. renderer output) — not for identifiers. */

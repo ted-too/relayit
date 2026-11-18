@@ -6,7 +6,7 @@ import { BunHttpServer } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { HttpMiddleware, HttpRouter, HttpServerError, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
-import { Api } from "./api";
+import { Api, MAX_SEND_BODY_BYTES } from "./api";
 import { dashboardRoutes } from "./dashboard/http";
 import { ApiKeyAuthLive, LegacyApiKeyAuthLive } from "./lib/api-key";
 import { RequestValidationLive } from "./lib/validation";
@@ -123,7 +123,15 @@ export const apiServer = (options: {
     },
   ).pipe(
     // Bun's own idle timeout, which the api ran with before; the layer's default is none.
+    // Bun's body limit is a backstop for the routes that read a body without one (better-auth
+    // reads its own): above it Bun answers an empty 413 before any route runs. It sits above
+    // the send endpoints' limit so that they answer theirs, `PayloadTooLarge`, themselves.
     Layer.provideMerge(
-      BunHttpServer.layer({ hostname: options.hostname, idleTimeout: 10, port: options.port }),
+      BunHttpServer.layer({
+        hostname: options.hostname,
+        idleTimeout: 10,
+        maxRequestBodySize: 2 * MAX_SEND_BODY_BYTES,
+        port: options.port,
+      }),
     ),
   );

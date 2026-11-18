@@ -1,6 +1,7 @@
 import {
   BLOCKED_ATTACHMENT_FILENAME_MESSAGE,
   isBlockedAttachmentFilename,
+  MAX_ATTACHMENTS,
 } from "@repo/channels/email/attachment-policy";
 import type { EmailFrom } from "@repo/persistence/db/validators/channels/email";
 import { Schema } from "effect";
@@ -130,7 +131,10 @@ const Attachment = Schema.Union([
   Schema.Struct({
     ...attachmentMeta,
     content: Schema.optionalKey(Schema.Never),
-    path: UriString.annotate({ description: "HTTPS URL of a hosted file to attach." }),
+    path: UriString.annotate({
+      description:
+        "HTTPS URL of a hosted file to attach, fetched when the send is accepted. Only `https:` URLs whose host resolves to a public address are fetched; redirects are not followed.",
+    }),
   }).annotate({ title: "Hosted attachment" }),
 ]).annotate({ identifier: "Attachment", title: "Attachment" });
 
@@ -168,7 +172,11 @@ export const SendEmailBody = Schema.Struct({
   headers: Schema.optionalKey(
     stringMap.annotate({ description: "Custom headers to add to the email." }),
   ),
-  attachments: Schema.optionalKey(Schema.Array(Attachment)),
+  attachments: Schema.optionalKey(
+    Schema.Array(Attachment)
+      .check(Schema.isMaxLength(MAX_ATTACHMENTS))
+      .annotate({ description: `Files to attach, up to ${MAX_ATTACHMENTS}.` }),
+  ),
   tags: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({ name: tagToken, value: tagToken }).annotate({ title: "Tag" }),

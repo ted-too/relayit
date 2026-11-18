@@ -70,7 +70,7 @@ curl -X POST https://api.relayit.io/send/my-project/template/email \
 | `contact`        | object | Optional. `name` and `externalIdentifiers` (string map) for the recipient.                                                                                                                                                  |
 | `app`            | string | Optional App attribution. Ignored unless `appEnvironment` is also set.                                                                                                                                                      |
 | `appEnvironment` | string | Optional App Environment attribution. Ignored unless `app` is also set.                                                                                                                                                     |
-| `attachments`    | array  | Up to 20. Each has `filename` and either `content` (base64) or `path` (URL), plus optional `contentType` and `contentId`.                                                                                                   |
+| `attachments`    | array  | Up to 20. Each has `filename` and either `content` (base64) or `path` (an `https:` URL, fetched as described in [Attachments](/docs/sending-email#attachments)), plus optional `contentType` and `contentId`.               |
 
 If you omit `from` and the Project has no verified Domain and no usable Sandbox Domain, the request fails with `400` and the message `No sender identity available; pass from or provision Sandbox Domain`.
 
@@ -93,6 +93,8 @@ Errors use `{ "message": "...", "details": [...] }`:
 | `400`  | `{ "message": "The 'from' address is not a verified sending domain for this Project.", "details": ["invalid_from_address"] }` | Accept error. `details[0]` is the same `code` that `/messages/email` returns. |
 | `429`  | `{ "message": "Monthly email send limit exceeded", "details": ["monthly_limit_exceeded"] }`                                   | Limit reached. No `retry_after_seconds`.                                      |
 | `500`  | `{ "message": "Something went wrong", "details": [] }`                                                                        | Server error.                                                                 |
+
+A body over 50 MiB gets `413` with `{ "code": "payload_too_large", "message": "Request body exceeds the 50 MiB limit." }`, the same as on `/messages/email`.
 
 The accept error codes are listed in [Errors and limits](/docs/errors-and-limits#accept-errors-422).
 

@@ -17,7 +17,7 @@ import { DB, type Database } from "@repo/persistence/db/effect";
 import type { handleListUnsubscribeOneClick } from "@repo/channels/email/deliverability";
 import type { handleSesNotification } from "@repo/provider-aws/email/webhooks";
 import { Context, Effect, Layer } from "effect";
-import { HttpClient, HttpServer } from "effect/http";
+import { HttpServer } from "effect/http";
 import { apiServer } from "./http";
 import { ApiAuth } from "./lib/auth";
 
@@ -110,7 +110,6 @@ const unusedServices = Layer.mergeAll(
   Layer.succeed(EmailManagedDns, {} as EmailManagedDns["Service"]),
   Layer.succeed(SymmetricCrypto, {} as SymmetricCrypto["Service"]),
   Layer.succeed(Jobs, {} as JobsService),
-  Layer.succeed(HttpClient.HttpClient, {} as HttpClient.HttpClient),
   Layer.succeed(ObjectStorage, {} as ObjectStorageService),
   Layer.succeed(Usage, {} as UsageService),
 );
