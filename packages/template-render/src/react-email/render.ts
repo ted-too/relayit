@@ -52,9 +52,10 @@ export async function renderSealedReactEmailArtifact(input: {
       cwd: runnerDir,
       stdout: "pipe",
       stderr: "pipe",
-      // The artifact is a customer's code, so the isolate gets none of the server's
-      // environment: only PATH to find bun, and NODE_ENV so React is the build the server
-      // itself runs. Bun needs nothing else to start.
+      // The artifact is a customer's code, so its `process.env` holds only what the runner
+      // needs: PATH to find bun, and the server's NODE_ENV (fixed at build time in the
+      // images, so React's production build there). Bun needs nothing else to start. This
+      // narrows what the artifact is handed; it is not a sandbox.
       env: {
         NODE_ENV: process.env.NODE_ENV,
         PATH: process.env.PATH,

@@ -101,7 +101,7 @@ export default function Email() {
     expect(result).toMatchObject({ ok: false, error: { code: "render_failed" } });
   });
 
-  it("keeps the server's environment from the artifact", async () => {
+  it("gives the artifact's process.env only what the runner needs", async () => {
     process.env.RELAYIT_TEST_SERVER_SECRET = "from-the-server";
     try {
       const result = await renderSealedReactEmailArtifact({
