@@ -11,6 +11,7 @@ A self-hosted install has three Relayit services, and optionally a fourth, plus 
 
 | Service          | Image                                            | Role                                                                                                                                    |
 | ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| migrate          | `ghcr.io/ted-too/relayit-api:<tag>`              | The api image running `bun run migrate.js`: applies the release's database migrations, then exits. The api and worker start after it.   |
 | api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), sign-in, and everything the dashboard does.               |
 | worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out. |
 | web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard: static files that call the api from the browser.                                                                         |
@@ -65,6 +66,8 @@ docker compose pull
 docker compose up -d
 docker compose ps
 ```
+
+`up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why.
 
 Then open:
 
@@ -129,7 +132,7 @@ Don't change the role by editing the `user` table. A signed-in user's sessions a
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                         | The same as the worker. The api registers new Domains with SES.                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
-Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in; `CLIENT_IP_HEADER`, the header your reverse proxy puts the visitor's IP in (`X-Real-IP` from nginx or Railway, `CF-Connecting-IP` from Cloudflare), so sign-in is rate limited per visitor rather than for everyone at once. Name only a header your proxy overwrites, and keep the api reachable only through that proxy, or a visitor can send the header themselves. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder. The api applies database migrations when it starts.
+Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in; `CLIENT_IP_HEADER`, the header your reverse proxy puts the visitor's IP in (`X-Real-IP` from nginx or Railway, `CF-Connecting-IP` from Cloudflare), so sign-in is rate limited per visitor rather than for everyone at once. Name only a header your proxy overwrites, and keep the api reachable only through that proxy, or a visitor can send the header themselves. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
 
 ### worker (required)
 
@@ -142,13 +145,34 @@ Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session coo
 | `SES_REGIONS`                                | The SES regions to send through, comma-separated, for example `us-east-1` or `eu-central-1,us-east-1`. New Domains are registered in the first. |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM credentials for the SES account.                                                                                                            |
 
-Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone. The worker does not migrate the database; start it after the api, as the Compose file does.
+Optional: `LOG_LEVEL`, and `CF_API_TOKEN`, `CF_ROOT_DOMAIN`, `CF_ZONE_ID` for a Sandbox Domain on your Cloudflare zone.
 
 ### web (required)
 
 | Variable  | Description                                                                                                      |
 | --------- | ---------------------------------------------------------------------------------------------------------------- |
 | `API_URL` | Public URL of the api, which the dashboard calls from the browser. Read when the container starts, not built in. |
+
+## Database migrations
+
+No service migrates the database as it starts. Each release has one migrate step, in the api image:
+
+```bash
+bun run migrate.js
+```
+
+It needs only `DATABASE_URL`. It exits 0 when the database has every migration the release carries, whether it had to apply them or not, and non-zero when it could not migrate, leaving the database as it was. Two runs at once are safe: the second waits for the first.
+
+With Docker Compose this is the `migrate` service, and `docker compose pull && docker compose up -d` is the whole upgrade: it migrates, then replaces the api and the worker.
+
+If you run the images another way, run the step to completion before you start or upgrade anything else, from the api image of the version you are moving to:
+
+```bash
+docker run --rm -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
+  ghcr.io/ted-too/relayit-api:<tag> bun run migrate.js
+```
+
+Then start the api, the worker and, if you run it, the template-builder. One started too early does no harm: it logs which migrations the database lacks, waits up to five minutes for the step to finish, then exits with an error. The version already running keeps working while the step runs and until you replace it.
 
 ## Image tags
 
@@ -168,7 +192,7 @@ If your platform runs the old and new api side by side during an upgrade (Compos
 - The web image sends `Strict-Transport-Security` with a one-year lifetime. Browsers apply it only to a dashboard they reached over https, so a plain-http setup such as the local Compose one is unaffected. Once a browser has opened the dashboard's hostname over https, it refuses plain http there for a year, so don't move that hostname back to http.
 - The api serves HTTP and the worker runs background jobs; scale each by running more replicas of it. Several workers share the queue safely.
 - If sign-in fails from the dashboard, check that the api's `APP_URL` is the URL you open the dashboard at, that web's `API_URL` is the api's public URL, and that the two are subdomains of one domain.
-- Check logs with `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
+- Check logs with `docker compose logs migrate`, `docker compose logs -f api`, `docker compose logs -f worker` and `docker compose logs -f web`. If sends stay queued, check that the worker is running.
 
 ## How self-hosted differs from Cloud
 

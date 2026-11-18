@@ -327,8 +327,10 @@ export const syncProjectSendingStatus = (
 
 /**
  * The Projects and regions that hold a Domain paused for a Project Sending Pause. The reason
- * is compared as text: a worker asks this as it starts, and one started before the api has
- * migrated must find nothing rather than fail on a value the enum does not have yet.
+ * is compared as text, so a database whose enum does not have the value yet answers nothing
+ * rather than failing. A worker asks this as it starts, and its startup check
+ * (`requireMigrated`) already holds it back until that migration is applied; this is the
+ * second guard, for anything else that asks.
  */
 const pausedProjectsInRegions = (
   db: DatabaseExecutor,

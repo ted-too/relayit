@@ -16,16 +16,16 @@ import {
 import { registerJobHandler, runJobWorker } from "@repo/jobs";
 import { LoggingLive, logEffectFailure } from "@repo/logging";
 import { getCurrentBetterAuthSecret } from "@repo/persistence/crypto/auth-secrets";
+import { requireMigrated } from "@repo/persistence/db/migrate";
 import { sesNotificationsUrl } from "@repo/provider-aws/email/webhooks";
 import { webhookDeliverHandler } from "@repo/webhooks";
 import { Cause, Effect, Fiber, Redacted } from "effect";
 import { workerConfig } from "./env";
 import { cloudflareFromConfig, makeWorkerLayer } from "./layers";
 
-// Never migrates: the api and builder apply migrations as they start, and this assumes
-// a current schema.
 const workerProgram = Effect.gen(function* () {
   const config = yield* workerConfig;
+  yield* requireMigrated({ databaseUrl: Redacted.value(config.databaseUrl) });
 
   const run = Effect.gen(function* () {
     // The fake backend has no infrastructure: nothing to point at the api.

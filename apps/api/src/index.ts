@@ -1,5 +1,5 @@
 import { LoggingLive, logEffectFailure } from "@repo/logging";
-import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { requireMigrated } from "@repo/persistence/db/migrate";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { Cause, Effect, Fiber, Layer, Option, Redacted } from "effect";
 import { apiConfig } from "./env";
@@ -9,8 +9,7 @@ import { ApiAuth } from "./lib/auth";
 
 const apiProgram = Effect.gen(function* () {
   const config = yield* apiConfig;
-  yield* Effect.promise(() => migrateOnStartup(Redacted.value(config.databaseUrl)));
-  yield* Effect.logInfo("Database migrations up to date");
+  yield* requireMigrated({ databaseUrl: Redacted.value(config.databaseUrl) });
 
   const server = apiServer({
     appOrigin: config.appUrl.origin,

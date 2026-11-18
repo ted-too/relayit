@@ -8,7 +8,7 @@ import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
-import { migrateOnStartup } from "@repo/persistence/db/migrate";
+import { migrateDatabase } from "@repo/persistence/db/migrate";
 import {
   contact,
   customDomain,
@@ -1588,7 +1588,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       within: <A, E>(use: Effect.Effect<A, E>) =>
         Effect.acquireUseRelease(
           admin(`create database "${name}"`),
-          () => Effect.promise(() => migrateOnStartup(url.href)).pipe(Effect.andThen(use)),
+          () => Effect.promise(() => migrateDatabase(url.href)).pipe(Effect.andThen(use)),
           () => admin(`drop database "${name}" with (force)`),
         ),
     };

@@ -1,4 +1,18 @@
 services:
+  # Applies the release's database migrations, then exits. The api and the worker start
+  # only once it has succeeded; `docker compose up` runs it again each time, and it changes
+  # nothing when the database is current.
+  migrate:
+    image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
+    command: ["bun", "run", "migrate.js"]
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - relayit-network
+
   # The public API, sign-in, and every operation the dashboard calls.
   api:
     image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
@@ -22,7 +36,6 @@ services:
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in .env}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
       - S3_BUCKET=${S3_BUCKET:-relayit}
-    # The api migrates before it listens, so a healthy api means a current schema.
     healthcheck:
       test:
         [
@@ -35,8 +48,8 @@ services:
       timeout: 5s
       retries: 12
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     networks:
@@ -62,8 +75,10 @@ services:
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
       - S3_BUCKET=${S3_BUCKET:-relayit}
     depends_on:
-      api:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     networks:
       - relayit-network
 

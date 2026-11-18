@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --no-env-file ../../tooling/scripts/src/with-env.ts --app api bun --no-env-file run --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts ./src/platform-admin.ts --outdir ./build --target bun",
+    "build": "bun build ./src/index.ts ./src/migrate.ts ./src/platform-admin.ts --outdir ./build --target bun",
     "typecheck": "tsc --noEmit",
     "test": "bun --no-env-file --bun vp test run --config ../../vite.config.ts --dir ."
   },
