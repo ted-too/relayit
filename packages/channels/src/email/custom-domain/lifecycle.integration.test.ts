@@ -4,10 +4,11 @@
  * identity along. SES, public DNS and the job queue are the boundaries stubbed.
  */
 import { describe, expect, it, test } from "@effect/vitest";
-import { Jobs, type JobsService } from "@repo/jobs";
+import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
+import { migrateOnStartup } from "@repo/persistence/db/migrate";
 import {
   customDomain,
   emailDelivery,
@@ -32,6 +33,7 @@ import {
   createCustomDomain,
   deleteCustomDomain,
   removeDeletedProjectDomains,
+  removeUnlinkedDomains,
 } from "./lifecycle";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
@@ -46,14 +48,25 @@ describe("Domain lifecycle (PostgreSQL)", () => {
 
   /**
    * SES, public DNS and the queue as each test sets them; what was scheduled, cancelled and
-   * enqueued, by job, the SES identities deleted, and the TXT values published in DNS.
+   * enqueued, by job, the SES identities created and deleted, and the TXT values published
+   * in DNS. `beforeKeyLoad` runs as a Domain's DKIM key is read, which an add does between
+   * writing a claim and registering the Domain.
    */
-  const boundaries = (options: { readonly failCreateIdentity?: () => boolean } = {}) => {
+  const boundaries = (
+    options: {
+      readonly beforeKeyLoad?: () => Effect.Effect<void>;
+      readonly databaseUrl?: string;
+      readonly failCancel?: boolean;
+      readonly failCreateIdentity?: () => boolean;
+      readonly failEnqueueFor?: () => string | undefined;
+    } = {},
+  ) => {
     const scheduled: { readonly name: string; readonly payload: unknown }[] = [];
     const published = new Set<string>();
     const cancelled: { readonly name: string; readonly payload: unknown }[] = [];
     const enqueued: { readonly name: string; readonly payload: unknown }[] = [];
     const deletedIdentities: { readonly fqdn: string; readonly region: string | null }[] = [];
+    const createdIdentities: string[] = [];
     const layer = Layer.mergeAll(
       Layer.succeed(EmailBackend, {
         createIdentity: ({ fqdn, region }) =>
@@ -64,7 +77,10 @@ describe("Domain lifecycle (PostgreSQL)", () => {
                   region: region ?? "eu-central-1",
                 }),
               )
-            : Effect.succeed({ mailFrom: { domain: `send.${fqdn}`, records: [] } }),
+            : Effect.sync(() => {
+                createdIdentities.push(fqdn);
+                return { mailFrom: { domain: `send.${fqdn}`, records: [] } };
+              }),
         defaultRegion: "eu-central-1",
         deleteIdentity: ({ fqdn, region }) =>
           Effect.sync(() => {
@@ -80,10 +96,24 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       }),
       Layer.succeed(Jobs, {
         cancel: ((contract: { readonly name: string }, payload?: unknown) => {
+          if (options.failCancel) {
+            return Effect.fail(
+              new JobEnqueueError({
+                cause: "Redis is down",
+                jobName: contract.name,
+                stage: "cancel",
+              }),
+            );
+          }
           cancelled.push({ name: contract.name, payload });
           return Effect.void;
         }) as JobsService["cancel"],
-        enqueue: ((contract: { readonly name: string }, payload: unknown) => {
+        enqueue: ((contract: { readonly name: string }, payload: { readonly fqdn?: string }) => {
+          if (payload.fqdn !== undefined && payload.fqdn === options.failEnqueueFor?.()) {
+            return Effect.fail(
+              new JobEnqueueError({ cause: "refused", jobName: contract.name, stage: "outbox" }),
+            );
+          }
           enqueued.push({ name: contract.name, payload });
           return Effect.void;
         }) as JobsService["enqueue"],
@@ -93,9 +123,33 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         }) as JobsService["schedule"],
       }),
       EmailManagedDns.noop(),
-      SymmetricCrypto.live(parseBetterAuthSecrets("1:lifecycle-test-secret-0123456789")),
-    ).pipe(Layer.provideMerge(makeDbLive({ databaseUrl: testDatabaseUrl })));
-    return { cancelled, deletedIdentities, enqueued, layer, published, scheduled };
+      Layer.effect(
+        SymmetricCrypto,
+        Effect.gen(function* () {
+          const crypto = yield* SymmetricCrypto;
+          return {
+            ...crypto,
+            decrypt: (value: string) =>
+              (options.beforeKeyLoad?.() ?? Effect.void).pipe(
+                Effect.andThen(crypto.decrypt(value)),
+              ),
+          };
+        }),
+      ).pipe(
+        Layer.provide(
+          SymmetricCrypto.live(parseBetterAuthSecrets("1:lifecycle-test-secret-0123456789")),
+        ),
+      ),
+    ).pipe(Layer.provideMerge(makeDbLive({ databaseUrl: options.databaseUrl ?? testDatabaseUrl })));
+    return {
+      cancelled,
+      createdIdentities,
+      deletedIdentities,
+      enqueued,
+      layer,
+      published,
+      scheduled,
+    };
   };
 
   const insertProject = Effect.fn(function* () {
@@ -158,6 +212,34 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       claimantIds.push(claimantId);
     }
     return { claimantIds, customDomainId, fqdn, holderId };
+  });
+
+  /** A Delivery a Project sent from a Domain, which keeps naming it. */
+  const sentFrom = Effect.fn(function* (input: {
+    readonly customDomainId: string;
+    readonly fqdn: string;
+    readonly organizationId: string;
+  }) {
+    const db = yield* DB;
+    const environmentId = typeid("oenv").toString();
+    const messageId = typeid("msg").toString();
+    yield* db
+      .insert(organizationAppEnvironment)
+      .values({ id: environmentId, organizationId: input.organizationId });
+    yield* db.insert(message).values({
+      id: messageId,
+      organizationAppEnvironmentId: environmentId,
+      purpose: "transactional",
+    });
+    yield* db.insert(emailDelivery).values({
+      customDomainId: input.customDomainId,
+      from: { address: `hello@${input.fqdn}`, normalized: `hello@${input.fqdn}` },
+      messageId,
+      status: "sent",
+      subject: "Hi",
+      text: "Hi",
+      to: ["to@example.com"],
+    });
   });
 
   const domainOf = Effect.fn(function* (fqdn: string) {
@@ -737,25 +819,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           .update(customDomain)
           .set({ lastCheckedAt: new Date(), verificationStatus: "verified" })
           .where(eq(customDomain.id, customDomainId));
-        const environmentId = typeid("oenv").toString();
-        const messageId = typeid("msg").toString();
-        yield* db
-          .insert(organizationAppEnvironment)
-          .values({ id: environmentId, organizationId: projectId });
-        yield* db.insert(message).values({
-          id: messageId,
-          organizationAppEnvironmentId: environmentId,
-          purpose: "transactional",
-        });
-        yield* db.insert(emailDelivery).values({
-          customDomainId,
-          from: { address: `hello@${fqdn}`, normalized: `hello@${fqdn}` },
-          messageId,
-          status: "sent",
-          subject: "Hi",
-          text: "Hi",
-          to: ["to@example.com"],
-        });
+        yield* sentFrom({ customDomainId, fqdn, organizationId: projectId });
 
         expect(yield* deleteCustomDomain({ customDomainId, organizationId: projectId })).toEqual({
           deleted: true,
@@ -803,5 +867,178 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         expect(yield* domainOf(fqdn)).toBeUndefined();
       }).pipe(Effect.provide(layer));
     },
+  );
+
+  it.live("a kept Domain whose claim is removed before it registers gets no identity", () => {
+    let removeClaim: Effect.Effect<void> = Effect.void;
+    const { createdIdentities, layer } = boundaries({ beforeKeyLoad: () => removeClaim });
+    return Effect.gen(function* () {
+      const services = yield* Effect.context<DB | Jobs>();
+      const senderId = yield* insertProject();
+      const claimantId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId: senderId });
+      yield* sentFrom({ customDomainId, fqdn, organizationId: senderId });
+      yield* deleteCustomDomain({ customDomainId, organizationId: senderId });
+      createdIdentities.length = 0;
+
+      // The claim is written, then removed before the add reaches the registration.
+      removeClaim = Effect.suspend(() => {
+        removeClaim = Effect.void;
+        return deleteCustomDomain({ customDomainId, organizationId: claimantId });
+      }).pipe(Effect.provide(services), Effect.orDie);
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+      ).toMatchObject({
+        message: "Domain was removed before it was registered with SES.",
+        operation: "register_identity",
+      });
+
+      expect(createdIdentities).toEqual([]);
+      expect(yield* domainOf(fqdn)).toMatchObject({
+        dnsRecords: [],
+        id: customDomainId,
+        organizations: [],
+        registration: null,
+      });
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a removal stands when its ownership check can't be cancelled", () => {
+    const { enqueued, layer } = boundaries({ failCancel: true });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const holderId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const first = yield* createCustomDomain({ fqdn, organizationId: holderId });
+      expect(
+        yield* deleteCustomDomain({
+          customDomainId: first.customDomainId,
+          organizationId: holderId,
+        }),
+      ).toEqual({ deleted: true });
+      expect(yield* domainOf(fqdn)).toBeUndefined();
+
+      // A deleted Project's claim was the last link to a Domain whose holder had gone.
+      const claimantId = yield* insertProject();
+      const orphan = `${Bun.randomUUIDv7()}.example.test`;
+      const { customDomainId } = yield* createCustomDomain({
+        fqdn: orphan,
+        organizationId: holderId,
+      });
+      yield* createCustomDomain({ fqdn: orphan, organizationId: claimantId });
+      yield* db.delete(organization).where(eq(organization.id, holderId));
+      const links = yield* linksOf(customDomainId);
+      yield* db.delete(organization).where(eq(organization.id, claimantId));
+      yield* removeDeletedProjectDomains({
+        links: links.map((link) => ({ ...link, customDomainId })),
+        organizationId: claimantId,
+      });
+
+      expect(yield* domainOf(orphan)).toBeUndefined();
+      expect(enqueued.map((job) => job.payload)).toEqual([
+        { fqdn, region: "eu-central-1" },
+        { fqdn: orphan, region: "eu-central-1" },
+      ]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live(
+    "the sweep of every Domain removes those without a link, and only those",
+    () => {
+      // A database of its own: the sweep reads every Domain, and in the shared one it would
+      // take the Domains other tests have yet to link.
+      const name = `sweep_${Bun.randomUUIDv7().replaceAll("-", "")}`;
+      const url = new URL(testDatabaseUrl);
+      url.pathname = `/${name}`;
+      const admin = (statement: string) =>
+        Effect.promise(async () => {
+          const sql = new Bun.SQL(testDatabaseUrl);
+          try {
+            await sql.unsafe(statement);
+          } finally {
+            await sql.close();
+          }
+        });
+      let refused: string | undefined;
+      const { deletedIdentities, enqueued, layer } = boundaries({
+        databaseUrl: url.href,
+        failEnqueueFor: () => refused,
+      });
+
+      const sweeps = Effect.gen(function* () {
+        const db = yield* DB;
+        const add = Effect.fn(function* () {
+          const organizationId = yield* insertProject();
+          const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+          const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
+          return { customDomainId, fqdn, organizationId };
+        });
+        const deleteProject = (organizationId: string) =>
+          db.delete(organization).where(eq(organization.id, organizationId));
+        // Their Deliveries outlive the Projects that held the Domains they were sent from.
+        const senderIds = [yield* insertProject(), yield* insertProject()] as const;
+
+        const linked = yield* add();
+        const unlinked = yield* add();
+        yield* deleteProject(unlinked.organizationId);
+        const bare = yield* add();
+        yield* sentFrom({ ...bare, organizationId: senderIds[0] });
+        yield* deleteCustomDomain(bare);
+        const sent = yield* add();
+        yield* sentFrom({ ...sent, organizationId: senderIds[1] });
+        yield* deleteProject(sent.organizationId);
+        const failing = yield* add();
+        yield* deleteProject(failing.organizationId);
+        refused = failing.fqdn;
+        enqueued.length = 0;
+
+        const kept = { dnsRecords: [], organizations: [], registration: null };
+        const after = Effect.gen(function* () {
+          return {
+            bare: yield* domainOf(bare.fqdn),
+            failing: yield* domainOf(failing.fqdn),
+            linked: yield* domainOf(linked.fqdn),
+            sent: yield* domainOf(sent.fqdn),
+            unlinked: yield* domainOf(unlinked.fqdn),
+          };
+        });
+
+        yield* removeUnlinkedDomains();
+
+        const swept = yield* after;
+        expect(swept.linked).toMatchObject({
+          organizations: [{ organizationId: linked.organizationId }],
+          registration: { region: "eu-central-1" },
+        });
+        expect(swept.unlinked).toBeUndefined();
+        expect(swept.bare).toMatchObject({ ...kept, id: bare.customDomainId });
+        expect(swept.sent).toMatchObject({ ...kept, id: sent.customDomainId });
+        // The one whose removal failed is as it was, and did not stop the others.
+        expect(swept.failing).toMatchObject({
+          id: failing.customDomainId,
+          registration: { region: "eu-central-1" },
+        });
+        expect(
+          enqueued.map((job) => (job.payload as { readonly fqdn: string }).fqdn).toSorted(),
+        ).toEqual([unlinked.fqdn, sent.fqdn].toSorted());
+
+        yield* removeUnlinkedDomains();
+
+        expect(yield* after).toEqual(swept);
+        expect(enqueued).toHaveLength(2);
+        expect(deletedIdentities).toEqual([]);
+      });
+
+      return Effect.acquireUseRelease(
+        admin(`create database "${name}"`).pipe(
+          Effect.andThen(Effect.promise(() => migrateOnStartup(url.href))),
+        ),
+        // The layer's pool is closed before the database is dropped.
+        () => sweeps.pipe(Effect.provide(layer)),
+        () => admin(`drop database "${name}" with (force)`),
+      );
+    },
+    30_000,
   );
 });

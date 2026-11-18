@@ -150,6 +150,9 @@ const assertDomainHolder = (input: {
     return link;
   });
 
+/** How long an SES call made under `lockDomainIdentity` may take before it is given up. */
+export const IDENTITY_CALL_TIMEOUT = "30 seconds";
+
 /**
  * Held to the end of the transaction while a Domain's SES identity is created or deleted.
  * SES names an identity by its FQDN alone, so deleting a removed Domain's identity and
@@ -175,31 +178,12 @@ const registerCustomDomainIdentity = (input: {
     const managedDns = yield* EmailManagedDns;
     const region = backend.defaultRegion;
 
-    yield* managedDns
-      .reconcile({
-        customDomainId: input.customDomainId,
-        owner: customDomainRootDnsOwner(input.customDomainId),
-        records: buildCustomDomainRootDnsRecords({
-          dkimPublicKey: input.keyMaterial.dkimPublicKey,
-          dkimSelector: input.keyMaterial.dkimSelector,
-          fqdn: input.fqdn,
-        }),
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              message: "Failed to materialize custom domain root DNS.",
-              operation: "create",
-            }),
-        ),
-      );
-
-    // The identity and its registration land as one step against the Domain's removal:
-    // holding the row keeps the Domain until the registration is recorded, so a removal
-    // either came first and nothing is created, or comes after and deletes the identity.
+    // The identity and its registration land as one step against the Domain's removal.
+    // Holding the row keeps the Domain and its links until the registration is recorded,
+    // so a removal either came first and nothing is created, or comes after and deletes
+    // the identity. The row alone is not enough to go on: a Domain kept bare for its
+    // Deliveries outlives its last link, and registering it would leave an identity no
+    // Project is linked to.
     yield* input.db
       .transaction((tx) =>
         Effect.gen(function* () {
@@ -209,13 +193,40 @@ const registerCustomDomainIdentity = (input: {
             .from(customDomain)
             .where(eq(customDomain.id, input.customDomainId))
             .for("key share");
-          if (!held) {
+          const [linked] = yield* tx
+            .select({ organizationId: organizationDomain.organizationId })
+            .from(organizationDomain)
+            .where(eq(organizationDomain.customDomainId, input.customDomainId))
+            .limit(1);
+          if (!(held && linked)) {
             return yield* new CustomDomainError({
               customDomainId: input.customDomainId,
               message: "Domain was removed before it was registered with SES.",
               operation: "register_identity",
             });
           }
+
+          yield* managedDns
+            .reconcile({
+              customDomainId: input.customDomainId,
+              owner: customDomainRootDnsOwner(input.customDomainId),
+              records: buildCustomDomainRootDnsRecords({
+                dkimPublicKey: input.keyMaterial.dkimPublicKey,
+                dkimSelector: input.keyMaterial.dkimSelector,
+                fqdn: input.fqdn,
+              }),
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new CustomDomainError({
+                    cause,
+                    customDomainId: input.customDomainId,
+                    message: "Failed to materialize custom domain root DNS.",
+                    operation: "create",
+                  }),
+              ),
+            );
 
           const identity = yield* backend
             .createIdentity({
@@ -234,6 +245,19 @@ const registerCustomDomainIdentity = (input: {
                     operation: "register_identity",
                   }),
               ),
+              // A call that never answers would hold this connection, the Domain's row
+              // and the FQDN's identity lock with it. Adding the Domain again finishes it.
+              Effect.timeoutOrElse({
+                duration: IDENTITY_CALL_TIMEOUT,
+                orElse: () =>
+                  Effect.fail(
+                    new CustomDomainError({
+                      customDomainId: input.customDomainId,
+                      message: "SES did not answer in time while registering the domain.",
+                      operation: "register_identity",
+                    }),
+                  ),
+              }),
             );
 
           yield* managedDns
@@ -847,6 +871,7 @@ export const removeDomainLink = (input: {
  * takes its links in the database, where no code sees the last one go, so this follows a
  * Project's deletion with the Domains it was linked to, and runs over every Domain when
  * the worker starts. A Domain kept only for its Deliveries is passed over until they go.
+ * One that fails is logged and the rest still go.
  */
 export const removeUnlinkedDomains = (among?: readonly string[]) =>
   Effect.gen(function* () {
@@ -890,20 +915,18 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
         ),
       );
 
+    // One Domain that can't be removed is left for the next run, not in the way of the rest.
     yield* Effect.forEach(
       unlinked,
       ({ id }) =>
         db
           .transaction((tx) => removeUnlinkedDomain(tx, id))
           .pipe(
-            Effect.mapError(
-              (cause) =>
-                new CustomDomainError({
-                  cause,
-                  customDomainId: id,
-                  message: "Failed to remove a Domain without a link.",
-                  operation: "delete",
-                }),
+            Effect.catch((cause) =>
+              Effect.logWarning("Failed to remove a Domain without a link", {
+                cause,
+                customDomainId: id,
+              }),
             ),
           ),
       { discard: true },
@@ -911,9 +934,29 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
   });
 
 /**
- * Follows up a deleted Project with the links it had, read before it went: the ownership
- * checks of its unproven claims are cancelled, and the Domains it left without a link are
- * removed.
+ * Stops the ownership check of a link that has been removed. The removal has happened by
+ * now and the check ends itself when it finds its link gone, so a failure is only logged.
+ */
+const cancelOwnershipCheck = (link: {
+  readonly customDomainId: string;
+  readonly organizationId: string;
+}) =>
+  Effect.gen(function* () {
+    const jobs = yield* Jobs;
+    yield* jobs.cancel(emailVerifyOwnershipJob, link).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("Ownership check of a removed link left scheduled", {
+          cause,
+          ...link,
+        }),
+      ),
+    );
+  });
+
+/**
+ * Follows up a deleted Project with the links it had, read before it went: the Domains it
+ * left without a link are removed, then the ownership checks of its unproven claims are
+ * cancelled.
  */
 export const removeDeletedProjectDomains = (input: {
   readonly links: readonly Pick<
@@ -923,32 +966,14 @@ export const removeDeletedProjectDomains = (input: {
   readonly organizationId: string;
 }) =>
   Effect.gen(function* () {
-    const jobs = yield* Jobs;
+    yield* removeUnlinkedDomains(input.links.map((link) => link.customDomainId));
 
     yield* Effect.forEach(
       input.links.filter((link) => link.ownershipVerificationStatus !== "verified"),
       ({ customDomainId }) =>
-        jobs
-          .cancel(emailVerifyOwnershipJob, {
-            customDomainId,
-            organizationId: input.organizationId,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new CustomDomainError({
-                  cause,
-                  customDomainId,
-                  message: "Failed to cancel ownership verification job.",
-                  operation: "schedule",
-                  organizationId: input.organizationId,
-                }),
-            ),
-          ),
+        cancelOwnershipCheck({ customDomainId, organizationId: input.organizationId }),
       { discard: true },
     );
-
-    yield* removeUnlinkedDomains(input.links.map((link) => link.customDomainId));
   });
 
 /**
@@ -958,7 +983,6 @@ export const removeDeletedProjectDomains = (input: {
 export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
-    const jobs = yield* Jobs;
 
     const removed = yield* removeDomainLink({ ...input, db });
     if (!removed.unlinked) {
@@ -970,23 +994,7 @@ export const deleteCustomDomain = (input: DeleteCustomDomainInput) =>
       });
     }
 
-    yield* jobs
-      .cancel(emailVerifyOwnershipJob, {
-        customDomainId: input.customDomainId,
-        organizationId: input.organizationId,
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new CustomDomainError({
-              cause,
-              customDomainId: input.customDomainId,
-              message: "Failed to cancel ownership verification job.",
-              operation: "schedule",
-              organizationId: input.organizationId,
-            }),
-        ),
-      );
+    yield* cancelOwnershipCheck(input);
 
     return { deleted: removed.domainRemoved };
   });

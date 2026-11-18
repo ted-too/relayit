@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emailDeleteDomainIdentityJob } from "./jobs";
-import { lockDomainIdentity } from "./lifecycle";
+import { IDENTITY_CALL_TIMEOUT, lockDomainIdentity } from "./lifecycle";
 
 export class DeleteDomainIdentityHandlerError extends Data.TaggedError(
   "DeleteDomainIdentityHandlerError",
@@ -18,7 +18,6 @@ export class DeleteDomainIdentityHandlerError extends Data.TaggedError(
 }> {}
 
 export const emailDeleteDomainIdentityHandler = defineJobHandler({
-  classifyFailure: () => "retryable",
   contract: emailDeleteDomainIdentityJob,
   handle: (payload) =>
     Effect.gen(function* () {
@@ -40,16 +39,20 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
             if (registered.some((now) => (now.region ?? backend.defaultRegion) === region)) {
               return;
             }
+            // A call that never answers would hold this connection and the FQDN's identity
+            // lock, and with it every registration of the FQDN. The retry deletes it.
             yield* backend.deleteIdentity({ fqdn: payload.fqdn, region: payload.region }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new DeleteDomainIdentityHandlerError({
-                    cause,
-                    fqdn: payload.fqdn,
-                    message: "Failed to delete the SES identity.",
-                    operation: "delete_identity",
-                  }),
-              ),
+              Effect.timeoutOrElse({
+                duration: IDENTITY_CALL_TIMEOUT,
+                orElse: () =>
+                  Effect.fail(
+                    new DeleteDomainIdentityHandlerError({
+                      fqdn: payload.fqdn,
+                      message: "SES did not answer in time while deleting the identity.",
+                      operation: "delete_identity",
+                    }),
+                  ),
+              }),
             );
           }),
         )
@@ -57,6 +60,12 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
           Effect.mapError((error) => {
             switch (error._tag) {
               case "DeleteDomainIdentityHandlerError":
+              case "EmailBackendAuthenticationError":
+              case "EmailBackendConfigurationError":
+              case "EmailBackendMessageError":
+              case "EmailBackendRateLimited":
+              case "EmailBackendRejected":
+              case "EmailBackendUnavailable":
                 return error;
               default:
                 return new DeleteDomainIdentityHandlerError({
@@ -69,4 +78,16 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
           }),
         );
     }),
+  // An outage, a throttle, a call that timed out or a database failure may pass. A region
+  // this deployment no longer has, refused credentials or a refusal from SES will not.
+  classifyFailure: (failure) => {
+    switch (failure._tag) {
+      case "DeleteDomainIdentityHandlerError":
+      case "EmailBackendRateLimited":
+      case "EmailBackendUnavailable":
+        return "retryable";
+      default:
+        return "terminal";
+    }
+  },
 });

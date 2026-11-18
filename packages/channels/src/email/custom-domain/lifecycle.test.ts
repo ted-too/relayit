@@ -2,7 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 import { Jobs, type JobsService } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB } from "@repo/persistence/db/effect";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { EmailBackend, type EmailBackendService } from "../backend";
 import { EmailManagedDns, type EmailManagedDnsService } from "../managed-dns";
 import { createCustomDomain, pauseCustomDomain, unpauseCustomDomain } from "./lifecycle";
@@ -172,6 +173,69 @@ describe("createCustomDomain", () => {
         });
         return result;
       }),
+    );
+  });
+
+  it.effect("gives up an SES registration that never answers", () => {
+    const domain = {
+      dkimPrivateKey: "sealed",
+      dkimPublicKey: "public",
+      dkimSelector: "relayit",
+      fqdn: "acme.test",
+      id: "dom_1",
+      lastCheckedAt: null,
+      organizations: [{ organizationId: "org_1", ownershipVerificationStatus: "verified" }],
+      registration: null,
+    };
+    const db: any = {
+      query: { customDomain: { findFirst: () => Effect.succeed(domain) } },
+      // The Domain is still there and linked when registration takes its locks.
+      transaction: (run: (tx: unknown) => Effect.Effect<unknown, unknown>) =>
+        run({
+          execute: () => Effect.void,
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: () => Effect.succeed([{ id: "dom_1" }]),
+                limit: () => Effect.succeed([{ organizationId: "org_1" }]),
+              }),
+            }),
+          }),
+        }),
+    };
+
+    return Effect.gen(function* () {
+      const adding = yield* Effect.forkChild(
+        Effect.flip(createCustomDomain({ fqdn: "acme.test", organizationId: "org_1" })),
+      );
+      yield* TestClock.adjust("30 seconds");
+
+      expect(yield* Fiber.join(adding)).toMatchObject({
+        _tag: "CustomDomainError",
+        message: "SES did not answer in time while registering the domain.",
+        operation: "register_identity",
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(DB, db),
+          Layer.succeed(EmailManagedDns, {
+            cloudflareEnabled: false,
+            reconcile: () => Effect.void,
+            remove: unsupported,
+          } satisfies EmailManagedDnsService),
+          backend({ createIdentity: () => Effect.never }),
+          Layer.succeed(Jobs, {
+            cancel: unsupported,
+            enqueue: unsupported,
+            schedule: unsupported,
+          } satisfies JobsService),
+          Layer.succeed(SymmetricCrypto, {
+            decrypt: () => Effect.succeed("private"),
+            encrypt: unsupported,
+          } as never),
+        ),
+      ),
     );
   });
 });
