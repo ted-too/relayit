@@ -130,4 +130,52 @@ describe("the body limit on every route", () => {
       }
     }),
   );
+
+  it.live("hands better-auth the bytes it was sent, as Stripe's signature needs", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(
+        stubs({
+          authHandler: async (request) =>
+            new Response(await request.arrayBuffer(), {
+              headers: { "x-signature": request.headers.get("stripe-signature") ?? "" },
+            }),
+        }).stubs,
+      );
+      // Not valid UTF-8, and JSON whose spacing a re-encode would change.
+      const sent = new Uint8Array([
+        ...new TextEncoder().encode('{ "id" :\t"evt_1",\r\n "n": 1.0,"é":"\u00e9" }'),
+        0xff,
+        0xfe,
+        0x00,
+      ]);
+      const echoed = (body: Uint8Array | ReadableStream<Uint8Array>, duplex?: "half") =>
+        Effect.promise(async () => {
+          const response = await fetch(`${origin}/auth/stripe/webhook`, {
+            body,
+            duplex,
+            headers: { "stripe-signature": "t=1,v1=abc" },
+            method: "POST",
+          });
+          return {
+            bytes: [...new Uint8Array(await response.arrayBuffer())],
+            signature: response.headers.get("x-signature"),
+          };
+        });
+
+      const expected = { bytes: [...sent], signature: "t=1,v1=abc" };
+      expect(yield* echoed(sent)).toEqual(expected);
+      expect(
+        yield* echoed(
+          new ReadableStream({
+            start: (controller) => {
+              controller.enqueue(sent.slice(0, 7));
+              controller.enqueue(sent.slice(7));
+              controller.close();
+            },
+          }),
+          "half",
+        ),
+      ).toEqual(expected);
+    }),
+  );
 });

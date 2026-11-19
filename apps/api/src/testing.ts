@@ -31,6 +31,8 @@ export const APP_ORIGIN = "http://app.test";
 export const GOOD_KEY = "rel_good";
 
 export interface Stubs {
+  /** better-auth's handler for `/auth/*`; without one, reaching it is a 500. */
+  readonly authHandler?: (request: Request) => Promise<Response>;
   readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
   readonly accept: typeof acceptTransactionalEmail;
   readonly handleSes: typeof handleSesNotification;
@@ -76,6 +78,7 @@ export const stubs = (overrides: Partial<Stubs> = {}) => {
 
 const makeAuth = (stubs: Stubs): ApiAuth["Service"] => ({
   auth: {
+    handler: stubs.authHandler,
     api: {
       // No request here carries a session; the dashboard's are tested with real ones.
       getSession: () => Promise.resolve(null),
