@@ -1,14 +1,16 @@
 import * as NodeFS from "node:fs";
+import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { describe, expect, it, test } from "@effect/vitest";
-import { Effect, Fiber, Schedule } from "effect";
+import { Effect, Fiber, Logger, Schedule } from "effect";
 import { Client } from "pg";
 import {
   DatabaseBehindError,
   DatabaseUnreachableError,
   migrateDatabase,
   MigrationError,
+  MigrationLockHeldError,
   requireMigrated,
 } from "./migrate";
 
@@ -50,6 +52,68 @@ const emptyDatabase = (serverUrl: string) =>
     }),
     ({ name }) => query(serverUrl, `drop database "${name}" with (force)`),
   ).pipe(Effect.map(({ url }) => url));
+
+/** Another run's advisory lock on the database, held until the test lets go of it. */
+const lockHolder = (databaseUrl: string) =>
+  Effect.acquireRelease(
+    Effect.promise(async () => {
+      const client = new Client({ application_name: "another-run", connectionString: databaseUrl });
+      await client.connect();
+      await client.query("select pg_advisory_lock(872014331, 1)");
+      return client;
+    }),
+    (client) => Effect.promise(() => client.end()),
+  );
+
+/** The step's own sessions on the database: it names itself to Postgres. */
+const stepSessions = `from pg_stat_activity
+  where datname = current_database() and application_name = 'relayit-migrate'`;
+
+const constraintMigration = carried.findIndex((name) =>
+  NodeFS.readFileSync(
+    NodePath.join(import.meta.dirname, "../../drizzle", name, "migration.sql"),
+    "utf8",
+  ).includes("contact_email_normalized_check"),
+);
+
+/**
+ * Migrates the database to where the release before `contact_email_normalized_check` left
+ * it: every migration but that one and any after it, applied by the step from a folder
+ * holding only those. The step still has that migration to run, on a table with rows.
+ */
+const migrateToBeforeTheConstraint = (databaseUrl: string) =>
+  Effect.gen(function* () {
+    const before = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const folder = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "migrate-test-"));
+        for (const name of carried.slice(0, constraintMigration)) {
+          NodeFS.cpSync(
+            NodePath.join(import.meta.dirname, "../../drizzle", name),
+            NodePath.join(folder, name),
+            { recursive: true },
+          );
+        }
+        return folder;
+      }),
+      (folder) => Effect.sync(() => NodeFS.rmSync(folder, { force: true, recursive: true })),
+    );
+    yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.DRIZZLE_MIGRATIONS_FOLDER;
+        process.env.DRIZZLE_MIGRATIONS_FOLDER = before;
+        return previous;
+      }),
+      () => migrateDatabase({ databaseUrl, waitFor: 0 }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) {
+            delete process.env.DRIZZLE_MIGRATIONS_FOLDER;
+          } else {
+            process.env.DRIZZLE_MIGRATIONS_FOLDER = previous;
+          }
+        }),
+    );
+  });
 
 const applied = (databaseUrl: string) =>
   query(databaseUrl, "select name from drizzle.__drizzle_migrations order by name").pipe(
@@ -103,32 +167,22 @@ describe("the migrate step and the apps' check for it", () => {
     Effect.gen(function* () {
       const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
       // Another step's lock, held so this one is still waiting when its connection goes.
-      const holder = yield* Effect.acquireRelease(
-        Effect.promise(async () => {
-          const client = new Client({ connectionString: databaseUrl });
-          await client.connect();
-          await client.query("select pg_advisory_lock(872014331, 1)");
-          return client;
-        }),
-        (client) => Effect.promise(() => client.end()),
-      );
+      const holder = yield* lockHolder(databaseUrl);
 
       const step = yield* Effect.forkChild(
         migrateDatabase({ databaseUrl, waitFor: "30 seconds" }).pipe(Effect.flip),
       );
-      const waiting = `from pg_stat_activity
-        where datname = current_database() and wait_event_type = 'Lock'`;
-      yield* query(databaseUrl, `select pid ${waiting}`).pipe(
+      yield* query(databaseUrl, `select pid ${stepSessions}`).pipe(
         Effect.repeat({
           until: (rows) => rows.length === 1,
-          // Bounded, so a step that never reaches the lock fails the assertion below
-          // rather than the test's timeout.
+          // Bounded, so a step that never connects fails the assertion below rather than
+          // the test's timeout.
           schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "3 seconds" })),
         }),
       );
-      expect(yield* query(databaseUrl, `select pg_terminate_backend(pid) ${waiting}`)).toHaveLength(
-        1,
-      );
+      expect(
+        yield* query(databaseUrl, `select pg_terminate_backend(pid) ${stepSessions}`),
+      ).toHaveLength(1);
 
       const error = yield* Fiber.join(step);
       expect(error).toBeInstanceOf(MigrationError);
@@ -148,46 +202,9 @@ describe("the migrate step and the apps' check for it", () => {
   it.live("the step normalizes stored Contact emails and merges the ones that then collide", () =>
     Effect.gen(function* () {
       const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
-      // The database as the release before the constraint left it: every migration but
-      // that one and any after it, applied by the step from a folder holding only those.
-      const constraint = carried.findIndex((name) =>
-        NodeFS.readFileSync(
-          NodePath.join(import.meta.dirname, "../../drizzle", name, "migration.sql"),
-          "utf8",
-        ).includes("contact_email_normalized_check"),
-      );
-      expect(constraint).toBeGreaterThan(0);
-      const before = yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const folder = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "migrate-test-"));
-          for (const name of carried.slice(0, constraint)) {
-            NodeFS.cpSync(
-              NodePath.join(import.meta.dirname, "../../drizzle", name),
-              NodePath.join(folder, name),
-              { recursive: true },
-            );
-          }
-          return folder;
-        }),
-        (folder) => Effect.sync(() => NodeFS.rmSync(folder, { force: true, recursive: true })),
-      );
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          const previous = process.env.DRIZZLE_MIGRATIONS_FOLDER;
-          process.env.DRIZZLE_MIGRATIONS_FOLDER = before;
-          return previous;
-        }),
-        () => migrateDatabase({ databaseUrl, waitFor: 0 }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.DRIZZLE_MIGRATIONS_FOLDER;
-            } else {
-              process.env.DRIZZLE_MIGRATIONS_FOLDER = previous;
-            }
-          }),
-      );
-      expect(yield* applied(databaseUrl)).toEqual(carried.slice(0, constraint));
+      expect(constraintMigration).toBeGreaterThan(0);
+      yield* migrateToBeforeTheConstraint(databaseUrl);
+      expect(yield* applied(databaseUrl)).toEqual(carried.slice(0, constraintMigration));
 
       yield* query(
         databaseUrl,
@@ -266,20 +283,21 @@ describe("the migrate step and the apps' check for it", () => {
           { concurrency: "unbounded" },
         ),
       );
-      // Both steps are waiting, one behind the unsubscribe and the other behind the first, so
-      // the unsubscribe commits while a step is under way. That it is kept is asserted below.
+      // One step is waiting behind the unsubscribe (the other asks for the first's advisory
+      // lock every two seconds), so the unsubscribe commits while a step is under way. That
+      // it is kept is asserted below.
       const waiting = yield* query(
         databaseUrl,
         `select pid from pg_stat_activity
           where datname = current_database() and wait_event_type = 'Lock'`,
       ).pipe(
         Effect.repeat({
-          until: (rows) => rows.length === 2,
+          until: (rows) => rows.length === 1,
           schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
         }),
       );
       // Not reached in time would mean the commit below came first and nothing was raced.
-      expect(waiting).toHaveLength(2);
+      expect(waiting).toHaveLength(1);
       expect(
         yield* query(databaseUrl, "select email from contact where id = 'cont_alone'"),
       ).toEqual([{ email: " Alone@Example.com\r\n" }]);
@@ -403,6 +421,152 @@ describe("the migrate step and the apps' check for it", () => {
         { contact_id: "cont_pair_lower", segment_id: "segm_vip" },
         { contact_id: "cont_three_a", segment_id: "segm_vip" },
       ]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    "the step fails naming the lock when another session holds it past the lock wait, having said it was waiting",
+    () => {
+      const warnings: string[] = [];
+      return Effect.gen(function* () {
+        const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+        const holder = yield* lockHolder(databaseUrl);
+
+        const started = Date.now();
+        const error = yield* migrateDatabase({
+          databaseUrl,
+          lockWaitFor: "3 seconds",
+          waitFor: 0,
+        }).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(MigrationLockHeldError);
+        expect(error.message).toContain("holds the migrate step's advisory lock");
+        // Who to look for: the holder's pid and the name it gave Postgres.
+        const [{ pid }] = (yield* Effect.promise(() =>
+          holder.query<{ pid: number }>("select pg_backend_pid() as pid"),
+        )).rows as [{ pid: number }];
+        expect(error).toMatchObject({
+          holder: expect.stringMatching(new RegExp(`^pid ${pid} another-run connected .* idle$`)),
+        });
+        // It asked more than once, and said so each time it was refused.
+        expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+        expect(warnings.length).toBeGreaterThanOrEqual(2);
+        expect(new Set(warnings)).toEqual(
+          new Set([
+            JSON.stringify(["Waiting for the migrate step's lock: another session holds it"]),
+          ]),
+        );
+        expect(
+          yield* query(databaseUrl, "select to_regclass('drizzle.__drizzle_migrations') as made"),
+        ).toEqual([{ made: null }]);
+        // Its session is gone, so the lock is the next run's as soon as the holder lets go.
+        expect(yield* query(databaseUrl, `select pid ${stepSessions}`)).toEqual([]);
+
+        yield* Effect.promise(() => holder.query("select pg_advisory_unlock(872014331, 1)"));
+        yield* migrateDatabase({ databaseUrl, waitFor: 0 });
+        expect(yield* applied(databaseUrl)).toEqual(carried);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Logger.layer([
+            Logger.make(({ logLevel, message }) => {
+              if (logLevel === "Warn") {
+                warnings.push(JSON.stringify(message));
+              }
+            }),
+          ]),
+        ),
+      );
+    },
+  );
+
+  it.live(
+    "the step fails when a migration cannot have its table lock in time, and migrates once it can",
+    () =>
+      Effect.gen(function* () {
+        const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+        yield* migrateToBeforeTheConstraint(databaseUrl);
+        // A session left idle in a transaction that has read `contact`. The normalization's
+        // lock lets readers by; the migration's ALTER TABLE does not.
+        const reader = yield* Effect.acquireRelease(
+          Effect.promise(async () => {
+            const client = new Client({ connectionString: databaseUrl });
+            await client.connect();
+            await client.query("begin; select count(*) from contact");
+            return client;
+          }),
+          (client) => Effect.promise(() => client.end()),
+        );
+
+        const error = yield* migrateDatabase({
+          databaseUrl,
+          tableLockWaitFor: "1 second",
+          waitFor: 0,
+        }).pipe(Effect.flip);
+        expect(error).toBeInstanceOf(MigrationError);
+        // lock_not_available: Postgres gave up the wait, not a statement that was running.
+        expect(error).toMatchObject({ cause: { cause: { code: "55P03" } } });
+        // The run rolled back whole.
+        expect(yield* applied(databaseUrl)).toEqual(carried.slice(0, constraintMigration));
+
+        yield* Effect.promise(() => reader.query("commit"));
+        yield* migrateDatabase({ databaseUrl, tableLockWaitFor: "1 second", waitFor: 0 });
+        expect(yield* applied(databaseUrl)).toEqual(carried);
+      }).pipe(Effect.scoped),
+  );
+
+  it.live("the step fails when Postgres stops answering it", () =>
+    Effect.gen(function* () {
+      const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+      yield* lockHolder(databaseUrl);
+      // Between the step and Postgres, so the test can stop passing bytes either way while
+      // both connections stay open: a peer that neither answers nor closes.
+      const upstream = new URL(databaseUrl);
+      const sockets: NodeNet.Socket[] = [];
+      const proxy = yield* Effect.acquireRelease(
+        Effect.callback<NodeNet.Server>((resume) => {
+          const server = NodeNet.createServer((downstream) => {
+            const up = NodeNet.connect(Number(upstream.port || 5432), upstream.hostname);
+            sockets.push(downstream, up);
+            downstream.on("error", () => undefined).pipe(up);
+            up.on("error", () => undefined).pipe(downstream);
+          });
+          server.listen(0, "127.0.0.1", () => resume(Effect.succeed(server)));
+        }),
+        (server) =>
+          Effect.sync(() => {
+            for (const socket of sockets) {
+              socket.destroy();
+            }
+            server.close();
+          }),
+      );
+      const through = new URL(databaseUrl);
+      through.hostname = "127.0.0.1";
+      through.port = String((proxy.address() as NodeNet.AddressInfo).port);
+
+      const step = yield* Effect.forkChild(
+        migrateDatabase({ databaseUrl: through.href, waitFor: 0 }).pipe(Effect.flip),
+      );
+      yield* query(databaseUrl, `select pid ${stepSessions}`).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "3 seconds" })),
+        }),
+      );
+      for (const socket of sockets) {
+        socket.unpipe();
+        socket.pause();
+      }
+      const silenced = Date.now();
+
+      const error = yield* Fiber.join(step);
+      expect(error).toBeInstanceOf(MigrationError);
+      expect(error).toMatchObject({
+        cause: { message: "Postgres did not answer within 10 seconds" },
+      });
+      // Its next question, at most two seconds off, and ten for the answer.
+      expect(Date.now() - silenced).toBeLessThan(20_000);
     }).pipe(Effect.scoped),
   );
 
