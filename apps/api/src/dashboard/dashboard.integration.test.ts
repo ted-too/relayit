@@ -16,6 +16,7 @@ import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
   customDomain,
+  emailDnsRecord,
   emailDomainRegistration,
   sandboxDomain,
   templatingWorkspace,
@@ -1275,7 +1276,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         });
         const domainId = (added.body as { id: string }).id;
         // As a week of checks that found it unverified leave it: checked, with no next
-        // check, and no job scheduled.
+        // check, and no job scheduled. The fake backend finds every record published, so
+        // the Domain is left with none to find and stays unverified at the refresh.
         const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
         const redis = makeRedisClient({ url: testRedisUrl });
         const scheduled = `test:${run}:${jobKeys("email.verify-custom-domain").scheduled}`;
@@ -1284,22 +1286,25 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             .update(customDomain)
             .set({ lastCheckedAt: new Date(), nextVerifyAt: null, verifyBackoffLevel: 21 })
             .where(eq(customDomain.id, domainId));
+          await db.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, domainId));
           await redis.send("ZREM", [scheduled, domainId]);
         });
-        // The fake backend verifies it at this check; what matters is that it has a next one.
         expect(
           yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner }),
-        ).toMatchObject({ status: 200 });
+        ).toMatchObject({ body: { verificationStatus: "not_verified" }, status: 200 });
 
         const { dueAt, row } = yield* Effect.promise(async () => ({
           dueAt: await redis.send("ZSCORE", [scheduled, domainId]),
           row: await db.query.customDomain.findFirst({
-            columns: { nextVerifyAt: true, verifyBackoffLevel: true },
+            columns: { lastCheckedAt: true, nextVerifyAt: true, verifyBackoffLevel: true },
             where: { id: domainId },
           }),
         }));
-        expect(row?.nextVerifyAt).toBeInstanceOf(Date);
-        expect(row?.verifyBackoffLevel).toBe(0);
+        // Counted from the start again: the first wait, not none.
+        expect(row?.verifyBackoffLevel).toBe(1);
+        expect((row?.nextVerifyAt?.getTime() ?? 0) - (row?.lastCheckedAt?.getTime() ?? 0)).toBe(
+          120_000,
+        );
         // Its job is scheduled for that check.
         expect(Number(dueAt)).toBe(row?.nextVerifyAt?.getTime());
         yield* Effect.promise(async () => {

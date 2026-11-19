@@ -10,6 +10,7 @@ import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
+  customDomain,
   organization,
   user,
   userChannel,
@@ -58,11 +59,11 @@ describe("custom Domain verification checks (PostgreSQL and Redis)", () => {
 
   /**
    * SES and public DNS as a test sets them: `ses.verified` is what SES says of every
-   * identity, and `published` holds the record values public DNS answers with (every record
+   * identity and `ses.whileAsked` runs while it answers, and `published` holds the record values public DNS answers with (every record
    * while `dns.allPublished`). `asked` is what SES was asked.
    */
   const boundaries = () => {
-    const ses = { verified: false };
+    const ses = { verified: false, whileAsked: Effect.void as Effect.Effect<void> };
     const dns = { allPublished: false };
     const published = new Set<string>();
     const asked: { readonly fqdn: string; readonly region: string | null }[] = [];
@@ -75,9 +76,12 @@ describe("custom Domain verification checks (PostgreSQL and Redis)", () => {
         deleteIdentity: () => Effect.die("unused"),
         ensureInfrastructure: () => Effect.die("unused"),
         getIdentityStatus: (input) =>
-          Effect.sync(() => {
+          Effect.suspend(() => {
             asked.push(input);
-            return { dkimVerified: ses.verified, verified: ses.verified };
+            return Effect.as(ses.whileAsked, {
+              dkimVerified: ses.verified,
+              verified: ses.verified,
+            });
           }),
         getProjectSendingStatus: () => Effect.die("unused"),
         send: () => Effect.die("unused"),
@@ -290,8 +294,8 @@ describe("custom Domain verification checks (PostgreSQL and Redis)", () => {
         expect(checksScheduledFor(queue, customDomainId)).toEqual([]);
         expect(checksScheduledFor(queue, unchecked.customDomainId)).toHaveLength(1);
 
-        // A check that runs anyway, as the one another Project's claim schedules, asks SES
-        // once and leaves it stopped, telling nobody again.
+        // A check that runs anyway, as a job left in the queue would, asks SES once and
+        // leaves it stopped, telling nobody again.
         yield* runCheck(customDomainId);
         expect(yield* domainOf(customDomainId)).toMatchObject({
           nextVerifyAt: null,
@@ -378,6 +382,36 @@ describe("custom Domain verification checks (PostgreSQL and Redis)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  it.live("a check keeps a restart made while it was asking SES", () => {
+    const { layer, ses } = boundaries();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const { customDomainId, organizationId } = yield* addedDomain();
+      // One check short of stopping, as a week unverified leaves it.
+      const waits = UNVERIFIED_WAITS_IN_MINUTES.length;
+      yield* db
+        .update(customDomain)
+        .set({ lastCheckedAt: new Date(), nextVerifyAt: new Date(), verifyBackoffLevel: waits })
+        .where(eq(customDomain.id, customDomainId));
+      // As a refresh or a proven claim writes, landing while this check waits on SES.
+      ses.whileAsked = db
+        .update(customDomain)
+        .set({ nextVerifyAt: new Date(), verifyBackoffLevel: 0 })
+        .where(eq(customDomain.id, customDomainId))
+        .pipe(Effect.orDie);
+
+      yield* runCheck(customDomainId);
+
+      // Counted from the restart, not from what the check read before it: not stopped.
+      const domain = yield* domainOf(customDomainId);
+      expect(domain.verifyBackoffLevel).toBe(1);
+      expect(
+        ((domain.nextVerifyAt?.getTime() ?? 0) - (domain.lastCheckedAt?.getTime() ?? 0)) / MINUTE,
+      ).toBe(2);
+      expect(yield* eventsOf(organizationId)).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  });
+
   it.live("a stopped Domain is checked again for the Project that proves a claim on it", () => {
     const { layer, published, ...queue } = boundaries();
     return Effect.gen(function* () {
@@ -385,9 +419,14 @@ describe("custom Domain verification checks (PostgreSQL and Redis)", () => {
       const { customDomainId, fqdn, organizationId: holderId } = yield* addedDomain();
       yield* checkUntilStopped(customDomainId);
       const claimantId = yield* insertProject();
+      queue.scheduled.length = 0;
+      queue.scheduledAt.length = 0;
       expect(yield* createCustomDomain({ fqdn, organizationId: claimantId })).toMatchObject({
         kind: "claim",
       });
+      // Making the claim checks nothing of the holder's Domain: another Project's claims
+      // must not use up the checks its holder has left.
+      expect(checksScheduledFor(queue, customDomainId)).toEqual([]);
       const claim = yield* db.query.organizationDomain.findFirst({
         where: { customDomainId, organizationId: claimantId },
       });

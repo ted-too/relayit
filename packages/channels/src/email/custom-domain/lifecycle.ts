@@ -633,7 +633,11 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
           );
         }
 
-        yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
+        // Only a Domain no check has run for: every check counts toward the ones its holder
+        // has left before they stop, and a claim must not spend another Project's.
+        if (existing.lastCheckedAt === null) {
+          yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
+        }
 
         return { customDomainId: existing.id, kind: "claim" as const };
       }

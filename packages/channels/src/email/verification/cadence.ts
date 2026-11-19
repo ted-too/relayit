@@ -88,8 +88,6 @@ export const computeNextDomainCheckAt = ({
   }
   const intervalMs = intervalAfter(unverifiedChecks);
   if (waitedMs + intervalMs > stopAfterMs) {
-    // Not counted further: a stopped Domain can be checked again without being refreshed,
-    // when a claim on it is made.
     return { nextCheckAt: null, unverifiedChecks };
   }
   return {

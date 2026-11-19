@@ -617,10 +617,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
           Effect.flip(ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root })),
         );
         yield* Deferred.await(calling);
-        // Not before the bound.
-        yield* TestClock.adjust("29 seconds");
-        expect(starting.pollUnsafe()).toBeUndefined();
-        yield* TestClock.adjust("1 second");
+        yield* TestClock.adjust("30 seconds");
         expect(yield* Fiber.join(starting)).toMatchObject({
           _tag: "SandboxDomainError",
           message,

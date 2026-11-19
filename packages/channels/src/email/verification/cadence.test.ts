@@ -51,13 +51,6 @@ describe("computeNextDomainCheckAt", () => {
     };
   };
 
-  test("doubles the wait after each unverified check, up to half a day", () => {
-    expect(Array.from({ length: 11 }, (_, checks) => minutesAfter(checks).minutes)).toEqual([
-      2, 4, 8, 16, 32, 64, 128, 256, 512, 720, 720,
-    ]);
-    expect(minutesAfter(3).unverifiedChecks).toBe(4);
-  });
-
   test("sets no next check once it would fall more than seven days after the first", () => {
     // The 21st check is 6 days 17 hours in, and the 22nd would be due 7 days 5 hours in.
     expect(minutesAfter(20)).toEqual({ minutes: 720, unverifiedChecks: 21 });

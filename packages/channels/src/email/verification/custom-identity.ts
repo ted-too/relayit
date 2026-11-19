@@ -43,7 +43,7 @@ export interface CustomDomainVerifyResult {
   readonly activeRecords: number;
   readonly customDomainId: string;
   readonly missingRecords: number;
-  /** Null when the Domain stayed unverified for so long that its checks have stopped. */
+  /** Null when the Domain stayed unverified until its checks stopped, or is gone. */
   readonly nextCheckAt: Date | null;
   readonly verificationStatus: DomainVerificationStatus;
 }
@@ -131,10 +131,7 @@ const verifyCustomDomainDnsRecords = (db: DatabaseExecutor, customDomainId: stri
  */
 export const verifyCustomDomainRegistration = (input: {
   readonly db: Database;
-  readonly domain: Pick<
-    CustomDomain,
-    "fqdn" | "id" | "lastCheckedAt" | "nextVerifyAt" | "verifyBackoffLevel"
-  >;
+  readonly domain: Pick<CustomDomain, "fqdn" | "id">;
   readonly registration: EmailDomainRegistration;
   readonly restart?: boolean;
 }) =>
@@ -188,17 +185,32 @@ export const verifyCustomDomainRegistration = (input: {
     });
 
     const now = new Date();
-    const cadence = computeNextDomainCheckAt({
-      from: now,
-      unverifiedChecks: input.restart ? 0 : input.domain.verifyBackoffLevel,
-      // SES can lag the DNS records: poll at the pace of whichever is further behind.
-      verificationStatus:
-        registrationStatus === "verified" ? verificationStatus : registrationStatus,
-    });
-
-    yield* input.db
+    const nextCheckAt = yield* input.db
       .transaction((tx) =>
         Effect.gen(function* () {
+          // Counted from the row as it is now, held: a refresh or a proven claim may have
+          // started the count again while SES and DNS were being asked, and a check that
+          // wrote what it read before would undo that, or tell a new holder of a stop.
+          const [current] = yield* tx
+            .select({
+              lastCheckedAt: customDomain.lastCheckedAt,
+              nextVerifyAt: customDomain.nextVerifyAt,
+              verifyBackoffLevel: customDomain.verifyBackoffLevel,
+            })
+            .from(customDomain)
+            .where(eq(customDomain.id, customDomainId))
+            .for("update");
+          // Removed while it was being checked: nothing to write, and no next check.
+          if (!current) {
+            return null;
+          }
+          const cadence = computeNextDomainCheckAt({
+            from: now,
+            unverifiedChecks: input.restart ? 0 : current.verifyBackoffLevel,
+            // SES can lag the DNS records: poll at the pace of whichever is further behind.
+            verificationStatus:
+              registrationStatus === "verified" ? verificationStatus : registrationStatus,
+          });
           const [checked] = yield* tx
             .update(customDomain)
             .set({
@@ -209,25 +221,25 @@ export const verifyCustomDomainRegistration = (input: {
             })
             .where(eq(customDomain.id, customDomainId))
             .returning(domainUpdatedColumns);
-          // Told once, by the check that stops them: one that finds them already stopped,
-          // as the check a new claim schedules does, changes nothing.
-          if (!checked || cadence.nextCheckAt !== null || domainChecksStopped(input.domain)) {
-            return;
-          }
-          const holders = yield* tx
-            .select({ organizationId: organizationDomain.organizationId })
-            .from(organizationDomain)
-            .where(
-              and(
-                eq(organizationDomain.customDomainId, customDomainId),
-                eq(organizationDomain.ownershipVerificationStatus, "verified"),
-              ),
+          // Told once, by the check that stops them: one that finds them already stopped
+          // changes nothing.
+          if (checked && cadence.nextCheckAt === null && !domainChecksStopped(current)) {
+            const holders = yield* tx
+              .select({ organizationId: organizationDomain.organizationId })
+              .from(organizationDomain)
+              .where(
+                and(
+                  eq(organizationDomain.customDomainId, customDomainId),
+                  eq(organizationDomain.ownershipVerificationStatus, "verified"),
+                ),
+              );
+            yield* Effect.forEach(
+              holders,
+              ({ organizationId }) => emitDomainUpdated(tx, organizationId, checked),
+              { discard: true },
             );
-          yield* Effect.forEach(
-            holders,
-            ({ organizationId }) => emitDomainUpdated(tx, organizationId, checked),
-            { discard: true },
-          );
+          }
+          return cadence.nextCheckAt;
         }),
       )
       .pipe(
@@ -246,7 +258,7 @@ export const verifyCustomDomainRegistration = (input: {
       activeRecords: dns.activeRecords,
       customDomainId,
       missingRecords: dns.missingRecords,
-      nextCheckAt: cadence.nextCheckAt,
+      nextCheckAt,
       verificationStatus,
     } satisfies CustomDomainVerifyResult;
   });
