@@ -3,7 +3,7 @@
  * must not overclaim is tested: a change that found no session has not been shown to
  * reach any.
  */
-export type Action = "grant" | "remove" | "ban" | "unban";
+type Action = "grant" | "remove" | "ban" | "unban";
 
 const DONE = {
   ban: "is banned",
