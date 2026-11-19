@@ -206,7 +206,7 @@ No service migrates the database as it starts. Each release has one migrate step
 bun run migrate.js
 ```
 
-It needs only `DATABASE_URL`. It exits 0 when the database has every migration the release carries, whether it had to apply them or not, and non-zero when it could not migrate, leaving the database as it was. If it cannot connect to the database it tries again every two seconds for two minutes, logging why, before it gives up; a migration that fails is not tried again. Two runs at once are safe: the second waits for the first, for up to five minutes. A run that cannot have a lock it needs in time, because another run or an open transaction holds it, exits non-zero saying so, with none of its migrations applied.
+It needs only `DATABASE_URL`. It exits 0 when the database has every migration the release carries, whether it had to apply them or not, and non-zero when it could not migrate, with none of its migrations applied. If it cannot connect to the database it tries again every two seconds for two minutes, logging why, before it gives up; a migration that fails is not tried again. Two runs at once are safe: the second waits for the first, for up to five minutes. A run that cannot have a lock it needs in time, because another run or an open transaction holds it, exits non-zero saying so.
 
 With Docker Compose this is the `migrate` service, and `docker compose pull && docker compose up -d` is the whole upgrade: it migrates, then replaces the api and the worker.
 
