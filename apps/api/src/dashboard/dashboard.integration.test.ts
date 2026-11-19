@@ -1097,18 +1097,45 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             ),
           ).toBeUndefined();
           // Another Project is not held up, by the same member or for the same name.
-          expect((yield* add(quiet, refused)).status).toBe(200);
+          const elsewhere = yield* add(quiet, refused);
+          expect(elsewhere.status).toBe(200);
 
-          // A refresh asks SES for the identity each time, and has its own count.
+          // A refresh that would have to finish a registration is an add to SES, and is
+          // counted as one: the Domain stays unregistered.
+          const domainId = (added.body as { id: string }).id;
+          yield* Effect.promise(() =>
+            db
+              .delete(emailDomainRegistration)
+              .where(eq(emailDomainRegistration.customDomainId, domainId)),
+          );
+          expect(
+            yield* call("POST", `/projects/${busy.slug}/domains/${domainId}/refresh`, {
+              as: owner,
+            }),
+          ).toMatchObject({ body: { _tag: "RateLimited" }, status: 429 });
+          expect(
+            yield* Effect.promise(() =>
+              db.query.emailDomainRegistration.findFirst({ where: { customDomainId: domainId } }),
+            ),
+          ).toBeUndefined();
+
+          // Any other refresh asks SES for the identity once, and has its own count.
           const refresh = call(
             "POST",
-            `/projects/${busy.slug}/domains/${(added.body as { id: string }).id}/refresh`,
+            `/projects/${quiet.slug}/domains/${(elsewhere.body as { id: string }).id}/refresh`,
             { as: owner },
           );
           for (let refreshed = 0; refreshed < 30; refreshed += 1) {
             expect((yield* refresh).status).toBe(200);
           }
-          expect(yield* refresh).toMatchObject({ body: { _tag: "RateLimited" }, status: 429 });
+          expect(yield* refresh).toEqual({
+            body: {
+              _tag: "RateLimited",
+              message: "This Project has refreshed Domains too often. Try again in a few minutes.",
+            },
+            cookies: [],
+            status: 429,
+          });
         }),
     );
 

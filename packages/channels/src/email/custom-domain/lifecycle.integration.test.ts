@@ -660,6 +660,43 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  it.live("a refused claim that was the Domain's last link takes the Domain with it", () => {
+    const ses = { down: false };
+    let holderLeaves: Effect.Effect<void> = Effect.void;
+    const { enqueued, identities, layer } = boundaries({
+      beforeKeyLoad: () => holderLeaves,
+      failCreateIdentity: () => ses.down,
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const services = yield* Effect.context<DB | Jobs>();
+      const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
+      const claimantId = yield* insertProject();
+      identities.set(fqdn, "selector1");
+
+      // The holder removes the Domain once the claim is written and before SES refuses it.
+      holderLeaves = Effect.suspend(() => {
+        holderLeaves = Effect.void;
+        return deleteCustomDomain({ customDomainId, organizationId: holderId });
+      }).pipe(Effect.provide(services), Effect.orDie);
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+      ).toMatchObject({ _tag: "CustomDomainIdentityConflict" });
+
+      // No Project is linked, so the Domain went with the claim. It never had an identity:
+      // nothing is recorded or queued for one, and the outside identity stays.
+      expect(yield* domainOf(fqdn)).toBeUndefined();
+      expect(
+        yield* db
+          .select({ id: removedDomainIdentity.id })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn)),
+      ).toEqual([]);
+      expect(enqueued).toEqual([]);
+      expect(identities.get(fqdn)).toBe("selector1");
+    }).pipe(Effect.provide(layer));
+  });
+
   it.live("a registration SES made the identity for before it failed is finished with it", () => {
     const ses = { down: false };
     const { createdIdentities, deletedIdentities, identities, layer } = boundaries({

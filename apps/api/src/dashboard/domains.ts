@@ -67,8 +67,11 @@ const lifecycleFailure =
  * and removing names in a loop would otherwise use it all: a Plan limits how many Domains
  * are held, not how often one is added. An add and the removal that makes room for the next
  * cost SES up to eight calls between them (create, get, MAIL FROM; then the delete job's
- * get, tenant lookups and delete, and its second look), a refresh one get, so these keep a
- * Project to about a fifth of the quota however it tries.
+ * get, tenant lookups and delete, and its second look), a refresh one get, and a refresh
+ * that has to finish a registration is counted as an add too. That is about 110 calls in
+ * the 600 seconds, under a fifth of the quota however a Project tries. A registration also
+ * asks SES once for each identity recorded for its FQDN's earlier removals, which this
+ * does not count: those are few unless SES was down for the removals' delete jobs.
  */
 const SES_CALL_LIMITS = { add: 10, refresh: 30 } as const;
 const SES_CALL_WINDOW_SECONDS = 10 * 60;
@@ -278,6 +281,8 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
           }
           yield* limitSesCalls("refresh", organizationId);
           if (!domain.registration) {
+            // A registration, which costs SES what an add does.
+            yield* limitSesCalls("add", organizationId);
             // A first add that failed partway left the Domain unregistered; adding it again,
             // as the holder, finishes the registration.
             yield* createCustomDomain({ fqdn: domain.fqdn, organizationId }).pipe(
