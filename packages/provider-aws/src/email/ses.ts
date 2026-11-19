@@ -164,12 +164,15 @@ export const makeSesEmailBackend = (config: SesConfig) =>
           return input.tenantName as string | undefined;
         }),
         Effect.catch((cause) =>
-          Effect.logWarning("Failed to ensure SES tenant; sending untenanted", {
-            cause,
-            identityFqdn: input.identityFqdn,
-            region: input.region,
-            tenantName: input.tenantName,
-          }).pipe(Effect.as(undefined)),
+          Effect.logWarning(
+            "Failed to ensure SES tenant; sending untenanted, on the account's reputation and past any pause of the Project's tenant. The SES IAM policy needs ses:CreateTenant, ses:GetTenant and ses:CreateTenantResourceAssociation (docs/aws-ses-iam-policy.json)",
+            {
+              cause,
+              identityFqdn: input.identityFqdn,
+              region: input.region,
+              tenantName: input.tenantName,
+            },
+          ).pipe(Effect.as(undefined)),
         ),
       );
     };

@@ -120,6 +120,52 @@ describe("docs/aws-ses-iam-policy.json", () => {
     ).toEqual([]);
   });
 
+  it("names resources no wider than the ones the backend uses", () => {
+    // Resources of each kind, Relayit's and ones named otherwise: a grant may cover only
+    // those its action is used on.
+    const resources = [
+      identity,
+      configurationSet,
+      tenant,
+      topic,
+      rule,
+      ses("configuration-set/other"),
+      ses("tenant/other/tn-0123456789abcdef"),
+      ses("template/other"),
+      "arn:aws:sns:eu-central-1:ACCOUNT_ID:other",
+      "arn:aws:events:eu-central-1:ACCOUNT_ID:rule/other",
+    ];
+    expect(
+      grants.flatMap((grant) =>
+        grant.resource === "*"
+          ? []
+          : resources
+              .filter(
+                (resource) =>
+                  covers(grant.resource, resource) &&
+                  !uses.some((use) => use.action === grant.action && use.resource === resource),
+              )
+              .map((resource) => ({ ...grant, covers: resource })),
+      ),
+    ).toEqual([]);
+  });
+
+  // Only the backend's clients are held to `AWS_OPERATIONS`, so nothing else may build one.
+  it("has no SES, SNS or EventBridge client but the backend's", () => {
+    const src = new URL("./", import.meta.url);
+    expect(
+      NodeFS.readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
+        (file) =>
+          file.endsWith(".ts") &&
+          !file.includes(".test.") &&
+          file !== "email/ses.ts" &&
+          /^import (?!type )[^;]*"@effect-aws\/client-(?:eventbridge|sesv2|sns)"/m.test(
+            NodeFS.readFileSync(new URL(file, src), "utf8"),
+          ),
+      ),
+    ).toEqual([]);
+  });
+
   // The types refuse a call to an operation that is not listed; this refuses a listed one
   // nothing calls any more, which the policy would go on granting.
   it("lists no operation the backend has stopped calling", () => {
