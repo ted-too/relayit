@@ -143,7 +143,7 @@ Don't change the role by editing the `user` table. A signed-in user's sessions a
 
 ### Banning a user
 
-The same command bans a user and lifts the ban, with the same ways to run it, the same output and the same exit codes:
+The same command bans a user and lifts the ban, with the same ways to run it and the same exit codes. Its output is the same too, except that `unban` finding no open session is the expected case and says only that the user can sign in again:
 
 ```bash
 docker compose exec api bun platform-admin.js ban someone@their-domain.com

@@ -245,7 +245,7 @@ describe("setPlatformAdmin (PostgreSQL, Redis)", () => {
           expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 0 });
           expect(yield* ban).toEqual({ banExpires: null, banned: false, banReason: null });
           yield* signIn;
-          // A user who was never banned keeps their session through it.
+          // Lifting a ban a user is not under keeps their session.
           expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 1 });
 
           expect(

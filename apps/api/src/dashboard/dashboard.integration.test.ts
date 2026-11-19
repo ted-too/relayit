@@ -842,6 +842,38 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           expect([path, response.status]).toEqual([path, 404]);
           expect(response.headers.getSetCookie()).toEqual([]);
         }
+        // A session opened by impersonating before it was switched off, made here as the
+        // endpoint made it, is refused on the dashboard's routes and its Project's operations.
+        const project = yield* createProject(target, `Impersonated ${run.slice(-8)}`);
+        expect(
+          (yield* call("GET", `/projects/${project.slug}/api-keys`, { as: target })).status,
+        ).toBe(200);
+        const { headers } = yield* Effect.promise(() =>
+          auth.api.impersonateUser({
+            body: { userId: targetId ?? "" },
+            headers: new Headers({ cookie: operator }),
+            returnHeaders: true,
+          }),
+        );
+        // Its session cookie alone, without the one that stops better-auth renewing it. The
+        // response first clears the admin's cookies, with empty values.
+        const impersonating = headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(";")[0] ?? "")
+          .find((cookie) => /session_token=./.test(cookie));
+        if (impersonating === undefined) {
+          return expect.fail("impersonating set no session cookie");
+        }
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toMatchObject(
+          { user: { email: `impersonated-${run}@example.test` } },
+        );
+        expect(
+          (yield* call("GET", `/projects/${project.slug}/api-keys`, { as: impersonating })).status,
+        ).toBe(401);
+        expect(
+          (yield* call("POST", "/projects", { as: impersonating, body: { name: "Impersonating" } }))
+            .status,
+        ).toBe(401);
         // The admin is still who they were.
         expect((yield* call("GET", "/auth/get-session", { as: operator })).body).toMatchObject({
           user: { email: `impersonator-${run}@example.test` },

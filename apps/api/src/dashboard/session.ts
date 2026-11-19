@@ -41,6 +41,12 @@ const isBanned = (row: { readonly banExpires: Date | null; readonly banned: bool
  *   here, since these handlers call `auth.api` directly, which skips it. The cookie is
  *   `SameSite=Lax`, so a browser leaves it off another site's POST anyway; this refuses one
  *   that names another origin, or none, even so.
+ * - A session opened by impersonating is refused. Impersonation is switched off
+ *   (`disabledPaths` in `createAuth`), so only a session from before that can be one, and
+ *   it renews like any other, so it would not end by itself.
+ *
+ * It goes by the session's copy of the user, so a ban written straight to the database
+ * does not reach it (#147); `ProjectAccess` and `PlatformAdmin` read the row.
  */
 const signedInUser = (auth: ApiAuth["Service"]["auth"], appOrigin: string) =>
   Effect.gen(function* () {
@@ -60,7 +66,7 @@ const signedInUser = (auth: ApiAuth["Service"]["auth"], appOrigin: string) =>
     const session = yield* Effect.promise(() =>
       auth.api.getSession({ headers: new Headers(request.headers) }),
     );
-    if (!session) {
+    if (!session || session.session.impersonatedBy) {
       return yield* unauthenticated;
     }
     return session.user;
