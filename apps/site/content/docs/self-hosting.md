@@ -67,7 +67,7 @@ docker compose up -d
 docker compose ps
 ```
 
-`up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why.
+`up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why. Every service but `migrate` restarts when it exits and when the host reboots, until you `docker compose stop` or `down` it.
 
 ### A Postgres volume from an older Compose file
 
@@ -188,7 +188,7 @@ No service migrates the database as it starts. Each release has one migrate step
 bun run migrate.js
 ```
 
-It needs only `DATABASE_URL`. It exits 0 when the database has every migration the release carries, whether it had to apply them or not, and non-zero when it could not migrate, leaving the database as it was. Two runs at once are safe: the second waits for the first.
+It needs only `DATABASE_URL`. It exits 0 when the database has every migration the release carries, whether it had to apply them or not, and non-zero when it could not migrate, leaving the database as it was. If it cannot connect to the database it tries again every two seconds for two minutes, logging why, before it gives up; a migration that fails is not tried again. Two runs at once are safe: the second waits for the first.
 
 With Docker Compose this is the `migrate` service, and `docker compose pull && docker compose up -d` is the whole upgrade: it migrates, then replaces the api and the worker.
 

@@ -6,6 +6,7 @@
  */
 import * as NodePath from "node:path";
 import { migrateDatabase } from "@repo/persistence/db/migrate";
+import { Effect } from "effect";
 import { ROOT } from "./root-env";
 
 const RUN_LABEL = "relayit.test-run";
@@ -134,7 +135,7 @@ try {
     process.env.TEST_DATABASE_URL && process.env.TEST_REDIS_URL
       ? { databaseUrl: process.env.TEST_DATABASE_URL, redisUrl: process.env.TEST_REDIS_URL }
       : await startServices();
-  await migrateDatabase(services.databaseUrl);
+  await Effect.runPromise(migrateDatabase({ databaseUrl: services.databaseUrl, waitFor: 0 }));
 
   const env = {
     ...process.env,

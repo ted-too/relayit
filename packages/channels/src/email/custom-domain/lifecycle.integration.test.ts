@@ -1954,7 +1954,11 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       within: <A, E>(use: Effect.Effect<A, E>) =>
         Effect.acquireUseRelease(
           admin(`create database "${name}"`),
-          () => Effect.promise(() => migrateDatabase(url.href)).pipe(Effect.andThen(use)),
+          () =>
+            migrateDatabase({ databaseUrl: url.href, waitFor: 0 }).pipe(
+              Effect.orDie,
+              Effect.andThen(use),
+            ),
           () => admin(`drop database "${name}" with (force)`),
         ),
     };
