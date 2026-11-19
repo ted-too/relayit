@@ -68,20 +68,33 @@ describe("the suppression lookup", () => {
         })}`,
       );
 
-      for (const plan of [strip, suppress]) {
+      // By App Environment alone, as removing one does through the foreign key. No index is on
+      // that column by itself: the unique index leads with it. Asked of a small App
+      // Environment, since reading most of the table is rightly a scan with any index.
+      const small = yield* seedAppEnvironment(20);
+      const byAppEnvironment = yield* db.execute<{ "QUERY PLAN": string }>(
+        sql`explain ${db
+          .select({ id: contact.id })
+          .from(contact)
+          .where(
+            sql`${contact.organizationAppEnvironmentId} = ${small.organizationAppEnvironmentId}`,
+          )}`,
+      );
+
+      for (const plan of [strip, suppress, byAppEnvironment]) {
         const text = plan.rows.map((row) => row["QUERY PLAN"]).join("\n");
-        expect(text).toContain("contact_app_env_lower_email_idx");
+        expect(text).toContain("contact_app_env_email_unique_idx");
         expect(text).not.toContain("Seq Scan");
       }
     }).pipe(Effect.provide(services)),
   );
 
-  it.live("strips a suppressed Contact whose stored email is not lower-case", () =>
+  it.live("strips a suppressed Contact named in another case, and stores none in one", () =>
     Effect.gen(function* () {
       const db = yield* DB;
       const { organizationAppEnvironmentId, organizationId } = yield* seedAppEnvironment(0);
       yield* db.insert(contact).values({
-        email: "Bounced@Example.com",
+        email: "bounced@example.com",
         organizationAppEnvironmentId,
         suppressionReason: "hard_bounce",
         suppressionSeverity: "all",
@@ -91,11 +104,19 @@ describe("the suppression lookup", () => {
         organizationAppEnvironmentId,
         organizationId,
         purpose: "transactional",
-        recipients: [{ email: "bounced@example.com" }, { email: "fine@example.com" }],
+        recipients: [{ email: "Bounced@Example.COM" }, { email: "fine@example.com" }],
       });
 
-      expect(stripped).toEqual([{ email: "bounced@example.com" }]);
+      expect(stripped).toEqual([{ email: "Bounced@Example.COM" }]);
       expect(kept).toEqual([{ email: "fine@example.com" }]);
+
+      // The lookup compares the column as stored, so a Contact stored in any other case
+      // would be one its Suppression is never found on. The database refuses it.
+      const refused = yield* db
+        .insert(contact)
+        .values({ email: "Bounced@Example.com", organizationAppEnvironmentId })
+        .pipe(Effect.flip);
+      expect(String(refused.cause)).toContain("contact_email_normalized_check");
     }).pipe(Effect.provide(services)),
   );
 });

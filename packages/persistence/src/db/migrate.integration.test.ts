@@ -1,4 +1,5 @@
 import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { describe, expect, it, test } from "@effect/vitest";
 import { Effect, Fiber, Schedule } from "effect";
@@ -20,11 +21,22 @@ const query = (databaseUrl: string, text: string) =>
     const client = new Client({ connectionString: databaseUrl });
     await client.connect();
     try {
-      return (await client.query<Record<string, string>>(text)).rows;
+      return (await client.query<Record<string, unknown>>(text)).rows;
     } finally {
       await client.end();
     }
   });
+
+/** A Contact's columns as the test reads them, where a row sets nothing. */
+const unset = {
+  deleted: null,
+  first_name: null,
+  properties: null,
+  reason: null,
+  severity: null,
+  suppressed: null,
+  unsubscribed: false,
+};
 
 /** A database of this test's own on the run's Postgres: the shared one is already migrated. */
 const emptyDatabase = (serverUrl: string) =>
@@ -130,6 +142,267 @@ describe("the migrate step and the apps' check for it", () => {
       yield* Effect.promise(() => holder.query("select pg_advisory_unlock(872014331, 1)"));
       yield* migrateDatabase({ databaseUrl, waitFor: 0 });
       expect(yield* applied(databaseUrl)).toEqual(carried);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("the step normalizes stored Contact emails and merges the ones that then collide", () =>
+    Effect.gen(function* () {
+      const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+      // The database as the release before the constraint left it: every migration but
+      // that one and any after it, applied by the step from a folder holding only those.
+      const constraint = carried.findIndex((name) =>
+        NodeFS.readFileSync(
+          NodePath.join(import.meta.dirname, "../../drizzle", name, "migration.sql"),
+          "utf8",
+        ).includes("contact_email_normalized_check"),
+      );
+      expect(constraint).toBeGreaterThan(0);
+      const before = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const folder = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "migrate-test-"));
+          for (const name of carried.slice(0, constraint)) {
+            NodeFS.cpSync(
+              NodePath.join(import.meta.dirname, "../../drizzle", name),
+              NodePath.join(folder, name),
+              { recursive: true },
+            );
+          }
+          return folder;
+        }),
+        (folder) => Effect.sync(() => NodeFS.rmSync(folder, { force: true, recursive: true })),
+      );
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const previous = process.env.DRIZZLE_MIGRATIONS_FOLDER;
+          process.env.DRIZZLE_MIGRATIONS_FOLDER = before;
+          return previous;
+        }),
+        () => migrateDatabase({ databaseUrl, waitFor: 0 }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) {
+              delete process.env.DRIZZLE_MIGRATIONS_FOLDER;
+            } else {
+              process.env.DRIZZLE_MIGRATIONS_FOLDER = previous;
+            }
+          }),
+      );
+      expect(yield* applied(databaseUrl)).toEqual(carried.slice(0, constraint));
+
+      yield* query(
+        databaseUrl,
+        `insert into organization (id, name, slug, created_at, updated_at)
+            values ('orgn_a', 'A', 'a', now(), now()), ('orgn_b', 'B', 'b', now(), now());
+          insert into organization_app_environment (id, organization_id, updated_at)
+            values ('oenv_a', 'orgn_a', now()), ('oenv_b', 'orgn_b', now());
+          insert into topic (id, organization_id, name, updated_at) values
+            ('topc_news', 'orgn_a', 'News', now()), ('topc_offers', 'orgn_a', 'Offers', now());
+          insert into segment (id, organization_id, name, updated_at) values
+            ('segm_all', 'orgn_a', 'All', now()), ('segm_vip', 'orgn_a', 'VIP', now());
+          insert into contact
+            (id, organization_app_environment_id, email, first_name, properties, unsubscribed,
+             suppression_severity, suppression_reason, suppressed_at, deleted_at, created_at,
+             updated_at)
+          values
+            -- Alone in another case with whitespace around it, as from a file, suppressed.
+            ('cont_alone', 'oenv_a', E' Alone@Example.com\\r\\n', null, '{}', false,
+             'all', 'hard_bounce', '2026-01-01', null, '2026-01-01', now()),
+            -- A pair: the lower-case row sends have been finding, and a stricter older one.
+            ('cont_pair_lower', 'oenv_a', 'pair@example.com', null, '{"plan":"pro","a":"lower"}',
+             false, 'marketing', 'complaint', '2026-03-01', null, '2026-02-01', now()),
+            ('cont_pair_mixed', 'oenv_a', 'Pair@Example.com', 'Pat', '{"a":"mixed","b":"mixed"}',
+             true, 'all', 'hard_bounce', '2026-01-15', '2026-01-20', '2026-01-01', now()),
+            -- Three with no lower-case row among them; only the newest is suppressed.
+            ('cont_three_a', 'oenv_a', 'Three@example.com', null, null, false,
+             null, null, null, null, '2026-01-01', now()),
+            ('cont_three_b', 'oenv_a', 'THREE@example.com', null, null, false,
+             null, null, null, null, '2026-01-02', now()),
+            ('cont_three_c', 'oenv_a', 'three@Example.com', null, null, false,
+             'marketing', 'manual', '2026-01-03', null, '2026-01-03', now()),
+            -- Every row of the address deleted: it stays deleted.
+            ('cont_gone', 'oenv_a', 'Gone@example.com', null, null, false,
+             null, null, null, '2026-01-05', '2026-01-01', now()),
+            -- The same address in another Project's App Environment is another Contact.
+            ('cont_other', 'oenv_b', 'pair@example.com', null, null, false,
+             null, null, null, null, '2026-01-01', now()),
+            ('cont_untouched', 'oenv_a', 'plain@example.com', 'Plain', '{"k":"v"}', false,
+             null, null, null, null, '2026-01-01', '2026-01-01');
+          insert into contact_topic_unsubscribe (id, contact_id, topic_id) values
+            ('ctun_1', 'cont_pair_lower', 'topc_news'),
+            ('ctun_2', 'cont_pair_mixed', 'topc_news'),
+            ('ctun_3', 'cont_pair_mixed', 'topc_offers'),
+            ('ctun_4', 'cont_three_b', 'topc_news'),
+            ('ctun_5', 'cont_three_c', 'topc_news');
+          insert into segment_member (id, segment_id, contact_id) values
+            ('sgmb_1', 'segm_all', 'cont_pair_lower'),
+            ('sgmb_2', 'segm_all', 'cont_pair_mixed'),
+            ('sgmb_3', 'segm_vip', 'cont_pair_mixed'),
+            ('sgmb_4', 'segm_vip', 'cont_three_b');`,
+      );
+
+      // The previous release unsubscribing a Contact that is about to be merged away, not
+      // yet committed when the step starts.
+      const unsubscribing = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const client = new Client({ connectionString: databaseUrl });
+          await client.connect();
+          await client.query("begin");
+          await client.query(
+            `insert into contact_topic_unsubscribe (id, contact_id, topic_id)
+              values ('ctun_late', 'cont_three_c', 'topc_offers')`,
+          );
+          return client;
+        }),
+        (client) => Effect.promise(() => client.end()),
+      );
+
+      // Twice at once, as two releases' steps would: one normalizes, the other finds it done.
+      const steps = yield* Effect.forkChild(
+        Effect.all(
+          [
+            migrateDatabase({ databaseUrl, waitFor: 0 }),
+            migrateDatabase({ databaseUrl, waitFor: 0 }),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
+      // Both steps are waiting, one behind the unsubscribe and the other behind the first, so
+      // the unsubscribe commits while a step is under way. That it is kept is asserted below.
+      const waiting = yield* query(
+        databaseUrl,
+        `select pid from pg_stat_activity
+          where datname = current_database() and wait_event_type = 'Lock'`,
+      ).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 2,
+          schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
+        }),
+      );
+      // Not reached in time would mean the commit below came first and nothing was raced.
+      expect(waiting).toHaveLength(2);
+      expect(
+        yield* query(databaseUrl, "select email from contact where id = 'cont_alone'"),
+      ).toEqual([{ email: " Alone@Example.com\r\n" }]);
+      yield* Effect.promise(() => unsubscribing.query("commit"));
+      yield* Fiber.join(steps);
+      expect(yield* applied(databaseUrl)).toEqual(carried);
+
+      expect(
+        yield* query(
+          databaseUrl,
+          `select id, organization_app_environment_id as env, email, first_name, properties,
+              unsubscribed, suppression_severity as severity, suppression_reason as reason,
+              to_char(suppressed_at, 'YYYY-MM-DD') as suppressed,
+              to_char(deleted_at, 'YYYY-MM-DD') as deleted,
+              to_char(created_at, 'YYYY-MM-DD') as created
+            from contact order by id`,
+        ),
+      ).toEqual([
+        {
+          ...unset,
+          created: "2026-01-01",
+          email: "alone@example.com",
+          env: "oenv_a",
+          id: "cont_alone",
+          properties: {},
+          reason: "hard_bounce",
+          severity: "all",
+          suppressed: "2026-01-01",
+        },
+        {
+          ...unset,
+          created: "2026-01-01",
+          deleted: "2026-01-05",
+          email: "gone@example.com",
+          env: "oenv_a",
+          id: "cont_gone",
+        },
+        {
+          ...unset,
+          created: "2026-01-01",
+          email: "pair@example.com",
+          env: "oenv_b",
+          id: "cont_other",
+        },
+        {
+          // The stricter Suppression and the opt-out of the row that went, on the row that
+          // was live, which stays live.
+          created: "2026-01-01",
+          deleted: null,
+          email: "pair@example.com",
+          env: "oenv_a",
+          first_name: "Pat",
+          id: "cont_pair_lower",
+          properties: { a: "lower", b: "mixed", plan: "pro" },
+          reason: "hard_bounce",
+          severity: "all",
+          suppressed: "2026-01-15",
+          unsubscribed: true,
+        },
+        {
+          ...unset,
+          created: "2026-01-01",
+          email: "three@example.com",
+          env: "oenv_a",
+          id: "cont_three_a",
+          reason: "manual",
+          severity: "marketing",
+          suppressed: "2026-01-03",
+        },
+        {
+          ...unset,
+          created: "2026-01-01",
+          email: "plain@example.com",
+          env: "oenv_a",
+          first_name: "Plain",
+          id: "cont_untouched",
+          properties: { k: "v" },
+        },
+      ]);
+      // A Contact the step had no reason to touch is not written.
+      expect(
+        yield* query(
+          databaseUrl,
+          "select to_char(updated_at, 'YYYY-MM-DD') as updated from contact where id = 'cont_untouched'",
+        ),
+      ).toEqual([{ updated: "2026-01-01" }]);
+      expect(
+        yield* query(
+          databaseUrl,
+          "select contact_id, topic_id from contact_topic_unsubscribe order by 1, 2",
+        ),
+      ).toEqual([
+        { contact_id: "cont_pair_lower", topic_id: "topc_news" },
+        { contact_id: "cont_pair_lower", topic_id: "topc_offers" },
+        { contact_id: "cont_three_a", topic_id: "topc_news" },
+        // Made while the step waited, on a Contact the step then removed.
+        { contact_id: "cont_three_a", topic_id: "topc_offers" },
+      ]);
+
+      // What the constraint is for: an address is stored one way only.
+      const refused = yield* Effect.tryPromise(async () => {
+        const client = new Client({ connectionString: databaseUrl });
+        await client.connect();
+        try {
+          await client.query(
+            `insert into contact (id, organization_app_environment_id, email, updated_at)
+              values ('cont_spaced', 'oenv_a', E'spaced@example.com\\r', now())`,
+          );
+        } finally {
+          await client.end();
+        }
+      }).pipe(Effect.flip);
+      expect(refused.cause).toMatchObject({ constraint: "contact_email_normalized_check" });
+      expect(
+        yield* query(
+          databaseUrl,
+          "select contact_id, segment_id from segment_member order by 1, 2",
+        ),
+      ).toEqual([
+        { contact_id: "cont_pair_lower", segment_id: "segm_all" },
+        { contact_id: "cont_pair_lower", segment_id: "segm_vip" },
+        { contact_id: "cont_three_a", segment_id: "segm_vip" },
+      ]);
     }).pipe(Effect.scoped),
   );
 

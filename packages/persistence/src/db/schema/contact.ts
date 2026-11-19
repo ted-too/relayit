@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgEnum,
@@ -76,16 +77,19 @@ export const contact = pgTable(
       .notNull(),
   },
   (t) => [
-    index("contact_organization_app_environment_idx").on(t.organizationAppEnvironmentId),
+    // The one index on the address. It also serves a lookup by App Environment alone, as its
+    // leading column; none is on the email alone, which no query asks for across App
+    // Environments and which the planner would otherwise pick for a single address.
     uniqueIndex("contact_app_env_email_unique_idx").on(t.organizationAppEnvironmentId, t.email),
-    // What the suppression lookups compare: they lower the column because not every stored
-    // email is lower-case, so the unique index on the plain column cannot serve them. Not
-    // unique, since two rows that differ only in case may exist.
-    index("contact_app_env_lower_email_idx").on(
-      t.organizationAppEnvironmentId,
-      sql`lower(${t.email})`,
+    // Every lookup compares the column as stored, and the unique index above is the only
+    // thing keeping one Contact per address, so a stored email that differs from a send's
+    // normalized one in case or in whitespace around it would hide its Suppression. Rows from
+    // before this are normalized by the migrate step (db/migrate.ts) before the constraint is
+    // added; the step runs while no constraint of this name exists, so keep the name.
+    check(
+      "contact_email_normalized_check",
+      sql`${t.email} = lower(${t.email}) and ${t.email} !~ '^\\s|\\s$'`,
     ),
-    index("contact_email_idx").on(t.email),
     index("contact_properties_gin_idx").using("gin", t.properties),
     index("contact_unsubscribed_idx").on(t.unsubscribed),
     index("contact_suppression_reason_idx").on(t.suppressionReason),

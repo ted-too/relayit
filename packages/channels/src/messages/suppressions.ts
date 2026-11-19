@@ -1,6 +1,6 @@
 import type { DatabaseExecutor } from "@repo/persistence/db/effect";
 import { contact } from "@repo/persistence/db/schema";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { type MessageContactInput, normalizeContactEmail } from "./accept/contacts";
 
@@ -14,9 +14,8 @@ export class MessageSuppressionLookupError extends Data.TaggedError(
 
 /**
  * The Contacts of one App Environment whose address is among `emails` (normalized). The column
- * is lowered because not every stored email is lower-case, and a Suppression on such a Contact
- * must still be found; `contact_app_env_lower_email_idx` is on this expression, so write the
- * comparison nowhere else.
+ * is compared as stored: `contact_email_normalized_check` keeps every stored email normalized, so
+ * a normalized address finds its Contact, through the unique index.
  */
 export const contactsAmong = (input: {
   readonly emails: readonly string[];
@@ -24,7 +23,7 @@ export const contactsAmong = (input: {
 }) =>
   and(
     eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
-    inArray(sql`lower(${contact.email})`, [...input.emails]),
+    inArray(contact.email, [...input.emails]),
   );
 
 /**
