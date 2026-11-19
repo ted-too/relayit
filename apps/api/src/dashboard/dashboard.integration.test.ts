@@ -169,8 +169,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   );
 
   /**
-   * The api as an image runs it, with `EMAIL_WORKSPACE_EDITING` unset, beside a builder that
-   * only counts what reaches it.
+   * The api with `EMAIL_WORKSPACE_EDITING` empty, as `docker-compose.yaml` passes it when
+   * the operator sets nothing, beside a builder that only counts what reaches it.
    */
   let builderCalls = 0;
   const frozenServer = Layer.unwrap(

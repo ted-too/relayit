@@ -187,21 +187,23 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
             Open in editor
           </Button>
         ) : null}
-        <Button
-          render={
-            <Link
-              params={{ orgSlug }}
-              search={{
-                templateId: template.id,
-                intent: "create-new",
-              }}
-              to="/$orgSlug/automations/templates/workspace"
-            />
-          }
-        >
-          <RiAddLine />
-          Create new Entry
-        </Button>
+        {editing ? (
+          <Button
+            render={
+              <Link
+                params={{ orgSlug }}
+                search={{
+                  templateId: template.id,
+                  intent: "create-new",
+                }}
+                to="/$orgSlug/automations/templates/workspace"
+              />
+            }
+          >
+            <RiAddLine />
+            Create new Entry
+          </Button>
+        ) : null}
       </div>
 
       <EntryPickerDialog
