@@ -6,7 +6,7 @@
  * another Project reaches nothing.
  */
 import { describe, expect, layer, test } from "@effect/vitest";
-import { setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
+import { setBanned, setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
@@ -748,6 +748,146 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             ),
           ).toMatchObject({ _tag: "PlatformAdminUserNotFound" });
         }),
+    );
+
+    it.effect(
+      "refuses a banned user's open session on a Project's operations, until the ban is lifted",
+      () =>
+        Effect.gen(function* () {
+          const { auth } = yield* ApiAuth;
+          const email = `banned-${run}@example.test`;
+          const signIn = call("POST", "/auth/sign-in/email", {
+            body: { email, password: "a-long-password" },
+          });
+          const owner = yield* signUp("banned");
+          const project = yield* createProject(owner, `Banned ${run.slice(-8)}`);
+          const keys = (as: string) => call("GET", `/projects/${project.slug}/api-keys`, { as });
+          expect((yield* keys(owner)).status).toBe(200);
+
+          // The operator's ban, as `bun platform-admin.js ban` makes it: the session ends.
+          expect(yield* setBanned(auth, { banned: true, email })).toEqual({ sessions: 1 });
+          expect((yield* keys(owner)).status).toBe(401);
+          expect(
+            (yield* call("POST", "/projects", { as: owner, body: { name: "While banned" } }))
+              .status,
+          ).toBe(401);
+          // better-auth's own endpoints go by the session too, and it is gone.
+          expect((yield* call("GET", "/auth/get-session", { as: owner })).body).toBeNull();
+          expect(yield* signIn).toMatchObject({ body: { code: "BANNED_USER" }, status: 403 });
+
+          expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 0 });
+          const signedIn = yield* signIn;
+          expect(signedIn.status).toBe(200);
+          const again = signedIn.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
+          expect((yield* keys(again)).status).toBe(200);
+
+          // A ban written straight to the database leaves the session open; the Project's
+          // operations refuse it by the row, until the ban lapses.
+          const setBan = (banned: boolean, banExpires: Date | null) =>
+            Effect.promise(async () => {
+              const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+              await db.update(user).set({ banExpires, banned }).where(eq(user.email, email));
+              await db.$client.end();
+            });
+          const refused = { body: { message: "This account is banned." }, status: 403 };
+          yield* setBan(true, null);
+          expect(yield* keys(again)).toMatchObject(refused);
+          expect(
+            yield* call("POST", `/projects/${project.slug}/api-keys`, {
+              as: again,
+              body: { name: "While banned" },
+            }),
+          ).toMatchObject(refused);
+          yield* setBan(true, new Date(Date.now() + 60 * 60 * 1000));
+          expect(yield* keys(again)).toMatchObject(refused);
+          yield* setBan(true, new Date(Date.now() - 1000));
+          expect((yield* keys(again)).status).toBe(200);
+          yield* setBan(true, null);
+          expect(yield* keys(again)).toMatchObject(refused);
+          // Lifting it with the command reaches the open session.
+          expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 1 });
+          expect((yield* keys(again)).status).toBe(200);
+        }),
+    );
+
+    it.effect("answers 404 to impersonation, for a platform admin too", () =>
+      Effect.gen(function* () {
+        const operator = yield* signUpAdmin("impersonator");
+        const target = yield* signUp("impersonated");
+        const { auth } = yield* ApiAuth;
+        const targetId = (yield* Effect.promise(() =>
+          auth.api.getSession({ headers: new Headers({ cookie: target }) }),
+        ))?.user.id;
+        expect(targetId).toBeDefined();
+        // The admin endpoints beside it answer this admin; these two are not there, however
+        // the path is spelt. better-auth answers them itself, in plain text.
+        expect((yield* call("GET", "/auth/admin/list-users", { as: operator })).status).toBe(200);
+        const origin = yield* Origin;
+        for (const path of [
+          "/auth/admin/impersonate-user",
+          "/auth/admin/impersonate-user/",
+          "/auth/admin/impersonate%2Duser",
+          "/auth/admin//impersonate-user",
+          "/auth//admin/impersonate-user",
+          "/auth/admin/Impersonate-User",
+          "/auth/admin/stop-impersonating",
+        ]) {
+          const response = yield* Effect.promise(() =>
+            fetch(`${origin}${path}`, {
+              body: JSON.stringify({ userId: targetId }),
+              headers: { "content-type": "application/json", cookie: operator, origin: APP },
+              method: "POST",
+            }),
+          );
+          expect([path, response.status]).toEqual([path, 404]);
+          expect(response.headers.getSetCookie()).toEqual([]);
+        }
+        // A session opened by impersonating before it was switched off, made here as the
+        // endpoint made it, is refused on the dashboard's routes and its Project's operations.
+        const project = yield* createProject(target, `Impersonated ${run.slice(-8)}`);
+        expect(
+          (yield* call("GET", `/projects/${project.slug}/api-keys`, { as: target })).status,
+        ).toBe(200);
+        const { headers } = yield* Effect.promise(() =>
+          auth.api.impersonateUser({
+            body: { userId: targetId ?? "" },
+            headers: new Headers({ cookie: operator }),
+            returnHeaders: true,
+          }),
+        );
+        // Its session cookie alone, without the one that stops better-auth renewing it. The
+        // response first clears the admin's cookies, with empty values.
+        const impersonating = headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(";")[0] ?? "")
+          .find((cookie) => /session_token=./.test(cookie));
+        if (impersonating === undefined) {
+          return expect.fail("impersonating set no session cookie");
+        }
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toMatchObject(
+          { user: { email: `impersonated-${run}@example.test` } },
+        );
+        expect(
+          (yield* call("GET", `/projects/${project.slug}/api-keys`, { as: impersonating })).status,
+        ).toBe(401);
+        expect(
+          (yield* call("POST", "/projects", { as: impersonating, body: { name: "Impersonating" } }))
+            .status,
+        ).toBe(401);
+        // What ends it everywhere, better-auth's own endpoints included: a ban of the
+        // impersonated user, lifted afterwards.
+        const impersonated = `impersonated-${run}@example.test`;
+        expect(yield* setBanned(auth, { banned: true, email: impersonated })).toEqual({
+          sessions: 2,
+        });
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toBeNull();
+        yield* setBanned(auth, { banned: false, email: impersonated });
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toBeNull();
+        // The admin is still who they were.
+        expect((yield* call("GET", "/auth/get-session", { as: operator })).body).toMatchObject({
+          user: { email: `impersonator-${run}@example.test` },
+        });
+      }),
     );
 
     it.effect("refuses a Sandbox Domain's root, and any name under it, as a Project's Domain", () =>

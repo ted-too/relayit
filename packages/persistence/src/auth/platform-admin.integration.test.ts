@@ -1,12 +1,12 @@
 /**
- * `setPlatformAdmin` against a real Postgres and Redis: it reports the sessions it
- * confirmed, and does not report success when it could not reach them.
+ * `setPlatformAdmin` and `setBanned` against a real Postgres and Redis: each reports the
+ * sessions it confirmed, and does not report success when it could not reach them.
  */
 import { describe, expect, it, test } from "@effect/vitest";
 import { RedisClient } from "bun";
 import { Effect } from "effect";
 import { createPromiseDb } from "../db/promise";
-import { hasStoredSessions, setPlatformAdmin } from "./platform-admin";
+import { hasStoredSessions, setBanned, setPlatformAdmin } from "./platform-admin";
 import { createAuth } from "./server";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
@@ -53,7 +53,7 @@ describe("setPlatformAdmin (PostgreSQL, Redis)", () => {
             yield* Effect.flip(setPlatformAdmin(unreachable, { admin: true, email })),
           ).toMatchObject({
             _tag: "PlatformAdminStoreError",
-            roleChanged: false,
+            rowChanged: false,
             store: "sessions",
           });
           expect(yield* role).toBe("user");
@@ -153,7 +153,7 @@ describe("setPlatformAdmin (PostgreSQL, Redis)", () => {
           );
           const unconfirmed = {
             _tag: "PlatformAdminStoreError",
-            roleChanged: true,
+            rowChanged: true,
             store: "sessions",
           };
           expect(
@@ -166,6 +166,93 @@ describe("setPlatformAdmin (PostgreSQL, Redis)", () => {
           ).toMatchObject(unconfirmed);
           expect(yield* role).toBe("user");
           expect(yield* setPlatformAdmin(auth, { admin: false, email })).toEqual({ sessions: 1 });
+        }),
+      ({ db, redis }) =>
+        Effect.promise(async () => {
+          redis.close();
+          await db.$client.end();
+        }),
+    ),
+  );
+  it.live("a ban ends the user's sessions and refuses new ones until it is lifted", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => ({
+        db: createPromiseDb({ databaseUrl: testDatabaseUrl }),
+        redis: new RedisClient(testRedisUrl),
+      })),
+      ({ db, redis }) =>
+        Effect.gen(function* () {
+          const run = Bun.randomUUIDv7();
+          const email = `banned-${run}@example.test`;
+          const config = { db, rateLimit: false, redisKeyPrefix: `test:${run}:` };
+          const auth = createAuth({ ...config, redis });
+          const ban = Effect.promise(() =>
+            db.query.user.findFirst({
+              columns: { banExpires: true, banned: true, banReason: true },
+              where: { email },
+            }),
+          );
+          const signIn = Effect.tryPromise(() =>
+            auth.api.signInEmail({ body: { email, password: "a-long-password" } }),
+          );
+          const signedUp = yield* Effect.promise(() =>
+            auth.api.signUpEmail({ body: { email, name: "Banned", password: "a-long-password" } }),
+          );
+          yield* signIn;
+
+          // Redis unreachable: nothing is banned.
+          const unreachable = createAuth({
+            ...config,
+            redis: { send: () => Promise.reject(new Error("connection refused")) },
+          });
+          expect(yield* Effect.flip(setBanned(unreachable, { banned: true, email }))).toMatchObject(
+            { _tag: "PlatformAdminStoreError", rowChanged: false, store: "sessions" },
+          );
+          expect(yield* ban).toMatchObject({ banned: false });
+
+          // A Redis that refuses every write leaves both sessions open, and it says so.
+          const readOnly = createAuth({
+            ...config,
+            redis: {
+              send: (command, args) =>
+                command === "GET"
+                  ? redis.send(command, args)
+                  : Promise.reject(new Error("READONLY")),
+            },
+          });
+          expect(yield* Effect.flip(setBanned(readOnly, { banned: true, email }))).toMatchObject({
+            _tag: "PlatformAdminSessionsStale",
+            stale: 2,
+          });
+          expect(yield* ban).toMatchObject({ banned: true });
+
+          // Running it again ends them, and no new session is made while the ban stands.
+          expect(yield* setBanned(auth, { banned: true, email })).toEqual({ sessions: 2 });
+          expect(yield* ban).toEqual({
+            banExpires: null,
+            banned: true,
+            banReason: "Banned by an operator",
+          });
+          const { internalAdapter } = yield* Effect.promise(() => auth.$context);
+          expect(
+            yield* Effect.promise(() => internalAdapter.findSession(signedUp.token ?? "")),
+          ).toBeNull();
+          expect(yield* Effect.flip(signIn)).toMatchObject({
+            cause: { body: { code: "BANNED_USER" } },
+          });
+          expect(yield* setBanned(auth, { banned: true, email })).toEqual({ sessions: 0 });
+
+          expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 0 });
+          expect(yield* ban).toEqual({ banExpires: null, banned: false, banReason: null });
+          yield* signIn;
+          // Lifting a ban a user is not under keeps their session.
+          expect(yield* setBanned(auth, { banned: false, email })).toEqual({ sessions: 1 });
+
+          expect(
+            yield* Effect.flip(
+              setBanned(auth, { banned: true, email: `nobody-${run}@example.test` }),
+            ),
+          ).toMatchObject({ _tag: "PlatformAdminUserNotFound" });
         }),
       ({ db, redis }) =>
         Effect.promise(async () => {

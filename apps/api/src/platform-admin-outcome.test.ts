@@ -14,6 +14,37 @@ describe("platform-admin.js's outcome", () => {
     ]);
   });
 
+  it("says a ban signed the user out only when it ended a session, and lifting one needs none", () => {
+    expect(changedLines({ action: "ban", email, sessions: 2, store })).toEqual([
+      "ada@example.test is banned and is signed out. Open sessions ended: 2.",
+    ]);
+    const none = changedLines({ action: "ban", email, sessions: 0, store });
+    expect(none).toHaveLength(1);
+    expect(none[0]).toContain("is banned in the database. No open sessions of theirs were found");
+    expect(none[0]).toContain("the ban has not ended their sessions");
+    expect(none[0]).not.toMatch(/signed out/);
+    expect(
+      changedLines({ action: "ban", email, sessions: 0, store: { ...store, empty: true } })[0],
+    ).toMatch(/^Warning: /);
+
+    // A ban ended the user's sessions, so none is expected, whatever the store holds.
+    expect(
+      changedLines({ action: "unban", email, sessions: 0, store: { ...store, empty: true } }),
+    ).toEqual(["ada@example.test is no longer banned and can sign in again."]);
+    expect(changedLines({ action: "unban", email, sessions: 1, store })).toEqual([
+      "ada@example.test is no longer banned. Open sessions updated: 1.",
+    ]);
+  });
+
+  it("says a ban that was not confirmed may have left the user signed in, and claims no harm for a lifted one", () => {
+    expect(unconfirmedLine("ban", "their sessions are not confirmed")).toBe(
+      "The user is banned in the database, but their sessions are not confirmed. Their open sessions may still be signed in until this is run again.",
+    );
+    expect(unconfirmedLine("unban", "their sessions are not confirmed")).toBe(
+      "The ban is lifted in the database and the user can sign in, but their sessions are not confirmed. Run this again to confirm them.",
+    );
+  });
+
   it("names the store it searched when it found no session, and claims nothing for them", () => {
     for (const action of ["grant", "remove"] as const) {
       const lines = changedLines({
