@@ -553,27 +553,23 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         expect(
           yield* Effect.flip(createCustomDomain({ fqdn, organizationId: projectId })),
         ).toMatchObject({ _tag: "CustomDomainIdentityConflict", fqdn });
-        // The Domain the add wrote goes with the refusal, and its removal deletes nothing.
+        // The Domain the add wrote goes with the refusal.
         expect(yield* domainOf(fqdn)).toBeUndefined();
-        yield* runIdentityDeletes(enqueued, fqdn);
       }
 
-      expect(enqueued.map((job) => job.name)).toEqual([
-        "email.delete-domain-identity",
-        "email.delete-domain-identity",
-      ]);
       expect(identities.get(fqdn)).toBe("selector1");
-      // Nothing was deleted, so each removal's record stays: were an identity of one of
-      // those Domains to turn up, an add of the FQDN could still delete it.
+      // That Domain never had an identity, so its removal records none and enqueues no
+      // delete: however often the name is tried, the next add asks SES no more than the first.
       expect(
         yield* db
           .select({ id: removedDomainIdentity.id })
           .from(removedDomainIdentity)
           .where(eq(removedDomainIdentity.fqdn, fqdn)),
-      ).toHaveLength(2);
-      expect({ createdIdentities, deletedIdentities, scheduled }).toEqual({
+      ).toEqual([]);
+      expect({ createdIdentities, deletedIdentities, enqueued, scheduled }).toEqual({
         createdIdentities: [],
         deletedIdentities: [],
+        enqueued: [],
         scheduled: [],
       });
     }).pipe(Effect.provide(layer));

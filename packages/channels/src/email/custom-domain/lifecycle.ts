@@ -250,7 +250,7 @@ const registerCustomDomainIdentity = (input: {
                     customDomainId: input.customDomainId,
                     fqdn: input.fqdn,
                     message:
-                      "This domain already has a sending identity that Relayit did not create, so it can't be added.",
+                      "This domain already has an SES identity that Relayit can't take over, so it can't be added. Contact support if it should send through Relayit.",
                   });
                 default:
                   return new CustomDomainError({
@@ -692,10 +692,14 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       keyMaterial,
     }).pipe(
       // Unlike a registration that failed, one refused can never be finished by adding the
-      // Domain again, so the Domain this add wrote goes with it. Its removal deletes no
-      // identity: the one in SES does not sign with this Domain's selector.
+      // Domain again, so the Domain this add wrote goes with it.
       Effect.tapErrorTag("CustomDomainIdentityConflict", () =>
-        removeDomainLink({ customDomainId: row.id, db, organizationId: input.organizationId }),
+        removeDomainLink({
+          customDomainId: row.id,
+          db,
+          identityRefused: true,
+          organizationId: input.organizationId,
+        }),
       ),
     );
 
@@ -974,7 +978,12 @@ export const completeDomainClaimTransfer = (input: {
  * Project whose link went where no code saw it, and their events lose the reference by
  * their foreign key.
  */
-const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =>
+const removeUnlinkedDomain = (
+  tx: DatabaseTransaction,
+  customDomainId: string,
+  // False for a Domain SES has just refused an identity: it has none, and never will.
+  hasIdentity = true,
+) =>
   Effect.gen(function* () {
     const jobs = yield* Jobs;
     const [domain] = yield* tx
@@ -1000,23 +1009,24 @@ const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =
       .returning({ region: emailDomainRegistration.region });
     // Enqueued even without a registration: an add that failed after SES made the identity
     // recorded none, always in the default region, and SES takes deleting no identity as done.
-    // The selector keeps the job to this Domain's identity: a Domain refused for an identity
-    // Relayit did not make is removed like any other, and that identity stays. Recorded too,
-    // for an add of the FQDN that comes before the job has run.
-    yield* tx.insert(removedDomainIdentity).values({
-      dkimSelector: domain.dkimSelector,
-      fqdn: domain.fqdn,
-      region: registration?.region ?? null,
-    });
-    yield* jobs.enqueue(
-      emailDeleteDomainIdentityJob,
-      {
+    // The selector keeps the job to this Domain's identity, so one of that name Relayit did
+    // not make stays. Recorded too, for an add of the FQDN that comes before the job has run.
+    if (hasIdentity) {
+      yield* tx.insert(removedDomainIdentity).values({
         dkimSelector: domain.dkimSelector,
         fqdn: domain.fqdn,
         region: registration?.region ?? null,
-      },
-      tx,
-    );
+      });
+      yield* jobs.enqueue(
+        emailDeleteDomainIdentityJob,
+        {
+          dkimSelector: domain.dkimSelector,
+          fqdn: domain.fqdn,
+          region: registration?.region ?? null,
+        },
+        tx,
+      );
+    }
     // A Domain's records are the customer's to publish and exist only as these rows.
     yield* tx.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, customDomainId));
 
@@ -1042,6 +1052,12 @@ export const removeDomainLink = (input: {
   readonly db: Database;
   readonly organizationId: string;
   readonly unprovenOnly?: boolean;
+  /**
+   * The link is of a first add SES has just refused an identity. Its Domain, if it goes,
+   * leaves no identity to record or delete: a record would only be read, and SES asked
+   * about it, by every later add of a name that stays refused.
+   */
+  readonly identityRefused?: boolean;
 }) =>
   input.db
     .transaction((tx) =>
@@ -1072,7 +1088,11 @@ export const removeDomainLink = (input: {
           organizationIds: unlinked.held === "verified" ? [input.organizationId] : [],
         });
         return {
-          domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId),
+          domainRemoved: yield* removeUnlinkedDomain(
+            tx,
+            input.customDomainId,
+            !input.identityRefused,
+          ),
           unlinked: true as const,
         };
       }),

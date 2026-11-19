@@ -137,7 +137,9 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
     // Identities in the account that Relayit did not make, as `addOutsideIdentity` puts
     // them there. They are all the fake remembers: the api registers a Domain and the worker
     // deletes its identity, in two processes that share no memory, so an identity Relayit
-    // made is taken to exist for as long as its Domain says so and no longer.
+    // made is taken to exist for as long as its Domain says so and no longer. So the fake
+    // differs from SES in one case: an identity Relayit made and lost track of blocks its
+    // FQDN in SES, and does not exist here.
     const outsideIdentities = new Set<string>();
     const identityKey = (input: { readonly fqdn: string; readonly region: string | null }) =>
       `${input.region ?? defaultRegion}:${input.fqdn.toLowerCase()}`;

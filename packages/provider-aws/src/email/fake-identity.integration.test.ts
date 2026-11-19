@@ -4,8 +4,6 @@
  */
 import { describe, expect, it, test } from "@effect/vitest";
 import { EmailBackend } from "@repo/channels/email/backend";
-import { emailDeleteDomainIdentityHandler } from "@repo/channels/email/custom-domain/handlers";
-import type { EmailDeleteDomainIdentityPayload } from "@repo/channels/email/custom-domain/jobs";
 import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle";
 import { DnsLookups } from "@repo/channels/email/dns-lookups";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
@@ -30,7 +28,7 @@ describe("fake email backend's identities (PostgreSQL)", () => {
   }
 
   it.live(testName, () => {
-    const enqueued: EmailDeleteDomainIdentityPayload[] = [];
+    const enqueued: unknown[] = [];
     const layer = Layer.mergeAll(
       EmailManagedDns.noop(),
       SymmetricCrypto.live(parseBetterAuthSecrets("1:fake-identity-test-secret-0123456789")),
@@ -38,11 +36,11 @@ describe("fake email backend's identities (PostgreSQL)", () => {
         detectProvider: () => Promise.resolve("unknown"),
         evaluate: () => Promise.resolve({ matches: true, warnings: [] }),
       }),
-      // The queue is a boundary here: the identity delete a removal enqueues is run below.
+      // The queue is a boundary here, and records what a removal enqueues.
       Layer.succeed(Jobs, {
         cancel: (() => Effect.void) as JobsService["cancel"],
         enqueue: ((_contract: unknown, payload: unknown) => {
-          enqueued.push(payload as EmailDeleteDomainIdentityPayload);
+          enqueued.push(payload);
           return Effect.void;
         }) as JobsService["enqueue"],
         schedule: (() => Effect.void) as JobsService["schedule"],
@@ -69,27 +67,20 @@ describe("fake email backend's identities (PostgreSQL)", () => {
       });
       expect(yield* db.query.customDomain.findFirst({ where: { fqdn } })).toBeUndefined();
 
-      // The Domain that add wrote is removed like any other, and the identity delete its
-      // removal enqueued runs, with the selector of a Domain the identity was never made for.
-      expect(enqueued).toMatchObject([{ fqdn, region: null }]);
-      for (const payload of enqueued) {
-        yield* emailDeleteDomainIdentityHandler
-          .handle(payload, { attempt: 1, enqueuedAt: Date.now(), id: "job_delete_identity" })
-          .pipe(Effect.provideService(EmailBackend, fake));
-      }
-
-      // The fake answered that it deleted nothing, so the handler kept the removal's record:
-      // that the SES backend deletes nothing of an outside identity is `identity.test.ts`'s.
-      expect(
-        yield* db.query.removedDomainIdentity.findMany({
-          columns: { dkimSelector: true },
-          where: { fqdn },
-        }),
-      ).toEqual([{ dkimSelector: enqueued[0]?.dkimSelector }]);
-
-      // The identity is still in the account, untouched: the name is refused as before.
+      // The Domain that add wrote never had an identity: nothing is recorded or enqueued to
+      // delete one, so trying the name again costs no more than the first time.
+      expect(enqueued).toEqual([]);
+      expect(yield* db.query.removedDomainIdentity.findMany({ where: { fqdn } })).toEqual([]);
       expect(yield* Effect.flip(add)).toMatchObject({ _tag: "CustomDomainIdentityConflict" });
-      // In the region it is in, and under that name only.
+
+      // A delete naming it, as the job of a Domain removed under that name would, deletes
+      // nothing, where a Domain's own identity is deleted. The fake keeps no identity to look
+      // at afterwards: that SES leaves one exactly as it was is `identity.test.ts`'s to show.
+      const removed = { dkimSelector: "relayit0a1b2c3d", region: null };
+      expect(yield* fake.deleteIdentity({ ...removed, fqdn })).toBe(false);
+      expect(yield* fake.deleteIdentity({ ...removed, fqdn: `other-${fqdn}` })).toBe(true);
+
+      // Another name is added as usual.
       const other = yield* createCustomDomain({
         fqdn: `other-${fqdn}`,
         organizationId,
