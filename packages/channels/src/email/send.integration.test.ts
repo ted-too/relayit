@@ -728,7 +728,8 @@ describe("an accepted email send", () => {
         const accepted = yield* acceptTransactionalEmail(
           sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
         );
-        // The outbox publishes its job, and Redis then loses it, as when it loses its data.
+        // The outbox publishes its job, and the stream it went to is then deleted from Redis
+        // (with the set a retry would wait in), as when Redis loses its data.
         yield* publishOutboxBatch({ batchSize: 1000, claimTtlMs: 30_000, concurrency: 1 });
         expect(
           yield* db
@@ -754,7 +755,7 @@ describe("an accepted email send", () => {
         yield* endStuckDeliveries;
 
         const reason =
-          "The send was not started within a day of when it was due; it is not sent late";
+          "The send could not be completed within a day of when it was due; it is not sent late";
         expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
         expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
           completedAt: expect.any(Date),
@@ -789,6 +790,20 @@ describe("an accepted email send", () => {
 
       yield* endStuckDeliveries;
       yield* runWorker;
+      // And a duplicate of the job, as a reclaimed or re-published entry would be.
+      const jobs = yield* Jobs;
+      yield* db.transaction((tx) =>
+        jobs.enqueue(
+          emailDeliverJob,
+          {
+            billingUserId: "unused",
+            deliveryId: accepted.deliveryId,
+            purpose: "transactional",
+            startDate: new Date().toISOString(),
+          },
+          tx,
+        ),
+      );
       yield* runWorker;
 
       expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
@@ -846,7 +861,14 @@ describe("an accepted email send", () => {
       yield* endStuckDeliveries;
       expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
 
-      // A day and more after that hour, with no job having come for it.
+      // Due 19 hours ago, with no job having come for it: still within the day.
+      yield* Effect.gen(function* () {
+        yield* TestClock.setTime(Date.now() + 20 * 3_600_000);
+        yield* endStuckDeliveries;
+      }).pipe(Effect.provide(TestClock.layer()));
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+      // A day and more after it was due.
       yield* Effect.gen(function* () {
         yield* TestClock.setTime(Date.now() + 26 * 3_600_000);
         yield* endStuckDeliveries;

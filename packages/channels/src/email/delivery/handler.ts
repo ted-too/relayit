@@ -47,8 +47,8 @@ const SES_REJECTED_MESSAGE = "SES rejected the message";
 const SES_SENDING_PAUSED = "SES paused sending";
 const PROJECT_SENDING_PAUSED = "SES paused sending for this Project";
 const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
-const NEVER_STARTED =
-  "The send was not started within a day of when it was due; it is not sent late";
+const NOT_SENT_IN_TIME =
+  "The send could not be completed within a day of when it was due; it is not sent late";
 
 /**
  * SES answers within this or the send counts as unanswered: a hung connection must not hold
@@ -81,8 +81,9 @@ const CLAIM_LEASE = Duration.minutes(2);
  * reconcile does the first and the last from the same answer under the same guarded write, so
  * whichever is first, the other finds the outcome written and adds nothing. A kept refusal (one
  * SES answered whose requeue was never written) it fails, where a job with attempts left would
- * have sent again: requeued with no job, the Delivery would be stuck `queued` instead. That
- * needs the job held up for the whole age, which is why the age is a day and not an hour.
+ * have sent again: requeued with no job, the Delivery would only be failed `queued` a pass
+ * later. That needs the job held up for the whole age, which is why the age is a day and not
+ * an hour.
  *
  * A `queued` Delivery this old is failed too, never sent and never given a new job. SES has not
  * been called for it, so nothing here risks a second send: the only thing that sends is a job's
@@ -540,8 +541,9 @@ export const endStuckDeliveries = Effect.gen(function* () {
     .where(
       or(
         and(eq(emailDelivery.status, "sending"), lt(emailDelivery.startedAt, cutoff)),
-        // A requeue after a refusal keeps `createdAt`, and the job's retries are over within
-        // minutes of it, so the age needs no time of its own for one put back to `queued`.
+        // One SES refused and a run put back to `queued` is aged from its accept like any
+        // other: with a job held up for most of the day it can be failed here while that job
+        // still has retries left, which is the same choice of failing over sending late.
         and(
           eq(emailDelivery.status, "queued"),
           lt(emailDelivery.createdAt, cutoff),
@@ -554,6 +556,10 @@ export const endStuckDeliveries = Effect.gen(function* () {
     stuck,
     (delivery) =>
       Effect.gen(function* () {
+        // The query reads no other status; this is for the type.
+        if (delivery.status !== "queued" && delivery.status !== "sending") {
+          return;
+        }
         const state =
           delivery.status === "queued"
             ? ({ kind: "queued" } as const)
@@ -561,7 +567,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
         let failureMessage: string;
         switch (state.kind) {
           case "queued":
-            failureMessage = NEVER_STARTED;
+            failureMessage = NOT_SENT_IN_TIME;
             break;
           case "accepted": {
             const recorded = yield* recordSent(db, {
@@ -604,11 +610,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
                 claimedAt: state.claimedAt,
                 region: state.region,
               })
-            : yield* failDelivery(
-                db,
-                { ...delivery, status: state.kind === "queued" ? "queued" : "sending" },
-                failureMessage,
-              );
+            : yield* failDelivery(db, { ...delivery, status: delivery.status }, failureMessage);
         if (failed) {
           // No job runs again to make a release Redis refused, so it is retried here. If
           // Redis stays down past the retries the failure is logged and the reservation is
