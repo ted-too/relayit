@@ -5,6 +5,9 @@ services:
   migrate:
     image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
     command: ["bun", "run", "migrate.js"]
+    # One run per `up`: a step that failed says why and stays failed, rather than running the
+    # same migration again.
+    restart: "no"
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
     depends_on:
@@ -16,6 +19,7 @@ services:
   # The public API, sign-in, and every operation the dashboard calls.
   api:
     image: ghcr.io/ted-too/relayit-api:${IMAGE_TAG:-alpha}
+    restart: unless-stopped
     ports:
       - "${API_PORT:-3005}:3005"
     environment:
@@ -86,6 +90,7 @@ services:
   # browser calls the api itself, so API_URL is the api's public URL, not a Compose name.
   web:
     image: ghcr.io/ted-too/relayit-web:${IMAGE_TAG:-alpha}
+    restart: unless-stopped
     ports:
       - "${WEB_PORT:-3000}:3000"
     environment:
@@ -101,6 +106,7 @@ services:
 
   postgres:
     image: postgres:18-alpine
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -111,15 +117,25 @@ services:
       # volume at the older /var/lib/postgresql/data.
       - relayit_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-relayit}"]
+      # Over TCP, as the services connect. Over the socket it would also pass for the server
+      # the image runs to set up a new volume, which takes no TCP connections and stops again.
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-relayit}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
+      # Setting up a new volume answers nothing over TCP until it is done. Failures in this
+      # time do not count, or a slow disk would have `up` give up on a Postgres still starting.
+      start_period: 60s
     networks:
       - relayit-network
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
