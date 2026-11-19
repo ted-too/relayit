@@ -60,6 +60,6 @@ export const unconfirmedLine = (action: Action, what: string) => {
     case "ban":
       return `The user is banned in the database, but ${what}. Their open sessions may still be signed in until this is run again.`;
     case "unban":
-      return `The ban is lifted in the database, but ${what}. A session of theirs may still be refused until this is run again.`;
+      return `The ban is lifted in the database and the user can sign in, but ${what}. Run this again to confirm them.`;
   }
 };

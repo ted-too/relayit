@@ -818,6 +818,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         const targetId = (yield* Effect.promise(() =>
           auth.api.getSession({ headers: new Headers({ cookie: target }) }),
         ))?.user.id;
+        expect(targetId).toBeDefined();
         // The admin endpoints beside it answer this admin; these two are not there, however
         // the path is spelt. better-auth answers them itself, in plain text.
         expect((yield* call("GET", "/auth/admin/list-users", { as: operator })).status).toBe(200);

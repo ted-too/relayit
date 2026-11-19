@@ -150,7 +150,10 @@ export const ProjectAccessLive = (appOrigin: string) =>
             return yield* forbidden;
           }
           // The foreign key gives every member a user; the relation's type does not say so.
-          if (!membership.user || isBanned(membership.user)) {
+          if (!membership.user) {
+            return yield* forbidden;
+          }
+          if (isBanned(membership.user)) {
             return yield* new Forbidden({ message: "This account is banned." });
           }
           const required = Context.getOption(endpoint.annotations, RequiresPermission);

@@ -76,6 +76,8 @@ const program = Effect.gen(function* () {
   const redisUrl = Redacted.value(config.redisUrl);
   const empty =
     sessions === 0 &&
+    // Lifting a ban expects no session, and is done once the row is written.
+    action !== "unban" &&
     !(yield* Effect.acquireUseRelease(
       Effect.sync(() => makeRedisClient({ url: redisUrl })),
       (redis) => hasStoredSessions(redis, config.redisKeyPrefix),
@@ -103,7 +105,7 @@ const program = Effect.gen(function* () {
   // looked in the wrong place, and the user may still be signed in: a script must not read
   // that as done. A grant is left at 0: a new deployment's first admin has no session yet;
   // so is lifting a ban, which expects none.
-  if ((action === "remove" || action === "ban") && empty) {
+  if (action !== "grant" && empty) {
     process.exitCode = 7;
   }
 }).pipe(

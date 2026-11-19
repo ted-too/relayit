@@ -36,12 +36,12 @@ describe("platform-admin.js's outcome", () => {
     ]);
   });
 
-  it("says a ban that was not confirmed may have left the user signed in", () => {
+  it("says a ban that was not confirmed may have left the user signed in, and claims no harm for a lifted one", () => {
     expect(unconfirmedLine("ban", "their sessions are not confirmed")).toBe(
       "The user is banned in the database, but their sessions are not confirmed. Their open sessions may still be signed in until this is run again.",
     );
     expect(unconfirmedLine("unban", "their sessions are not confirmed")).toBe(
-      "The ban is lifted in the database, but their sessions are not confirmed. A session of theirs may still be refused until this is run again.",
+      "The ban is lifted in the database and the user can sign in, but their sessions are not confirmed. Run this again to confirm them.",
     );
   });
 
