@@ -1,8 +1,9 @@
 import { DashboardApi } from "@repo/contracts/dashboard";
-import { ByteSize, Effect } from "effect";
+import { ByteSize, Cause, Effect } from "effect";
 import {
   HttpIncomingMessage,
   HttpRouter,
+  HttpServerError,
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/http";
@@ -21,6 +22,11 @@ export const DEFAULT_BODY_BYTES = 1024 * 1024;
  * The routes that are not held to `DEFAULT_BODY_BYTES`, by their contract's group and
  * endpoint: a number is the route's own limit, enforced here the same way; `"own"` is a
  * route that limits its body itself because it answers differently, and is left alone.
+ *
+ * A route is found by its endpoint's method and path, which is what `HttpApiBuilder`
+ * registers as long as every `:param` in the path is declared and followed by `/` or the
+ * end. For a path it rewrites, the name below would match and the limit would not apply,
+ * so each entry's limit is pinned by a test (`body-limit.test.ts`, `contract.test.ts`).
  */
 const exceptions: Record<string, number | "own"> = {
   // 50 MiB, after the API key and as the customer contract's `413` (`validation.ts`).
@@ -67,15 +73,18 @@ if (unmatched.size > 0) {
  * added there later is limited without anyone asking for it.
  *
  * A body over the limit by its `Content-Length` is a `413` before any of it is read and
- * before the route (its session check included) runs. A body without one (chunked) is read
- * here, up to the limit, before the route runs, and is a `413` once it passes it; the route
- * then reads the same bytes from the request's cache, under the same limit. Reading it here
- * rather than leaving it to the route is what makes the answer the same on every route:
- * one that reads no body, one that hands the request to better-auth, and one whose
- * contract has no `413` to answer a failed read with.
+ * before the route (its session check included) runs. A body without one (chunked) is
+ * never read here: the route runs under `MaxBodySize`, so whoever reads the body (the
+ * contract's payload decoding, after the session check; `routes/auth.ts` for better-auth)
+ * stops once it passes the limit, and that failed read is answered with the same `413`
+ * here. `HttpApi` and `routes/auth.ts` die on a failed read, so it is looked for among the
+ * defects too. A route that reads no body reads none of a chunked one either. The limit
+ * does not reach `request.stream` or a multipart read: a route that takes one caps it
+ * itself and is named `"own"`.
  *
- * The `413` closes the connection. Bun stops reading a body nobody consumes, and the
- * connection then waits on it until the idle timeout, holding a graceful shutdown with it.
+ * The `413` closes the connection, and so does any answer a route gives without reading
+ * the body it was sent. Bun stops reading a body nobody consumes, and the connection then
+ * waits on it until the idle timeout, holding a graceful shutdown with it.
  */
 export const bodyLimit = HttpRouter.middleware((httpEffect) =>
   Effect.gen(function* () {
@@ -90,26 +99,41 @@ export const bodyLimit = HttpRouter.middleware((httpEffect) =>
         code: "payload_too_large",
         message: `Request body exceeds the ${limit / 1024 / 1024} MiB limit.`,
       },
-      { headers: { connection: "close" }, status: 413 },
+      {
+        contentType: "application/json;charset=utf-8",
+        headers: { connection: "close" },
+        status: 413,
+      },
     );
     const announced = request.headers["content-length"];
     if (announced !== undefined && !(Number(announced) <= limit)) {
       return tooLarge;
     }
-    return yield* Effect.gen(function* () {
-      if (announced === undefined) {
-        const read = yield* Effect.result(request.arrayBuffer);
-        if (read._tag === "Failure") {
-          const { reason } = read.failure;
-          if (reason._tag === "RequestParseError" && reason.reason === "BodyTooLarge") {
-            return tooLarge;
-          }
-          return yield* read.failure;
-        }
-      }
-      return yield* httpEffect;
-    }).pipe(
+    const source = yield* HttpServerRequest.toWeb(request);
+    return yield* httpEffect.pipe(
       Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.fromInputUnsafe(limit)),
+      // An answer given with the body unread closes the connection too, for the same reason.
+      Effect.map((response) =>
+        source.body === null || source.bodyUsed
+          ? response
+          : HttpServerResponse.setHeader(response, "connection", "close"),
+      ),
+      Effect.catchCauseIf(
+        (cause) =>
+          cause.reasons.some((reason) => {
+            const raised = Cause.isFailReason(reason)
+              ? reason.error
+              : Cause.isDieReason(reason)
+                ? reason.defect
+                : undefined;
+            return (
+              HttpServerError.isHttpServerError(raised) &&
+              raised.reason._tag === "RequestParseError" &&
+              raised.reason.reason === "BodyTooLarge"
+            );
+          }),
+        () => Effect.succeed(tooLarge),
+      ),
     );
   }),
 ).layer;

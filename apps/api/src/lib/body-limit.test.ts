@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { announced, APP_ORIGIN, request, serve, stubs } from "../testing";
 
 const MIB = 1024 * 1024;
+const JSON_TYPE = "application/json;charset=utf-8";
 const UNSUBSCRIBE = "/unsubscribe/acme/cont_1?msg=msg_1&topic=topc_1&sig=sig";
 const COMMITS = "/projects/acme/workspaces/reactEmail/commits";
 
@@ -31,7 +32,12 @@ const chunked = (origin: string, path: string, bytes: number) =>
       headers: { "content-type": "application/json", origin: APP_ORIGIN },
       method: "POST",
     });
-    return { body: await response.text(), status: response.status };
+    return {
+      body: await response.text(),
+      connection: response.headers.get("connection"),
+      contentType: response.headers.get("content-type"),
+      status: response.status,
+    };
   });
 
 describe("the body limit on every route", () => {
@@ -51,19 +57,19 @@ describe("the body limit on every route", () => {
         body: tooLarge(1),
         status: "HTTP/1.1 413 Payload Too Large",
       });
-      // Without a Content-Length, reading stops once it passes the limit.
-      expect(yield* chunked(origin, UNSUBSCRIBE, 2 * MIB)).toEqual({
-        body: tooLarge(1),
-        status: 413,
-      });
       expect(calls).toEqual([]);
 
-      // What a mailbox provider sends, with or without a Content-Length, still unsubscribes.
+      // What a mailbox provider sends still unsubscribes.
       expect(
         yield* request(origin, "POST", UNSUBSCRIBE, { body: "List-Unsubscribe=One-Click" }),
       ).toMatchObject({ status: 200 });
-      expect(yield* chunked(origin, UNSUBSCRIBE, 26)).toMatchObject({ status: 200 });
-      expect(calls).toEqual(["cont_1", "cont_1"]);
+      expect(calls).toEqual(["cont_1"]);
+      // The route reads no body, so one without a Content-Length is never read at all: the
+      // link is honoured, and the connection is closed on what was sent.
+      expect(yield* chunked(origin, UNSUBSCRIBE, 2 * MIB)).toMatchObject({
+        connection: "close",
+        status: 200,
+      });
     }),
   );
 
@@ -76,13 +82,14 @@ describe("the body limit on every route", () => {
         body: tooLarge(1),
         status: "HTTP/1.1 413 Payload Too Large",
       });
-      expect(yield* chunked(origin, "/projects", 2 * MIB)).toEqual({
-        body: tooLarge(1),
-        status: 413,
-      });
       // At the limit the route runs, and refuses a request with no session.
       expect(yield* announced(origin, "/projects", post, MIB)).toMatchObject({
         status: "HTTP/1.1 401 Unauthorized",
+      });
+      // Without a Content-Length the session comes first, and the body is never read.
+      expect(yield* chunked(origin, "/projects", 2 * MIB)).toMatchObject({
+        connection: "close",
+        status: 401,
       });
     }),
   );
@@ -96,15 +103,10 @@ describe("the body limit on every route", () => {
         body: tooLarge(10),
         status: "HTTP/1.1 413 Payload Too Large",
       });
-      expect(yield* chunked(origin, COMMITS, 11 * MIB)).toEqual({
-        body: tooLarge(10),
-        status: 413,
-      });
       // Over the default and within its own: the route runs, and asks for a session.
       expect(yield* announced(origin, COMMITS, post, 10 * MIB)).toMatchObject({
         status: "HTTP/1.1 401 Unauthorized",
       });
-      expect(yield* chunked(origin, COMMITS, 2 * MIB)).toMatchObject({ status: 401 });
     }),
   );
 
@@ -118,7 +120,13 @@ describe("the body limit on every route", () => {
           body: tooLarge(1),
           status: "HTTP/1.1 413 Payload Too Large",
         });
-        expect(yield* chunked(origin, path, 2 * MIB)).toEqual({ body: tooLarge(1), status: 413 });
+        // Without a Content-Length, reading stops once it passes the limit.
+        expect(yield* chunked(origin, path, 2 * MIB)).toEqual({
+          body: tooLarge(1),
+          connection: "close",
+          contentType: JSON_TYPE,
+          status: 413,
+        });
       }
     }),
   );

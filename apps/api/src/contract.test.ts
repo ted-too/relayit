@@ -353,7 +353,7 @@ describe("POST /messages/email", () => {
         email({ attachments: [{ content: "A".repeat(bytes), filename: "big.pdf" }] });
       const over = withAttachment(50 * 1024 * 1024);
 
-      for (const path of ["/messages/email", "/send/acme/raw/email"]) {
+      for (const path of ["/messages/email", "/send/acme/raw/email", "/send/acme/template/email"]) {
         expect(yield* request(origin, "POST", path, { body: over, headers: keyed })).toEqual(
           tooLarge,
         );

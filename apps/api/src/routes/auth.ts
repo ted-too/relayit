@@ -25,6 +25,7 @@ export const authRoutes = HttpRouter.use((router) =>
                 body: body.byteLength === 0 ? undefined : body,
                 headers: source.headers,
                 method: source.method,
+                signal: source.signal,
               }),
             ),
           ),

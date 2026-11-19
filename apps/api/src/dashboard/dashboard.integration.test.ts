@@ -1082,31 +1082,45 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           yield* call("POST", "/projects", { as: cookie, body: { name: padding, slug: "big" } }),
         ).toMatchObject({ body: tooLarge, status: 413 });
 
+        // Without a Content-Length the member's session is checked, then reading the body
+        // stops at the limit.
+        const origin = yield* Origin;
+        const chunked = (path: string, body: unknown, as?: string) =>
+          Effect.promise(() =>
+            fetch(`${origin}${path}`, {
+              body: new ReadableStream({
+                start: (controller) => {
+                  controller.enqueue(new TextEncoder().encode(JSON.stringify(body)));
+                  controller.close();
+                },
+              }),
+              duplex: "half",
+              headers: {
+                "content-type": "application/json",
+                origin: APP,
+                ...(as === undefined ? {} : { cookie: as }),
+              },
+              method: "POST",
+            }),
+          );
+        const overChunked = yield* chunked("/projects", { name: padding, slug: "big" }, cookie);
+        expect(overChunked.status).toBe(413);
+        expect(yield* Effect.promise(() => overChunked.json())).toEqual(tooLarge);
+        const created = yield* chunked(
+          "/projects",
+          { name: "Limit", slug: `limit-${run}` },
+          cookie,
+        );
+        expect(created.status).toBe(200);
+
         // better-auth is handed the body the api read: a sign-in sent without a
         // Content-Length signs in.
-        const origin = yield* Origin;
-        const chunked = yield* Effect.promise(() =>
-          fetch(`${origin}/auth/sign-in/email`, {
-            body: new ReadableStream({
-              start: (controller) => {
-                controller.enqueue(
-                  new TextEncoder().encode(
-                    JSON.stringify({
-                      email: `limit-${run}@example.test`,
-                      password: "a-long-password",
-                    }),
-                  ),
-                );
-                controller.close();
-              },
-            }),
-            duplex: "half",
-            headers: { "content-type": "application/json", origin: APP },
-            method: "POST",
-          }),
-        );
-        expect(chunked.status).toBe(200);
-        expect(yield* Effect.promise(() => chunked.json())).toMatchObject({
+        const signedIn = yield* chunked("/auth/sign-in/email", {
+          email: `limit-${run}@example.test`,
+          password: "a-long-password",
+        });
+        expect(signedIn.status).toBe(200);
+        expect(yield* Effect.promise(() => signedIn.json())).toMatchObject({
           user: { email: `limit-${run}@example.test` },
         });
       }),
