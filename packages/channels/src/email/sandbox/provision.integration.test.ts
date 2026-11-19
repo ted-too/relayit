@@ -562,6 +562,7 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       expect(yield* sandboxesOn(root)).toEqual([sandbox]);
       expect(createdIdentities).toEqual([root]);
       expect(yield* registrationsOf(sandbox?.id)).toHaveLength(1);
+      expect(scheduled).toEqual([{ sandboxDomainId: sandbox?.id }]);
     }).pipe(Effect.provide(layer));
   });
 
