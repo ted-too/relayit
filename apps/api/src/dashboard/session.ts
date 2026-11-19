@@ -9,6 +9,7 @@ import {
   Unauthenticated,
 } from "@repo/contracts/dashboard";
 import { admin, member, owner } from "@repo/persistence/auth/permissions";
+import { APIError, BANNED_USER } from "@repo/persistence/auth/server";
 import { DB } from "@repo/persistence/db/effect";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
@@ -20,15 +21,6 @@ const unauthenticated = new Unauthenticated({ message: "Sign in to continue." })
 const forbidden = new Forbidden({
   message: "You do not have permission to do that in this Project.",
 });
-
-/**
- * Whether the user's row says they are banned now. Read from the row, not the session:
- * better-auth keeps a copy of the user beside the session in Redis for as long as the
- * session lives and answers `getSession` from it, so a ban set straight in the database
- * never reaches it. A ban with an expiry lapses at it, as better-auth treats one at sign-in.
- */
-const isBanned = (row: { readonly banExpires: Date | null; readonly banned: boolean | null }) =>
-  row.banned === true && (row.banExpires === null || row.banExpires.getTime() > Date.now());
 
 /**
  * The signed-in user behind a request's session cookie, on the dashboard's routes, which
@@ -44,9 +36,8 @@ const isBanned = (row: { readonly banExpires: Date | null; readonly banned: bool
  * - A session opened by impersonating is refused. Impersonation is switched off
  *   (`disabledPaths` in `createAuth`), so only a session from before that can be one, and
  *   it renews like any other, so it would not end by itself.
- *
- * It goes by the session's copy of the user, so a ban written straight to the database
- * does not reach it (#147); `ProjectAccess` and `PlatformAdmin` read the row.
+ * - A banned user is refused (403). `createAuth`'s hook reads the ban from the user's row
+ *   whenever better-auth resolves a session, so `getSession` throws for one.
  */
 const signedInUser = (auth: ApiAuth["Service"]["auth"], appOrigin: string) =>
   Effect.gen(function* () {
@@ -64,8 +55,16 @@ const signedInUser = (auth: ApiAuth["Service"]["auth"], appOrigin: string) =>
       return yield* new Forbidden({ message: "Cross-site request refused." });
     }
     const session = yield* Effect.promise(() =>
-      auth.api.getSession({ headers: new Headers(request.headers) }),
+      auth.api.getSession({ headers: new Headers(request.headers) }).catch((cause: unknown) => {
+        if (cause instanceof APIError && cause.body?.code === BANNED_USER) {
+          return "banned" as const;
+        }
+        throw cause;
+      }),
     );
+    if (session === "banned") {
+      return yield* new Forbidden({ message: "This account is banned." });
+    }
     if (!session || session.session.impersonatedBy) {
       return yield* unauthenticated;
     }
@@ -90,10 +89,10 @@ export const DashboardSessionLive = (appOrigin: string) =>
   );
 
 /**
- * Platform admins only, by better-auth's admin role on the user. The role and the ban are
- * read from the user's row on every request, not from the session's copy of the user (see
- * `isBanned`): going by the session would leave an admin demoted or banned straight in the
- * database with this until they signed out.
+ * Platform admins only, by better-auth's admin role on the user. The role is read from the
+ * user's row on every request, not from the session's copy of the user: going by the
+ * session would leave an admin demoted straight in the database with this until they
+ * signed out.
  */
 export const PlatformAdminLive = (appOrigin: string) =>
   Layer.effect(
@@ -106,11 +105,11 @@ export const PlatformAdminLive = (appOrigin: string) =>
           const user = yield* signedInUser(auth, appOrigin);
           const row = yield* db.query.user
             .findFirst({
-              columns: { banExpires: true, banned: true, role: true },
+              columns: { role: true },
               where: { id: user.id },
             })
             .pipe(Effect.orDie);
-          if (!row || isBanned(row) || !row.role?.split(",").includes("admin")) {
+          if (!row?.role?.split(",").includes("admin")) {
             return yield* new Forbidden({ message: "Only a platform admin can do that." });
           }
           return yield* Effect.provideService(httpEffect, DashboardUser, {
@@ -127,10 +126,6 @@ export const PlatformAdminLive = (appOrigin: string) =>
  * named by `:orgSlug`, then the user's membership of it, then the role's permission for
  * the endpoint. The handler sees only `DashboardMember`, so whatever it reads or changes
  * is scoped to that Project's id.
- *
- * A banned member is refused, by the ban on their row, which the membership query reads
- * with it. An operator's ban (`bun platform-admin.js ban`) ends the user's sessions, so
- * this is for the ban that did not: one written straight to the database.
  */
 export const ProjectAccessLive = (appOrigin: string) =>
   Layer.effect(
@@ -149,18 +144,10 @@ export const ProjectAccessLive = (appOrigin: string) =>
             .findFirst({
               columns: { organizationId: true, role: true },
               where: { organization: { slug: orgSlug }, userId: user.id },
-              with: { user: { columns: { banExpires: true, banned: true } } },
             })
             .pipe(Effect.orDie);
           if (!membership) {
             return yield* forbidden;
-          }
-          // The foreign key gives every member a user; the relation's type does not say so.
-          if (!membership.user) {
-            return yield* forbidden;
-          }
-          if (isBanned(membership.user)) {
-            return yield* new Forbidden({ message: "This account is banned." });
           }
           const required = Context.getOption(endpoint.annotations, RequiresPermission);
           if (

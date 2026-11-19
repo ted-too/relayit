@@ -885,6 +885,69 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         }),
     );
 
+    it.effect(
+      "refuses a session whose user was banned in the database, on every route but sign-out",
+      () =>
+        Effect.gen(function* () {
+          const email = `row-banned-${run}@example.test`;
+          const owner = yield* signUp("row-banned");
+          const project = yield* createProject(owner, `Row banned ${run.slice(-8)}`);
+          const createKey = call("POST", "/auth/api-key/create", {
+            as: owner,
+            body: { configId: "org-keys", name: "Straight", organizationId: project.id },
+          });
+          const createProjectAgain = call("POST", "/projects", {
+            as: owner,
+            body: { name: `Row banned again ${run.slice(-8)}` },
+          });
+          const session = call("GET", "/auth/get-session", { as: owner });
+          const invite = call("POST", "/auth/organization/invite-member", {
+            as: owner,
+            body: {
+              email: `row-banned-guest-${run}@example.test`,
+              organizationId: project.id,
+              role: "member",
+            },
+          });
+          const setBan = (banned: boolean, banExpires: Date | null) =>
+            Effect.promise(async () => {
+              const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+              await db.update(user).set({ banExpires, banned }).where(eq(user.email, email));
+              await db.$client.end();
+            });
+          expect(yield* createKey).toMatchObject({
+            body: { key: expect.any(String) },
+            status: 200,
+          });
+
+          // No session of theirs is ended: only the row says they are banned.
+          yield* setBan(true, null);
+          const banned = { body: { code: "BANNED_USER" }, status: 403 };
+          expect(yield* createKey).toMatchObject(banned);
+          expect(yield* invite).toMatchObject(banned);
+          expect(yield* session).toMatchObject(banned);
+          expect(yield* createProjectAgain).toMatchObject({
+            body: { _tag: "Forbidden", message: "This account is banned." },
+            status: 403,
+          });
+
+          // It lapses at its expiry, and stands until then.
+          yield* setBan(true, new Date(Date.now() + 60 * 60 * 1000));
+          expect(yield* createKey).toMatchObject(banned);
+          expect(yield* createProjectAgain).toMatchObject({ status: 403 });
+          yield* setBan(true, new Date(Date.now() - 1000));
+          expect((yield* session).body).toMatchObject({ user: { email } });
+          expect((yield* createKey).status).toBe(200);
+          expect((yield* createProjectAgain).status).toBe(200);
+
+          // The refused session can still be signed out, which ends it.
+          yield* setBan(true, null);
+          expect((yield* call("POST", "/auth/sign-out", { as: owner })).status).toBe(200);
+          yield* setBan(false, null);
+          expect((yield* session).body).toBeNull();
+        }),
+    );
+
     it.effect("answers 404 to impersonation, for a platform admin too", () =>
       Effect.gen(function* () {
         const operator = yield* signUpAdmin("impersonator");

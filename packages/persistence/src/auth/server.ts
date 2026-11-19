@@ -2,6 +2,7 @@ import { apiKey } from "@better-auth/api-key";
 import { type StripeOptions, stripe } from "@better-auth/stripe";
 import { APIError, type BetterAuthOptions, betterAuth, type SocialProviders } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import {
   admin,
   lastLoginMethod,
@@ -88,6 +89,9 @@ export interface AuthConfig {
   socialProviders?: SocialProviders;
 }
 
+/** The `code` of better-auth's refusal of a banned user, at sign-in and on an open session. */
+export const BANNED_USER = "BANNED_USER";
+
 /** better-auth's refusal of a slug `ProjectSlug` doesn't take, with the rule it broke. */
 const refuseInvalidSlug = (slug: string | undefined) => {
   if (slug === undefined) {
@@ -126,12 +130,9 @@ export const createAuth = ({
       provider: "pg",
       schema,
     }),
-    session: {
-      cookieCache: {
-        maxAge: 5 * 60,
-        refreshCache: false,
-      },
-    },
+    // No `session.cookieCache`: with it on, `getSession` answers from the signed cookie
+    // without reading Redis, so a session an operator ended (a ban, a removed platform
+    // admin) would keep answering until the cookie's copy expired.
     secondaryStorage: {
       get: async (key) => {
         const value = await redis.send("GET", [`${redisKeyPrefix}${COOKIE_PREFIX}:auth:${key}`]);
@@ -199,6 +200,41 @@ export const createAuth = ({
     },
     plugins: [
       admin(),
+      // A banned user's open session is refused on every endpoint, over HTTP and through
+      // `auth.api`, which is how the dashboard's routes resolve a session. The ban is read
+      // from the user's row: the session holds its own copy of the user in Redis for as
+      // long as it lives, which a ban written straight to the database never reaches. A ban
+      // with an expiry lapses at it, as better-auth treats one at sign-in. Signing out is
+      // let through, so the refused session can be ended from its own browser.
+      {
+        id: "banned-user",
+        hooks: {
+          before: [
+            {
+              matcher: (ctx) => ctx.path !== "/sign-out",
+              handler: createAuthMiddleware(async (ctx) => {
+                const session = await getSessionFromCtx(ctx);
+                if (!session) {
+                  return;
+                }
+                const row = await db.query.user.findFirst({
+                  columns: { banExpires: true, banned: true },
+                  where: { id: session.user.id },
+                });
+                if (
+                  row?.banned === true &&
+                  (row.banExpires === null || row.banExpires.getTime() > Date.now())
+                ) {
+                  throw new APIError("FORBIDDEN", {
+                    code: BANNED_USER,
+                    message: "This account is banned.",
+                  });
+                }
+              }),
+            },
+          ],
+        },
+      },
       ...(plugins?.stripe
         ? [
             stripe({
@@ -312,5 +348,4 @@ export const createAuth = ({
 
 export type Auth = ReturnType<typeof createAuth>;
 
-export { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-export { APIError };
+export { APIError, createAuthMiddleware, getSessionFromCtx };
