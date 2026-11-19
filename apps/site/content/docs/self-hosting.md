@@ -213,6 +213,8 @@ Release notes are on [GitHub Releases](https://github.com/ted-too/relayit/releas
 
 If your platform runs the old and new api side by side during an upgrade (Compose does not), then after upgrading past the release that flattened the send limits in `user_channel.limits`, run the `UPDATE` in its migration, [`20261118132136_flatten_user_channel_limits/migration.sql`](https://github.com/ted-too/relayit/blob/main/packages/persistence/drizzle/20261118132136_flatten_user_channel_limits/migration.sql), once more when the old api is gone (`psql` against the api's database, with that file). While both versions run, sends answer 500; and a sign-in the old api handled in the meantime stores that user's limits in the shape the new api refuses to send on, which the second run corrects.
 
+After upgrading past the release that made Relayit delete only the SES identities it created, look in `job_dead_letter` for `email.delete-domain-identity` rows (`select payload, failed_at from job_dead_letter where job_name = 'email.delete-domain-identity'`). A delete queued by the old release and still waiting when the new worker started can't be read by it, so the identity of that removed Domain is still in SES, and adding the same domain again is refused until you delete the identity there by hand. If your platform runs the old and new releases side by side (Compose does not), stop the old worker before the new api takes traffic: the old worker deletes whatever identity a job names.
+
 ## Production notes
 
 - Put the api and web behind a reverse proxy with TLS, for example `https://api.your-domain.com` and `https://app.your-domain.com`, and set `API_URL` and `APP_URL` to those URLs. Forward `X-Forwarded-For` to the api: sign-in is rate-limited per client address.

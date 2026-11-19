@@ -250,7 +250,7 @@ const registerCustomDomainIdentity = (input: {
                     customDomainId: input.customDomainId,
                     fqdn: input.fqdn,
                     message:
-                      "This domain already has an SES identity that Relayit can't take over, so it can't be added. Whoever runs this Relayit deployment can remove that identity in SES.",
+                      "This domain already has an SES identity that Relayit can't take over, so Relayit can't register it. Whoever runs this Relayit deployment can remove that identity in SES.",
                   });
                 default:
                   return new CustomDomainError({
@@ -981,8 +981,8 @@ export const completeDomainClaimTransfer = (input: {
 const removeUnlinkedDomain = (
   tx: DatabaseTransaction,
   customDomainId: string,
-  // False for a Domain SES has just refused an identity: it has none, and never will.
-  hasIdentity = true,
+  // SES has just refused the Domain an identity: it has none, and never will.
+  options: { readonly identityRefused?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const jobs = yield* Jobs;
@@ -1013,7 +1013,7 @@ const removeUnlinkedDomain = (
     // not make stays. Recorded too, for an add of the FQDN that comes before the job has run.
     // A registration found here says otherwise, whatever the caller was refused: another
     // add of the Domain registered it since.
-    if (hasIdentity || registration) {
+    if (registration || !options.identityRefused) {
       yield* tx.insert(removedDomainIdentity).values({
         dkimSelector: domain.dkimSelector,
         fqdn: domain.fqdn,
@@ -1090,11 +1090,9 @@ export const removeDomainLink = (input: {
           organizationIds: unlinked.held === "verified" ? [input.organizationId] : [],
         });
         return {
-          domainRemoved: yield* removeUnlinkedDomain(
-            tx,
-            input.customDomainId,
-            !input.identityRefused,
-          ),
+          domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId, {
+            identityRefused: input.identityRefused,
+          }),
           unlinked: true as const,
         };
       }),

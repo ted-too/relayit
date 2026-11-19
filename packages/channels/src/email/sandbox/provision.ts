@@ -96,8 +96,8 @@ const registerSandboxIdentity = (input: {
       .pipe(
         Effect.mapError((cause) => {
           switch (cause._tag) {
-            // Not retried into: the identity stays as it is until someone deletes it in SES
-            // or the root is changed.
+            // Nothing was changed in SES, and every start fails this way until someone
+            // deletes the identity there or the root is changed.
             case "EmailBackendIdentityConflict":
               return new SandboxDomainError({
                 cause,
