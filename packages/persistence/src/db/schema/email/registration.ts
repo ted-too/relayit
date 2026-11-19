@@ -53,7 +53,8 @@ export const emailDomainRegistration = pgTable(
 export type EmailDomainRegistration = typeof emailDomainRegistration.$inferSelect;
 
 /**
- * The SES identity of a Domain that was removed, until SES has deleted it. The identity
+ * The SES identity of a Domain that was removed, until its delete job has deleted it or
+ * has found none after the time a late create could still land. The identity
  * outlives the Domain's row by as long as its delete job takes, and SES names it by FQDN
  * alone, so an add of the same FQDN in that time finds an identity signing with a selector
  * that is not its own. This row is what says the identity was Relayit's, and so may be

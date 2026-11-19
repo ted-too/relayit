@@ -1059,6 +1059,80 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("holds a Billing User's Projects to a share of adds and refreshes between them", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("hurried");
+        const other = yield* signUp("unhurried");
+        const [busy, sibling, quiet] = [
+          yield* createProject(owner, `Busy ${run.slice(-8)}`),
+          yield* createProject(owner, `Sibling ${run.slice(-8)}`),
+          yield* createProject(other, `Quiet ${run.slice(-8)}`),
+        ];
+        const add = (as: string, project: { readonly slug: string }, fqdn: string) =>
+          call("POST", `/projects/${project.slug}/domains`, { as, body: { fqdn } });
+        const tooOften = (did: "added" | "refreshed") => ({
+          body: {
+            _tag: "RateLimited",
+            message: `Domains have been ${did} too often in the Projects billed to this Project's Billing User. Try again in a few minutes.`,
+          },
+          cookies: [],
+          status: 429,
+        });
+
+        // Ten adds in the window, whatever becomes of each: these all name one Domain.
+        const fqdn = `${run}.hurried.example.test`;
+        const added = yield* add(owner, busy, fqdn);
+        expect(added.status).toBe(200);
+        for (let again = 1; again < 10; again += 1) {
+          expect((yield* add(owner, busy, fqdn)).status).toBe(200);
+        }
+        const refused = `${run}.refused.example.test`;
+        expect(yield* add(owner, busy, refused)).toEqual(tooOften("added"));
+        // Making another Project buys no more: it is billed to the same user.
+        expect(yield* add(owner, sibling, refused)).toEqual(tooOften("added"));
+        // Refused before anything was written, and so before SES was asked for an identity:
+        // an add writes the Domain first.
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        yield* Effect.addFinalizer(() => Effect.promise(() => db.$client.end()));
+        expect(
+          yield* Effect.promise(() =>
+            db.query.customDomain.findFirst({ where: { fqdn: refused } }),
+          ),
+        ).toBeUndefined();
+        // Another Billing User's Project is not held up, even for the same name.
+        const elsewhere = yield* add(other, quiet, refused);
+        expect(elsewhere.status).toBe(200);
+
+        // A refresh that would have to finish a registration is an add to SES, and is
+        // counted as one: the Domain stays unregistered.
+        const domainId = (added.body as { id: string }).id;
+        yield* Effect.promise(() =>
+          db
+            .delete(emailDomainRegistration)
+            .where(eq(emailDomainRegistration.customDomainId, domainId)),
+        );
+        expect(
+          yield* call("POST", `/projects/${busy.slug}/domains/${domainId}/refresh`, { as: owner }),
+        ).toEqual(tooOften("added"));
+        expect(
+          yield* Effect.promise(() =>
+            db.query.emailDomainRegistration.findFirst({ where: { customDomainId: domainId } }),
+          ),
+        ).toBeUndefined();
+
+        // Any other refresh asks SES for the identity once, and has its own count.
+        const refresh = call(
+          "POST",
+          `/projects/${quiet.slug}/domains/${(elsewhere.body as { id: string }).id}/refresh`,
+          { as: other },
+        );
+        for (let refreshed = 0; refreshed < 30; refreshed += 1) {
+          expect((yield* refresh).status).toBe(200);
+        }
+        expect(yield* refresh).toEqual(tooOften("refreshed"));
+      }),
+    );
+
     it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("unregistered");

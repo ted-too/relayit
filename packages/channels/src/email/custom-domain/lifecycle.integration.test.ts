@@ -45,6 +45,7 @@ import {
 } from "../verification/handlers";
 import {
   CLAIM_TTL_MS,
+  LATE_IDENTITY_GRACE_MS,
   createCustomDomain,
   deleteCustomDomain,
   pauseCustomDomain,
@@ -88,6 +89,8 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     const published = new Set<string>();
     const cancelled: { readonly name: string; readonly payload: unknown }[] = [];
     const enqueued: { readonly name: string; readonly payload: unknown }[] = [];
+    /** When each of `enqueued` was delayed until, in the same order. */
+    const enqueuedFor: (number | undefined)[] = [];
     const deletedIdentities: { readonly fqdn: string; readonly region: string | null }[] = [];
     const createdIdentities: string[] = [];
     // The SES account as SES keeps it: one identity to an FQDN, signing with one selector.
@@ -153,13 +156,19 @@ describe("Domain lifecycle (PostgreSQL)", () => {
           cancelled.push({ name: contract.name, payload });
           return Effect.void;
         }) as JobsService["cancel"],
-        enqueue: ((contract: { readonly name: string }, payload: { readonly fqdn?: string }) => {
+        enqueue: ((
+          contract: { readonly name: string },
+          payload: { readonly fqdn?: string },
+          _transaction?: unknown,
+          enqueueOptions?: { readonly delayUntil?: number },
+        ) => {
           if (payload.fqdn !== undefined && payload.fqdn === options.failEnqueueFor?.()) {
             return Effect.fail(
               new JobEnqueueError({ cause: "refused", jobName: contract.name, stage: "outbox" }),
             );
           }
           enqueued.push({ name: contract.name, payload });
+          enqueuedFor.push(enqueueOptions?.delayUntil);
           return Effect.void;
         }) as JobsService["enqueue"],
         schedule: ((contract: { readonly name: string }, payload: unknown, at?: number) => {
@@ -201,6 +210,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       createdIdentities,
       deletedIdentities,
       enqueued,
+      enqueuedFor,
       identities,
       layer,
       published,
@@ -209,17 +219,17 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     };
   };
 
-  const insertProject = Effect.fn(function* () {
+  /** A Project whose Billing User's Plan allows `customDomains` Domains: any number, unless given. */
+  const insertProject = Effect.fn(function* (customDomains: number | null = null) {
     const db = yield* DB;
     const id = typeid("orgn").toString();
-    // A Billing User whose Plan sets no Domain limit; the limit has its own tests.
     const billingUserId = `user_${id}`;
     yield* db
       .insert(user)
       .values({ email: `${billingUserId}@example.test`, id: billingUserId, name: "Billing" });
     yield* db.insert(userChannel).values({
       channelType: "email",
-      limits: SELF_HOSTED_LIMITS.email,
+      limits: { ...SELF_HOSTED_LIMITS.email, customDomains },
       userId: billingUserId,
     });
     yield* db
@@ -584,28 +594,106 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     });
     return Effect.gen(function* () {
       const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
-      const claimantId = yield* insertProject();
       identities.set(fqdn, "selector1");
 
-      // Its holder finishing it and another Project claiming it are refused alike, and as
-      // with any registration that failed the Domain and the claim stay as they were.
-      for (const organizationId of [holderId, claimantId]) {
-        expect(yield* Effect.flip(createCustomDomain({ fqdn, organizationId }))).toMatchObject({
-          _tag: "CustomDomainIdentityConflict",
-          customDomainId,
-        });
-      }
+      // As with any registration that failed, the Domain stays its holder's as it was.
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: holderId })),
+      ).toMatchObject({ _tag: "CustomDomainIdentityConflict", customDomainId });
       expect(yield* domainOf(fqdn)).toMatchObject({ id: customDomainId, registration: null });
-      expect(yield* linksOf(customDomainId)).toHaveLength(2);
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: holderId, ownershipVerificationStatus: "verified" },
+      ]);
 
       // Removing the Domain leaves the identity: it never signed with the Domain's selector.
-      for (const organizationId of [holderId, claimantId]) {
-        yield* deleteCustomDomain({ customDomainId, organizationId });
-      }
+      yield* deleteCustomDomain({ customDomainId, organizationId: holderId });
       expect(yield* domainOf(fqdn)).toBeUndefined();
       expect(yield* runIdentityDeletes(enqueued, fqdn)).toHaveLength(1);
       expect(identities.get(fqdn)).toBe("selector1");
       expect(deletedIdentities).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a claim refused for an identity Relayit did not make leaves no link behind", () => {
+    const ses = { down: false };
+    const { cancelled, createdIdentities, enqueued, identities, layer } = boundaries({
+      failCreateIdentity: () => ses.down,
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
+      // A Plan with room for one Domain, which a claim left behind would take.
+      const claimantId = yield* insertProject(1);
+      identities.set(fqdn, "selector1");
+
+      for (const _attempt of [1, 2]) {
+        expect(
+          yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+        ).toMatchObject({ _tag: "CustomDomainIdentityConflict", customDomainId });
+        expect(yield* linkOf(customDomainId, claimantId)).toBeUndefined();
+      }
+
+      // Its check is stopped, and the Domain is its holder's as it was, with nothing
+      // recorded or queued for an identity it never had.
+      expect(cancelled).toContainEqual({
+        name: "email.verify-ownership",
+        payload: { customDomainId, organizationId: claimantId },
+      });
+      expect(yield* linksOf(customDomainId)).toEqual([
+        { organizationId: holderId, ownershipVerificationStatus: "verified" },
+      ]);
+      expect(
+        yield* db
+          .select({ id: removedDomainIdentity.id })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn)),
+      ).toEqual([]);
+      expect(enqueued).toEqual([]);
+      expect(identities.get(fqdn)).toBe("selector1");
+
+      // The one Domain the claimant's Plan allows is still free.
+      const other = `${Bun.randomUUIDv7()}.example.test`;
+      expect((yield* createCustomDomain({ fqdn: other, organizationId: claimantId })).kind).toBe(
+        "created",
+      );
+      expect(createdIdentities).toEqual([other]);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a refused claim that was the Domain's last link takes the Domain with it", () => {
+    const ses = { down: false };
+    let holderLeaves: Effect.Effect<void> = Effect.void;
+    const { enqueued, identities, layer } = boundaries({
+      beforeKeyLoad: () => holderLeaves,
+      failCreateIdentity: () => ses.down,
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const services = yield* Effect.context<DB | Jobs>();
+      const { customDomainId, fqdn, holderId } = yield* unregisteredDomain(ses);
+      const claimantId = yield* insertProject();
+      identities.set(fqdn, "selector1");
+
+      // The holder removes the Domain once the claim is written and before SES refuses it.
+      holderLeaves = Effect.suspend(() => {
+        holderLeaves = Effect.void;
+        return deleteCustomDomain({ customDomainId, organizationId: holderId });
+      }).pipe(Effect.provide(services), Effect.orDie);
+      expect(
+        yield* Effect.flip(createCustomDomain({ fqdn, organizationId: claimantId })),
+      ).toMatchObject({ _tag: "CustomDomainIdentityConflict" });
+
+      // No Project is linked, so the Domain went with the claim. It never had an identity:
+      // nothing is recorded or queued for one, and the outside identity stays.
+      expect(yield* domainOf(fqdn)).toBeUndefined();
+      expect(
+        yield* db
+          .select({ id: removedDomainIdentity.id })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn)),
+      ).toEqual([]);
+      expect(enqueued).toEqual([]);
+      expect(identities.get(fqdn)).toBe("selector1");
     }).pipe(Effect.provide(layer));
   });
 
@@ -664,6 +752,96 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       yield* runIdentityDeletes(enqueued.slice(1), fqdn);
       expect(yield* recorded).toEqual([]);
       expect(identities.has(fqdn)).toBe(false);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a removal whose delete found no identity is forgotten once none can land late", () => {
+    const ses = { down: false };
+    const { deletedIdentities, enqueued, enqueuedFor, identities, layer } = boundaries({
+      failCreateIdentity: () => ses.down,
+    });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const recorded = (fqdn: string) =>
+        db
+          .select({ dkimSelector: removedDomainIdentity.dkimSelector })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn));
+      const aged = (fqdn: string) =>
+        db
+          .update(removedDomainIdentity)
+          .set({ createdAt: sql`now() - make_interval(secs => ${LATE_IDENTITY_GRACE_MS / 1000})` })
+          .where(eq(removedDomainIdentity.fqdn, fqdn));
+      // Three Domains whose create was given up on, each then removed.
+      const [nothingLands, landsLate, neverRun] = [
+        yield* unregisteredDomain(ses),
+        yield* unregisteredDomain(ses),
+        yield* unregisteredDomain(ses),
+      ];
+      const lateSelector = yield* selectorOf(landsLate.customDomainId);
+      for (const { customDomainId, holderId } of [nothingLands, landsLate, neverRun]) {
+        yield* deleteCustomDomain({ customDomainId, organizationId: holderId });
+      }
+      const removals = enqueued.length;
+
+      // The delete job finds no identity. The create may still land, so the record stays
+      // and the job is queued to look again once it no longer can.
+      const before = Date.now();
+      for (const { fqdn } of [nothingLands, landsLate]) {
+        yield* runIdentityDeletes(enqueued.slice(0, removals), fqdn);
+        expect(yield* recorded(fqdn)).toHaveLength(1);
+      }
+      expect(enqueued.slice(removals)).toEqual(
+        [nothingLands, landsLate].map(({ fqdn }) => ({
+          name: "email.delete-domain-identity",
+          payload: expect.objectContaining({ fqdn }),
+        })),
+      );
+      for (const delayedUntil of enqueuedFor.slice(removals)) {
+        expect(delayedUntil).toBeGreaterThanOrEqual(before + LATE_IDENTITY_GRACE_MS);
+        expect(delayedUntil).toBeLessThanOrEqual(Date.now() + LATE_IDENTITY_GRACE_MS);
+      }
+
+      // That time passes, and for one of them the create did land.
+      identities.set(landsLate.fqdn, lateSelector);
+      for (const { fqdn } of [nothingLands, landsLate, neverRun]) {
+        yield* aged(fqdn);
+      }
+      const followUps = enqueued.length;
+      for (const { fqdn } of [nothingLands, landsLate]) {
+        yield* runIdentityDeletes(enqueued.slice(removals, followUps), fqdn);
+      }
+
+      // Both records are gone, the late identity with its own, and nothing is queued again.
+      expect(yield* recorded(nothingLands.fqdn)).toEqual([]);
+      expect(yield* recorded(landsLate.fqdn)).toEqual([]);
+      expect(deletedIdentities).toEqual([{ fqdn: landsLate.fqdn, region: null }]);
+      expect(enqueued).toHaveLength(followUps);
+      // A record as old whose job has not run is kept: its identity may still be in SES.
+      expect(yield* recorded(neverRun.fqdn)).toHaveLength(1);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("a delete job that finds its record cleared by a registration queues nothing", () => {
+    const { enqueued, layer } = boundaries();
+    return Effect.gen(function* () {
+      const holderId = yield* insertProject();
+      const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+      const first = yield* createCustomDomain({ fqdn, organizationId: holderId });
+      yield* deleteCustomDomain({ customDomainId: first.customDomainId, organizationId: holderId });
+      // Added again before the job ran: the registration deleted the identity and its record.
+      const second = yield* createCustomDomain({ fqdn, organizationId: holderId });
+      yield* deleteCustomDomain({
+        customDomainId: second.customDomainId,
+        organizationId: holderId,
+      });
+      const removals = enqueued.length;
+
+      // The second removal's job deletes the identity; the first's then finds none, and no
+      // record of its own to wait on.
+      yield* runIdentityDeletes(enqueued.slice(0, removals).toReversed(), fqdn);
+
+      expect(enqueued).toHaveLength(removals);
     }).pipe(Effect.provide(layer));
   });
 

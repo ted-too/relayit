@@ -17,8 +17,10 @@ import {
   NotFound,
   type OperationFailed,
   PlanLimitReached,
+  RateLimited,
 } from "@repo/contracts/dashboard";
 import { DB } from "@repo/persistence/db/effect";
+import { Redis } from "@repo/redis";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { operationFailed } from "./failures";
@@ -56,6 +58,61 @@ const lifecycleFailure =
         return operationFailed(message)(error);
     }
   };
+
+/**
+ * How often the Projects of one Billing User may add a Domain and refresh one, between
+ * them, in a ten-minute window.
+ *
+ * SES allows one control-plane call a second in a region, for the whole account, and every
+ * Project's registrations and verification checks draw on it. A member, or a script, adding
+ * and removing names in a loop would otherwise use it all: a Plan limits how many Domains
+ * are held, not how often one is added. An add and the removal that makes room for the next
+ * cost SES up to eight calls between them (create, get, MAIL FROM; then the delete job's
+ * get, tenant lookups and delete, and its second look), a refresh one get, and a refresh
+ * that has to finish a registration is counted as an add too. That is about 110 calls in a
+ * window, under a fifth of the quota, and twice that across the edge of two windows.
+ *
+ * It bounds adding and removing, and nothing else: not the verification checks of Domains
+ * that are kept (#168), nor what a registration asks SES about the identities recorded
+ * for its FQDN's earlier removals, which are few unless SES was down for their delete jobs.
+ */
+const SES_CALL_LIMITS = { add: 10, refresh: 30 } as const;
+const SES_CALL_WINDOW_SECONDS = 10 * 60;
+
+/**
+ * Counts one add or refresh and refuses it over the limit, before SES is called. Counted
+ * against the Project's Billing User, as the Plan's Domain limit is, because a Project
+ * costs nothing to make: counted by Project, a loop would only have to make another. A
+ * Project with no Billing User recorded is counted alone, not with its owner's others as
+ * that limit counts it: it takes a Billing User since deleted, or never recorded. A counter in Redis with a fixed window, as
+ * better-auth keeps for `/auth/*`: the window starts at the first call and the counter
+ * expires with it.
+ */
+const limitSesCalls = (action: keyof typeof SES_CALL_LIMITS, organizationId: string) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    const redis = yield* Redis;
+    const failed = operationFailed("Failed to count the Billing User's Domain operations.");
+    const project = yield* db.query.organization
+      .findFirst({ columns: { billingUserId: true }, where: { id: organizationId } })
+      .pipe(Effect.catch(failed));
+    const calls = yield* redis
+      .evaluateNumber({
+        args: [String(SES_CALL_WINDOW_SECONDS)],
+        keys: [`domain-ses-calls:${action}:${project?.billingUserId ?? organizationId}`],
+        script:
+          "local n = redis.call('INCR', KEYS[1]) if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return n",
+      })
+      .pipe(Effect.catch(failed));
+    if (calls > SES_CALL_LIMITS[action]) {
+      return yield* new RateLimited({
+        message:
+          action === "add"
+            ? "Domains have been added too often in the Projects billed to this Project's Billing User. Try again in a few minutes."
+            : "Domains have been refreshed too often in the Projects billed to this Project's Billing User. Try again in a few minutes.",
+      });
+    }
+  });
 
 /**
  * A Project's Domains as the dashboard lists them, or the one `customDomainId` names.
@@ -188,6 +245,7 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
       .handle("create", ({ payload }) =>
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
+          yield* limitSesCalls("add", organizationId);
           const created = yield* createCustomDomain({ fqdn: payload.fqdn, organizationId }).pipe(
             Effect.catch(
               (
@@ -233,6 +291,12 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
             );
             return yield* listedDomain({ customDomainId: params.domainId, organizationId });
           }
+          if (!domain.registration) {
+            // A registration, which costs SES what an add does. Counted first, so that one
+            // refused here does not use up a refresh.
+            yield* limitSesCalls("add", organizationId);
+          }
+          yield* limitSesCalls("refresh", organizationId);
           if (!domain.registration) {
             // A first add that failed partway left the Domain unregistered; adding it again,
             // as the holder, finishes the registration.

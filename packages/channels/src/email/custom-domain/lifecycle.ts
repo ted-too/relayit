@@ -137,6 +137,14 @@ export const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const IDENTITY_CALL_TIMEOUT = "30 seconds";
 
 /**
+ * How long after a Domain's removal a create that was given up on is still taken to be able
+ * to land in SES. Giving a call up aborts its request, so what can land is a request SES
+ * already had, which it answers in seconds; this is thirty times the timeout. The removed
+ * Domain's identity stays recorded for this long when its delete job found none.
+ */
+export const LATE_IDENTITY_GRACE_MS = 15 * 60 * 1000;
+
+/**
  * Held to the end of the transaction while a Domain's SES identity is created or deleted.
  * SES names an identity by its FQDN alone, so deleting a removed Domain's identity and
  * registering the same FQDN added again must not interleave.
@@ -599,7 +607,29 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
             db,
             fqdn: existing.fqdn,
             keyMaterial: yield* loadCustomDomainKeyMaterial(existing),
-          });
+          }).pipe(
+            // As for a first add: a refusal can't be finished by claiming again, so the
+            // claim this request wrote goes with it, and with it the place it took in the
+            // Plan's Domain limit. The Domain stays its holder's.
+            Effect.tapErrorTag("CustomDomainIdentityConflict", () =>
+              removeDomainLink({
+                customDomainId: existing.id,
+                db,
+                identityRefused: true,
+                organizationId: input.organizationId,
+                unprovenOnly: true,
+              }).pipe(
+                Effect.flatMap((removed) =>
+                  removed.unlinked
+                    ? cancelOwnershipCheck({
+                        customDomainId: existing.id,
+                        organizationId: input.organizationId,
+                      })
+                    : Effect.void,
+                ),
+              ),
+            ),
+          );
         }
 
         yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
@@ -1095,9 +1125,10 @@ export const removeDomainLink = (input: {
   readonly organizationId: string;
   readonly unprovenOnly?: boolean;
   /**
-   * The link is of a first add SES has just refused an identity. Its Domain, if it goes,
-   * leaves no identity to record or delete: a record would only be read, and SES asked
-   * about it, by every later add of a name that stays refused.
+   * The link is one this request wrote, for a Domain SES has just refused an identity: a
+   * first add, or a claim on an unregistered Domain. The Domain, if it goes, leaves no
+   * identity to record or delete: a record would only be read, and SES asked about it, by
+   * every later add of a name that stays refused.
    */
   readonly identityRefused?: boolean;
 }) =>
