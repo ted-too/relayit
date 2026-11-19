@@ -16,7 +16,7 @@ const admin = (databaseUrl: string, text: string) =>
     const client = new Client({ connectionString: databaseUrl });
     await client.connect();
     try {
-      await client.query(text);
+      return (await client.query<Record<string, unknown>>(text)).rows;
     } finally {
       await client.end();
     }
@@ -78,15 +78,7 @@ describe("timestamp columns", () => {
       expect([promise].flat().map((result) => result.rows)).toEqual([[{ now: true, zone: "UTC" }]]);
 
       // The database's own zone is what a session gets when nothing sets it.
-      const unset = yield* Effect.promise(async () => {
-        const client = new Client({ connectionString: url.href });
-        await client.connect();
-        try {
-          return (await client.query("select current_setting('TimeZone') as zone")).rows;
-        } finally {
-          await client.end();
-        }
-      });
+      const unset = yield* admin(url.href, "select current_setting('TimeZone') as zone");
       expect(unset).toEqual([{ zone: "Etc/GMT+12" }]);
     }).pipe(Effect.scoped),
   );

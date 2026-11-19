@@ -96,9 +96,9 @@ describe("a Project's Billing User (PostgreSQL)", () => {
     }).pipe(Effect.provide(live)),
   );
 
-  // #121. With none recorded and several owners, each reader used to take whichever owner
-  // its own query met first. Both orders of insertion, so the answer cannot be the order
-  // the rows lie in.
+  // #121. Readers that each took whichever owner their own query met first would charge one
+  // owner and count or lock another. Both orders of insertion, so the answer cannot be the
+  // order the rows lie in.
   it.live.each([["first"], ["last"]] as const)(
     "with none recorded, is for every reader the owner who has been a member longest, inserted %s",
     ([inserted]) =>

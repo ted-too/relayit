@@ -946,8 +946,8 @@ describe("an accepted email send", () => {
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
-  // #160. The reservation used to expire 90 days after the billing period it was made in,
-  // a month at most, so a send scheduled for later was sent with its confirm finding nothing.
+  // #160. A reservation that expired by its billing period alone, a month away at most,
+  // would be gone when a send scheduled for later is confirmed or released.
   it.live("keeps the Usage reservation of a send scheduled long past its billing period", () => {
     const backend = makeBackend();
     return Effect.gen(function* () {

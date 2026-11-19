@@ -100,7 +100,7 @@ export const requireDomainAllowance = (
       .innerJoin(organization, eq(organization.id, organizationDomain.organizationId))
       .where(
         and(
-          eq(billingUserIdOf(tx), billingUserId),
+          eq(billingUserIdOf, billingUserId),
           input.customDomainId
             ? ne(organizationDomain.customDomainId, input.customDomainId)
             : undefined,

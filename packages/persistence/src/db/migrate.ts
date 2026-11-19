@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Data, type Duration, Effect, Schedule } from "effect";
 import { Client } from "pg";
+import { SESSION_TIME_ZONE } from "./effect";
 
 /** Fixed identity — do not change after first deploy. */
 const LOCK_KEY1 = 872_014_331;
@@ -226,6 +227,7 @@ export const migrateDatabase = (options: {
       try: async () => {
         const client = new Client({
           connectionString: options.databaseUrl,
+          options: `-c timezone=${SESSION_TIME_ZONE}`,
           // An address that answers nothing would otherwise hold one attempt open. No
           // query timeout: the lock is waited for and a migration takes as long as it takes.
           connectionTimeoutMillis: 10_000,
@@ -325,6 +327,7 @@ export const requireMigrated = (options: {
       try: async () => {
         const client = new Client({
           connectionString: options.databaseUrl,
+          options: `-c timezone=${SESSION_TIME_ZONE}`,
           // An address that answers nothing, or a connection that goes quiet after it is
           // made, would otherwise hold one attempt open, and the wait is only counted
           // between attempts.
