@@ -79,6 +79,7 @@ docker volume ls --filter name=relayit_postgres_data   # the volume's full name
 docker run --rm -v <volume>:/old alpine cat /old/PG_VERSION   # the version that wrote it
 
 docker run -d --name relayit-postgres-old -v <volume>:/var/lib/postgresql/data postgres:<version>-alpine
+until docker exec relayit-postgres-old pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
 docker exec relayit-postgres-old pg_dump -U postgres -d relayit --no-owner > relayit.sql
 docker rm -f relayit-postgres-old
 ```
@@ -88,9 +89,12 @@ Use your own `POSTGRES_USER` and `POSTGRES_DB` if you changed them. Check that `
 ```bash
 docker volume rm <volume>
 docker compose up -d postgres
-docker compose exec -T postgres psql -U postgres -d relayit < relayit.sql
+until docker compose exec -T postgres pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
+docker compose exec -T postgres psql -U postgres -d relayit -v ON_ERROR_STOP=1 --single-transaction < relayit.sql
 docker compose up -d
 ```
+
+The wait matters: a new volume's Postgres first runs a short-lived setup server, and a restore sent to that one is cut off when it stops. If the restore reports an error, nothing was restored; fix the cause and run it again from `relayit.sql`.
 
 Then open:
 

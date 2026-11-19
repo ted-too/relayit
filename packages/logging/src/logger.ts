@@ -9,7 +9,7 @@ import {
   Schema,
   SchemaTransformation,
 } from "effect";
-import { logEffectFailure } from "./log-failure";
+import { failureAnnotations } from "./log-failure";
 
 const LEVELS = {
   all: "All",
@@ -70,7 +70,10 @@ export const logged =
         // An interrupt is the process being told to stop, not a failure.
         cause.reasons.every(Cause.isInterruptReason)
           ? Effect.void
-          : logEffectFailure(failure)(cause).pipe(
+          : // Always an error: `logEffectFailure` logs a failure a client caused at debug,
+            // and whatever ends the process is not one of those.
+            Effect.logError(failure, cause).pipe(
+              Effect.annotateLogs(failureAnnotations(Cause.squash(cause))),
               Effect.andThen(
                 Effect.sync(() => {
                   process.exitCode = 1;

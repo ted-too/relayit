@@ -130,6 +130,11 @@ describe("the migrate step and the apps' check for it", () => {
       const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
       const name = new URL(databaseUrl).pathname.slice(1);
       yield* query(testDatabaseUrl, `alter database "${name}" allow_connections false`);
+      // Refused, not merely behind: an empty database would keep the app waiting too.
+      const refused = yield* Effect.tryPromise(() =>
+        new Client({ connectionString: databaseUrl }).connect(),
+      ).pipe(Effect.flip);
+      expect(refused).toMatchObject({ cause: { code: "55000" } });
 
       const app = yield* Effect.forkChild(requireMigrated({ databaseUrl, waitFor: "30 seconds" }));
       yield* Effect.sleep("500 millis");

@@ -98,9 +98,11 @@ export const requireMigrated = (options: {
       try: async () => {
         const client = new Client({
           connectionString: options.databaseUrl,
-          // An address that answers nothing would otherwise hold one attempt, and so the
-          // whole wait, open for as long as the OS keeps trying.
+          // An address that answers nothing, or a connection that goes quiet after it is
+          // made, would otherwise hold one attempt open, and the wait is only counted
+          // between attempts.
           connectionTimeoutMillis: 10_000,
+          query_timeout: 10_000,
         });
         // pg reports a connection lost between calls as an event, and an error event
         // nobody listens for ends the process.
