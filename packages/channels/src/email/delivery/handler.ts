@@ -217,7 +217,8 @@ const sendingState = (delivery: { readonly id: string; readonly startedAt: Date 
 
 /**
  * Records a Delivery SES has accepted as sent, with its message.sent event. Only the claim
- * SES answered changes, so recording it twice emits nothing twice.
+ * SES answered changes, so recording it twice emits nothing twice; false when it was already
+ * recorded.
  */
 const recordSent = (
   db: Database,
@@ -239,7 +240,7 @@ const recordSent = (
           { completedAt: new Date(), providerMessageId: input.providerMessageId, status: "sent" },
         );
         if (!sent) {
-          return;
+          return false;
         }
         yield* emitWebhookEvent(tx, {
           event: {
@@ -253,6 +254,7 @@ const recordSent = (
           messageTags: input.messageTags,
           organizationId: input.organizationId,
         });
+        return true;
       }),
     )
     .pipe(
@@ -418,8 +420,8 @@ export const endStuckDeliveries = Effect.gen(function* () {
         const state = yield* sendingState(delivery);
         let failureMessage: string;
         switch (state.kind) {
-          case "accepted":
-            yield* recordSent(db, {
+          case "accepted": {
+            const recorded = yield* recordSent(db, {
               claimedAt: state.claimedAt,
               deliveryId: delivery.id,
               messageId: delivery.messageId,
@@ -427,8 +429,15 @@ export const endStuckDeliveries = Effect.gen(function* () {
               organizationId: delivery.organizationId,
               providerMessageId: state.providerMessageId,
             });
-            yield* confirmUsage(delivery.id);
-            return yield* Effect.logWarning("Recorded a Delivery left sending as sent");
+            if (recorded) {
+              // As the release below: no job runs again to confirm what Redis refused.
+              yield* confirmUsage(delivery.id).pipe(
+                Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
+              );
+              yield* Effect.logWarning("Recorded a Delivery left sending as sent");
+            }
+            return;
+          }
           case "live":
             // Not reachable while the age is longer than the lease; its owner has it.
             return;
