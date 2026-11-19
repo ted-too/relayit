@@ -23,7 +23,7 @@ import {
   userChannel,
 } from "@repo/persistence/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendIdentityConflict } from "../backend";
@@ -80,13 +80,14 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
                 if (options.createIdentityAnswers?.() === false) {
                   return Effect.never;
                 }
-                const existing = identities.get(fqdn);
+                // SES keeps a domain's name in lower case, whatever case it was asked in.
+                const existing = identities.get(fqdn.toLowerCase());
                 if (existing !== undefined && existing !== dkimSelector) {
                   return Effect.fail(
                     new EmailBackendIdentityConflict({ fqdn, region: region ?? "eu-central-1" }),
                   );
                 }
-                identities.set(fqdn, dkimSelector);
+                identities.set(fqdn.toLowerCase(), dkimSelector);
                 createdIdentities.push(fqdn);
                 return Effect.succeed({ mailFrom: { domain: `send.${fqdn}`, records: [] } });
               }),
@@ -95,10 +96,10 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
         defaultRegion: "eu-central-1",
         deleteIdentity: ({ dkimSelector, fqdn }) =>
           Effect.sync(() => {
-            if (identities.get(fqdn) !== dkimSelector) {
+            if (identities.get(fqdn.toLowerCase()) !== dkimSelector) {
               return false;
             }
-            identities.delete(fqdn);
+            identities.delete(fqdn.toLowerCase());
             deletedIdentities.push(fqdn);
             return true;
           }),
@@ -171,6 +172,28 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       .insert(organization)
       .values({ billingUserId, id, name: "Domains", slug: `domains-${id}` });
     return id;
+  });
+
+  /**
+   * Returns once a transaction is waiting for the advisory lock of that key, so a test
+   * that holds the lock knows the code under test has reached it.
+   */
+  const awaitWaiterOn = Effect.fn(function* (key: string) {
+    const db = yield* DB;
+    yield* db
+      .execute<{ waiting: boolean }>(
+        sql`select exists (
+          select 1 from pg_locks
+          where locktype = 'advisory' and not granted
+            and ((classid::bigint << 32) | objid::bigint) = hashtextextended(${key}, 0)
+        ) as waiting`,
+      )
+      .pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("20 millis"),
+          until: (result) => result.rows[0]?.waiting === true,
+        }),
+      );
   });
 
   const registrationsOf = Effect.fn(function* (sandboxDomainId: string | undefined) {
@@ -308,7 +331,7 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
   });
 
   it.live("is set up beside a Domain whose name only ends with the root's letters", () => {
-    const { createdIdentities, layer, scheduled } = boundaries();
+    const { createdIdentities, dnsOwners, layer, scheduled } = boundaries();
     return Effect.gen(function* () {
       const db = yield* DB;
       const root = newRoot();
@@ -330,11 +353,13 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       // identity is the Sandbox Domain's by then, and nothing is created or scheduled again.
       // In whatever case the root is typed.
       yield* heldDomain(root);
+      const dnsCalls = dnsOwners.length;
       expect(
         yield* ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root.toUpperCase() }),
       ).toBe(0);
       expect(createdIdentities).toEqual([root]);
       expect(scheduled).toHaveLength(1);
+      expect(dnsOwners).toHaveLength(dnsCalls);
     }).pipe(Effect.provide(layer));
   });
 
@@ -491,7 +516,7 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       const starting = yield* Effect.forkChild(
         ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root.toUpperCase() }),
       );
-      yield* Effect.sleep("300 millis");
+      yield* awaitWaiterOn(`custom-domain-identity:${root}`);
       const [sandbox] = yield* sandboxesOn(root);
       expect(sandbox).toBeDefined();
       expect(createdIdentities).toEqual([]);
@@ -569,7 +594,7 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       const starting = yield* Effect.forkChild(
         Effect.flip(ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root })),
       );
-      yield* Effect.sleep("300 millis");
+      yield* awaitWaiterOn("sandbox-domain-roots");
       expect(yield* sandboxesOn(root)).toEqual([]);
 
       yield* Deferred.succeed(commit, undefined);
@@ -614,7 +639,7 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       const adding = yield* Effect.forkChild(
         Effect.flip(createCustomDomain({ fqdn: `mail.${root}`, organizationId })),
       );
-      yield* Effect.sleep("300 millis");
+      yield* awaitWaiterOn("sandbox-domain-roots");
       yield* Deferred.succeed(commit, undefined);
       yield* Fiber.join(starting);
 
