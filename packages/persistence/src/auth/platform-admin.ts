@@ -119,9 +119,8 @@ export const setPlatformAdmin = (
 
 /**
  * Bans a user or lifts their ban, as better-auth's `/auth/admin/ban-user` and `unban-user`
- * do, which need an admin's session. A ban has no expiry and ends the user's sessions:
- * better-auth refuses a banned user only when a session is made, so one left open would
- * keep everything better-auth's own endpoints give it (a Project's API keys among them).
+ * do, which need an admin's session. A ban has no expiry and ends the user's sessions, so
+ * they are gone rather than left open and refused by `createAuth`'s `banned-user` hook.
  * Lifting a ban ends nothing; it clears the ban from any session a ban written straight to
  * the database left open.
  */

@@ -10,6 +10,11 @@ export const session = q.createQueryKeys("session", {
   me: q.static({
     queryFn: async () => {
       const { data, error } = await authClient.getSession();
+      // A session whose user is banned is refused, not ended: to the pages that is signed
+      // out, and signing in again says why.
+      if (error?.code === "BANNED_USER") {
+        return Promise.reject(new SignedOut("Banned"));
+      }
       if (error) {
         return Promise.reject(error);
       }
