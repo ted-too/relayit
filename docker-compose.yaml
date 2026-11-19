@@ -20,7 +20,7 @@ services:
       - "${API_PORT:-3005}:3005"
     environment:
       - PORT=3005
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_LEVEL=${LOG_LEVEL:-Info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - API_URL=${API_URL:-http://localhost:3005}
@@ -61,7 +61,7 @@ services:
     image: ghcr.io/ted-too/relayit-worker:${IMAGE_TAG:-alpha}
     restart: unless-stopped
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_LEVEL=${LOG_LEVEL:-Info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-relayit}?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - API_URL=${API_URL:-http://localhost:3005}
@@ -106,7 +106,10 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-relayit}
     volumes:
-      - relayit_postgres_data:/var/lib/postgresql/data
+      # The parent of the data directory, as the 18 images require: they keep the cluster in
+      # a directory named for its major version beneath it, and refuse to start with a
+      # volume at the older /var/lib/postgresql/data.
+      - relayit_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-relayit}"]
       interval: 5s

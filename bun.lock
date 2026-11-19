@@ -385,6 +385,10 @@
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
       },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "vitest": "catalog:",
+      },
     },
   },
   "trustedDependencies": [

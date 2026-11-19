@@ -61,56 +61,95 @@ export class DatabaseBehindError extends Data.TaggedError("DatabaseBehindError")
     "The database is missing migrations this version needs. Run the migrate step first (`bun run migrate.js` in the api image)";
 }
 
+/** The startup check could not ask the database: no connection, or its query failed. */
+export class DatabaseUnreachableError extends Data.TaggedError("DatabaseUnreachableError")<{
+  readonly cause: unknown;
+}> {
+  override readonly message = "Could not check the database's migrations";
+}
+
 /**
  * What an app does before it serves: succeed once the database has every migration this
- * build carries, and fail with `DatabaseBehindError` if it still lacks one after `waitFor`
- * (five minutes unless given).
+ * build carries. Until then it checks every two seconds for `waitFor` (five minutes unless
+ * given), then fails with the last check's outcome: `DatabaseBehindError`, or
+ * `DatabaseUnreachableError` if it could not ask.
  *
  * Behind is refused because the app's queries would fail one by one. It waits rather than
  * exiting at once because a platform that starts services in no order (Railway) may start
- * this one while the release's migrate step is still running. A database that is ahead,
- * with migrations this build has never heard of, is fine: during a rollout the previous
- * version keeps running against the schema the new one migrated, so a migration must
- * always leave the previous release working.
+ * this one while the release's migrate step is still running. A database it cannot reach
+ * gets the same wait, whatever the reason: Postgres still starting or a dropped connection
+ * passes, and exiting costs a restart, of which a platform allows only so many. A database
+ * that is ahead, with migrations this build has never heard of, is fine: during a rollout
+ * the previous version keeps running against the schema the new one migrated, so a
+ * migration must always leave the previous release working.
  */
 export const requireMigrated = (options: {
   readonly databaseUrl: string;
   readonly waitFor?: Duration.Input;
 }) =>
-  Effect.promise(async () => {
+  Effect.gen(function* () {
     // Drizzle decides what to run by name, so the same comparison says what is missing.
-    const carried = readMigrationFiles({ migrationsFolder: resolveMigrationsFolder() });
-    const client = new Client({ connectionString: options.databaseUrl });
-    await client.connect();
-    try {
-      const applied = await client
-        .query<{ name: string | null }>("select name from drizzle.__drizzle_migrations")
-        .then(
-          (result) => new Set(result.rows.map((row) => row.name)),
-          (error: { readonly code?: string }) => {
-            // undefined_table: nothing has ever migrated this database.
-            if (error.code === "42P01") {
-              return new Set<string | null>();
-            }
-            throw error;
-          },
-        );
-      return carried.map((migration) => migration.name).filter((name) => !applied.has(name));
-    } finally {
-      await client.end();
-    }
-  }).pipe(
-    Effect.flatMap((missing) =>
-      missing.length === 0 ? Effect.void : Effect.fail(new DatabaseBehindError({ missing })),
-    ),
-    Effect.tapError((error) =>
-      Effect.logWarning("Waiting for the migrate step: the database is behind this version").pipe(
-        Effect.annotateLogs({ missing: error.missing.join(", ") }),
+    // Read outside the retry: an image without its migrations will not grow them.
+    const carried = yield* Effect.sync(() =>
+      readMigrationFiles({ migrationsFolder: resolveMigrationsFolder() }),
+    );
+    return yield* Effect.tryPromise({
+      catch: (cause) => new DatabaseUnreachableError({ cause }),
+      try: async () => {
+        const client = new Client({
+          connectionString: options.databaseUrl,
+          // An address that answers nothing, or a connection that goes quiet after it is
+          // made, would otherwise hold one attempt open, and the wait is only counted
+          // between attempts.
+          connectionTimeoutMillis: 10_000,
+          query_timeout: 10_000,
+        });
+        // pg reports a connection lost between calls as an event, and an error event
+        // nobody listens for ends the process.
+        client.on("error", () => undefined);
+        try {
+          await client.connect();
+          const applied = await client
+            .query<{ name: string | null }>("select name from drizzle.__drizzle_migrations")
+            .then(
+              (result) => new Set(result.rows.map((row) => row.name)),
+              (error: { readonly code?: string }) => {
+                // undefined_table: nothing has ever migrated this database.
+                if (error.code === "42P01") {
+                  return new Set<string | null>();
+                }
+                throw error;
+              },
+            );
+          return carried.map((migration) => migration.name).filter((name) => !applied.has(name));
+        } finally {
+          // A client that never connected has nothing to end.
+          await client.end().catch(() => undefined);
+        }
+      },
+    }).pipe(
+      Effect.flatMap((missing) =>
+        missing.length === 0 ? Effect.void : Effect.fail(new DatabaseBehindError({ missing })),
       ),
-    ),
-    Effect.retry({
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.upTo({ duration: options.waitFor ?? "5 minutes" }),
-      ),
-    }),
-  );
+      Effect.tapError((error) => {
+        switch (error._tag) {
+          case "DatabaseBehindError": {
+            return Effect.logWarning(
+              "Waiting for the migrate step: the database is behind this version",
+            ).pipe(Effect.annotateLogs({ missing: error.missing.join(", ") }));
+          }
+          case "DatabaseUnreachableError": {
+            // One line an attempt; the cause in full is in the failure, if it comes to that.
+            return Effect.logWarning("Waiting for the database: could not reach it").pipe(
+              Effect.annotateLogs({ reason: String(error.cause) }),
+            );
+          }
+        }
+      }),
+      Effect.retry({
+        schedule: Schedule.spaced("2 seconds").pipe(
+          Schedule.upTo({ duration: options.waitFor ?? "5 minutes" }),
+        ),
+      }),
+    );
+  });

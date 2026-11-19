@@ -69,6 +69,33 @@ docker compose ps
 
 `up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why.
 
+### A Postgres volume from an older Compose file
+
+Postgres 18's image keeps its data one level deeper than earlier versions did, so the Compose file mounts the `relayit_postgres_data` volume at `/var/lib/postgresql` rather than at `/var/lib/postgresql/data`. A new install needs nothing. If your volume was written through the older mount, by Postgres 17 or earlier, the `postgres` service exits at start with "there appears to be PostgreSQL data in: /var/lib/postgresql" and nothing else starts. Your data is untouched, and has to be dumped by the version that wrote it and restored into 18:
+
+```bash
+docker compose down
+docker volume ls --filter name=relayit_postgres_data   # the volume's full name
+docker run --rm -v <volume>:/old alpine cat /old/PG_VERSION   # the version that wrote it
+
+docker run -d --name relayit-postgres-old -v <volume>:/var/lib/postgresql/data postgres:<version>-alpine
+until docker exec relayit-postgres-old pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
+docker exec relayit-postgres-old pg_dump -U postgres -d relayit --no-owner > relayit.sql
+docker rm -f relayit-postgres-old
+```
+
+Use your own `POSTGRES_USER` and `POSTGRES_DB` if you changed them. Check that `relayit.sql` holds your data and keep a copy, then remove the old volume and restore into a new one:
+
+```bash
+docker volume rm <volume>
+docker compose up -d postgres
+until docker compose exec -T postgres pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
+docker compose exec -T postgres psql -U postgres -d relayit -v ON_ERROR_STOP=1 --single-transaction < relayit.sql
+docker compose up -d
+```
+
+The wait matters: a new volume's Postgres first runs a short-lived setup server, and a restore sent to that one is cut off when it stops. If the restore reports an error, nothing was restored; fix the cause and run it again from `relayit.sql`.
+
 Then open:
 
 - Dashboard: http://localhost:3000
@@ -132,7 +159,7 @@ Don't change the role by editing the `user` table. A signed-in user's sessions a
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                         | The same as the worker. The api registers new Domains with SES.                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3-compatible object storage.                                                                                                    |
 
-Optional: `LOG_LEVEL`; `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in; `CLIENT_IP_HEADER`, the header your reverse proxy puts the visitor's IP in (`X-Real-IP` from nginx or Railway, `CF-Connecting-IP` from Cloudflare), so sign-in is rate limited per visitor rather than for everyone at once. Name only a header your proxy overwrites, and keep the api reachable only through that proxy, or a visitor can send the header themselves. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
+Optional: `LOG_LEVEL` (`All`, `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Fatal` or `None`, in any case; `Info` if unset); `AUTH_COOKIE_DOMAIN`, a parent domain for the session cookie, only if another site of yours on that domain must see that a visitor is signed in; `CLIENT_IP_HEADER`, the header your reverse proxy puts the visitor's IP in (`X-Real-IP` from nginx or Railway, `CF-Connecting-IP` from Cloudflare), so sign-in is rate limited per visitor rather than for everyone at once. Name only a header your proxy overwrites, and keep the api reachable only through that proxy, or a visitor can send the header themselves. Stripe keys are optional and should be left unset for self-hosting. React Email workspace Git operations also need `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET`, pointing at a running template-builder.
 
 ### worker (required)
 
@@ -172,7 +199,7 @@ docker run --rm -e DATABASE_URL="postgres://user:pass@host:5432/relayit" \
   ghcr.io/ted-too/relayit-api:<tag> bun run migrate.js
 ```
 
-Then start the api, the worker and, if you run it, the template-builder. One started too early does no harm: it logs which migrations the database lacks, waits up to five minutes for the step to finish, then exits with an error. The version already running keeps working while the step runs and until you replace it.
+Then start the api, the worker and, if you run it, the template-builder. One started too early does no harm: it logs which migrations the database lacks, waits up to five minutes for the step to finish, then exits with an error. It waits the same five minutes for a database it cannot reach, logging why every two seconds. The version already running keeps working while the step runs and until you replace it.
 
 ## Image tags
 

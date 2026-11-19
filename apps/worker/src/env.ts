@@ -1,3 +1,4 @@
+import { logLevelConfig } from "@repo/logging";
 import { objectStorageConfig } from "@repo/object-storage";
 import { emailBackendConfig, selectEmailBackend } from "@repo/provider-aws/email/backend";
 import { Config, Effect, Option, Redacted } from "effect";
@@ -13,7 +14,7 @@ export const workerConfig = Effect.gen(function* () {
     cfZoneId: Config.String("CF_ZONE_ID").pipe(Config.option),
     databaseUrl: Config.Redacted("DATABASE_URL"),
     emailBackend: Config.Literals(["ses", "fake"], "EMAIL_BACKEND").pipe(Config.option),
-    logLevel: Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")),
+    logLevel: logLevelConfig,
     nodeEnv: Config.String("NODE_ENV").pipe(Config.option),
     redisKeyPrefix: Config.String("REDIS_KEY_PREFIX").pipe(Config.withDefault("")),
     redisUrl: Config.Redacted("REDIS_URL"),
