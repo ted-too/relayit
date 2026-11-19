@@ -10,7 +10,7 @@ import { checkoutRefToDirectory, HOSTED_DEV_REF, withWorkspaceGitLock } from "..
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
-import { hardenCheckedOutPackageJson } from "./package-json";
+import { assertRegistryLockfile, hardenCheckedOutPackageJson } from "./package-json";
 import { workspaceToolOutput } from "./tool-output";
 
 // The Effect language service refuses an untyped `catch`, so the thrown value is carried
@@ -90,6 +90,7 @@ export const previewHostedWorkspaceEntry = (input: {
         });
 
         yield* hardenCheckedOutPackageJson(tempDir);
+        yield* assertRegistryLockfile(tempDir);
 
         const install = yield* runBunInstall({
           args: ["--frozen-lockfile", "--ignore-scripts"],

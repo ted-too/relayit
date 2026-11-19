@@ -129,7 +129,7 @@ export const commitFiles = (input: {
         return yield* new TemplatingBuilderError({
           code: "invalid",
           message:
-            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
         });
       }
       if (path === "package.json" && content !== null) {

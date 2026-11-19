@@ -42,7 +42,7 @@ export const checkoutRefToDirectory = (input: {
         code: "invalid",
         detail: `Delete ${bunConfig} from the workspace.`,
         message:
-          "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
+          "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
       });
     }
 

@@ -458,6 +458,60 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
   );
 
   it.live(
+    "refuses to install from a lockfile that resolves a package to a URL",
+    () =>
+      Effect.gen(function* () {
+        const workspaceId = yield* insertWorkspace;
+        yield* listFiles({ workspaceId });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/welcome.tsx", workspaceId },
+        });
+        const scaffolded = yield* readFile({ path: "bun.lock", workspaceId });
+        // What a registry package's own dependency on a tarball URL leaves in the lockfile.
+        const requested: string[] = [];
+        const internal = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              fetch: (request) => {
+                requested.push(request.url);
+                return new Response("not found", { status: 404 });
+              },
+              hostname: "127.0.0.1",
+              port: 0,
+            }),
+          ),
+          (served) => Effect.promise(() => served.stop(true)),
+        );
+        yield* withWorkspaceGitLock(
+          workspaceId,
+          gitCommitFiles({
+            changes: {
+              "bun.lock": scaffolded.content.replace(
+                /"react": \["react@[^\]]+\]/,
+                `"react": ["react@http://127.0.0.1:${internal.port}/react.tgz", {}]`,
+              ),
+            },
+            message: "chore: forge the lockfile",
+            ref: HOSTED_DEV_REF,
+            workspaceId,
+          }),
+        );
+
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({
+          code: "invalid",
+          detail: "react is not installed from the npm registry.",
+        });
+        expect(yield* Effect.flip(publish({ workspaceId }))).toMatchObject({ code: "invalid" });
+        expect(requested).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live(
     "resolves a deps sync from package.json alone, whatever the lockfile held",
     () =>
       Effect.gen(function* () {
@@ -491,7 +545,13 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
     120_000,
   );
 
-  it.live.each([".npmrc", "bunfig.toml", "reactEmail/.npmrc", "package-lock.json"])(
+  it.live.each([
+    ".npmrc",
+    "bunfig.toml",
+    "reactEmail/.npmrc",
+    "package-lock.json",
+    "node_modules/react/index.js",
+  ])(
     "refuses %s in a workspace, at a commit and in a tree that already holds one",
     (path) =>
       Effect.gen(function* () {
@@ -508,7 +568,7 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
         expect(refused).toMatchObject({
           code: "invalid",
           message:
-            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
         });
 
         // As a commit made before the refusal left it.
@@ -528,7 +588,7 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
           code: "invalid",
           detail: `Delete ${path} from the workspace.`,
           message:
-            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
         });
         expect(yield* Effect.flip(publish({ workspaceId }))).toMatchObject({ code: "invalid" });
         expect(yield* Effect.flip(depsSync({ workspaceId }))).toMatchObject({ code: "invalid" });

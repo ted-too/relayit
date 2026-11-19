@@ -21,7 +21,7 @@ import { TemplatingBuilderError } from "../rpc/errors";
 import { newArtifactRevision, templatingArtifacts } from "../storage";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
-import { hardenCheckedOutPackageJson } from "./package-json";
+import { assertRegistryLockfile, hardenCheckedOutPackageJson } from "./package-json";
 
 export interface PublishResult {
   commitSha: string;
@@ -86,9 +86,10 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           workspaceId: input.workspaceId,
         });
 
-        yield* hardenCheckedOutPackageJson(tempDir).pipe(
-          Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)),
-        );
+        yield* Effect.andThen(
+          hardenCheckedOutPackageJson(tempDir),
+          assertRegistryLockfile(tempDir),
+        ).pipe(Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)));
 
         const installResult = yield* runBunInstall({
           args: ["--frozen-lockfile", "--ignore-scripts"],

@@ -76,6 +76,8 @@ The workspace toolbar has three actions:
 - **Preview** renders the Entry with the JSON in the **Props** panel, so you can check the output with sample data.
 - **Publish** builds the workspace into a sealed artifact. When you opened the workspace from a Template, Publish also links the Entry to it.
 
+A workspace is built from its own files and the public npm registry, and nothing else. A build fails if an Entry imports a file outside the workspace or uses a bundle-time macro (`with { type: "macro" }`), and a save is refused for a `package.json` dependency that is not a registry version (no paths, URLs or Git repositories), for an `.npmrc`, `bunfig.toml` or another package manager's lockfile, and for anything under `node_modules`. A `tsconfig.json` in the workspace is not read: use package.json `imports` for path aliases.
+
 Drafts are never sent. A send uses the artifact from the last successful Publish. If you edit and save without publishing, sends keep using the previous version.
 
 The status badge on the Template's email channel tells you where things stand: **Linked**, **Not linked**, or **Broken** (the linked Entry was removed).

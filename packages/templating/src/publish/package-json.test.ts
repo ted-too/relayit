@@ -70,6 +70,8 @@ describe("hardenPackageJson", () => {
     Effect.all([
       refused({ dependencies: ["../outside"] }),
       refused({ dependencies: { package: 1 } }),
+      // Only an override nests.
+      refused({ dependencies: { package: { nested: "1.0.0" } } }),
       refused([]),
     ]),
   );
@@ -111,5 +113,16 @@ describe("hardenPackageJson", () => {
         type: "module",
       });
     }),
+  );
+
+  it.effect(
+    "refuses overrides nested deeper than any are, where a walk would run out of stack",
+    () =>
+      hardenPackageJson(
+        `{ "overrides": ${'{ "a": '.repeat(200_000)}"1.0.0"${"}".repeat(200_000)} }`,
+      ).pipe(
+        Effect.flip,
+        Effect.map((failure) => expect(failure).toMatchObject({ code: "invalid" })),
+      ),
   );
 });

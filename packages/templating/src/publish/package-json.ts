@@ -19,10 +19,9 @@ const DEPENDENCY_FIELDS = [
   "devDependencies",
   "optionalDependencies",
   "peerDependencies",
-  // These replace a dependency's spec, at any depth of nesting.
-  "overrides",
-  "resolutions",
 ];
+// These replace a dependency's spec, and nest.
+const OVERRIDE_FIELDS = ["overrides", "resolutions"];
 
 // Each is another way to name where a dependency comes from, or to rewrite one once it is
 // installed. An Email Workspace is one package, so none has a use here. Refused by name
@@ -39,6 +38,7 @@ const REFUSED_FIELDS = [
 // install is given these and nothing else.
 const KEPT_FIELDS = new Set([
   ...DEPENDENCY_FIELDS,
+  ...OVERRIDE_FIELDS,
   "name",
   "version",
   "private",
@@ -52,13 +52,21 @@ const KEPT_FIELDS = new Set([
   "sideEffects",
 ]);
 
-const isRegistrySpecs = (value: unknown): boolean =>
-  typeof value === "string"
-    ? REGISTRY_SPEC_RE.test(value.trim()) && !TARBALL_RE.test(value.trim())
-    : typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      Object.values(value).every(isRegistrySpecs);
+const isRegistrySpec = (value: unknown) =>
+  typeof value === "string" &&
+  REGISTRY_SPEC_RE.test(value.trim()) &&
+  !TARBALL_RE.test(value.trim());
+
+// More nesting than any real override has, and far less than the stack holds.
+const MAX_OVERRIDE_DEPTH = 16;
+
+const isRegistrySpecs = (value: unknown, depth: number): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.values(value).every(
+    (spec) => isRegistrySpec(spec) || (depth > 0 && isRegistrySpecs(spec, depth - 1)),
+  );
 
 /**
  * Refuse a package.json whose install would take anything from outside the registry, and
@@ -85,12 +93,12 @@ export const hardenPackageJson = (raw: string) =>
       Array.isArray(pkg) ||
       REFUSED_FIELDS.some((field) => field in pkg) ||
       DEPENDENCY_FIELDS.some(
+        (field) => field in pkg && !isRegistrySpecs((pkg as Record<string, unknown>)[field], 0),
+      ) ||
+      OVERRIDE_FIELDS.some(
         (field) =>
           field in pkg &&
-          !(
-            typeof (pkg as Record<string, unknown>)[field] === "object" &&
-            isRegistrySpecs((pkg as Record<string, unknown>)[field])
-          ),
+          !isRegistrySpecs((pkg as Record<string, unknown>)[field], MAX_OVERRIDE_DEPTH),
       )
     ) {
       return yield* new TemplatingBuilderError({
@@ -127,4 +135,36 @@ export const hardenCheckedOutPackageJson = (workspaceDir: string) =>
         }),
       try: () => NodeFSP.writeFile(path, hardened),
     });
+  });
+
+/**
+ * Refuse a checkout whose lockfile resolves any package to something other than the
+ * registry. package.json is held to registry versions, but a package from the registry
+ * may itself depend on a URL or a git repository, which Bun would fetch from inside the
+ * builder's network and install where an Entry can import it. The lockfile is Bun's own
+ * writing, and a registry package is the one shape with an empty second element.
+ */
+export const assertRegistryLockfile = (workspaceDir: string) =>
+  Effect.gen(function* () {
+    const refused = new TemplatingBuilderError({
+      code: "invalid",
+      message: "A dependency resolves to something other than the npm registry.",
+    });
+    const lockfile = yield* Effect.tryPromise({
+      catch: () => refused,
+      try: async () =>
+        Bun.JSONC.parse(
+          await NodeFSP.readFile(NodePath.join(workspaceDir, "bun.lock"), "utf8"),
+        ) as { packages?: Record<string, unknown> },
+    });
+    const outside = Object.entries(lockfile.packages ?? {}).find(
+      ([, resolved]) => !(Array.isArray(resolved) && resolved[1] === ""),
+    );
+    if (outside) {
+      return yield* new TemplatingBuilderError({
+        code: "invalid",
+        detail: `${outside[0]} is not installed from the npm registry.`,
+        message: "A dependency resolves to something other than the npm registry.",
+      });
+    }
   });

@@ -19,7 +19,10 @@ const BUN_CONFIG_NAMES = new Set([
  * builder's settings, so it may hold none, at any depth.
  */
 export function isBunConfigPath(path: string): boolean {
-  return BUN_CONFIG_NAMES.has(path.slice(path.lastIndexOf("/") + 1).toLowerCase());
+  const segments = path.toLowerCase().split("/");
+  // `node_modules` is the install's to fill: a file committed there survives it, in
+  // place of the package the lockfile names.
+  return segments.includes("node_modules") || BUN_CONFIG_NAMES.has(segments.at(-1) ?? "");
 }
 
 /** Normalize and validate a workspace-relative path (kind-agnostic). */
