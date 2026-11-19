@@ -4,7 +4,10 @@
  * is read when it announces its length.
  */
 import { describe, expect, it } from "@effect/vitest";
+import { DashboardApi } from "@repo/contracts/dashboard";
 import { Effect } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
 import { announced, APP_ORIGIN, request, serve, stubs } from "../testing";
 
 const MIB = 1024 * 1024;
@@ -14,6 +17,7 @@ const COMMITS = "/projects/acme/workspaces/reactEmail/commits";
 
 const tooLarge = (mib: number) =>
   JSON.stringify({
+    _tag: "PayloadTooLarge",
     code: "payload_too_large",
     message: `Request body exceeds the ${mib} MiB limit.`,
   });
@@ -53,7 +57,7 @@ describe("the body limit on every route", () => {
         }).stubs,
       );
 
-      expect(yield* announced(origin, UNSUBSCRIBE, {})).toEqual({
+      expect(yield* announced(origin, UNSUBSCRIBE, {})).toMatchObject({
         body: tooLarge(1),
         status: "HTTP/1.1 413 Payload Too Large",
       });
@@ -78,7 +82,7 @@ describe("the body limit on every route", () => {
       const origin = yield* serve(stubs().stubs);
       const post = { "content-type": "application/json", origin: APP_ORIGIN };
 
-      expect(yield* announced(origin, "/projects", post)).toEqual({
+      expect(yield* announced(origin, "/projects", post)).toMatchObject({
         body: tooLarge(1),
         status: "HTTP/1.1 413 Payload Too Large",
       });
@@ -99,15 +103,44 @@ describe("the body limit on every route", () => {
       const origin = yield* serve(stubs().stubs);
       const post = { "content-type": "application/json", origin: APP_ORIGIN };
 
-      expect(yield* announced(origin, COMMITS, post)).toEqual({
+      // The page is another origin: without CORS on the refusal, it sees a failed request.
+      expect(yield* announced(origin, COMMITS, post)).toMatchObject({
         body: tooLarge(10),
+        headers: {
+          "access-control-allow-credentials": "true",
+          "access-control-allow-origin": APP_ORIGIN,
+          connection: "close",
+        },
         status: "HTTP/1.1 413 Payload Too Large",
       });
+      const elsewhere = yield* announced(origin, COMMITS, { ...post, origin: "http://evil.test" });
+      expect(elsewhere.status).toBe("HTTP/1.1 413 Payload Too Large");
+      expect(elsewhere.headers).not.toHaveProperty("access-control-allow-origin");
       // Over the default and within its own: the route runs, and asks for a session.
       expect(yield* announced(origin, COMMITS, post, 10 * MIB)).toMatchObject({
         status: "HTTP/1.1 401 Unauthorized",
       });
     }),
+  );
+
+  it.live("rejects the dashboard's client with the limit when a commit is over it", () =>
+    Effect.gen(function* () {
+      const origin = yield* serve(stubs().stubs);
+      const client = yield* HttpApiClient.make(DashboardApi, { baseUrl: origin });
+
+      // The whole body is sent, as a browser sends it, and the refusal still arrives.
+      const refused = yield* client.workspaces
+        .createCommit({
+          params: { kind: "reactEmail", orgSlug: "acme" },
+          payload: { changes: { "reactEmail/big.tsx": "a".repeat(11 * MIB) } },
+        })
+        .pipe(Effect.flip);
+
+      expect(refused).toMatchObject({
+        _tag: "PayloadTooLarge",
+        message: "Request body exceeds the 10 MiB limit.",
+      });
+    }).pipe(Effect.provide(FetchHttpClient.layer)),
   );
 
   it.live("refuses an over-size body to better-auth before it is handed the request", () =>
@@ -116,7 +149,7 @@ describe("the body limit on every route", () => {
       const origin = yield* serve(stubs().stubs);
 
       for (const path of ["/auth/sign-in/email", "/auth/sign-up/email", "/auth/stripe/webhook"]) {
-        expect(yield* announced(origin, path, {})).toEqual({
+        expect(yield* announced(origin, path, {})).toMatchObject({
           body: tooLarge(1),
           status: "HTTP/1.1 413 Payload Too Large",
         });

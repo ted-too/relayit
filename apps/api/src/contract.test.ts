@@ -21,7 +21,7 @@ import {
 } from "@repo/provider-aws/errors";
 import { SES_NOTIFICATIONS_PATH } from "@repo/provider-aws/email/webhooks";
 import type { Database } from "@repo/persistence/db/effect";
-import { Effect, Fiber, Logger } from "effect";
+import { Effect, Exit, Fiber, Logger, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { announced, GOOD_KEY, request, serve, stubs } from "./testing";
@@ -245,35 +245,69 @@ describe("POST /messages/email", () => {
   it.live("answers a request whose key is missing or unknown without reading its body", () =>
     Effect.gen(function* () {
       const { accepted, stubs: boundary } = stubs();
-      const origin = yield* serve(boundary);
+      const serving = yield* Scope.make();
+      const origin = yield* serve(boundary).pipe(Scope.provide(serving));
       const unfinished = (path: string, key?: string) =>
         announced(origin, path, {
           "content-type": "application/json",
           ...(key === undefined ? {} : { "x-api-key": key }),
         });
+      // Each closes the connection: the body it never read would hold it open otherwise.
+      const headers = { connection: "close" };
 
       expect(yield* unfinished("/messages/email")).toMatchObject({
         body: expect.stringContaining('"property":"/x-api-key"'),
+        headers,
         status: "HTTP/1.1 422 Unprocessable Entity",
       });
-      expect(yield* unfinished("/messages/email", "rel_unknown")).toEqual({
+      expect(yield* unfinished("/messages/email", "rel_unknown")).toMatchObject({
         body: JSON.stringify({ code: "invalid_api_key", message: "Invalid API key" }),
+        headers,
         status: "HTTP/1.1 403 Forbidden",
       });
-      expect(yield* unfinished("/send/acme/raw/email")).toEqual({
+      expect(yield* unfinished("/send/acme/raw/email")).toMatchObject({
         body: JSON.stringify({ details: [], message: "Unauthorized" }),
+        headers,
         status: "HTTP/1.1 401 Unauthorized",
       });
-      expect(yield* unfinished("/send/acme/raw/email", "rel_unknown")).toEqual({
+      expect(yield* unfinished("/send/acme/raw/email", "rel_unknown")).toMatchObject({
         body: JSON.stringify({ details: [], message: "Invalid API key" }),
+        headers,
         status: "HTTP/1.1 401 Unauthorized",
       });
       // Another Project's key is refused for the path, its body unread too.
-      expect(yield* unfinished("/send/other/raw/email", GOOD_KEY)).toEqual({
+      expect(yield* unfinished("/send/other/raw/email", GOOD_KEY)).toMatchObject({
         body: JSON.stringify({ details: [], message: "Project not found" }),
+        headers,
         status: "HTTP/1.1 404 Not Found",
       });
+      // So is a path no route takes.
+      expect(yield* unfinished("/nowhere")).toMatchObject({
+        body: "NOT_FOUND",
+        headers,
+        status: "HTTP/1.1 404 Not Found",
+      });
+      // A client that keeps its connection open with megabytes of the body sent is the one
+      // that held a graceful shutdown for its 20 seconds.
+      expect(
+        yield* announced(
+          origin,
+          "/messages/email",
+          { "content-type": "application/json", "x-api-key": "rel_unknown" },
+          40 * 1024 * 1024,
+          true,
+        ),
+      ).toMatchObject({ headers, status: "HTTP/1.1 403 Forbidden" });
       expect(accepted).toEqual([]);
+      // A send whose body was read keeps its connection.
+      const read = yield* Effect.promise(() =>
+        fetch(`${origin}/messages/email`, { body: email(), headers: keyed, method: "POST" }),
+      );
+      expect([read.status, read.headers.get("connection")]).toEqual([201, null]);
+
+      const started = Date.now();
+      yield* Scope.close(serving, Exit.void);
+      expect(Date.now() - started).toBeLessThan(2000);
     }),
   );
 
@@ -361,6 +395,12 @@ describe("POST /messages/email", () => {
       expect(
         yield* request(origin, "POST", "/messages/email", { body: over, headers: asJson }),
       ).toEqual(tooLarge);
+      // Refused by the length it announces, with none of it read, the connection is closed.
+      expect(yield* announced(origin, "/messages/email", keyed, 60 * 1024 * 1024)).toMatchObject({
+        body: tooLarge.body,
+        headers: { connection: "close" },
+        status: "HTTP/1.1 413 Payload Too Large",
+      });
       // Without a Content-Length, reading stops once it passes the limit.
       const chunked = yield* Effect.promise(async () => {
         const bytes = new TextEncoder().encode(over);
@@ -377,11 +417,13 @@ describe("POST /messages/email", () => {
         });
         return {
           body: await response.text(),
+          connection: response.headers.get("connection"),
           contentType: response.headers.get("content-type"),
           status: response.status,
         };
       });
-      expect(chunked).toEqual(tooLarge);
+      // The rest of a body whose read stopped is never read either.
+      expect(chunked).toEqual({ ...tooLarge, connection: "close" });
       expect(accepted).toEqual([]);
 
       // Every deliverable send fits: SES refuses a message over 40 MB.
@@ -1016,8 +1058,9 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
       const origin = yield* serve(boundary);
       const rejected = { code: "bad_request", message: "SES notification handling failed" };
 
-      expect(yield* announced(origin, SES_NOTIFICATIONS_PATH, {})).toEqual({
+      expect(yield* announced(origin, SES_NOTIFICATIONS_PATH, {})).toMatchObject({
         body: JSON.stringify(rejected),
+        headers: { connection: "close" },
         status: "HTTP/1.1 400 Bad Request",
       });
       // Without a Content-Length, reading stops once it passes the limit.
@@ -1032,9 +1075,17 @@ describe(`POST ${SES_NOTIFICATIONS_PATH}`, () => {
           duplex: "half",
           method: "POST",
         });
-        return { body: await response.text(), status: response.status };
+        return {
+          body: await response.text(),
+          connection: response.headers.get("connection"),
+          status: response.status,
+        };
       });
-      expect(chunked).toEqual({ body: JSON.stringify(rejected), status: 400 });
+      expect(chunked).toEqual({
+        body: JSON.stringify(rejected),
+        connection: "close",
+        status: 400,
+      });
       expect(received).toEqual([]);
 
       // The most SNS sends, 256 KB of message escaped to twice that, is read.

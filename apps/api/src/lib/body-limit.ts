@@ -1,6 +1,7 @@
-import { DashboardApi } from "@repo/contracts/dashboard";
+import { DashboardApi, type PayloadTooLarge } from "@repo/contracts/dashboard";
 import { ByteSize, Cause, Effect } from "effect";
 import {
+  HttpEffect,
   HttpIncomingMessage,
   HttpRouter,
   HttpServerError,
@@ -68,9 +69,19 @@ if (unmatched.size > 0) {
 }
 
 /**
- * Holds every route it is given to a body limit: `DEFAULT_BODY_BYTES` unless the route is
- * named in `exceptions`. `http.ts` gives it to all of the api's routes at once, so a route
- * added there later is limited without anyone asking for it.
+ * Closes the connection once the request in hand is answered, for a body whose read stopped
+ * at its limit. The rest of it is never read, and Bun would hold the connection for it
+ * until the idle timeout, as it does for a body nobody read at all; `http.ts` closes that
+ * one for every route, but cannot tell a body read whole from one read in part.
+ */
+export const closeAfterAnswer = HttpEffect.appendPreResponseHandler((_request, response) =>
+  Effect.succeed(HttpServerResponse.setHeader(response, "connection", "close")),
+);
+
+/**
+ * Holds the route it wraps to a body limit: `DEFAULT_BODY_BYTES` unless the route is named
+ * in `exceptions`. `http.ts` puts it in the route middleware of every route the api serves,
+ * so a route added there later is limited without anyone asking for it.
  *
  * A body over the limit by its `Content-Length` is a `413` before any of it is read and
  * before the route (its session check included) runs. A body without one (chunked) is
@@ -82,11 +93,12 @@ if (unmatched.size > 0) {
  * does not reach `request.stream` or a multipart read: a route that takes one caps it
  * itself and is named `"own"`.
  *
- * The `413` closes the connection, and so does any answer a route gives without reading
- * the body it was sent. Bun stops reading a body nobody consumes, and the connection then
- * waits on it until the idle timeout, holding a graceful shutdown with it.
+ * The `413` is the dashboard contract's `PayloadTooLarge`, so the dashboard's client
+ * rejects with its message; the other routes under the limit answer the same body.
  */
-export const bodyLimit = HttpRouter.middleware((httpEffect) =>
+export const bodyLimit = <E, R>(
+  httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+) =>
   Effect.gen(function* () {
     const { route } = yield* HttpRouter.RouteContext;
     const limit = limits.get(`${route.method} ${route.path}`) ?? DEFAULT_BODY_BYTES;
@@ -96,12 +108,12 @@ export const bodyLimit = HttpRouter.middleware((httpEffect) =>
     const request = yield* HttpServerRequest.HttpServerRequest;
     const tooLarge = HttpServerResponse.jsonUnsafe(
       {
+        _tag: "PayloadTooLarge",
         code: "payload_too_large",
         message: `Request body exceeds the ${limit / 1024 / 1024} MiB limit.`,
-      },
+      } satisfies typeof PayloadTooLarge.Encoded,
       {
         contentType: "application/json;charset=utf-8",
-        headers: { connection: "close" },
         status: 413,
       },
     );
@@ -109,15 +121,8 @@ export const bodyLimit = HttpRouter.middleware((httpEffect) =>
     if (announced !== undefined && !(Number(announced) <= limit)) {
       return tooLarge;
     }
-    const source = yield* HttpServerRequest.toWeb(request);
     return yield* httpEffect.pipe(
       Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.fromInputUnsafe(limit)),
-      // An answer given with the body unread closes the connection too, for the same reason.
-      Effect.map((response) =>
-        source.body === null || source.bodyUsed
-          ? response
-          : HttpServerResponse.setHeader(response, "connection", "close"),
-      ),
       Effect.catchCauseIf(
         (cause) =>
           cause.reasons.some((reason) => {
@@ -132,8 +137,7 @@ export const bodyLimit = HttpRouter.middleware((httpEffect) =>
               raised.reason.reason === "BodyTooLarge"
             );
           }),
-        () => Effect.succeed(tooLarge),
+        () => Effect.as(closeAfterAnswer, tooLarge),
       ),
     );
-  }),
-).layer;
+  });

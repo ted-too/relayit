@@ -16,6 +16,7 @@ import {
   Invalid,
   NotFound,
   OperationFailed,
+  PayloadTooLarge,
   PlanLimitReached,
   RateLimited,
   Unavailable,
@@ -50,8 +51,12 @@ import { DashboardSession, PlatformAdmin, ProjectAccess, RequiresPermission } fr
 
 const project = { orgSlug: Schema.String };
 
-/** What any operation on a Project's data can fail with besides access. */
-const failures = [NotFound, Conflict, Invalid, OperationFailed];
+/**
+ * What any operation on a Project's data can fail with besides access. `PayloadTooLarge`
+ * is the api's body limit answering in the operation's place, declared so that the client
+ * rejects with its message.
+ */
+const failures = [NotFound, Conflict, Invalid, OperationFailed, PayloadTooLarge];
 
 /** Before sign-in: what the deployment offers. The one endpoint here without a session. */
 export class ConfigApi extends HttpApiGroup.make("config").add(

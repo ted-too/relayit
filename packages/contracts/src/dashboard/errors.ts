@@ -28,6 +28,16 @@ export class Invalid extends Schema.TaggedError<Invalid>()(
   { httpApiStatus: 422 },
 ) {}
 
+/**
+ * The request's body is over the limit the api holds its route to. The api's body limit
+ * answers with this before the operation, or its session check, runs.
+ */
+export class PayloadTooLarge extends Schema.TaggedError<PayloadTooLarge>()(
+  "PayloadTooLarge",
+  { code: Schema.Literal("payload_too_large"), message: Schema.String },
+  { httpApiStatus: 413 },
+) {}
+
 /** The Billing User's Plan allows no more of what the operation adds. */
 export class PlanLimitReached extends Schema.TaggedError<PlanLimitReached>()(
   "PlanLimitReached",

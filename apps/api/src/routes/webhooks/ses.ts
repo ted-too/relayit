@@ -9,6 +9,7 @@ import { ByteSize, Effect } from "effect";
 import { HttpIncomingMessage } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { Api, SesNotificationFailed, SesNotificationRejected } from "../../api";
+import { closeAfterAnswer } from "../../lib/body-limit";
 
 /**
  * The largest body this route reads. Anyone can post here, and the body is read before
@@ -54,6 +55,7 @@ export const sesNotificationHandlers = (handle = handleSesNotification) =>
               ),
             );
             if (body === undefined) {
+              yield* closeAfterAnswer;
               yield* Effect.logWarning("Rejected an SES notification over the size limit");
               return "rejected" as const;
             }
