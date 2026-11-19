@@ -19,7 +19,7 @@ export class DB extends Context.Service<DB, Effect.Success<typeof dbEffect>>()("
  * The time zone every session runs in. Our columns are `timestamp` without time zone and the
  * app writes UTC into them, but a `created_at` Postgres fills with `now()` takes the
  * session's wall clock: under a server, database or role default in another zone it is off
- * by that zone's offset from everything the app wrote or compares it with (#167). The
+ * by that zone's offset from everything the app wrote or compares it with. The
  * session's zone is therefore ours, not the server's.
  */
 export const SESSION_TIME_ZONE = "UTC";

@@ -16,7 +16,7 @@ export interface UsageReservationInput {
   readonly deliveryId: string;
   /**
    * When the send is scheduled for, if it is. The reservation is kept until then, however
-   * far past its billing period, so the send's confirm or release finds it (#160).
+   * far past its billing period, so the send's confirm or release finds it.
    */
   readonly dueAt?: Date;
   readonly organizationId: string;
