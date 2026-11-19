@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { checkoutRefToDirectory, commitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
-import { assertHardenedPackageJson } from "./package-json";
+import { hardenCheckedOutPackageJson } from "./package-json";
 
 /**
  * Hardened install on `dev`: rewrite platform-owned lockfile from current
@@ -34,15 +34,7 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
           workspaceId: input.workspaceId,
         });
 
-        const packageJson = yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Failed to read package.json.",
-            }),
-          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
-        });
-        yield* assertHardenedPackageJson(packageJson);
+        yield* hardenCheckedOutPackageJson(tempDir);
 
         const install = yield* runBunInstall({
           args: ["--ignore-scripts"],

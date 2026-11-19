@@ -41,7 +41,8 @@ export const checkoutRefToDirectory = (input: {
       return yield* new TemplatingBuilderError({
         code: "invalid",
         detail: `Delete ${bunConfig} from the workspace.`,
-        message: "A workspace cannot hold .npmrc or bunfig.toml.",
+        message:
+          "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
       });
     }
 

@@ -22,6 +22,13 @@ if (!(workspaceArg && entryPath)) {
 const workspaceDir = NodeFS.realpathSync(workspaceArg);
 const inWorkspace = (path: string) => path.startsWith(`${workspaceDir}/`);
 
+// The workspace's tsconfig is not read: its `extends` may name any file of the host, whose
+// `jsxImportSource` or `paths` would then show in the artifact or in an error. The option
+// takes a file, so the checkout's own is replaced with an empty one; a tsconfig deeper in
+// the checkout is ignored once the option is set.
+const tsconfig = NodePath.join(workspaceDir, "tsconfig.json");
+NodeFS.writeFileSync(tsconfig, "{}\n");
+
 // Not an inline argument: `macros` is missing from Bun's types, and an object literal
 // would be refused for it. It is what `bun build --no-macros` sets; the runtime flag and
 // bunfig's `macros = false` do not reach `Bun.build`. A bundle-time macro is the
@@ -52,8 +59,8 @@ const config = {
           }
           return undefined;
         });
-        // Every file the bundler is about to read, however it was reached: a symlink, a
-        // linked dependency in node_modules, a tsconfig `paths` entry. Returning nothing
+        // Every file the bundler is about to read, however it was reached: a symlink, or a
+        // linked dependency in node_modules. Returning nothing
         // leaves the load to the bundler.
         build.onLoad({ filter: /.*/ }, (args) => {
           // A path that cannot be resolved throws here, which refuses it too.
@@ -67,6 +74,7 @@ const config = {
   ],
   sourcemap: "none" as const,
   target: "bun" as const,
+  tsconfig,
   // A failed build answers with its logs rather than rejecting with them.
   throw: false,
 };

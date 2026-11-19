@@ -14,7 +14,7 @@ import { renderSealedReactEmailArtifact } from "@repo/template-render/react-emai
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { typeid } from "typeid-js";
 import { commitFiles as gitCommitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
-import { commitFiles, depsSync, listFiles, preview, publish } from "./workspace";
+import { commitFiles, depsSync, listFiles, preview, publish, readFile } from "./workspace";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 const testRedisUrl = Bun.env.TEST_REDIS_URL;
@@ -419,7 +419,45 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
     120_000,
   );
 
-  it.live.each([".npmrc", "bunfig.toml", "reactEmail/.npmrc"])(
+  it.live(
+    "installs from the package.json it checked, not from the text a commit wrote",
+    () =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        yield* Effect.promise(() =>
+          Promise.all([
+            NodeFSP.writeFile(NodePath.join(outside, "package.json"), '{ "name": "host" }\n'),
+            NodeFSP.writeFile(NodePath.join(outside, "environ"), "DATABASE_URL=from-the-host\n"),
+          ]),
+        );
+        const workspaceId = yield* insertWorkspace;
+        // Bun installs from the first `dependencies` of two, and the check reads the last.
+        yield* commitFiles({
+          changes: {
+            "package.json": `{\n  "dependencies": { "host": ${JSON.stringify(outside)} },\n  "name": "relayit-email-workspace",\n  "type": "module",\n  "dependencies": { "@react-email/components": "^0.5.3", "react": "^19.2.6", "react-dom": "^19.2.6" }\n}\n`,
+            "reactEmail/reaching.tsx": `import environ from "host/environ" with { type: "text" };\nexport default function ReachingEmail() {\n  return <div>{environ}</div>;\n}\n`,
+          },
+          workspaceId,
+        });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/reaching.tsx", workspaceId },
+        });
+
+        yield* depsSync({ workspaceId });
+        const lockfile = yield* readFile({ path: "bun.lock", workspaceId });
+        expect(lockfile.content).not.toContain("host");
+
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({ message: "Failed to bundle workspace entry." });
+        expect(failure.detail).toContain('Could not resolve: "host/environ"');
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live.each([".npmrc", "bunfig.toml", "reactEmail/.npmrc", "package-lock.json"])(
     "refuses %s in a workspace, at a commit and in a tree that already holds one",
     (path) =>
       Effect.gen(function* () {
@@ -435,7 +473,8 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
         );
         expect(refused).toMatchObject({
           code: "invalid",
-          message: "A workspace cannot hold .npmrc or bunfig.toml.",
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
         });
 
         // As a commit made before the refusal left it.
@@ -454,7 +493,8 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
         expect(failure).toMatchObject({
           code: "invalid",
           detail: `Delete ${path} from the workspace.`,
-          message: "A workspace cannot hold .npmrc or bunfig.toml.",
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
         });
         expect(yield* Effect.flip(publish({ workspaceId }))).toMatchObject({ code: "invalid" });
         expect(yield* Effect.flip(depsSync({ workspaceId }))).toMatchObject({ code: "invalid" });

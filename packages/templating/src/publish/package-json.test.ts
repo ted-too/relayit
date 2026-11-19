@@ -1,16 +1,16 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { assertHardenedPackageJson } from "./package-json";
+import { hardenPackageJson } from "./package-json";
 
 const refused = (pkg: unknown) =>
   Effect.gen(function* () {
-    const failure = yield* Effect.flip(assertHardenedPackageJson(JSON.stringify(pkg)));
+    const failure = yield* Effect.flip(hardenPackageJson(JSON.stringify(pkg)));
     expect(failure).toMatchObject({ code: "invalid" });
   });
 
-describe("assertHardenedPackageJson", () => {
+describe("hardenPackageJson", () => {
   it.effect("accepts registry versions, ranges, tags and aliases", () =>
-    assertHardenedPackageJson(
+    hardenPackageJson(
       JSON.stringify({
         dependencies: {
           "@react-email/components": "^0.5.3",
@@ -47,6 +47,8 @@ describe("assertHardenedPackageJson", () => {
     "https://example.com/package.tgz",
     "workspace:*",
     "catalog:",
+    // In capitals Bun reads the alias prefix as a git host.
+    "NPM:other@1.0.0",
   ])("refuses the dependency spec %s", (spec) => refused({ dependencies: { package: spec } }));
 
   it.effect.each(["overrides", "resolutions"])(
@@ -59,7 +61,7 @@ describe("assertHardenedPackageJson", () => {
       ]),
   );
 
-  it.effect.each(["workspaces", "catalog", "catalogs", "patchedDependencies"])(
+  it.effect.each(["workspaces", "catalog", "catalogs", "patchedDependencies", "packageExtensions"])(
     "refuses %s, another way to say where a dependency comes from",
     (field) => refused({ dependencies: { package: "1.0.0" }, [field]: {} }),
   );
@@ -70,5 +72,44 @@ describe("assertHardenedPackageJson", () => {
       refused({ dependencies: { package: 1 } }),
       refused([]),
     ]),
+  );
+
+  // Of two keys with one name Bun installs from the first and JSON.parse reads the last,
+  // so the text is never what is installed: the answer is, and it holds one of them.
+  it.effect.each([
+    '{ "dependencies": { "host": "../outside" }, "dependencies": { "react": "19.2.6" } }',
+    '{ "dependenci\\u0065s": { "host": "../outside" }, "dependencies": { "react": "19.2.6" } }',
+    '{ "dependencies": { "react": "../outside", "react": "19.2.6" } }',
+  ])("answers a package.json with one reading of %s", (raw) =>
+    Effect.gen(function* () {
+      const hardened = yield* hardenPackageJson(raw);
+
+      expect(hardened).not.toContain("outside");
+      expect(hardened.match(/"dependencies"/g)).toHaveLength(1);
+      expect(JSON.parse(hardened)).toEqual({ dependencies: { react: "19.2.6" } });
+    }),
+  );
+
+  it.effect("answers only the fields an install and the bundler's resolver need", () =>
+    Effect.gen(function* () {
+      const hardened = yield* hardenPackageJson(
+        JSON.stringify({
+          dependencies: { react: "19.2.6" },
+          imports: { "#lib/*": "./lib/*" },
+          name: "relayit-email-workspace",
+          scripts: { postinstall: "curl example.com" },
+          trustedDependencies: ["react"],
+          type: "module",
+          unknownToUs: { "is-number": "https://example.com/package.tgz" },
+        }),
+      );
+
+      expect(JSON.parse(hardened)).toEqual({
+        dependencies: { react: "19.2.6" },
+        imports: { "#lib/*": "./lib/*" },
+        name: "relayit-email-workspace",
+        type: "module",
+      });
+    }),
   );
 });

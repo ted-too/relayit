@@ -15,7 +15,7 @@ import {
   previewHostedWorkspaceEntry,
   publishHostedWorkspace,
 } from "../publish";
-import { assertHardenedPackageJson } from "../publish/package-json";
+import { hardenPackageJson } from "../publish/package-json";
 import { TemplatingBuilderError } from "../rpc/errors";
 
 const hasPackageManifest = (paths: readonly string[]) =>
@@ -127,11 +127,12 @@ export const commitFiles = (input: {
       if (isBunConfigPath(path) && content !== null) {
         return yield* new TemplatingBuilderError({
           code: "invalid",
-          message: "A workspace cannot hold .npmrc or bunfig.toml.",
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml or another package manager's lockfile.",
         });
       }
       if (path === "package.json" && content !== null) {
-        yield* assertHardenedPackageJson(content);
+        yield* hardenPackageJson(content);
       }
       normalized[path] = content;
     }

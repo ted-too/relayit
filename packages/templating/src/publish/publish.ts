@@ -21,7 +21,7 @@ import { TemplatingBuilderError } from "../rpc/errors";
 import { newArtifactRevision, templatingArtifacts } from "../storage";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
-import { assertHardenedPackageJson } from "./package-json";
+import { hardenCheckedOutPackageJson } from "./package-json";
 
 export interface PublishResult {
   commitSha: string;
@@ -86,16 +86,7 @@ export const publishHostedWorkspace = (input: { workspaceId: string }) =>
           workspaceId: input.workspaceId,
         });
 
-        const packageJson = yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Failed to read package.json.",
-            }),
-          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
-        });
-
-        yield* assertHardenedPackageJson(packageJson).pipe(
+        yield* hardenCheckedOutPackageJson(tempDir).pipe(
           Effect.tapError((error) => recordBuildError(input.workspaceId, error.message)),
         );
 

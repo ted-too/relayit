@@ -87,19 +87,31 @@ describe("bundleReactEmailEntry", () => {
     }),
   );
 
-  it.live("refuses a tsconfig path that maps an import onto a host directory", () =>
+  it.live("builds without the workspace's tsconfig, which may extend a file of the host's", () =>
     Effect.gen(function* () {
-      const { outside, workspaceDir } = yield* workspaceImporting(
-        'import value from "@host/environ" with { type: "text" };',
-      );
-      yield* Effect.promise(() =>
-        NodeFSP.writeFile(
-          NodePath.join(workspaceDir, "tsconfig.json"),
-          JSON.stringify({ compilerOptions: { paths: { "@host/*": [`${outside}/*`] } } }),
-        ),
-      );
+      const { outside, workspaceDir } = yield* workspaceImporting("const value = <p>hello</p>;");
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(
+          NodePath.join(outside, "tsconfig.json"),
+          JSON.stringify({ compilerOptions: { jsxImportSource: "from-the-host" } }),
+        );
+        // At both depths the bundler looks for one.
+        for (const dir of [workspaceDir, NodePath.join(workspaceDir, "reactEmail")]) {
+          await NodeFSP.writeFile(
+            NodePath.join(dir, "tsconfig.json"),
+            JSON.stringify({ extends: NodePath.join(outside, "tsconfig.json") }),
+          );
+        }
+      });
 
-      yield* refusedAsOutside(workspaceDir);
+      const artifact = yield* bundleReactEmailEntry({
+        entryPath: "reactEmail/entry.tsx",
+        workspaceDir,
+      });
+
+      const code = new TextDecoder().decode(artifact);
+      expect(code).toContain('from "react/jsx');
+      expect(code).not.toContain("from-the-host");
     }),
   );
 });
