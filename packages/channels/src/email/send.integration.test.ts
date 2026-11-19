@@ -32,7 +32,7 @@ import {
 import { makeRedisLive, Redis } from "@repo/redis";
 import { webhookEventDefinitions } from "@repo/webhooks/events";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
-import { Deferred, Duration, Effect, Fiber, Layer } from "effect";
+import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Logger, References } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { typeid } from "typeid-js";
@@ -714,6 +714,284 @@ describe("an accepted email send", () => {
       ).pipe(Effect.flip);
       expect(refused).toMatchObject({ _tag: "UsageLimitExceeded" });
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live(
+    "ends failed, unsent, with one message.failed, when left queued with its job lost",
+    () => {
+      const backend = makeBackend();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const redis = yield* Redis;
+        // One send a day, so Usage still held would refuse the next.
+        const project = yield* seedProject({ dailySends: 1 });
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+        // The outbox publishes its job, and the stream it went to is then deleted from Redis
+        // (with the set a retry would wait in), as when Redis loses its data.
+        yield* publishOutboxBatch({ batchSize: 1000, claimTtlMs: 30_000, concurrency: 1 });
+        expect(
+          yield* db
+            .select({ status: jobOutbox.status })
+            .from(jobOutbox)
+            .where(like(jobOutbox.payload, `%${accepted.deliveryId}%`)),
+        ).toEqual([{ status: "published" }]);
+        yield* redis.evaluateNumber({
+          args: [],
+          keys: [deliverer.stream, deliverer.delayedStream],
+          script: 'return redis.call("DEL", KEYS[1], KEYS[2])',
+        });
+        yield* db
+          .update(emailDelivery)
+          .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+          .where(eq(emailDelivery.id, accepted.deliveryId));
+        // No run comes for it: the worker finds nothing to do.
+        yield* runWorker;
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+        // Two workers reconcile at once, and one again later.
+        yield* Effect.all([endStuckDeliveries, endStuckDeliveries], { concurrency: 2 });
+        yield* endStuckDeliveries;
+
+        const reason =
+          "The send could not be completed within a day of when it was due; it is not sent late";
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          completedAt: expect.any(Date),
+          error: { message: reason, retryable: false },
+          startedAt: null,
+          status: "failed",
+        });
+        expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+          { payload: { error: reason }, type: "message.failed" },
+        ]);
+        const next = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+        expect(next.replayed).toBe(false);
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    },
+  );
+
+  it.live("is not sent when its job turns up after the worker failed it queued", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Queued two days ago, and its job held up all that time rather than lost.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* endStuckDeliveries;
+      yield* runWorker;
+      // And a duplicate of the job, as a reclaimed or re-published entry would be.
+      const jobs = yield* Jobs;
+      yield* db.transaction((tx) =>
+        jobs.enqueue(
+          emailDeliverJob,
+          {
+            billingUserId: "unused",
+            deliveryId: accepted.deliveryId,
+            purpose: "transactional",
+            startDate: new Date().toISOString(),
+          },
+          tx,
+        ),
+      );
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.failed"]);
+      const next = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      expect(next.replayed).toBe(false);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("ends failed, unsent, when its job comes for it more than a day late", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so Usage still held would refuse the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Its job was held up for two days, and runs before any reconcile finds the Delivery.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* runWorker;
+
+      const reason =
+        "The send could not be completed within a day of when it was due; it is not sent late";
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: reason, retryable: false },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: reason }, type: "message.failed" },
+      ]);
+      const next = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      expect(next.replayed).toBe(false);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is left to its job, and sent, while it has been queued for less than a day", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 23 * 3_600_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* endStuckDeliveries;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is left queued until a day past the time it was scheduled for", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const scheduledAt = DateTime.makeUnsafe(Date.now() + 3_600_000);
+      const accepted = yield* acceptTransactionalEmail({
+        ...sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        scheduledAt,
+      });
+      // Accepted two days ago for an hour from now.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+      const dueHoursAgo = (hours: number) =>
+        db
+          .update(message)
+          .set({ scheduledAt: new Date(Date.now() - hours * 3_600_000) })
+          .where(eq(message.id, accepted.messageId));
+
+      yield* endStuckDeliveries;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+      // No job having come for it, it is still within the day when it was due 19 hours ago.
+      yield* dueHoursAgo(19);
+      yield* endStuckDeliveries;
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
+
+      yield* dueHoursAgo(25);
+      yield* endStuckDeliveries;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.scheduled", "message.failed"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("is sent when it falls due, however long before that it was accepted", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail({
+        ...sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        scheduledAt: DateTime.makeUnsafe(Date.now() + 3_600_000),
+      });
+      // Accepted two days ago for a minute ago.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+      yield* db
+        .update(message)
+        .set({ scheduledAt: new Date(Date.now() - 60_000) })
+        .where(eq(message.id, accepted.messageId));
+
+      yield* endStuckDeliveries;
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.scheduled", "message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  it.live("logs no error when the reservation of a Delivery it ends is already gone", () => {
+    const backend = makeBackend();
+    const errors: unknown[] = [];
+    let deliveryId = "";
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const redis = yield* Redis;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      deliveryId = accepted.deliveryId;
+      // Redis lost the reservation, as it does with the job when it loses its data.
+      expect(
+        yield* redis.evaluateNumber({
+          args: [],
+          keys: [`relayit:usage:reservation:${accepted.deliveryId}`],
+          script: 'return redis.call("DEL", KEYS[1])',
+        }),
+      ).toBe(1);
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* endStuckDeliveries;
+
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });
+      expect(errors).toEqual([]);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          services(testDatabaseUrl, testRedisUrl, backend.layer),
+          // The pass ends other tests' stuck Deliveries too; only this one's lines count.
+          Logger.layer([
+            Logger.make(({ fiber, logLevel, message }) => {
+              if (
+                (logLevel === "Error" || logLevel === "Fatal") &&
+                fiber.getRef(References.CurrentLogAnnotations).deliveryId === deliveryId
+              ) {
+                errors.push(message);
+              }
+            }),
+          ]),
+        ),
+      ),
+    );
   });
 
   it.live("ends sent once when a reclaimed duplicate runs while SES is still answering", () =>

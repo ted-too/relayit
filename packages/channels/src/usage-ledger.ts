@@ -3,6 +3,13 @@ import type { RedisService } from "@repo/redis";
 
 const RESERVATION_KEY_PREFIX = "relayit:usage:reservation";
 const COUNTER_KEY_PREFIX = "relayit:usage";
+/**
+ * How long a reservation is kept once nothing more is expected of it: from its confirm or
+ * release, so a job that runs again finds it finalized, and for one never finalized from the
+ * end of the billing period it counts in. Until that period ends a reservation holds a place
+ * in the counters and only its release gives it back; after it the counters have expired and
+ * the hash holds nothing but the record, so it may go.
+ */
 export const USAGE_TOMBSTONE_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 const RESERVE_SCRIPT = `
@@ -54,6 +61,7 @@ redis.call("HSET", reservation,
   "monthlyKey", monthly,
   "status", "reserved"
 )
+redis.call("EXPIRE", reservation, tonumber(ARGV[5]) + tonumber(ARGV[13]))
 return 0
 `;
 
@@ -160,6 +168,7 @@ export const makeUsageLedger = (redis: RedisService) => ({
         input.reservedAt,
         policy.periodStart.toISOString(),
         policy.periodEnd.toISOString(),
+        String(USAGE_TOMBSTONE_TTL_SECONDS),
       ],
       keys: [reservationKey(deliveryId), keys.daily, keys.monthly],
       script: RESERVE_SCRIPT,

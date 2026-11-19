@@ -56,12 +56,12 @@ const workerProgram = Effect.gen(function* () {
       }).pipe(Effect.catchCause(logEffectFailure("Failed to ensure the Sandbox Domain")));
     }
 
-    // A Delivery whose job was lost while it was `sending` has no run left to end it. Beside
-    // the jobs and on a timer, not only at start: one can be left at any time, and a worker
-    // may run for months.
+    // A Delivery whose job was lost while it was `queued` or `sending` has no run left to end
+    // it. Beside the jobs and on a timer, not only at start: one can be left at any time, and
+    // a worker may run for months.
     yield* Effect.forkChild(
       endStuckDeliveries.pipe(
-        Effect.catchCause(logEffectFailure("Failed to end Deliveries left sending")),
+        Effect.catchCause(logEffectFailure("Failed to end Deliveries left without a job")),
         Effect.andThen(Effect.sleep("1 hour")),
         Effect.forever,
       ),

@@ -12,7 +12,7 @@ import {
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { Redis } from "@repo/redis";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
@@ -47,6 +47,8 @@ const SES_REJECTED_MESSAGE = "SES rejected the message";
 const SES_SENDING_PAUSED = "SES paused sending";
 const PROJECT_SENDING_PAUSED = "SES paused sending for this Project";
 const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
+const NOT_SENT_IN_TIME =
+  "The send could not be completed within a day of when it was due; it is not sent late";
 
 /**
  * SES answers within this or the send counts as unanswered: a hung connection must not hold
@@ -62,15 +64,16 @@ const SES_SEND_TIMEOUT = Duration.seconds(30);
 const CLAIM_LEASE = Duration.minutes(2);
 
 /**
- * How long a Delivery stays `sending` before the worker ends it without waiting for its job
- * (`endStuckDeliveries`). A job normally ends its own Delivery: the claim's owner within the
- * two-minute lease, a later attempt by reading the kept SES answer or, past the lease, failing
- * it, all inside the job's five attempts and seven and a half minutes of backoff. What is left
- * `sending` after that has lost its job, or its job is being held up, and nothing in the code
- * bounds how long that can last: an entry reclaimed from a crashed worker every minute and a
- * half, a dead-letter step that cannot write yet, a backlog, or no worker running. So the age
- * is a margin, not a derived limit, bounded above by the seven days SES's answer is kept: past
- * those, a send SES accepted could no longer be told from one it never answered.
+ * How long a Delivery stays `sending`, or `queued` past when it was due, before the worker
+ * ends it without waiting for its job (`endStuckDeliveries`). A job normally ends its own
+ * Delivery: the claim's owner within the two-minute lease, a later attempt by reading the kept
+ * SES answer or, past the lease, failing it, all inside the job's five attempts and seven and
+ * a half minutes of backoff. What is left `sending` after that has lost its job, or its job is
+ * being held up, and nothing in the code bounds how long that can last: an entry reclaimed
+ * from a crashed worker every minute and a half, a dead-letter step that cannot write yet, a
+ * backlog, or no worker running. So the age is a margin, not a derived limit, bounded above by
+ * the seven days SES's answer is kept: past those, a send SES accepted could no longer be told
+ * from one it never answered.
  *
  * A day is about two hundred times the retry schedule and a seventh of that window. It is also
  * safe if the job does turn up later. On a claim older than its lease a run records a kept
@@ -78,10 +81,36 @@ const CLAIM_LEASE = Duration.minutes(2);
  * reconcile does the first and the last from the same answer under the same guarded write, so
  * whichever is first, the other finds the outcome written and adds nothing. A kept refusal (one
  * SES answered whose requeue was never written) it fails, where a job with attempts left would
- * have sent again: requeued with no job, the Delivery would be stuck `queued` instead. That
- * needs the job held up for the whole age, which is why the age is a day and not an hour.
+ * have sent again: requeued with no job, the Delivery would only be failed `queued` a pass
+ * later. That needs the job held up for the whole age, which is why the age is a day and not
+ * an hour.
+ *
+ * A `queued` Delivery this long past when it was due is failed too, never sent and never given
+ * a new job, and the claim refuses one for the same condition, so whether its job is lost or
+ * only late it ends the same way: a job that claims first is failed by its dead-letter step,
+ * with the reason the reconcile gives. SES has not been called for it, so nothing here risks a
+ * second send: the only thing that sends is a job's claim from `queued`, which a `failed`
+ * Delivery never matches, so a job that does turn up finds the outcome written and only
+ * releases the Usage again. Looking for the job instead
+ * (the outbox, the stream, its pending entries, the delayed set) cannot be done in one step,
+ * and a job moving between them would be missed. Enqueueing another was rejected because the
+ * age cannot tell a lost job from one held up: every pass would add a job for each Delivery of
+ * a backlog, and what it sent would arrive more than a day after the Project asked for it,
+ * when a password reset or a receipt is worth less than hearing that it failed.
  */
-const STUCK_SENDING_AGE = Duration.hours(24);
+const STUCK_AGE = Duration.hours(24);
+
+/**
+ * Whether a Delivery was due before `cutoff`: accepted before it and, if it was scheduled,
+ * scheduled for before it. One condition for the two that hold a send to `STUCK_AGE`: the
+ * claim, which refuses a Delivery past it, and `endStuckDeliveries`, which ends one no job
+ * came for.
+ */
+const dueBefore = (cutoff: Date) =>
+  sql<boolean>`(${emailDelivery.createdAt} < ${cutoff.toISOString()} and not exists (
+    select 1 from ${messageTable}
+    where ${messageTable.id} = ${emailDelivery.messageId}
+      and ${messageTable.scheduledAt} >= ${cutoff.toISOString()}))`;
 
 /**
  * How many times one run strips and claims before leaving the Delivery to the job's retry. A
@@ -329,7 +358,11 @@ const confirmUsage = (deliveryId: string) =>
     );
   });
 
-/** As `confirmUsage`, for a Delivery that ended without sending. */
+/**
+ * As `confirmUsage`, for a Delivery that ended without sending. A reservation that is gone has
+ * nothing to give back and is no error: Redis lost it with the job (which is how a Delivery
+ * comes to be ended by `endStuckDeliveries`), or it expired after its billing period.
+ */
 const releaseUsage = (deliveryId: string) =>
   Effect.gen(function* () {
     const usage = yield* Usage;
@@ -344,6 +377,10 @@ const releaseUsage = (deliveryId: string) =>
                 message: "Usage could not be released",
                 stage: "usage",
               }),
+            );
+          case "UsageReservationNotFound":
+            return Effect.logInfo("No Usage reservation was left to release for a Delivery").pipe(
+              Effect.annotateLogs({ deliveryId }),
             );
           default:
             return Effect.logError("Usage could not be released for a Delivery", error).pipe(
@@ -489,16 +526,18 @@ const failProjectSendingPaused = (
   );
 
 /**
- * Ends every Delivery left `sending` for longer than `STUCK_SENDING_AGE`, whose job is gone or
- * held up: `sent` when SES's kept answer says it took the send, otherwise `failed` with the
- * reason the job's dead-letter step would have given, `message.failed` and its Usage released.
- * The worker runs it as it starts and every hour after. Several workers may run it at once:
- * each write is guarded by the claim it read, so one of them ends a Delivery and the rest
- * find nothing to do.
+ * Ends every Delivery whose job is gone or held up: one left `sending` for longer than
+ * `STUCK_AGE`, and one still `queued` that long after it was accepted and, if it was scheduled,
+ * after the time it was scheduled for. A `sending` one ends `sent` when SES's kept answer says
+ * it took the send, otherwise `failed` with the reason the job's dead-letter step would have
+ * given; a `queued` one ends `failed`, unsent. Each `failed` end emits `message.failed` and
+ * releases the Usage. The worker runs it as it starts and every hour after. Several workers
+ * may run it at once: each write is guarded by the status and claim it read, so one of them
+ * ends a Delivery and the rest find nothing to do.
  */
 export const endStuckDeliveries = Effect.gen(function* () {
   const db = yield* DB;
-  const now = yield* Clock.currentTimeMillis;
+  const cutoff = new Date((yield* Clock.currentTimeMillis) - Duration.toMillis(STUCK_AGE));
   const stuck = yield* db
     .select({
       id: emailDelivery.id,
@@ -506,6 +545,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
       messageTags: messageTable.tags,
       organizationId: organizationAppEnvironment.organizationId,
       startedAt: emailDelivery.startedAt,
+      status: emailDelivery.status,
     })
     .from(emailDelivery)
     .innerJoin(messageTable, eq(messageTable.id, emailDelivery.messageId))
@@ -514,9 +554,12 @@ export const endStuckDeliveries = Effect.gen(function* () {
       eq(organizationAppEnvironment.id, messageTable.organizationAppEnvironmentId),
     )
     .where(
-      and(
-        eq(emailDelivery.status, "sending"),
-        lt(emailDelivery.startedAt, new Date(now - Duration.toMillis(STUCK_SENDING_AGE))),
+      or(
+        and(eq(emailDelivery.status, "sending"), lt(emailDelivery.startedAt, cutoff)),
+        // One SES refused and a run put back to `queued` is aged from its accept like any
+        // other: with a job held up for most of the day it can be failed here while that job
+        // still has retries left, which is the same choice of failing over sending late.
+        and(eq(emailDelivery.status, "queued"), dueBefore(cutoff)),
       ),
     );
 
@@ -524,9 +567,19 @@ export const endStuckDeliveries = Effect.gen(function* () {
     stuck,
     (delivery) =>
       Effect.gen(function* () {
-        const state = yield* sendingState(delivery);
+        // The query reads no other status; this is for the type.
+        if (delivery.status !== "queued" && delivery.status !== "sending") {
+          return;
+        }
+        const state =
+          delivery.status === "queued"
+            ? ({ kind: "queued" } as const)
+            : yield* sendingState(delivery);
         let failureMessage: string;
         switch (state.kind) {
+          case "queued":
+            failureMessage = NOT_SENT_IN_TIME;
+            break;
           case "accepted": {
             const recorded = yield* recordSent(db, {
               claimedAt: state.claimedAt,
@@ -568,7 +621,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
                 claimedAt: state.claimedAt,
                 region: state.region,
               })
-            : yield* failDelivery(db, { ...delivery, status: "sending" }, failureMessage);
+            : yield* failDelivery(db, { ...delivery, status: delivery.status }, failureMessage);
         if (failed) {
           // No job runs again to make a release Redis refused, so it is retried here. If
           // Redis stays down past the retries the failure is logged and the reservation is
@@ -577,7 +630,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
           yield* releaseUsage(delivery.id).pipe(
             Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
           );
-          yield* Effect.logWarning("Ended a Delivery left sending without a job").pipe(
+          yield* Effect.logWarning("Ended a Delivery left without a job").pipe(
             Effect.annotateLogs({ reason: failureMessage }),
           );
         }
@@ -951,6 +1004,12 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               // complaint suppressed since the strip above is never sent to. The claim also
               // writes the recipients it sends to, so the Delivery names no one it stripped.
               const sender = senderMaySend(appEnvironment.organizationId);
+              const claimMillis = yield* Clock.currentTimeMillis;
+              // Nor is it sent more than `STUCK_AGE` after it was due: its job was held up
+              // that long, and `endStuckDeliveries` fails what this run does not reach first.
+              const inTime = sql<boolean>`not ${dueBefore(
+                new Date(claimMillis - Duration.toMillis(STUCK_AGE)),
+              )}`;
               const recipientsUnsuppressed = sql<boolean>`not exists (select 1 from ${contact} where ${suppressedAmong(
                 {
                   emails: [...toEmails, ...ccEmails, ...bccEmails].map(normalizeContactEmail),
@@ -963,7 +1022,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 .set({
                   bcc: loaded.bcc && bccEmails,
                   cc: loaded.cc && ccEmails,
-                  startedAt: new Date(yield* Clock.currentTimeMillis),
+                  startedAt: new Date(claimMillis),
                   status: "sending",
                   to: toEmails,
                 })
@@ -974,6 +1033,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     sender.domainUnpaused,
                     sender.domainHeld,
                     sender.sandboxOpen,
+                    inTime,
                     recipientsUnsuppressed,
                   ),
                 )
@@ -997,7 +1057,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 // `queued` whose sender may send was refused for a recipient, or for something
                 // lifted since: either way no run has it, so this one goes round again.
                 const [unclaimed] = yield* db
-                  .select({ status: emailDelivery.status, ...sender })
+                  .select({ inTime, status: emailDelivery.status, ...sender })
                   .from(emailDelivery)
                   .where(eq(emailDelivery.id, loaded.id))
                   .pipe(
@@ -1030,6 +1090,13 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       deliveryId: loaded.id,
                       message: "The Project no longer holds the sending Domain",
                       stage: "domain",
+                    });
+                  }
+                  if (!unclaimed.inTime) {
+                    return yield* new MessageDeliveryTerminalError({
+                      deliveryId: loaded.id,
+                      message: NOT_SENT_IN_TIME,
+                      stage: "deadline",
                     });
                   }
                   return true;

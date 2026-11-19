@@ -1,7 +1,8 @@
 import { describe, expect, it, test } from "@effect/vitest";
-import { makeRedisLive } from "@repo/redis";
+import { makeRedisLive, Redis } from "@repo/redis";
 import { Effect, Layer } from "effect";
 import { Usage, UsageLive, UsagePolicy, type UsagePolicyService } from "./usage";
+import { USAGE_TOMBSTONE_TTL_SECONDS } from "./usage-ledger";
 
 const testRedisUrl = Bun.env.TEST_REDIS_URL;
 const integrationTestName = "Usage reservation lifecycle";
@@ -24,16 +25,12 @@ const makePolicy = (limit: number | null): UsagePolicyService => {
   };
 };
 
-const withUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A, E, Usage>) =>
+const withUsage = <A, E>(policy: UsagePolicyService, effect: Effect.Effect<A, E, Redis | Usage>) =>
   effect.pipe(
     Effect.provide(
       UsageLive.pipe(
-        Layer.provide(
-          Layer.merge(
-            makeRedisLive({ url: testRedisUrl ?? "" }),
-            Layer.succeed(UsagePolicy, policy),
-          ),
-        ),
+        Layer.provide(Layer.succeed(UsagePolicy, policy)),
+        Layer.provideMerge(makeRedisLive({ url: testRedisUrl ?? "" })),
       ),
     ),
   );
@@ -126,6 +123,33 @@ describe("Usage reservation lifecycle", () => {
           _tag: "UsageLimitExceeded",
           window: "daily",
         });
+      }),
+    );
+  });
+
+  it.live("a reservation never confirmed or released expires after its billing period", () => {
+    const organizationId = `organization_${Bun.randomUUIDv7()}`;
+    const reservation = makeReservation(organizationId, `delivery_${Bun.randomUUIDv7()}`);
+
+    return withUsage(
+      makePolicy(1),
+      Effect.gen(function* () {
+        const usage = yield* Usage;
+        const policy = yield* usage.reserve(reservation);
+
+        const redis = yield* Redis;
+        const ttl = yield* redis.evaluateNumber({
+          args: [],
+          keys: [`relayit:usage:reservation:${reservation.deliveryId}`],
+          script: 'return redis.call("TTL", KEYS[1])',
+        });
+        // Until its period ends only a release gives its place back, so it outlives the
+        // period, by the time a finalized one is kept; and it does not stay for good.
+        const untilPeriodEnd = Math.floor(
+          (policy.periodEnd.getTime() - new Date(reservation.reservedAt).getTime()) / 1000,
+        );
+        expect(ttl).toBeGreaterThanOrEqual(untilPeriodEnd + USAGE_TOMBSTONE_TTL_SECONDS - 60);
+        expect(ttl).toBeLessThanOrEqual(untilPeriodEnd + USAGE_TOMBSTONE_TTL_SECONDS + 60);
       }),
     );
   });
