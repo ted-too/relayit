@@ -13,6 +13,21 @@ export class MessageSuppressionLookupError extends Data.TaggedError(
 }> {}
 
 /**
+ * The Contacts of one App Environment whose address is among `emails` (normalized). The column
+ * is lowered because not every stored email is lower-case, and a Suppression on such a Contact
+ * must still be found; `contact_app_env_lower_email_idx` is on this expression, so write the
+ * comparison nowhere else.
+ */
+export const contactsAmong = (input: {
+  readonly emails: readonly string[];
+  readonly organizationAppEnvironmentId: string;
+}) =>
+  and(
+    eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
+    inArray(sql`lower(${contact.email})`, [...input.emails]),
+  );
+
+/**
  * The Contacts of one App Environment, among `emails` (normalized), whose Suppression stops a
  * send of this purpose: severity `all` stops every send, `marketing` only a marketing one.
  * One condition for the strip and for the Delivery's claim, so the two cannot disagree.
@@ -23,11 +38,10 @@ export const suppressedAmong = (input: {
   readonly purpose: "marketing" | "transactional";
 }) =>
   and(
-    eq(contact.organizationAppEnvironmentId, input.organizationAppEnvironmentId),
+    contactsAmong(input),
     input.purpose === "marketing"
       ? isNotNull(contact.suppressionSeverity)
       : eq(contact.suppressionSeverity, "all"),
-    inArray(sql`lower(${contact.email})`, [...input.emails]),
   );
 
 export const filterSuppressedContacts = (

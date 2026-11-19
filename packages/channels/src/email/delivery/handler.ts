@@ -4,13 +4,15 @@ import {
   contact,
   customDomain,
   emailDelivery,
+  message as messageTable,
+  organizationAppEnvironment,
   organizationDomain,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
 import { emitWebhookEvent } from "@repo/webhooks";
 import { deliverySkipped, messageFailed, messageSent } from "@repo/webhooks/events";
 import { Redis } from "@repo/redis";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import { normalizeContactEmail } from "../../messages/accept/contacts";
 import {
@@ -51,6 +53,28 @@ const SES_SEND_TIMEOUT = Duration.seconds(30);
  * knows its owner may still be sending and retries later instead of failing it.
  */
 const CLAIM_LEASE = Duration.minutes(2);
+
+/**
+ * How long a Delivery stays `sending` before the worker ends it without waiting for its job
+ * (`endStuckDeliveries`). A job normally ends its own Delivery: the claim's owner within the
+ * two-minute lease, a later attempt by reading the kept SES answer or, past the lease, failing
+ * it, all inside the job's five attempts and seven and a half minutes of backoff. What is left
+ * `sending` after that has lost its job, or its job is being held up, and nothing in the code
+ * bounds how long that can last: an entry reclaimed from a crashed worker every minute and a
+ * half, a dead-letter step that cannot write yet, a backlog, or no worker running. So the age
+ * is a margin, not a derived limit, bounded above by the seven days SES's answer is kept: past
+ * those, a send SES accepted could no longer be told from one it never answered.
+ *
+ * A day is about two hundred times the retry schedule and a seventh of that window. It is also
+ * safe if the job does turn up later. On a claim older than its lease a run records a kept
+ * acceptance as `sent`, requeues a kept refusal, and otherwise fails the Delivery. The
+ * reconcile does the first and the last from the same answer under the same guarded write, so
+ * whichever is first, the other finds the outcome written and adds nothing. A kept refusal (one
+ * SES answered whose requeue was never written) it fails, where a job with attempts left would
+ * have sent again: requeued with no job, the Delivery would be stuck `queued` instead. That
+ * needs the job held up for the whole age, which is why the age is a day and not an hour.
+ */
+const STUCK_SENDING_AGE = Duration.hours(24);
 
 /**
  * How many times one run strips and claims before leaving the Delivery to the job's retry. A
@@ -193,7 +217,8 @@ const sendingState = (delivery: { readonly id: string; readonly startedAt: Date 
 
 /**
  * Records a Delivery SES has accepted as sent, with its message.sent event. Only the claim
- * SES answered changes, so recording it twice emits nothing twice.
+ * SES answered changes, so recording it twice emits nothing twice; false when it was already
+ * recorded.
  */
 const recordSent = (
   db: Database,
@@ -215,7 +240,7 @@ const recordSent = (
           { completedAt: new Date(), providerMessageId: input.providerMessageId, status: "sent" },
         );
         if (!sent) {
-          return;
+          return false;
         }
         yield* emitWebhookEvent(tx, {
           event: {
@@ -229,6 +254,7 @@ const recordSent = (
           messageTags: input.messageTags,
           organizationId: input.organizationId,
         });
+        return true;
       }),
     )
     .pipe(
@@ -298,6 +324,152 @@ const releaseUsage = (deliveryId: string) =>
       }),
     );
   });
+
+/**
+ * Ends a Delivery `failed` with its `message.failed`, in one transaction and only while it is
+ * still as it was read (`status`, and the claim made at `startedAt`). False when something
+ * else moved it meanwhile: nothing is written then, so two that fail one Delivery at once
+ * tell the Project once.
+ */
+const failDelivery = (
+  db: Database,
+  delivery: {
+    readonly id: string;
+    readonly messageId: string;
+    readonly messageTags: Record<string, string> | null;
+    readonly organizationId: string;
+    readonly startedAt: Date | null;
+    readonly status: "queued" | "sending";
+  },
+  failureMessage: string,
+) =>
+  db.transaction((tx) =>
+    Effect.gen(function* () {
+      const [failed] = yield* tx
+        .update(emailDelivery)
+        .set({
+          completedAt: new Date(),
+          error: { message: failureMessage, retryable: false },
+          status: "failed",
+        })
+        .where(
+          and(
+            eq(emailDelivery.id, delivery.id),
+            eq(emailDelivery.status, delivery.status),
+            delivery.startedAt
+              ? eq(emailDelivery.startedAt, delivery.startedAt)
+              : isNull(emailDelivery.startedAt),
+          ),
+        )
+        .returning({ id: emailDelivery.id });
+      if (!failed) {
+        return false;
+      }
+      yield* emitWebhookEvent(tx, {
+        event: {
+          data: {
+            delivery_id: delivery.id,
+            error: failureMessage,
+            message_id: delivery.messageId,
+          },
+          type: messageFailed.type,
+        },
+        messageTags: delivery.messageTags,
+        organizationId: delivery.organizationId,
+      });
+      return true;
+    }),
+  );
+
+/**
+ * Ends every Delivery left `sending` for longer than `STUCK_SENDING_AGE`, whose job is gone or
+ * held up: `sent` when SES's kept answer says it took the send, otherwise `failed` with the
+ * reason the job's dead-letter step would have given, `message.failed` and its Usage released.
+ * The worker runs it as it starts and every hour after. Several workers may run it at once:
+ * each write is guarded by the claim it read, so one of them ends a Delivery and the rest
+ * find nothing to do.
+ */
+export const endStuckDeliveries = Effect.gen(function* () {
+  const db = yield* DB;
+  const now = yield* Clock.currentTimeMillis;
+  const stuck = yield* db
+    .select({
+      id: emailDelivery.id,
+      messageId: emailDelivery.messageId,
+      messageTags: messageTable.tags,
+      organizationId: organizationAppEnvironment.organizationId,
+      startedAt: emailDelivery.startedAt,
+    })
+    .from(emailDelivery)
+    .innerJoin(messageTable, eq(messageTable.id, emailDelivery.messageId))
+    .innerJoin(
+      organizationAppEnvironment,
+      eq(organizationAppEnvironment.id, messageTable.organizationAppEnvironmentId),
+    )
+    .where(
+      and(
+        eq(emailDelivery.status, "sending"),
+        lt(emailDelivery.startedAt, new Date(now - Duration.toMillis(STUCK_SENDING_AGE))),
+      ),
+    );
+
+  yield* Effect.forEach(
+    stuck,
+    (delivery) =>
+      Effect.gen(function* () {
+        const state = yield* sendingState(delivery);
+        let failureMessage: string;
+        switch (state.kind) {
+          case "accepted": {
+            const recorded = yield* recordSent(db, {
+              claimedAt: state.claimedAt,
+              deliveryId: delivery.id,
+              messageId: delivery.messageId,
+              messageTags: delivery.messageTags,
+              organizationId: delivery.organizationId,
+              providerMessageId: state.providerMessageId,
+            });
+            if (recorded) {
+              // As the release below: no job runs again to confirm what Redis refused.
+              yield* confirmUsage(delivery.id).pipe(
+                Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
+              );
+              yield* Effect.logWarning("Recorded a Delivery left sending as sent");
+            }
+            return;
+          }
+          case "live":
+            // Not reachable while the age is longer than the lease; its owner has it.
+            return;
+          case "refused":
+            failureMessage = SES_REFUSED;
+            break;
+          case "stale":
+            failureMessage = OUTCOME_UNKNOWN;
+            break;
+        }
+        if (yield* failDelivery(db, { ...delivery, status: "sending" }, failureMessage)) {
+          // No job runs again to make a release Redis refused, so it is retried here. If
+          // Redis stays down past the retries the failure is logged and the reservation is
+          // left: no later pass reads a `failed` Delivery, so the Project's count for the
+          // period the send was reserved in stays one too high.
+          yield* releaseUsage(delivery.id).pipe(
+            Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
+          );
+          yield* Effect.logWarning("Ended a Delivery left sending without a job").pipe(
+            Effect.annotateLogs({ reason: failureMessage }),
+          );
+        }
+      }).pipe(
+        // A worker shutting down finishes the Delivery it is on: the outcome with its Usage.
+        Effect.uninterruptible,
+        // One that cannot be ended yet waits for the next pass; the rest are still ended.
+        Effect.catchCause((cause) => Effect.logError("Failed to end a stuck Delivery", cause)),
+        Effect.annotateLogs({ deliveryId: delivery.id }),
+      ),
+    { discard: true },
+  );
+});
 
 export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOptions) =>
   defineJobHandler({
@@ -1013,47 +1185,26 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             return yield* releaseUsage(deliveryId);
         }
 
-        yield* db.transaction((tx) =>
-          Effect.gen(function* () {
-            const [failed] = yield* tx
-              .update(emailDelivery)
-              .set({
-                completedAt: new Date(),
-                error: { message: failureMessage, retryable: false },
-                status: "failed",
-              })
-              .where(
-                and(
-                  eq(emailDelivery.id, deliveryId),
-                  eq(emailDelivery.status, delivery.status),
-                  delivery.startedAt
-                    ? eq(emailDelivery.startedAt, delivery.startedAt)
-                    : isNull(emailDelivery.startedAt),
-                ),
-              )
-              .returning({ id: emailDelivery.id });
-            if (!failed) {
-              // Another run moved it meanwhile; settle it on the next run.
-              return yield* new MessageDeliveryRetryableError({
-                deliveryId,
-                message: "The Delivery changed while it was being failed",
-                stage: "dead_letter",
-              });
-            }
-            yield* emitWebhookEvent(tx, {
-              event: {
-                data: {
-                  delivery_id: deliveryId,
-                  error: failureMessage,
-                  message_id: delivery.messageId,
-                },
-                type: messageFailed.type,
-              },
-              messageTags: delivery.message?.tags ?? null,
-              organizationId,
-            });
-          }),
+        const failed = yield* failDelivery(
+          db,
+          {
+            id: deliveryId,
+            messageId: delivery.messageId,
+            messageTags: delivery.message?.tags ?? null,
+            organizationId,
+            startedAt: delivery.startedAt,
+            status: delivery.status,
+          },
+          failureMessage,
         );
+        if (!failed) {
+          // Another run moved it meanwhile; settle it on the next run.
+          return yield* new MessageDeliveryRetryableError({
+            deliveryId,
+            message: "The Delivery changed while it was being failed",
+            stage: "dead_letter",
+          });
+        }
         yield* releaseUsage(deliveryId);
       }),
   });

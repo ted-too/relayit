@@ -8,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { typeid } from "typeid-js";
 import * as z from "zod";
 import type { ContactProperties } from "../validators/contact";
@@ -77,6 +78,13 @@ export const contact = pgTable(
   (t) => [
     index("contact_organization_app_environment_idx").on(t.organizationAppEnvironmentId),
     uniqueIndex("contact_app_env_email_unique_idx").on(t.organizationAppEnvironmentId, t.email),
+    // What the suppression lookups compare: they lower the column because not every stored
+    // email is lower-case, so the unique index on the plain column cannot serve them. Not
+    // unique, since two rows that differ only in case may exist.
+    index("contact_app_env_lower_email_idx").on(
+      t.organizationAppEnvironmentId,
+      sql`lower(${t.email})`,
+    ),
     index("contact_email_idx").on(t.email),
     index("contact_properties_gin_idx").using("gin", t.properties),
     index("contact_unsubscribed_idx").on(t.unsubscribed),
