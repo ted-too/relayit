@@ -1,10 +1,15 @@
 /**
  * Adding and removing a Domain against a real Postgres: who ends up holding it, whether it
  * ends up registered and checked, and that it goes with its last link and takes its SES
- * identity along. SES, public DNS and the job queue are the boundaries stubbed.
+ * identity along. SES and public DNS are the boundaries stubbed; the job queue is the real
+ * one, on Redis and the outbox, recorded and made to fail only where a test asks.
  */
 import { describe, expect, it, test } from "@effect/vitest";
-import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
+import { DeadLetterStoreLive, Jobs, registerJobHandler } from "@repo/jobs";
+import { publishOutboxBatch } from "@repo/jobs/outbox";
+import { jobOutbox } from "@repo/jobs/outbox-schema";
+import { JOB_WORKER_GROUP } from "@repo/jobs/storage";
+import { processJobBatch } from "@repo/jobs/worker";
 import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -27,12 +32,14 @@ import {
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
+import { Redis } from "@repo/redis";
 import { and, count, eq, or, sql } from "drizzle-orm";
 import { Effect, Layer, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendIdentityConflict, EmailBackendUnavailable } from "../backend";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { recordedJobs } from "../recorded-jobs-test-layer";
 import { ingestDeliveryEvents } from "../deliverability/notifications";
 import { pauseProjectDomains } from "../deliverability/project-sending-pause";
 import { createOwnershipToken, ownershipChallengeValue } from "./dns";
@@ -54,18 +61,21 @@ import {
 } from "./lifecycle";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
+const testRedisUrl = Bun.env.TEST_REDIS_URL;
 
-describe("Domain lifecycle (PostgreSQL)", () => {
-  if (!testDatabaseUrl) {
-    process.emitWarning("Skipping Domain lifecycle tests: TEST_DATABASE_URL is not set");
-    // The PostgreSQL test is opt-in.
+describe("Domain lifecycle (PostgreSQL and Redis)", () => {
+  if (!(testDatabaseUrl && testRedisUrl)) {
+    process.emitWarning(
+      "Skipping Domain lifecycle tests: TEST_DATABASE_URL and TEST_REDIS_URL are not both set",
+    );
+    // The PostgreSQL and Redis test is opt-in.
     test.skip("createCustomDomain", () => undefined);
     return;
   }
 
   /**
-   * SES, public DNS and the queue as each test sets them; what was scheduled, cancelled and
-   * enqueued, by job, the SES identities the account holds (`identities`, FQDN to DKIM selector,
+   * SES and public DNS as each test sets them, and the queue (`recordedJobs`); what was
+   * scheduled, cancelled and enqueued, by job, the SES identities the account holds (`identities`, FQDN to DKIM selector,
    * which a test may also fill with one Relayit did not make), those created and deleted,
    * and the TXT values published
    * in DNS. `beforeKeyLoad` runs as a Domain's DKIM key is read, which an add does between
@@ -83,14 +93,9 @@ describe("Domain lifecycle (PostgreSQL)", () => {
       readonly failSchedule?: () => boolean;
     } = {},
   ) => {
-    const scheduled: { readonly name: string; readonly payload: unknown }[] = [];
-    /** When each of `scheduled` is due, in the same order. */
-    const scheduledAt: number[] = [];
+    const jobs = recordedJobs(testRedisUrl, options);
+    const { cancelled, enqueued, enqueuedFor, scheduled, scheduledAt } = jobs;
     const published = new Set<string>();
-    const cancelled: { readonly name: string; readonly payload: unknown }[] = [];
-    const enqueued: { readonly name: string; readonly payload: unknown }[] = [];
-    /** When each of `enqueued` was delayed until, in the same order. */
-    const enqueuedFor: (number | undefined)[] = [];
     const deletedIdentities: { readonly fqdn: string; readonly region: string | null }[] = [];
     const createdIdentities: string[] = [];
     // The SES account as SES keeps it: one identity to an FQDN, signing with one selector.
@@ -142,50 +147,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         detectProvider: () => Promise.resolve("cloudflare"),
         evaluate: ({ value }) => Promise.resolve({ matches: published.has(value), warnings: [] }),
       }),
-      Layer.succeed(Jobs, {
-        cancel: ((contract: { readonly name: string }, payload?: unknown) => {
-          if (options.failCancel) {
-            return Effect.fail(
-              new JobEnqueueError({
-                cause: "Redis is down",
-                jobName: contract.name,
-                stage: "cancel",
-              }),
-            );
-          }
-          cancelled.push({ name: contract.name, payload });
-          return Effect.void;
-        }) as JobsService["cancel"],
-        enqueue: ((
-          contract: { readonly name: string },
-          payload: { readonly fqdn?: string },
-          _transaction?: unknown,
-          enqueueOptions?: { readonly delayUntil?: number },
-        ) => {
-          if (payload.fqdn !== undefined && payload.fqdn === options.failEnqueueFor?.()) {
-            return Effect.fail(
-              new JobEnqueueError({ cause: "refused", jobName: contract.name, stage: "outbox" }),
-            );
-          }
-          enqueued.push({ name: contract.name, payload });
-          enqueuedFor.push(enqueueOptions?.delayUntil);
-          return Effect.void;
-        }) as JobsService["enqueue"],
-        schedule: ((contract: { readonly name: string }, payload: unknown, at?: number) => {
-          if (options.failSchedule?.()) {
-            return Effect.fail(
-              new JobEnqueueError({
-                cause: "Redis is down",
-                jobName: contract.name,
-                stage: "schedule",
-              }),
-            );
-          }
-          scheduled.push({ name: contract.name, payload });
-          scheduledAt.push(at ?? Number.NaN);
-          return Effect.void;
-        }) as JobsService["schedule"],
-      }),
+      jobs.layer,
       EmailManagedDns.noop(),
       Layer.effect(
         SymmetricCrypto,
@@ -2268,6 +2230,73 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         ),
     };
   };
+
+  it.live(
+    "a removal writes its identity's delete job to the outbox, and a worker runs it",
+    () => {
+      // Its own database, so the outbox holds this removal's job alone and no other test's
+      // worker pass publishes it first.
+      const database = ownDatabase();
+      const { deletedIdentities, identities, layer } = boundaries({ databaseUrl: database.url });
+
+      const removal = Effect.gen(function* () {
+        const db = yield* DB;
+        const redis = yield* Redis;
+        const organizationId = yield* insertProject();
+        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+        const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
+        const dkimSelector = yield* selectorOf(customDomainId);
+        const outbox = db
+          .select({
+            jobName: jobOutbox.jobName,
+            payload: jobOutbox.payload,
+            status: jobOutbox.status,
+          })
+          .from(jobOutbox);
+        const records = db
+          .select({ dkimSelector: removedDomainIdentity.dkimSelector })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn));
+        expect(yield* outbox).toEqual([]);
+
+        yield* deleteCustomDomain({ customDomainId, organizationId });
+
+        // Committed with the removal: the Domain is gone, its identity is recorded, and the
+        // job that deletes it waits in the outbox. SES still holds the identity.
+        expect(yield* domainOf(fqdn)).toBeUndefined();
+        expect(yield* records).toEqual([{ dkimSelector }]);
+        expect(yield* outbox).toEqual([
+          {
+            jobName: "email.delete-domain-identity",
+            payload: expect.stringContaining(fqdn),
+            status: "pending",
+          },
+        ]);
+        expect(identities.get(fqdn)).toBe(dkimSelector);
+
+        // One pass of the worker: publish the outbox to Redis, then run what is ready.
+        const deleter = registerJobHandler(emailDeleteDomainIdentityHandler);
+        yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: deleter.stream });
+        yield* publishOutboxBatch({ batchSize: 10, claimTtlMs: 30_000, concurrency: 1 });
+        yield* processJobBatch([deleter], {
+          blockMs: 100,
+          concurrency: 1,
+          consumer: "test",
+          count: 10,
+        });
+
+        expect(yield* outbox).toMatchObject([{ status: "published" }]);
+        expect(deletedIdentities).toMatchObject([{ fqdn }]);
+        expect(identities.has(fqdn)).toBe(false);
+        expect(yield* records).toEqual([]);
+      });
+
+      return database.within(
+        removal.pipe(Effect.provide(Layer.provideMerge(DeadLetterStoreLive, layer))),
+      );
+    },
+    30_000,
+  );
 
   it.live(
     "the sweep of every Domain removes those without a link, and only those",
