@@ -250,7 +250,7 @@ const registerCustomDomainIdentity = (input: {
                     customDomainId: input.customDomainId,
                     fqdn: input.fqdn,
                     message:
-                      "This domain already has a sending identity that Relayit did not create, so it can't be added. If you removed the domain a moment ago, try again shortly.",
+                      "This domain already has a sending identity that Relayit did not create, so it can't be added.",
                   });
                 default:
                   return new CustomDomainError({

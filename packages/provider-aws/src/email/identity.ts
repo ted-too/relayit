@@ -111,7 +111,7 @@ export const ensureSesDomainIdentity = (
  * Deletes the SES identity of a removed Domain: the one signing with its selector. One of
  * that name signing with anything else is left as it is. It is an identity Relayit did not
  * make, which a Domain refused for it must not delete on its way out, or the identity of a
- * Domain added since.
+ * Domain added since. Answers whether it deleted one.
  */
 export const deleteSesDomainIdentity = (
   ses: Pick<SESv2.Type, "deleteEmailIdentity" | "getEmailIdentity"> & SesTenantClient,
@@ -122,14 +122,14 @@ export const deleteSesDomainIdentity = (
       .getEmailIdentity({ EmailIdentity: input.fqdn })
       .pipe(Effect.catchTags({ NotFoundException: () => Effect.succeed(null) }));
     if (!existing) {
-      return;
+      return false;
     }
     if (!isIdentityOfSelector(existing, input.dkimSelector)) {
       yield* Effect.logWarning("Left an SES identity that was not made for the removed Domain", {
         fqdn: input.fqdn,
         region: input.region,
       });
-      return;
+      return false;
     }
     // Best effort: if this fails, deleteEmailIdentity below surfaces the real error while
     // associations remain.
@@ -145,4 +145,5 @@ export const deleteSesDomainIdentity = (
     yield* ses
       .deleteEmailIdentity({ EmailIdentity: input.fqdn })
       .pipe(Effect.catchTags({ NotFoundException: () => Effect.void }));
+    return true;
   });

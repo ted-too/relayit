@@ -121,10 +121,12 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         defaultRegion: "eu-central-1",
         deleteIdentity: ({ dkimSelector, fqdn, region }) =>
           Effect.sync(() => {
-            if (identities.get(fqdn) === dkimSelector) {
-              identities.delete(fqdn);
-              deletedIdentities.push({ fqdn, region });
+            if (identities.get(fqdn) !== dkimSelector) {
+              return false;
             }
+            identities.delete(fqdn);
+            deletedIdentities.push({ fqdn, region });
+            return true;
           }),
         ensureInfrastructure: () => Effect.void,
         getIdentityStatus: () => Effect.die("unused"),
@@ -541,6 +543,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     const { createdIdentities, deletedIdentities, enqueued, identities, layer, scheduled } =
       boundaries();
     return Effect.gen(function* () {
+      const db = yield* DB;
       const projectId = yield* insertProject();
       const fqdn = `${Bun.randomUUIDv7()}.example.test`;
       // Made by hand in the SES console, or by another system on the same account.
@@ -560,6 +563,14 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         "email.delete-domain-identity",
       ]);
       expect(identities.get(fqdn)).toBe("selector1");
+      // Nothing was deleted, so each removal's record stays: were an identity of one of
+      // those Domains to turn up, an add of the FQDN could still delete it.
+      expect(
+        yield* db
+          .select({ id: removedDomainIdentity.id })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn)),
+      ).toHaveLength(2);
       expect({ createdIdentities, deletedIdentities, scheduled }).toEqual({
         createdIdentities: [],
         deletedIdentities: [],

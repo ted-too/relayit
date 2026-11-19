@@ -78,6 +78,15 @@ describe("fake email backend's identities (PostgreSQL)", () => {
           .pipe(Effect.provideService(EmailBackend, fake));
       }
 
+      // The fake answered that it deleted nothing, so the handler kept the removal's record:
+      // that the SES backend deletes nothing of an outside identity is `identity.test.ts`'s.
+      expect(
+        yield* db.query.removedDomainIdentity.findMany({
+          columns: { dkimSelector: true },
+          where: { fqdn },
+        }),
+      ).toEqual([{ dkimSelector: enqueued[0]?.dkimSelector }]);
+
       // The identity is still in the account, untouched: the name is refused as before.
       expect(yield* Effect.flip(add)).toMatchObject({ _tag: "CustomDomainIdentityConflict" });
       // In the region it is in, and under that name only.

@@ -168,8 +168,10 @@ export const makeFakeEmailBackend = (defaultRegion: string) =>
               },
             }),
       defaultRegion,
-      // An outside identity never signs with a Domain's selector, so none is ever deleted.
-      deleteIdentity: () => Effect.void,
+      // An outside identity never signs with a Domain's selector, so none is ever deleted;
+      // a Domain's own is taken to have been there and to be gone.
+      deleteIdentity: ({ fqdn, region }) =>
+        Effect.sync(() => !outsideIdentities.has(identityKey({ fqdn, region }))),
       ensureInfrastructure: () => Effect.void,
       getIdentityStatus: () => Effect.succeed({ dkimVerified: true, verified: true }),
       getProjectSendingStatus: ({ projectId }) =>

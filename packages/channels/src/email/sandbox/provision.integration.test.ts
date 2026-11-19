@@ -18,7 +18,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 import { typeid } from "typeid-js";
-import { EmailBackend } from "../backend";
+import { EmailBackend, EmailBackendIdentityConflict } from "../backend";
 import { createOwnershipToken } from "../custom-domain/dns";
 import { EmailManagedDns } from "../managed-dns";
 import { ensureSandboxDomain } from "./provision";
@@ -34,17 +34,21 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
   }
 
   /** SES, Cloudflare and the queue, and what each was asked to do. */
-  const boundaries = () => {
+  const boundaries = (options: { readonly outsideIdentity?: () => string | undefined } = {}) => {
     const createdIdentities: string[] = [];
     const dnsOwners: string[] = [];
     const scheduled: unknown[] = [];
     const layer = Layer.mergeAll(
       Layer.succeed(EmailBackend, {
-        createIdentity: ({ fqdn }) =>
-          Effect.sync(() => {
-            createdIdentities.push(fqdn);
-            return { mailFrom: { domain: `send.${fqdn}`, records: [] } };
-          }),
+        createIdentity: ({ fqdn, region }) =>
+          fqdn === options.outsideIdentity?.()
+            ? Effect.fail(
+                new EmailBackendIdentityConflict({ fqdn, region: region ?? "eu-central-1" }),
+              )
+            : Effect.sync(() => {
+                createdIdentities.push(fqdn);
+                return { mailFrom: { domain: `send.${fqdn}`, records: [] } };
+              }),
         defaultRegion: "eu-central-1",
         deleteIdentity: () => Effect.die("unused"),
         ensureInfrastructure: () => Effect.die("unused"),
@@ -165,6 +169,38 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
         dnsOwners: [],
         scheduled: [],
       });
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.live("is not registered onto an SES identity Relayit did not make, at any start", () => {
+    let root: string | undefined;
+    const { createdIdentities, layer, scheduled } = boundaries({ outsideIdentity: () => root });
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      root = newRoot();
+
+      // The first start writes the Sandbox Domain and is refused by SES; the next finds its
+      // row unregistered and is refused the same.
+      for (const _start of [1, 2]) {
+        expect(
+          yield* Effect.flip(ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root })),
+        ).toMatchObject({
+          _tag: "SandboxDomainError",
+          cause: { _tag: "EmailBackendIdentityConflict", fqdn: root },
+          message:
+            "The sandbox root already has an SES identity that Relayit did not create; it was left untouched.",
+        });
+      }
+
+      const sandboxes = yield* sandboxesOn(root);
+      expect(sandboxes).toHaveLength(1);
+      expect(
+        yield* db
+          .select({ id: emailDomainRegistration.id })
+          .from(emailDomainRegistration)
+          .where(eq(emailDomainRegistration.sandboxDomainId, sandboxes[0]?.id ?? "")),
+      ).toEqual([]);
+      expect({ createdIdentities, scheduled }).toEqual({ createdIdentities: [], scheduled: [] });
     }).pipe(Effect.provide(layer));
   });
 

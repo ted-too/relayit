@@ -94,15 +94,27 @@ const registerSandboxIdentity = (input: {
         region,
       })
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to register the sandbox domain with SES.",
-              operation: "register_identity",
-              sandboxDomainId: input.sandboxDomain.id,
-            }),
-        ),
+        Effect.mapError((cause) => {
+          switch (cause._tag) {
+            // Not retried into: the identity stays as it is until someone deletes it in SES
+            // or the root is changed.
+            case "EmailBackendIdentityConflict":
+              return new SandboxDomainError({
+                cause,
+                message:
+                  "The sandbox root already has an SES identity that Relayit did not create; it was left untouched.",
+                operation: "register_identity",
+                sandboxDomainId: input.sandboxDomain.id,
+              });
+            default:
+              return new SandboxDomainError({
+                cause,
+                message: "Failed to register the sandbox domain with SES.",
+                operation: "register_identity",
+                sandboxDomainId: input.sandboxDomain.id,
+              });
+          }
+        }),
       );
 
     yield* managedDns

@@ -174,7 +174,7 @@ export const makeSesEmailBackend = (config: SesConfig) =>
       deleteIdentity: ({ dkimSelector, fqdn, region: recorded }) =>
         Effect.gen(function* () {
           const { mapAwsError, region, ses } = yield* inRegion(recorded);
-          yield* deleteSesDomainIdentity(ses, { dkimSelector, fqdn, region }).pipe(
+          return yield* deleteSesDomainIdentity(ses, { dkimSelector, fqdn, region }).pipe(
             Effect.mapError(mapAwsError),
           );
         }),

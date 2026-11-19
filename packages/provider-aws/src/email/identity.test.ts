@@ -161,7 +161,7 @@ describe("deleteSesDomainIdentity", () => {
     Effect.gen(function* () {
       const account = makeSes({ origin: "EXTERNAL", tokens: ["relayitabc123"] });
 
-      yield* deleteSesDomainIdentity(account.ses, input);
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(true);
 
       expect(account.identity).toBeNull();
       expect(account.calls).toEqual(["get", "detach", "delete"]);
@@ -172,7 +172,7 @@ describe("deleteSesDomainIdentity", () => {
     Effect.gen(function* () {
       const account = makeSes(existing);
 
-      yield* deleteSesDomainIdentity(account.ses, input);
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(false);
 
       expect(account.identity).toEqual(existing);
       expect(account.calls).toEqual(["get"]);
@@ -183,7 +183,7 @@ describe("deleteSesDomainIdentity", () => {
     Effect.gen(function* () {
       const account = makeSes();
 
-      yield* deleteSesDomainIdentity(account.ses, input);
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(false);
 
       expect(account.calls).toEqual(["get"]);
     }),

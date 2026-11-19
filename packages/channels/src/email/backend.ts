@@ -30,10 +30,11 @@ export interface EmailBackendService {
   /**
    * Deletes the identity a Domain was registered as: the one signing with `dkimSelector`.
    * An identity of that name signing with anything else is not that Domain's and stays.
+   * Answers whether it deleted one: false when there was none, or none of the Domain's.
    */
   readonly deleteIdentity: (
     input: EmailIdentityRef & { readonly dkimSelector: string },
-  ) => Effect.Effect<void, EmailBackendError>;
+  ) => Effect.Effect<boolean, EmailBackendError>;
   /** The configuration set and notification topic in every region, pointed at the api. */
   readonly ensureInfrastructure: (input: {
     readonly deliveryWebhookUrl: string;
