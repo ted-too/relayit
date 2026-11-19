@@ -1349,6 +1349,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       Effect.gen(function* () {
         const cookie = yield* signUp("limit");
         const tooLarge = {
+          _tag: "PayloadTooLarge",
           code: "payload_too_large",
           message: "Request body exceeds the 1 MiB limit.",
         };

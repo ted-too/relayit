@@ -221,5 +221,15 @@ export const announced = (
     ]);
     socket.end();
     const [head, body] = response.split("\r\n\r\n");
-    return { body, status: head?.split("\r\n")[0] };
+    const [status, ...lines] = head?.split("\r\n") ?? [];
+    return {
+      body,
+      headers: Object.fromEntries(
+        lines.map((line) => {
+          const colon = line.indexOf(":");
+          return [line.slice(0, colon).toLowerCase(), line.slice(colon + 1).trim()];
+        }),
+      ),
+      status,
+    };
   });

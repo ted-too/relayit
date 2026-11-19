@@ -5,7 +5,14 @@ import { logEffectFailure } from "@repo/logging";
 import type { handleSesNotification } from "@repo/provider-aws/email/webhooks";
 import { BunHttpServer } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { HttpMiddleware, HttpRouter, HttpServerError, HttpServerResponse } from "effect/http";
+import {
+  HttpEffect,
+  HttpMiddleware,
+  HttpRouter,
+  HttpServerError,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import { Api, MAX_SEND_BODY_BYTES } from "./api";
 import { dashboardRoutes } from "./dashboard/http";
@@ -26,6 +33,12 @@ const healthHandlers = HttpApiBuilder.group(Api, "health", (handlers) =>
  * In front of every route: a request no route matches gets the `404 NOT_FOUND` the api
  * has always answered with, and a failure no route turned into a response is logged
  * before the server answers 500.
+ *
+ * Whatever is answered, by a route, by its middleware or here, closes the connection when
+ * the request had a body and none of it was read: a send refused for its key, a body
+ * refused by its `Content-Length`, a 404. Bun stops reading a body nobody consumes, and the
+ * connection then waits on it until the idle timeout, holding a graceful shutdown with it.
+ * It is a pre-response handler rather than a `map` so that the server's own 500 is covered.
  */
 const fallback = HttpRouter.middleware(
   (httpEffect) =>
@@ -42,6 +55,17 @@ const fallback = HttpRouter.middleware(
           ),
       ),
       Effect.tapCause(logEffectFailure("API request failed")),
+      HttpEffect.withPreResponseHandler((request, response) =>
+        HttpServerRequest.toWeb(request).pipe(
+          Effect.map((source) =>
+            source.body === null || source.bodyUsed
+              ? response
+              : HttpServerResponse.setHeader(response, "connection", "close"),
+          ),
+          // Only a request that isn't a web `Request` fails here, and Bun's always is.
+          Effect.orElseSucceed(() => response),
+        ),
+      ),
     ),
   { global: true },
 );
@@ -50,19 +74,17 @@ const fallback = HttpRouter.middleware(
  * CORS for the dashboard, which runs on its own origin (`APP_URL`) and calls the api with
  * the session cookie: that origin alone is granted, with credentials, and preflights are
  * answered. Another origin gets no `Access-Control-Allow-Origin`, so a browser keeps the
- * response from it. It is route middleware, given to exactly the routes the dashboard calls
- * (the `DashboardApi`, better-auth, unsubscribe) where they are built, rather than matched
- * on paths: the public API is never given it, sends no CORS headers, and its preflight stays
- * a 404, since it is called by servers holding an API key, never from a page.
+ * response from it. It is for exactly the routes the dashboard calls (the `DashboardApi`,
+ * better-auth, unsubscribe), rather than matched on paths: the public API is never given
+ * it, sends no CORS headers, and its preflight stays a 404, since it is called by servers
+ * holding an API key, never from a page.
  */
 const dashboardCors = (appOrigin: string) =>
-  HttpRouter.middleware(
-    HttpMiddleware.cors({
-      allowedOrigins: (origin) => origin === appOrigin,
-      credentials: true,
-      maxAge: 600,
-    }),
-  ).layer;
+  HttpMiddleware.cors({
+    allowedOrigins: (origin) => origin === appOrigin,
+    credentials: true,
+    maxAge: 600,
+  });
 
 /**
  * The api's HTTP server on Bun: the public routes, with `/docs` and `/openapi.json`
@@ -84,9 +106,16 @@ export const apiServer = (options: {
   readonly unsubscribe?: typeof handleListUnsubscribeOneClick;
 }) =>
   HttpRouter.serve(
+    // Every route is in one of these two groups, and so behind `bodyLimit`: a route added
+    // to either is limited too. The dashboard's routes get CORS around the limit, composed
+    // as one function, because the router does not promise an order between two route
+    // middlewares provided apart, and a `413` given inside the limit has to come back
+    // through CORS for the page to be allowed to read it.
     Layer.mergeAll(
-      HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }),
-      HttpApiScalar.layerCdn(Api, { path: "/docs" }),
+      Layer.mergeAll(
+        HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }),
+        HttpApiScalar.layerCdn(Api, { path: "/docs" }),
+      ).pipe(Layer.provide(HttpRouter.middleware(bodyLimit).layer)),
       Layer.mergeAll(
         dashboardRoutes({ ...options.dashboard, appOrigin: options.appOrigin }),
         authRoutes,
@@ -95,11 +124,15 @@ export const apiServer = (options: {
           handle: options.unsubscribe,
           secrets: options.unsubscribeSecrets,
         }),
-      ).pipe(Layer.provide(dashboardCors(options.appOrigin))),
+      ).pipe(
+        Layer.provide(
+          HttpRouter.middleware((httpEffect) =>
+            dashboardCors(options.appOrigin)(bodyLimit(httpEffect)),
+          ).layer,
+        ),
+      ),
       fallback,
     ).pipe(
-      // Around every route above, so that one added there is limited too.
-      Layer.provide(bodyLimit),
       Layer.provide(
         Layer.mergeAll(
           healthHandlers,

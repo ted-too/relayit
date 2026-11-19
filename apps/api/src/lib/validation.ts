@@ -7,6 +7,7 @@ import {
   requestSchemas,
   SchemaValidationFailed,
 } from "../api";
+import { closeAfterAnswer } from "./body-limit";
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -133,6 +134,7 @@ export const RequestValidationLive = Layer.succeed(
         if (Result.isFailure(read)) {
           const { reason } = read.failure;
           if (reason._tag === "RequestParseError" && reason.reason === "BodyTooLarge") {
+            yield* closeAfterAnswer;
             return yield* new PayloadTooLarge({
               code: "payload_too_large",
               message: "Request body exceeds the 50 MiB limit.",
