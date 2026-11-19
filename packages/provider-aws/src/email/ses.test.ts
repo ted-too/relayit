@@ -5,38 +5,20 @@ import { makeSesEmailBackend, provesNotSent } from "./ses";
 
 const SEND_PATH = "/v2/email/outbound-emails";
 
-/** Runs `use` with one send through the real SES client, with SES at `endpoint`. */
-const throughSes = <A, E>(
+/** Runs `use` with the real SES client, with SES at `endpoint`. */
+const withSesAt = <A, E>(
   endpoint: string,
-  use: (send: ReturnType<EmailBackendService["send"]>) => Effect.Effect<A, E>,
+  use: (backend: EmailBackendService) => Effect.Effect<A, E>,
 ) =>
   Effect.gen(function* () {
     const previous = process.env.AWS_ENDPOINT_URL_SESV2;
     process.env.AWS_ENDPOINT_URL_SESV2 = endpoint;
-    return yield* Effect.gen(function* () {
-      const backend = yield* makeSesEmailBackend({
-        accessKeyId: "AKIATEST",
-        regions: ["eu-central-1"],
-        secretAccessKey: "secret",
-      });
-      return yield* use(
-        backend.send({
-          message: {
-            bcc: null,
-            cc: null,
-            from: { address: "hello@example.com", normalized: "hello@example.com" },
-            headers: null,
-            html: null,
-            replyTo: null,
-            sender: { identityFqdn: "example.com", projectId: "orgn_test" },
-            subject: "Hello",
-            text: "Hello",
-            to: ["someone@example.com"],
-          },
-          region: "eu-central-1",
-        }),
-      );
+    return yield* makeSesEmailBackend({
+      accessKeyId: "AKIATEST",
+      regions: ["eu-central-1"],
+      secretAccessKey: "secret",
     }).pipe(
+      Effect.flatMap(use),
       Effect.ensuring(
         Effect.sync(() => {
           if (previous === undefined) {
@@ -48,6 +30,31 @@ const throughSes = <A, E>(
       ),
     );
   });
+
+/** Runs `use` with one send through the real SES client, with SES at `endpoint`. */
+const throughSes = <A, E>(
+  endpoint: string,
+  use: (send: ReturnType<EmailBackendService["send"]>) => Effect.Effect<A, E>,
+) =>
+  withSesAt(endpoint, (backend) =>
+    use(
+      backend.send({
+        message: {
+          bcc: null,
+          cc: null,
+          from: { address: "hello@example.com", normalized: "hello@example.com" },
+          headers: null,
+          html: null,
+          replyTo: null,
+          sender: { identityFqdn: "example.com", projectId: "orgn_test" },
+          subject: "Hello",
+          text: "Hello",
+          to: ["someone@example.com"],
+        },
+        region: "eu-central-1",
+      }),
+    ),
+  );
 
 /** What one send that SES does not accept fails with. */
 const sendThrough = (endpoint: string) => throughSes(endpoint, Effect.flip);
@@ -193,6 +200,33 @@ describe("the SES backend's send", () => {
       expect(error).toMatchObject({ _tag: "EmailBackendUnavailable" });
       expect(sends).toHaveLength(1);
     }).pipe(Effect.ensuring(Effect.sync(() => server.stop(true))));
+  });
+});
+
+describe("the SES backend's read of a Project's sending status", () => {
+  const statusThrough = (endpoint: string) =>
+    withSesAt(endpoint, (backend) =>
+      Effect.flip(
+        backend.getProjectSendingStatus({ projectId: "orgn_test", region: "eu-central-1" }),
+      ),
+    );
+
+  it.live("fails as credentials, not as SES being down, when SES denies the read", () => {
+    // What SES answers an IAM user without ses:GetTenant: a 403 it has no modelled error for.
+    const ses = answering(403, "AccessDeniedException");
+    return Effect.gen(function* () {
+      expect(yield* statusThrough(ses.url)).toMatchObject({
+        _tag: "EmailBackendAuthenticationError",
+        region: "eu-central-1",
+      });
+    }).pipe(Effect.ensuring(ses.stop));
+  });
+
+  it.live("fails as unavailable, to be retried, when SES answers with a 5xx", () => {
+    const ses = answering(500, "InternalFailure");
+    return Effect.gen(function* () {
+      expect(yield* statusThrough(ses.url)).toMatchObject({ _tag: "EmailBackendUnavailable" });
+    }).pipe(Effect.ensuring(ses.stop));
   });
 });
 

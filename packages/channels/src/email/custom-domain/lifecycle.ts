@@ -25,7 +25,10 @@ import {
 import { and, eq, inArray, isNull, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
-import { emitDomainUpdated } from "../deliverability/project-sending-pause";
+import {
+  emitDomainUpdated,
+  liftPreviousHolderPause,
+} from "../deliverability/project-sending-pause";
 import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
 import { DnsLookups } from "../dns-lookups";
@@ -894,7 +897,8 @@ const detachDeliveries = (
  * be checked again, and of two claims proven at once the second finds its link gone. False
  * when it is: another claim took the Domain first. The SES registration, DNS records and
  * DKIM key stay, since they belong to the Domain, not the Project; what the Projects losing
- * it sent from it does not, and is detached from it here.
+ * it sent from it does not, and is detached from it here. Nor does a pause made for the
+ * previous holder's Project Sending Pause, which is lifted here; an admin's pause stays.
  */
 export const completeDomainClaimTransfer = (input: {
   readonly customDomainId: string;
@@ -916,6 +920,16 @@ export const completeDomainClaimTransfer = (input: {
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
+        // Read under the Domain's row, which every writer of its links holds.
+        const [claim] = yield* tx
+          .select({ status: organizationDomain.ownershipVerificationStatus })
+          .from(organizationDomain)
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              eq(organizationDomain.organizationId, input.organizationId),
+            ),
+          );
         const [proven] = yield* tx
           .update(organizationDomain)
           .set({ ...input.proof, ownershipVerificationStatus: "verified" })
@@ -950,6 +964,15 @@ export const completeDomainClaimTransfer = (input: {
             .filter(({ held }) => held === "verified")
             .map(({ organizationId }) => organizationId),
         });
+        // Only as the Domain changes hands: a check that proves the same claim a second
+        // time finds a pause that may by now be the new holder's own.
+        if (claim?.status !== "verified") {
+          yield* liftPreviousHolderPause(tx, {
+            customDomainId: input.customDomainId,
+            defaultRegion: (yield* EmailBackend).defaultRegion,
+            organizationId: input.organizationId,
+          });
+        }
         return true;
       }),
     )

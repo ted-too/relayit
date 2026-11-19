@@ -112,7 +112,7 @@ If you add a domain that another Project already added to Relayit, Relayit start
 
 Until ownership verifies, the Domain is not yours: you cannot send from it, and its page shows only the ownership record.
 
-When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. The Messages the other Project sent from the domain stay with that Project and are not attached to the domain in yours; bounces and complaints for them are still recorded for that Project. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
+When ownership verifies, the domain moves to your Project and the other Project loses it; its emails still queued from the domain fail at send time. A domain that was paused because sending was paused for the other Project is unpaused as it moves, unless sending is paused for your Project too, and your Project's `domain.updated` Webhook Endpoints are told; a pause by one of Relayit's operators stays. The Messages the other Project sent from the domain stay with that Project and are not attached to the domain in yours; bounces and complaints for them are still recorded for that Project. Several Projects can claim the same domain at once: the first to verify takes it, and the other claims are removed. A claim not verified within 7 days lapses and is removed.
 
 ## Delete a Domain
 

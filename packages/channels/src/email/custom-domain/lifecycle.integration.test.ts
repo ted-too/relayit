@@ -34,6 +34,7 @@ import { EmailBackend, EmailBackendIdentityConflict, EmailBackendUnavailable } f
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
 import { ingestDeliveryEvents } from "../deliverability/notifications";
+import { pauseProjectDomains } from "../deliverability/project-sending-pause";
 import { createOwnershipToken, ownershipChallengeValue } from "./dns";
 import { emailDeleteDomainIdentityHandler } from "./handlers";
 import type { EmailDeleteDomainIdentityPayload } from "./jobs";
@@ -46,6 +47,7 @@ import {
   CLAIM_TTL_MS,
   createCustomDomain,
   deleteCustomDomain,
+  pauseCustomDomain,
   removeDeletedProjectDomains,
   removeUnlinkedDomains,
 } from "./lifecycle";
@@ -877,6 +879,131 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         { organizationId: winner?.organizationId, ownershipVerificationStatus: "verified" },
       ]);
     }).pipe(Effect.provide(layer));
+  });
+
+  describe("a paused Domain taken by a proven claim", () => {
+    /** What SES pausing a Project in the Domains' region does to the Domains it holds. */
+    const pauseForProject = Effect.fn(function* (organizationId: string) {
+      const db = yield* DB;
+      return yield* db.transaction((tx) =>
+        pauseProjectDomains(tx, {
+          defaultRegion: "eu-central-1",
+          organizationId,
+          region: "eu-central-1",
+        }),
+      );
+    });
+    /** A claim on a held Domain, by a Project that is told of every Domain change. */
+    const claimWithEndpoint = Effect.fn(function* () {
+      const db = yield* DB;
+      const {
+        claimantIds: [claimantId = ""],
+        customDomainId,
+        holderId,
+      } = yield* claimedDomain(1);
+      yield* db.insert(webhookEndpoint).values({
+        eventTypes: ["domain.updated"],
+        organizationId: claimantId,
+        signingSecret: "whsec_test",
+        url: "https://hooks.relayit.test/events",
+      });
+      return { claimantId, customDomainId, holderId };
+    });
+    const pauseOf = Effect.fn(function* (customDomainId: string) {
+      const db = yield* DB;
+      return yield* db.query.customDomain.findFirst({
+        columns: { isPaused: true, pausedReason: true },
+        where: { id: customDomainId },
+      });
+    });
+    const domainEventsOf = Effect.fn(function* (organizationId: string) {
+      const db = yield* DB;
+      return yield* db
+        .select({ payload: webhookEvent.payload, type: webhookEvent.type })
+        .from(webhookEvent)
+        .where(eq(webhookEvent.organizationId, organizationId))
+        .orderBy(webhookEvent.createdAt);
+    });
+
+    it.live("loses a pause made for its previous holder's Project Sending Pause", () => {
+      const { layer, published } = boundaries();
+      return Effect.gen(function* () {
+        const { claimantId, customDomainId, holderId } = yield* claimWithEndpoint();
+        expect(yield* pauseForProject(holderId)).toBe(1);
+
+        yield* publishProof(published, customDomainId, claimantId);
+        expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+          ownershipVerificationStatus: "verified",
+        });
+
+        expect(yield* pauseOf(customDomainId)).toEqual({ isPaused: false, pausedReason: null });
+        expect(yield* domainEventsOf(claimantId)).toEqual([
+          {
+            payload: {
+              domain_id: customDomainId,
+              paused: false,
+              paused_reason: null,
+              status: "not_verified",
+            },
+            type: "domain.updated",
+          },
+        ]);
+      }).pipe(Effect.provide(layer));
+    });
+
+    it.live("keeps a pause an admin made", () => {
+      const { layer, published } = boundaries();
+      return Effect.gen(function* () {
+        const { claimantId, customDomainId } = yield* claimWithEndpoint();
+        yield* pauseCustomDomain({ customDomainId, reason: "bad_reputation" });
+
+        yield* publishProof(published, customDomainId, claimantId);
+        expect(yield* checkOwnership(customDomainId, claimantId)).toMatchObject({
+          ownershipVerificationStatus: "verified",
+        });
+
+        expect(yield* pauseOf(customDomainId)).toEqual({
+          isPaused: true,
+          pausedReason: "bad_reputation",
+        });
+        expect(yield* domainEventsOf(claimantId)).toEqual([]);
+      }).pipe(Effect.provide(layer));
+    });
+
+    it.live("stays paused when SES pauses its new holder in the region too", () => {
+      const { layer, published, scheduled } = boundaries();
+      return Effect.gen(function* () {
+        const { claimantId, customDomainId, holderId } = yield* claimWithEndpoint();
+        // The claimant already holds a Domain there, paused for its own pause.
+        const own = yield* createCustomDomain({
+          fqdn: `${Bun.randomUUIDv7()}.example.test`,
+          organizationId: claimantId,
+        });
+        expect(yield* pauseForProject(claimantId)).toBe(1);
+        expect(yield* pauseForProject(holderId)).toBe(1);
+
+        yield* publishProof(published, customDomainId, claimantId);
+        scheduled.length = 0;
+        yield* checkOwnership(customDomainId, claimantId);
+
+        expect(yield* pauseOf(customDomainId)).toEqual({
+          isPaused: true,
+          pausedReason: "project_sending_pause",
+        });
+        // Kept for the new holder's pause, so that pause's recheck is what must lift it:
+        // one is scheduled even if the holder's own were ending at this moment.
+        expect(scheduled).toContainEqual({
+          name: "email.recheck-project-sending-pause",
+          payload: { organizationId: claimantId, region: "eu-central-1" },
+        });
+        // Only its own Domain's pause was told; the claimed one changed nothing.
+        expect(
+          (yield* domainEventsOf(claimantId)).map(
+            ({ payload }) => (payload as { readonly domain_id: string }).domain_id,
+          ),
+        ).toEqual([own.customDomainId]);
+      }).pipe(Effect.provide(layer));
+    });
   });
 
   it.live("a lapsed claim's next check removes it, and a holder stays proven", () => {
