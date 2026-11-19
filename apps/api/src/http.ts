@@ -10,7 +10,6 @@ import {
   HttpMiddleware,
   HttpRouter,
   HttpServerError,
-  HttpServerRequest,
   HttpServerResponse,
 } from "effect/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
@@ -56,14 +55,13 @@ const fallback = HttpRouter.middleware(
       ),
       Effect.tapCause(logEffectFailure("API request failed")),
       HttpEffect.withPreResponseHandler((request, response) =>
-        HttpServerRequest.toWeb(request).pipe(
-          Effect.map((source) =>
-            source.body === null || source.bodyUsed
-              ? response
-              : HttpServerResponse.setHeader(response, "connection", "close"),
-          ),
-          // Only a request that isn't a web `Request` fails here, and Bun's always is.
-          Effect.orElseSucceed(() => response),
+        Effect.succeed(
+          // Bun's request is a web `Request`; anything else has no body to tell about.
+          request.source instanceof Request &&
+            request.source.body !== null &&
+            !request.source.bodyUsed
+            ? HttpServerResponse.setHeader(response, "connection", "close")
+            : response,
         ),
       ),
     ),

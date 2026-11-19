@@ -299,6 +299,11 @@ describe("POST /messages/email", () => {
         ),
       ).toMatchObject({ headers, status: "HTTP/1.1 403 Forbidden" });
       expect(accepted).toEqual([]);
+      // A send whose body was read keeps its connection.
+      const read = yield* Effect.promise(() =>
+        fetch(`${origin}/messages/email`, { body: email(), headers: keyed, method: "POST" }),
+      );
+      expect([read.status, read.headers.get("connection")]).toEqual([201, null]);
 
       const started = Date.now();
       yield* Scope.close(serving, Exit.void);

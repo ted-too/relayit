@@ -179,7 +179,7 @@ export const request = (
 
 /**
  * A request that announces `bytes` (40 MiB unless given) and sends 1 KiB: an answer can only
- * come from a handler that isn't waiting for the rest. With `held`, it sends 4 MiB and
+ * come from a handler that isn't waiting for the rest. With `held`, it sends up to 4 MiB more and
  * never ends the connection itself, which is what leaves a server waiting on the body.
  */
 export const announced = (
