@@ -2,6 +2,7 @@ import { EventBridge } from "@effect-aws/client-eventbridge";
 import { SESv2 } from "@effect-aws/client-sesv2";
 import { SNS } from "@effect-aws/client-sns";
 import {
+  EmailBackendAuthenticationError,
   EmailBackendConfigurationError,
   EmailBackendMessageError,
   EmailBackendRejected,
@@ -206,11 +207,25 @@ export const makeSesEmailBackend = (config: SesConfig) =>
             verified: identity.VerifiedForSendingStatus === true,
           };
         }),
-      getProjectSendingStatus: ({ projectId, region }) =>
+      getProjectSendingStatus: ({ projectId, region: recorded }) =>
         Effect.gen(function* () {
-          const { mapAwsError, ses } = yield* inRegion(region);
+          const { mapAwsError, region, ses } = yield* inRegion(recorded);
           return yield* sesTenantSendingStatus(ses, sesTenantNameFor(projectId)).pipe(
-            Effect.mapError(mapAwsError),
+            Effect.mapError((error) => {
+              switch (error._tag) {
+                // SES models no access-denied error, so the SDK reports credentials that may
+                // not read the status (no `ses:GetTenant` or `ses:GetReputationEntity`, or a
+                // key SES does not know) as an unmodelled 403. No retry gets past that, and
+                // the recheck job has to tell it from SES being down.
+                case "SdkError":
+                  return (error as { readonly $metadata?: { readonly httpStatusCode?: number } })
+                    .$metadata?.httpStatusCode === 403
+                    ? new EmailBackendAuthenticationError({ cause: error, region })
+                    : mapAwsError(error);
+                default:
+                  return mapAwsError(error);
+              }
+            }),
           );
         }),
       send: ({ message, region: recorded }) =>
