@@ -20,7 +20,11 @@ export class Conflict extends Schema.TaggedError<Conflict>()(
 /** Input the schema accepts but the operation can't use. */
 export class Invalid extends Schema.TaggedError<Invalid>()(
   "Invalid",
-  { message: Schema.String },
+  {
+    message: Schema.String,
+    /** What the Project's own source did wrong, in the failing tool's words: a preview's bundler or render error. */
+    detail: Schema.optional(Schema.String),
+  },
   { httpApiStatus: 422 },
 ) {}
 

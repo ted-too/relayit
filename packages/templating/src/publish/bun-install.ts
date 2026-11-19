@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 
 export interface BunInstallResult {
+  /**
+   * The install's exit code, or null when it did not end by itself: `bun` could not be
+   * started, or a signal killed it (out of memory). Either is the host's failure.
+   */
+  readonly exitCode: number | null;
   readonly ok: boolean;
   /** Install stderr, or the spawn error when `bun` could not start. */
   readonly stderr: string;
@@ -20,14 +25,31 @@ export const runBunInstall = (input: {
     try {
       const proc = Bun.spawn(["bun", "install", ...input.args], {
         cwd: input.cwd,
-        env: { ...process.env, BUN_INSTALL_IGNORE_SCRIPTS: "1" },
+        // A workspace may hold an `.npmrc`, in which Bun expands `${VAR}`: into the registry
+        // URL it requests, and into the stderr a failed preview shows the Project. So the
+        // install is handed only what it needs to run: where bun is, and where its cache
+        // and temp files go. Nothing else of the builder's environment reaches it.
+        env: {
+          BUN_INSTALL_IGNORE_SCRIPTS: "1",
+          BUN_TMPDIR: process.env.BUN_TMPDIR,
+          HOME: process.env.HOME,
+          PATH: process.env.PATH,
+          TMPDIR: process.env.TMPDIR,
+          XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+        },
         stderr: "pipe",
         stdout: "pipe",
       });
       const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
-      return { ok: exitCode === 0, stderr: stderr.trim() };
+      return {
+        // `exited` answers 128 + the signal for a killed child, which reads as its own exit.
+        exitCode: proc.signalCode === null ? exitCode : null,
+        ok: exitCode === 0,
+        stderr: stderr.trim(),
+      };
     } catch (error) {
       return {
+        exitCode: null,
         ok: false,
         stderr: error instanceof Error ? error.message : String(error),
       };

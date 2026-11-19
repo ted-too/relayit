@@ -83,7 +83,12 @@ const withBuilder = <A, E extends { readonly _tag: string }>(
                 case "busy":
                   return Effect.fail(new Conflict({ message }));
                 default:
-                  return operationFailed("Template builder request failed.")(error);
+                  // A `detail` is the workspace's own install, bundle or render failing:
+                  // the Project's to read and fix, not a failure of ours.
+                  // A tool that failed without a word gives the Project nothing to act on.
+                  return refusal.detail === undefined || refusal.detail === ""
+                    ? operationFailed("Template builder request failed.")(error)
+                    : Effect.fail(new Invalid({ detail: refusal.detail, message }));
               }
             }
             default:
