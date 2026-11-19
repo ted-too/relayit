@@ -127,6 +127,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      # Setting up a new volume answers nothing over TCP until it is done. Failures in this
+      # time do not count, or a slow disk would have `up` give up on a Postgres still starting.
+      start_period: 60s
     networks:
       - relayit-network
 

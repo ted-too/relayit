@@ -1,7 +1,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import { describe, expect, it, test } from "@effect/vitest";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Schedule } from "effect";
 import { Client } from "pg";
 import {
   DatabaseBehindError,
@@ -84,6 +84,45 @@ describe("the migrate step and the apps' check for it", () => {
       // The wait is for a connection only: a second attempt would come two seconds later.
       expect(Date.now() - started).toBeLessThan(2000);
       expect(yield* applied(databaseUrl)).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("the step fails with why when its connection is lost, and the next one migrates", () =>
+    Effect.gen(function* () {
+      const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
+      // Another step's lock, held so this one is still waiting when its connection goes.
+      const holder = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const client = new Client({ connectionString: databaseUrl });
+          await client.connect();
+          await client.query("select pg_advisory_lock(872014331, 1)");
+          return client;
+        }),
+        (client) => Effect.promise(() => client.end()),
+      );
+
+      const step = yield* Effect.forkChild(
+        migrateDatabase({ databaseUrl, waitFor: "30 seconds" }).pipe(Effect.flip),
+      );
+      const waiting = `from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock'`;
+      yield* query(databaseUrl, `select pid ${waiting}`).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          schedule: Schedule.spaced("50 millis"),
+        }),
+      );
+      yield* query(databaseUrl, `select pg_terminate_backend(pid) ${waiting}`);
+
+      const error = yield* Fiber.join(step);
+      expect(error).toBeInstanceOf(MigrationError);
+      // Postgres's own words (57P01, admin_shutdown), not pg's for a client it gave up on.
+      expect(error).toMatchObject({ cause: { code: "57P01" } });
+      expect(yield* applied(databaseUrl).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" });
+
+      yield* Effect.promise(() => holder.query("select pg_advisory_unlock(872014331, 1)"));
+      yield* migrateDatabase({ databaseUrl, waitFor: 0 });
+      expect(yield* applied(databaseUrl)).toEqual(carried);
     }).pipe(Effect.scoped),
   );
 

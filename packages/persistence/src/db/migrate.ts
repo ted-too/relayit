@@ -92,10 +92,8 @@ export const migrateDatabase = (options: {
   readonly databaseUrl: string;
   readonly waitFor: Duration.Input;
 }) =>
-  Effect.gen(function* () {
-    // Read outside the retry: an image without its migrations will not grow them.
-    const migrationsFolder = yield* Effect.sync(resolveMigrationsFolder);
-    const client = yield* Effect.tryPromise({
+  Effect.acquireUseRelease(
+    Effect.tryPromise({
       catch: (cause) => new DatabaseUnreachableError({ cause }),
       try: async () => {
         const client = new Client({
@@ -104,8 +102,8 @@ export const migrateDatabase = (options: {
           // query timeout: the lock is waited for and a migration takes as long as it takes.
           connectionTimeoutMillis: 10_000,
         });
-        // pg reports a connection lost between calls as an event, and an error event
-        // nobody listens for ends the process before the failure is logged.
+        // pg reports a lost connection as an event too, and an error event nobody listens
+        // for ends the process before the failure is logged.
         client.on("error", () => undefined);
         try {
           await client.connect();
@@ -115,27 +113,24 @@ export const migrateDatabase = (options: {
           throw error;
         }
       },
-    }).pipe(retryFor(options.waitFor));
-    yield* Effect.tryPromise({
-      catch: (cause) => new MigrationError({ cause }),
-      try: async () => {
-        try {
+    }).pipe(retryFor(options.waitFor)),
+    (client) =>
+      Effect.tryPromise({
+        catch: (cause) => new MigrationError({ cause }),
+        try: async () => {
+          // An image without its migrations fails here, as a migration that cannot run.
+          const migrationsFolder = resolveMigrationsFolder();
           await client.query("SELECT pg_advisory_lock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
-          try {
-            const result = await migrate(drizzle({ client }), { migrationsFolder });
-            if (result != null) {
-              throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
-            }
-          } finally {
-            await client.query("SELECT pg_advisory_unlock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
+          const result = await migrate(drizzle({ client }), { migrationsFolder });
+          if (result != null) {
+            throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
           }
-        } finally {
-          // A connection that was lost has nothing to end, and must not hide why.
-          await client.end().catch(() => undefined);
-        }
-      },
-    });
-  });
+        },
+      }),
+    // Ending the session is what releases the lock. An unlock query of its own would, on a
+    // connection that was lost, reject and take the place of the error that says why.
+    (client) => Effect.promise(() => client.end().catch(() => undefined)),
+  );
 
 /**
  * What an app does before it serves: succeed once the database has every migration this

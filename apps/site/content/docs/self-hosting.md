@@ -67,7 +67,7 @@ docker compose up -d
 docker compose ps
 ```
 
-`up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why. Every service but `migrate` restarts when it exits and when the host reboots, until you `docker compose stop` or `down` it.
+`up` first runs the `migrate` service, which brings the database to the schema this release needs and exits; the api and the worker start only once it has succeeded. If they don't start, `docker compose logs migrate` says why. Every service but `migrate` restarts when it exits and, if Docker itself starts at boot, when the host reboots, until you `docker compose stop` or `down` it.
 
 ### A Postgres volume from an older Compose file
 
