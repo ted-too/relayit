@@ -123,6 +123,7 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
     const rows = yield* db.query.sandboxDomain
       .findMany({
         columns: { id: true, nextVerifyAt: true },
+        with: { registration: { columns: { id: true } } },
       })
       .pipe(
         Effect.mapError(
@@ -135,13 +136,19 @@ export const emailVerifySandboxDomainHandler = defineJobHandler({
         ),
       );
 
+    // Every registered Sandbox Domain, as for a custom Domain below: its first check is
+    // scheduled in Redis after its registration commits, and nothing else schedules one, so
+    // a Sandbox Domain whose first job was lost is due now. Without it no Project would
+    // ever be assigned to it.
     yield* Effect.forEach(
-      rows.filter((row) => row.nextVerifyAt !== null),
+      rows.filter((row) => row.nextVerifyAt !== null || row.registration !== null),
       (row) =>
         jobs.schedule(
           emailVerifySandboxDomainJob,
           { sandboxDomainId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime(),
+          row.nextVerifyAt === null
+            ? Date.now()
+            : new Date(row.nextVerifyAt as Date | string).getTime(),
         ),
       { concurrency: "unbounded" },
     ).pipe(

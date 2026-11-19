@@ -1,18 +1,22 @@
 import { Jobs } from "@repo/jobs";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
-import { type DatabaseExecutor, DB } from "@repo/persistence/db/effect";
+import { type Database, DB } from "@repo/persistence/db/effect";
 import {
+  customDomain,
   emailDomainRegistration,
+  removedDomainIdentity,
   type SandboxDomain,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
+import { IDENTITY_CALL_TIMEOUT, lockDomainIdentity } from "../custom-domain/lifecycle";
 import type { DomainKeyMaterial } from "../dkim";
 import { EmailManagedDns } from "../managed-dns";
 import { emailVerifySandboxDomainJob } from "../verification/jobs";
 import { sweepIfSandboxAllocatable } from "./allocate";
-import { isAtOrUnderRoot } from "./reserved";
+import { isAtOrUnderRoot, lockSandboxRoots } from "./reserved";
 import {
   buildSandboxRootDnsRecords,
   createDomainKeyMaterial,
@@ -72,185 +76,180 @@ const loadSandboxKeyMaterial = (sandbox: SandboxDomain) =>
   });
 
 /**
- * Registers the sandbox root with SES in the default region (MAIL FROM DNS on our zone),
- * records where, and schedules its first verification.
+ * Publishes the root's DKIM and DMARC records on our zone, registers the root with SES in
+ * the default region (MAIL FROM DNS on our zone too) and records where. Each step is safe to
+ * repeat, so the next start finishes a registration that failed.
  */
 const registerSandboxIdentity = (input: {
-  readonly db: DatabaseExecutor;
-  readonly keyMaterial: DomainKeyMaterial;
-  readonly sandboxDomain: Pick<SandboxDomain, "cloudflareZoneId" | "id" | "rootDomain">;
+  readonly db: Database;
+  readonly sandboxDomain: SandboxDomain;
 }) =>
   Effect.gen(function* () {
     const backend = yield* EmailBackend;
     const managedDns = yield* EmailManagedDns;
-    const jobs = yield* Jobs;
     const region = backend.defaultRegion;
+    const sandboxDomainId = input.sandboxDomain.id;
+    const keyMaterial = yield* loadSandboxKeyMaterial(input.sandboxDomain);
+    // The name the identity lock and a removed Domain's record know it by: a custom
+    // Domain's FQDN is kept in lower case.
+    const fqdn = input.sandboxDomain.rootDomain.toLowerCase();
 
-    const identity = yield* backend
-      .createIdentity({
-        dkimPrivateKey: input.keyMaterial.dkimPrivateKey,
-        dkimSelector: input.keyMaterial.dkimSelector,
-        fqdn: input.sandboxDomain.rootDomain,
-        region,
-      })
+    yield* input.db
+      .transaction((tx) =>
+        Effect.gen(function* () {
+          // SES names an identity by its FQDN alone, so this takes the lock a custom Domain's
+          // registration and the job deleting a removed Domain's identity take for the name.
+          yield* lockDomainIdentity(tx, fqdn);
+          // Another worker starting at the same moment registered it while this one waited.
+          const [registered] = yield* tx
+            .select({ id: emailDomainRegistration.id })
+            .from(emailDomainRegistration)
+            .where(eq(emailDomainRegistration.sandboxDomainId, sandboxDomainId))
+            .limit(1);
+          if (registered) {
+            return;
+          }
+
+          yield* managedDns
+            .reconcile({
+              cloudflareZoneId: input.sandboxDomain.cloudflareZoneId,
+              owner: sandboxRootDnsOwner(sandboxDomainId),
+              records: buildSandboxRootDnsRecords({
+                dkimPublicKey: keyMaterial.dkimPublicKey,
+                dkimSelector: keyMaterial.dkimSelector,
+                fqdn: input.sandboxDomain.rootDomain,
+              }),
+              sandboxDomainId,
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SandboxDomainError({
+                    cause,
+                    message: "Failed to materialize sandbox root DNS.",
+                    operation: "create",
+                    sandboxDomainId,
+                  }),
+              ),
+            );
+
+          // The root was a Project's Domain before, removed, and SES may still hold that
+          // Domain's identity. Its delete job leaves a Sandbox Domain's name alone, so it
+          // goes here, as a custom Domain's registration deletes one. Only an identity
+          // recorded this way is Relayit's to replace: any other is refused below.
+          const left = yield* tx
+            .select({
+              dkimSelector: removedDomainIdentity.dkimSelector,
+              id: removedDomainIdentity.id,
+            })
+            .from(removedDomainIdentity)
+            .where(
+              and(
+                eq(removedDomainIdentity.fqdn, fqdn),
+                or(isNull(removedDomainIdentity.region), eq(removedDomainIdentity.region, region)),
+              ),
+            );
+
+          const identity = yield* Effect.forEach(
+            left,
+            ({ dkimSelector }) => backend.deleteIdentity({ dkimSelector, fqdn, region }),
+            { discard: true },
+          ).pipe(
+            Effect.andThen(
+              backend.createIdentity({
+                dkimPrivateKey: keyMaterial.dkimPrivateKey,
+                dkimSelector: keyMaterial.dkimSelector,
+                fqdn: input.sandboxDomain.rootDomain,
+                region,
+              }),
+            ),
+            Effect.mapError((cause) => {
+              switch (cause._tag) {
+                // Nothing was changed in SES, and every start fails this way until someone
+                // deletes the identity there or the root is changed.
+                case "EmailBackendIdentityConflict":
+                  return new SandboxDomainError({
+                    cause,
+                    message:
+                      "The sandbox root already has an SES identity that Relayit did not create; it was left untouched.",
+                    operation: "register_identity",
+                    sandboxDomainId,
+                  });
+                default:
+                  return new SandboxDomainError({
+                    cause,
+                    message: "Failed to register the sandbox domain with SES.",
+                    operation: "register_identity",
+                    sandboxDomainId,
+                  });
+              }
+            }),
+            // A call that never answers would hold the worker's start, this connection and
+            // the name's identity lock. The next start finishes the registration.
+            Effect.timeoutOrElse({
+              duration: IDENTITY_CALL_TIMEOUT,
+              orElse: () =>
+                Effect.fail(
+                  new SandboxDomainError({
+                    message: "SES did not answer in time while registering the sandbox domain.",
+                    operation: "register_identity",
+                    sandboxDomainId,
+                  }),
+                ),
+            }),
+          );
+
+          yield* managedDns
+            .reconcile({
+              cloudflareZoneId: input.sandboxDomain.cloudflareZoneId,
+              owner: sandboxIdentityDnsOwner(sandboxDomainId),
+              records: resolveSandboxMailFromRecords({
+                records: identity.mailFrom.records,
+              }),
+              sandboxDomainId,
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SandboxDomainError({
+                    cause,
+                    message: "Failed to materialize sandbox MAIL FROM DNS.",
+                    operation: "register_identity",
+                    sandboxDomainId,
+                  }),
+              ),
+            );
+
+          yield* tx.insert(emailDomainRegistration).values({
+            region,
+            sandboxDomainId,
+            verificationStatus: "not_verified",
+          });
+          if (left.length > 0) {
+            yield* tx.delete(removedDomainIdentity).where(
+              inArray(
+                removedDomainIdentity.id,
+                left.map(({ id }) => id),
+              ),
+            );
+          }
+        }),
+      )
       .pipe(
-        Effect.mapError((cause) => {
-          switch (cause._tag) {
-            // Nothing was changed in SES, and every start fails this way until someone
-            // deletes the identity there or the root is changed.
-            case "EmailBackendIdentityConflict":
-              return new SandboxDomainError({
-                cause,
-                message:
-                  "The sandbox root already has an SES identity that Relayit did not create; it was left untouched.",
-                operation: "register_identity",
-                sandboxDomainId: input.sandboxDomain.id,
-              });
+        Effect.mapError((error) => {
+          switch (error._tag) {
+            case "SandboxDomainError":
+              return error;
             default:
               return new SandboxDomainError({
-                cause,
-                message: "Failed to register the sandbox domain with SES.",
-                operation: "register_identity",
-                sandboxDomainId: input.sandboxDomain.id,
+                cause: error,
+                message: "Failed to record the sandbox domain registration.",
+                operation: "persist",
+                sandboxDomainId,
               });
           }
         }),
       );
-
-    yield* managedDns
-      .reconcile({
-        cloudflareZoneId: input.sandboxDomain.cloudflareZoneId,
-        owner: sandboxIdentityDnsOwner(input.sandboxDomain.id),
-        records: resolveSandboxMailFromRecords({
-          records: identity.mailFrom.records,
-        }),
-        sandboxDomainId: input.sandboxDomain.id,
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to materialize sandbox MAIL FROM DNS.",
-              operation: "register_identity",
-              sandboxDomainId: input.sandboxDomain.id,
-            }),
-        ),
-      );
-
-    yield* input.db
-      .insert(emailDomainRegistration)
-      .values({
-        region,
-        sandboxDomainId: input.sandboxDomain.id,
-        verificationStatus: "not_verified",
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to record the sandbox domain registration.",
-              operation: "persist",
-              sandboxDomainId: input.sandboxDomain.id,
-            }),
-        ),
-      );
-
-    yield* jobs
-      .schedule(
-        emailVerifySandboxDomainJob,
-        { sandboxDomainId: input.sandboxDomain.id },
-        Date.now(),
-      )
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to schedule sandbox verification job.",
-              operation: "schedule",
-              sandboxDomainId: input.sandboxDomain.id,
-            }),
-        ),
-      );
-  });
-
-/** A new sandbox root: BYODKIM key material and its DKIM and DMARC records on our zone. */
-const createSandboxDomain = (input: EnsureSandboxDomainInput) =>
-  Effect.gen(function* () {
-    const db = yield* DB;
-    const managedDns = yield* EmailManagedDns;
-    const crypto = yield* SymmetricCrypto;
-    const keyMaterial = createDomainKeyMaterial();
-
-    const encryptedPrivateKey = yield* crypto.encrypt(keyMaterial.dkimPrivateKey).pipe(
-      Effect.mapError(
-        (cause) =>
-          new SandboxDomainError({
-            cause,
-            message: "Failed to encrypt sandbox DKIM private key.",
-            operation: "encrypt_key",
-          }),
-      ),
-    );
-
-    const [row] = yield* db
-      .insert(sandboxDomain)
-      .values({
-        cloudflareZoneId: input.cloudflareZoneId,
-        dkimPrivateKey: encryptedPrivateKey,
-        dkimPublicKey: keyMaterial.dkimPublicKey,
-        dkimSelector: keyMaterial.dkimSelector,
-        isActive: false,
-        rootDomain: input.rootDomain,
-        verificationStatus: "not_verified",
-        verifyBackoffLevel: 0,
-      })
-      .returning()
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to insert sandbox domain.",
-              operation: "persist",
-            }),
-        ),
-      );
-
-    if (!row) {
-      return yield* new SandboxDomainError({
-        message: "Failed to insert sandbox domain.",
-        operation: "persist",
-      });
-    }
-
-    yield* managedDns
-      .reconcile({
-        cloudflareZoneId: input.cloudflareZoneId,
-        owner: sandboxRootDnsOwner(row.id),
-        records: buildSandboxRootDnsRecords({
-          dkimPublicKey: keyMaterial.dkimPublicKey,
-          dkimSelector: keyMaterial.dkimSelector,
-          fqdn: input.rootDomain,
-        }),
-        sandboxDomainId: row.id,
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new SandboxDomainError({
-              cause,
-              message: "Failed to materialize sandbox root DNS.",
-              operation: "create",
-              sandboxDomainId: row.id,
-            }),
-        ),
-      );
-
-    yield* registerSandboxIdentity({ db, keyMaterial, sandboxDomain: row });
-    return row.id;
   });
 
 /**
@@ -261,9 +260,15 @@ const createSandboxDomain = (input: EnsureSandboxDomainInput) =>
 export const ensureSandboxDomain = (input: EnsureSandboxDomainInput) =>
   Effect.gen(function* () {
     const db = yield* DB;
+    const jobs = yield* Jobs;
+    const crypto = yield* SymmetricCrypto;
+    // A name is the same name in any case: `CF_ROOT_DOMAIN` typed in another case is the
+    // Sandbox Domain already there, not a second one on the same SES identity.
+    const rootDomain = input.rootDomain.toLowerCase();
+
     const existing = yield* db.query.sandboxDomain
       .findFirst({
-        where: { rootDomain: input.rootDomain },
+        where: { RAW: (table) => sql`lower(${table.rootDomain}) = ${rootDomain}` },
         with: { registration: true },
       })
       .pipe(
@@ -277,50 +282,110 @@ export const ensureSandboxDomain = (input: EnsureSandboxDomainInput) =>
         ),
       );
 
-    // SES names an identity by its FQDN alone, so a Sandbox Domain on a root a Project holds
-    // as a custom Domain would be registered as that Domain's identity, and a custom Domain
-    // under the root has its DNS in the zone the sandbox publishes to. `createCustomDomain`
-    // refuses the reverse. Checked before anything is made, and only until the Sandbox
-    // Domain is registered: one already sending is not stopped by a Domain found later.
-    if (!existing?.registration) {
-      const held = yield* db.query.customDomain
-        .findFirst({
-          columns: { fqdn: true, id: true },
-          where: { RAW: (table) => isAtOrUnderRoot(table.fqdn, input.rootDomain) },
-        })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new SandboxDomainError({
-                cause,
-                message: "Failed to check the sandbox root against the custom Domains.",
-                operation: "persist",
-              }),
-          ),
-        );
-      if (held) {
-        return yield* new SandboxDomainRootHeld({
-          customDomainId: held.id,
-          fqdn: held.fqdn,
-          message:
-            "The Sandbox Domain's root, or a name under it, is a Project's custom Domain. Remove that Domain or configure another root; nothing was created.",
-          rootDomain: input.rootDomain,
-        });
-      }
-    }
-
     let sandboxDomainId: string;
-    if (existing) {
+    if (existing?.registration) {
       sandboxDomainId = existing.id;
-      if (!existing.registration) {
-        yield* registerSandboxIdentity({
-          db,
-          keyMaterial: yield* loadSandboxKeyMaterial(existing),
-          sandboxDomain: existing,
-        });
-      }
     } else {
-      sandboxDomainId = yield* createSandboxDomain(input);
+      // SES names an identity by its FQDN alone, so a Sandbox Domain on a root a Project holds
+      // as a custom Domain would be registered as that Domain's identity, and a custom Domain
+      // under the root has its DNS in the zone the sandbox publishes to. `createCustomDomain`
+      // refuses the reverse, on the Sandbox Domain's row, so the check and the row are one
+      // step under the lock that orders the two. Checked before anything is made, and only
+      // until the Sandbox Domain is registered: one already sending is not stopped by a
+      // Domain found later.
+      const unregistered = yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* lockSandboxRoots(tx, "exclusive");
+            const [held] = yield* tx
+              .select({ fqdn: customDomain.fqdn, id: customDomain.id })
+              .from(customDomain)
+              .where(isAtOrUnderRoot(customDomain.fqdn, rootDomain))
+              .limit(1);
+            if (held) {
+              return yield* new SandboxDomainRootHeld({
+                customDomainId: held.id,
+                fqdn: held.fqdn,
+                message:
+                  "The Sandbox Domain's root, or a name under it, is a Project's custom Domain. Remove that Domain or configure another root; nothing was created.",
+                rootDomain: input.rootDomain,
+              });
+            }
+            // Read again: another worker starting at the same moment wrote it while this
+            // one waited for the lock.
+            const [written] = yield* tx
+              .select()
+              .from(sandboxDomain)
+              .where(sql`lower(${sandboxDomain.rootDomain}) = ${rootDomain}`)
+              .limit(1);
+            if (written) {
+              return written;
+            }
+            const keyMaterial = createDomainKeyMaterial();
+            const dkimPrivateKey = yield* crypto.encrypt(keyMaterial.dkimPrivateKey).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SandboxDomainError({
+                    cause,
+                    message: "Failed to encrypt sandbox DKIM private key.",
+                    operation: "encrypt_key",
+                  }),
+              ),
+            );
+            const [inserted] = yield* tx
+              .insert(sandboxDomain)
+              .values({
+                cloudflareZoneId: input.cloudflareZoneId,
+                dkimPrivateKey,
+                dkimPublicKey: keyMaterial.dkimPublicKey,
+                dkimSelector: keyMaterial.dkimSelector,
+                isActive: false,
+                rootDomain,
+                verificationStatus: "not_verified",
+                verifyBackoffLevel: 0,
+              })
+              .returning();
+            return (
+              inserted ??
+              (yield* new SandboxDomainError({
+                message: "Failed to insert sandbox domain.",
+                operation: "persist",
+              }))
+            );
+          }),
+        )
+        .pipe(
+          Effect.mapError((error) => {
+            switch (error._tag) {
+              case "SandboxDomainError":
+              case "SandboxDomainRootHeld":
+                return error;
+              default:
+                return new SandboxDomainError({
+                  cause: error,
+                  message: "Failed to write the sandbox domain.",
+                  operation: "persist",
+                });
+            }
+          }),
+        );
+      sandboxDomainId = unregistered.id;
+
+      yield* registerSandboxIdentity({ db, sandboxDomain: unregistered });
+
+      // In Redis, after the registration commits, so it can fail or be lost: the worker's
+      // startup reconcile schedules a registered Sandbox Domain no check has run for.
+      yield* jobs.schedule(emailVerifySandboxDomainJob, { sandboxDomainId }, Date.now()).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxDomainError({
+              cause,
+              message: "Failed to schedule sandbox verification job.",
+              operation: "schedule",
+              sandboxDomainId,
+            }),
+        ),
+      );
     }
 
     return yield* sweepIfSandboxAllocatable(sandboxDomainId).pipe(

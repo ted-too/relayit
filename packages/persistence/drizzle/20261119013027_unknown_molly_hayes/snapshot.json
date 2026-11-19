@@ -1,0 +1,51 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "3225c0a5-b3cb-4e2e-b3a6-7a3af923cc8d",
+  "prevIds": [
+    "23f18d17-4e2c-49ee-afd8-3a3ad042549b"
+  ],
+  "footprints": [
+    {
+      "statementType": "recreate_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "sandbox_domain",
+        "sandbox_domain_root_domain_unique_idx"
+      ],
+      "writes": [
+        "s|idx|public.sandbox_domain_root_domain_unique_idx",
+        "n|idx|public.sandbox_domain_root_domain_unique_idx",
+        "e|idx|public.sandbox_domain_root_domain_unique_idx",
+        "n|rel|public.sandbox_domain_root_domain_unique_idx"
+      ],
+      "reads": [
+        "n|tbl|public.sandbox_domain",
+        "n|sch|public"
+      ],
+      "sharedWrites": [
+        "e|uniqueness|public.sandbox_domain.root_domain"
+      ],
+      "sqlHash": "b40f9a62072dfc63"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"sandbox_domain_root_domain_unique_idx\"]",
+      "set": {
+        "columns": [
+          {
+            "value": "lower(\"root_domain\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ]
+      }
+    }
+  ]
+}
