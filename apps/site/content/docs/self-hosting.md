@@ -9,15 +9,15 @@ Relayit is source-available under the Business Source License 1.1. You can run i
 
 A self-hosted install has three Relayit services, and optionally a fourth, plus Postgres, Redis, and S3-compatible storage:
 
-| Service          | Image                                            | Role                                                                                                                                    |
-| ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| migrate          | `ghcr.io/ted-too/relayit-api:<tag>`              | The api image running `bun run migrate.js`: applies the release's database migrations, then exits. The api and worker start after it.   |
-| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), sign-in, and everything the dashboard does.               |
-| worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out. |
-| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard: static files that call the api from the browser.                                                                         |
-| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                                   |
-| postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                                         |
-| redis            | `redis:7-alpine`                                 | Cache, sessions, and job queues. Redis 7 or later.                                                                                      |
+| Service          | Image                                            | Role                                                                                                                                                               |
+| ---------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| migrate          | `ghcr.io/ted-too/relayit-api:<tag>`              | The api image running `bun run migrate.js`: applies the release's database migrations, then exits. The api and worker start after it.                              |
+| api              | `ghcr.io/ted-too/relayit-api:<tag>`              | Public API (`/health`, `POST /messages/email`, `/send/*`, SES notifications), sign-in, and everything the dashboard does.                                          |
+| worker           | `ghcr.io/ted-too/relayit-worker:<tag>`           | Background jobs: sending, retries, Domain verification and outbound webhooks. No port. Without it, sends are accepted but never go out.                            |
+| web              | `ghcr.io/ted-too/relayit-web:<tag>`              | The dashboard: static files that call the api from the browser.                                                                                                    |
+| template-builder | `ghcr.io/ted-too/relayit-template-builder:<tag>` | Optional. Internal service for React Email workspace Git operations. Not in the default Compose file.                                                              |
+| postgres         | `postgres:18-alpine`                             | Database. Postgres 18 or later.                                                                                                                                    |
+| redis            | `redis:7-alpine`                                 | Cache, sessions, job queues and Usage counts. Redis 7 or later, with its default `maxmemory-policy` (`noeviction`): an evicted key is a lost job or a wrong count. |
 
 You also need an S3-compatible bucket (for example Cloudflare R2, AWS S3, or a Bunny Storage zone) for attachments and template artifacts, and an Amazon SES account that all email goes through.
 

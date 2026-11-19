@@ -916,6 +916,35 @@ describe("an accepted email send", () => {
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
+  it.live("is sent when it falls due, however long before that it was accepted", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      const project = yield* seedProject();
+      const accepted = yield* acceptTransactionalEmail({
+        ...sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        scheduledAt: DateTime.makeUnsafe(Date.now() + 3_600_000),
+      });
+      // Accepted two days ago for a minute ago.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+      yield* db
+        .update(message)
+        .set({ scheduledAt: new Date(Date.now() - 60_000) })
+        .where(eq(message.id, accepted.messageId));
+
+      yield* endStuckDeliveries;
+      yield* runWorker;
+
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+      expect(
+        (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
+      ).toEqual(["message.scheduled", "message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
   it.live("logs no error when the reservation of a Delivery it ends is already gone", () => {
     const backend = makeBackend();
     const errors: unknown[] = [];
