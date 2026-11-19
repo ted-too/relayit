@@ -10,6 +10,7 @@ import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import { Api, MAX_SEND_BODY_BYTES } from "./api";
 import { dashboardRoutes } from "./dashboard/http";
 import { ApiKeyAuthLive, LegacyApiKeyAuthLive } from "./lib/api-key";
+import { bodyLimit } from "./lib/body-limit";
 import { RequestValidationLive } from "./lib/validation";
 import { authRoutes } from "./routes/auth";
 import { legacySendHandlers } from "./routes/compat/send";
@@ -97,6 +98,8 @@ export const apiServer = (options: {
       ).pipe(Layer.provide(dashboardCors(options.appOrigin))),
       fallback,
     ).pipe(
+      // Around every route above, so that one added there is limited too.
+      Layer.provide(bodyLimit),
       Layer.provide(
         Layer.mergeAll(
           healthHandlers,
@@ -129,9 +132,9 @@ export const apiServer = (options: {
     // suppression checks, Usage, staging up to the attachments' total in object storage,
     // the transaction), so the connection outlives both and a send that runs out of time
     // still gets its JSON answer.
-    // Bun's body limit is a backstop for the routes that read a body without one (better-auth
-    // reads its own): above it Bun answers an empty 413 before any route runs. It sits above
-    // the send endpoints' limit so that they answer theirs, `PayloadTooLarge`, themselves.
+    // Bun's body limit is a backstop behind `bodyLimit` and the routes' own limits: above it
+    // Bun answers an empty 413 before any route runs. It sits above the send endpoints'
+    // limit, the largest, so that they answer theirs, `PayloadTooLarge`, themselves.
     Layer.provideMerge(
       BunHttpServer.layer({
         hostname: options.hostname,

@@ -24,7 +24,7 @@ import type { Database } from "@repo/persistence/db/effect";
 import { Effect, Fiber, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
-import { GOOD_KEY, request, serve, stubs } from "./testing";
+import { announced, GOOD_KEY, request, serve, stubs } from "./testing";
 
 const JSON_TYPE = "application/json;charset=utf-8";
 const TEXT_TYPE = "text/plain;charset=utf-8";
@@ -69,48 +69,6 @@ const expectSchemaFailure = (
 };
 
 const refused = (message: string) => respond(422, { message, on: "body", type: "validation" });
-
-/**
- * A request that announces 40 MiB and sends 1 KiB: an answer can only come from a handler
- * that isn't waiting for the rest.
- */
-const announced = (origin: string, path: string, headers: Record<string, string>) =>
-  Effect.promise(async () => {
-    let received = "";
-    const answered = Promise.withResolvers<string>();
-    const socket = await Bun.connect({
-      hostname: "127.0.0.1",
-      port: Number(new URL(origin).port),
-      socket: {
-        close: () => answered.resolve(received),
-        data: (_socket, chunk) => {
-          received += chunk.toString();
-          const [head, body] = received.split("\r\n\r\n");
-          const length = Number(/content-length: (\d+)/i.exec(head ?? "")?.[1]);
-          if (body !== undefined && body.length >= length) {
-            answered.resolve(received);
-          }
-        },
-      },
-    });
-    socket.write(
-      [
-        `POST ${path} HTTP/1.1`,
-        "host: api.test",
-        `content-length: ${40 * 1024 * 1024}`,
-        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
-        "",
-        `{"html":"${"a".repeat(1024)}`,
-      ].join("\r\n"),
-    );
-    const response = await Promise.race([
-      answered.promise,
-      Bun.sleep(2000).then(() => "no answer while the body is unread"),
-    ]);
-    socket.end();
-    const [head, body] = response.split("\r\n\r\n");
-    return { body, status: head?.split("\r\n")[0] };
-  });
 
 describe("the api's HTTP contract", () => {
   it.live("answers /health, and 404 NOT_FOUND to anything it does not route", () =>
@@ -395,7 +353,7 @@ describe("POST /messages/email", () => {
         email({ attachments: [{ content: "A".repeat(bytes), filename: "big.pdf" }] });
       const over = withAttachment(50 * 1024 * 1024);
 
-      for (const path of ["/messages/email", "/send/acme/raw/email"]) {
+      for (const path of ["/messages/email", "/send/acme/raw/email", "/send/acme/template/email"]) {
         expect(yield* request(origin, "POST", path, { body: over, headers: keyed })).toEqual(
           tooLarge,
         );
