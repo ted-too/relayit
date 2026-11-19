@@ -1,5 +1,10 @@
 import { describe, expect, it, test } from "@effect/vitest";
-import { EmailBackend, EmailBackendUnavailable } from "@repo/channels/email/backend";
+import {
+  EmailBackend,
+  EmailBackendAuthenticationError,
+  EmailBackendConfigurationError,
+  EmailBackendUnavailable,
+} from "@repo/channels/email/backend";
 import {
   pauseCustomDomain,
   unpauseCustomDomain,
@@ -10,7 +15,17 @@ import {
   pauseProjectDomains,
   syncProjectSendingStatus,
 } from "@repo/channels/email/deliverability";
-import { JobEnqueueError, Jobs, JobsLive, registerJobHandler } from "@repo/jobs";
+import {
+  DeadLetterStoreLive,
+  JobEnqueueError,
+  Jobs,
+  JobsLive,
+  promoteDelayedJobs,
+  registerJobHandler,
+} from "@repo/jobs";
+import { jobDeadLetter } from "@repo/jobs/dead-letter-schema";
+import { JOB_WORKER_GROUP } from "@repo/jobs/storage";
+import { processJobBatch, promoteScheduledJobs } from "@repo/jobs/worker";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
   customDomain,
@@ -20,7 +35,8 @@ import {
   webhookEndpoint,
 } from "@repo/persistence/db/schema";
 import { makeRedisLive, Redis } from "@repo/redis";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer, Logger } from "effect";
+import { TestClock } from "effect/testing";
 import { typeid } from "typeid-js";
 import { makeFakeEmailBackend } from "./fake";
 import { sesTenantNameFor } from "./tenant-name";
@@ -123,7 +139,7 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
     return;
   }
 
-  const services = JobsLive.pipe(
+  const services = Layer.mergeAll(JobsLive, DeadLetterStoreLive).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         makeDbLive({ databaseUrl: testDatabaseUrl }),
@@ -132,7 +148,8 @@ describe("SES tenant status events (PostgreSQL, Redis, the fake backend)", () =>
     ),
   );
 
-  const recheckSchedule = registerJobHandler(emailRecheckProjectSendingPauseHandler).scheduledKey;
+  const rechecker = registerJobHandler(emailRecheckProjectSendingPauseHandler);
+  const recheckSchedule = rechecker.scheduledKey;
   /** When the Project's next recheck is due, as Redis holds it; `undefined` when none is. */
   const nextRecheckAt = (organizationId: string) =>
     Effect.gen(function* () {
@@ -554,6 +571,174 @@ return -1`,
         }),
       ),
     );
+
+    it.live("lifts a pause found on a Project SES has no tenant for, and ends", () =>
+      withSes(({ asked, backend }) =>
+        Effect.gen(function* () {
+          // A pause that came with a Domain claimed from the Project SES paused, before
+          // a claim lifted it: SES has nothing of this Project's to pause in the region.
+          const project = yield* seedProject([]);
+          const domainId = yield* addDomain(project.organizationId, REGION, PAUSED_UNSCHEDULED);
+          const recheckAbsent = recheckJob(project.organizationId).pipe(
+            Effect.provideService(EmailBackend, {
+              ...backend,
+              getProjectSendingStatus: (input) =>
+                backend.getProjectSendingStatus(input).pipe(Effect.as("absent" as const)),
+            }),
+          );
+
+          yield* recheckAbsent;
+
+          expect(yield* pauseOf(domainId)).toEqual(NOT_PAUSED);
+          expect(yield* eventsOf(project.organizationId)).toMatchObject([
+            { payload: { domain_id: domainId, paused: false }, type: "domain.updated" },
+          ]);
+          // Nothing is left paused, so the next run asks SES nothing and schedules no other.
+          const scheduled = yield* nextRecheckAt(project.organizationId);
+          yield* recheckAbsent;
+          expect(asked()).toBe(1);
+          expect(yield* nextRecheckAt(project.organizationId)).toBe(scheduled);
+        }),
+      ),
+    );
+
+    describe("when SES refuses the status read until an operator acts", () => {
+      /**
+       * One period of the worker for the recheck job alone: whatever is scheduled or
+       * waiting on a retry is due (the clock is a day ahead while promoting) and is run.
+       * That includes the rechecks of pauses other tests left, so each test looks only at
+       * what names its own Project.
+       */
+      const workerPeriod = Effect.gen(function* () {
+        const redis = yield* Redis;
+        yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: rechecker.stream });
+        yield* Effect.gen(function* () {
+          yield* TestClock.setTime(Date.now() + 86_400_000);
+          yield* promoteScheduledJobs([rechecker], { limit: 100 });
+          yield* promoteDelayedJobs([rechecker], { limit: 100 });
+        }).pipe(Effect.provide(TestClock.layer()));
+        yield* processJobBatch([rechecker], {
+          blockMs: 100,
+          concurrency: 1,
+          consumer: "test",
+          count: 1000,
+        });
+      });
+      /** The warnings logged about one Project while `effect` ran. */
+      const warningsAbout = () => {
+        const logged: string[] = [];
+        return {
+          layer: Logger.layer([
+            Logger.make(({ logLevel, message }) => {
+              if (logLevel === "Warn") {
+                logged.push(JSON.stringify(message));
+              }
+            }),
+          ]),
+          of: (organizationId: string) => logged.filter((text) => text.includes(organizationId)),
+        };
+      };
+      const deadLettersOf = (organizationId: string) =>
+        Effect.gen(function* () {
+          const db = yield* DB;
+          const all = yield* db
+            .select({ failure: jobDeadLetter.failure, payload: jobDeadLetter.payload })
+            .from(jobDeadLetter);
+          return all.filter(({ payload }) => payload.includes(organizationId));
+        });
+
+      it.live.each([
+        [
+          "credentials lack the ses: read permissions",
+          new EmailBackendAuthenticationError({ region: REGION }),
+        ],
+        [
+          "region is no longer in SES_REGIONS",
+          new EmailBackendConfigurationError({ code: "unknown_region", region: REGION }),
+        ],
+      ] as const)(
+        "its %s: warns once, dead-letters nothing, and lifts the pause once SES answers",
+        ([, refusal]) =>
+          withSes(({ backend }) => {
+            const warnings = warningsAbout();
+            let refused = true;
+            return Effect.gen(function* () {
+              const project = yield* seedProject([]);
+              const domainId = yield* addDomain(project.organizationId, REGION, PAUSED_UNSCHEDULED);
+              // SES has restored the Project; Relayit cannot see it yet.
+              const atStart = emailRecheckProjectSendingPauseHandler.reconcile;
+              if (!atStart) {
+                return yield* Effect.die("the recheck job has nothing to do when a worker starts");
+              }
+              yield* atStart;
+              const warned = () => warnings.of(project.organizationId);
+
+              const before = Date.now();
+              for (let period = 0; period < 4; period += 1) {
+                yield* workerPeriod;
+              }
+
+              expect(yield* pauseOf(domainId)).toEqual(PAUSED_BY_RELAYIT);
+              expect(yield* deadLettersOf(project.organizationId)).toEqual([]);
+              // The operator is told once what to grant, not once a period.
+              expect(warned()).toHaveLength(1);
+              expect(warned()[0]).toContain("ses:GetReputationEntity");
+              // And the next is an hour on, not five minutes.
+              expect(yield* nextRecheckAt(project.organizationId)).toBeGreaterThanOrEqual(
+                before + 60 * 60_000,
+              );
+
+              // The operator fixes it; nothing else prompts the recheck.
+              refused = false;
+              yield* workerPeriod;
+
+              expect(yield* pauseOf(domainId)).toEqual(NOT_PAUSED);
+              expect(yield* eventsOf(project.organizationId)).toMatchObject([
+                { payload: { domain_id: domainId, paused: false }, type: "domain.updated" },
+              ]);
+              expect(warned()).toHaveLength(1);
+              expect(yield* deadLettersOf(project.organizationId)).toEqual([]);
+            }).pipe(
+              Effect.provideService(EmailBackend, {
+                ...backend,
+                getProjectSendingStatus: (input) =>
+                  refused ? Effect.fail(refusal) : backend.getProjectSendingStatus(input),
+              }),
+              Effect.provide(warnings.layer),
+            );
+          }),
+      );
+
+      it.live("warns again when a worker starts and SES still refuses", () =>
+        withSes(({ backend }) => {
+          const warnings = warningsAbout();
+          return Effect.gen(function* () {
+            const project = yield* seedProject([]);
+            yield* addDomain(project.organizationId, REGION, PAUSED_UNSCHEDULED);
+            const atStart = emailRecheckProjectSendingPauseHandler.reconcile;
+            if (!atStart) {
+              return yield* Effect.die("the recheck job has nothing to do when a worker starts");
+            }
+
+            yield* atStart;
+            yield* workerPeriod;
+            yield* workerPeriod;
+            yield* atStart;
+            yield* workerPeriod;
+            yield* workerPeriod;
+
+            expect(warnings.of(project.organizationId)).toHaveLength(2);
+          }).pipe(
+            Effect.provideService(EmailBackend, {
+              ...backend,
+              getProjectSendingStatus: () =>
+                Effect.fail(new EmailBackendAuthenticationError({ region: REGION })),
+            }),
+            Effect.provide(warnings.layer),
+          );
+        }),
+      );
+    });
 
     describe("a run that fails still leaves the next one scheduled", () => {
       /** A Project paused by Relayit with no recheck scheduled, so any found is the run's. */

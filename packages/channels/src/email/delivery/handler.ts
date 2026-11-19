@@ -21,7 +21,7 @@ import {
 } from "../../messages/delivery";
 import { filterSuppressedContacts, suppressedAmong } from "../../messages/suppressions";
 import { Usage } from "../../usage";
-import { EmailBackend, type EmailBackendRejected } from "../backend";
+import { EmailBackend } from "../backend";
 import {
   lockProjectDomains,
   mergeListUnsubscribeHeadersForSend,
@@ -39,6 +39,7 @@ export interface EmailDeliverHandlerOptions {
 /** What the Project reads in `message.failed` for each way a send can fail. */
 const SES_REFUSED = "SES send failed";
 const SES_REJECTED_MESSAGE = "SES rejected the message";
+const PROJECT_SENDING_PAUSED = "SES paused sending for this Project";
 const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
 
 /**
@@ -155,7 +156,14 @@ const sesAnswerKey = (deliveryId: string, claimedAt: Date) =>
   `email:delivery:${deliveryId}:ses-answer:${claimedAt.getTime()}`;
 
 const ACCEPTED = "accepted:";
+/**
+ * A refusal says which it was, because whoever ends the Delivery may not be the run SES
+ * answered: one the job's retries may get past (`REFUSED` alone), the message itself, or a
+ * Project Sending Pause, followed by the region SES paused the Project in.
+ */
 const REFUSED = "refused";
+const REFUSED_MESSAGE = `${REFUSED}:message`;
+const REFUSED_PROJECT_PAUSED = `${REFUSED}:project_sending_paused:`;
 
 const keepSesAnswer = (deliveryId: string, claimedAt: Date, answer: string) =>
   Effect.gen(function* () {
@@ -205,6 +213,16 @@ const sendingState = (delivery: { readonly id: string; readonly startedAt: Date 
         kind: "accepted",
         providerMessageId: answer.slice(ACCEPTED.length),
       } as const;
+    }
+    if (answer.startsWith(REFUSED_PROJECT_PAUSED)) {
+      return {
+        claimedAt,
+        kind: "project_sending_paused",
+        region: answer.slice(REFUSED_PROJECT_PAUSED.length),
+      } as const;
+    }
+    if (answer === REFUSED_MESSAGE) {
+      return { claimedAt, kind: "message_rejected" } as const;
     }
     if (answer === REFUSED) {
       return { claimedAt, kind: "refused" } as const;
@@ -382,6 +400,84 @@ const failDelivery = (
   );
 
 /**
+ * Ends a Delivery SES refused for a Project Sending Pause: `failed` with its `message.failed`,
+ * and the Project's Domains in the region paused, in one transaction. Whoever ends the
+ * Delivery ends it here (the run SES answered, a later run, the dead-letter step or
+ * `endStuckDeliveries`), so the Project is told why and the pause is made even when the
+ * first write failed. False when something else moved the Delivery meanwhile: nothing is
+ * written then.
+ */
+const failProjectSendingPaused = (
+  db: Database,
+  delivery: {
+    readonly claimedAt: Date;
+    readonly id: string;
+    readonly messageId: string;
+    readonly messageTags: Record<string, string> | null;
+    readonly organizationId: string;
+    /** Where SES paused the Project: the region the send went through. */
+    readonly region: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const backend = yield* EmailBackend;
+    const paused = {
+      defaultRegion: backend.defaultRegion,
+      organizationId: delivery.organizationId,
+      region: delivery.region,
+    };
+    return yield* db.transaction((tx) =>
+      Effect.gen(function* () {
+        // The Domains this will pause before the Delivery, as removing a Domain or taking it
+        // by a claim locks them, so neither waits on this while this waits on it; and all of
+        // them in one order, because SES refuses every send of a paused Project at once,
+        // each from a Domain of its own.
+        yield* lockProjectDomains(tx, paused);
+        const failed = yield* updateDelivery(
+          tx,
+          { claimedAt: delivery.claimedAt, id: delivery.id },
+          {
+            completedAt: new Date(),
+            error: { message: PROJECT_SENDING_PAUSED, retryable: false },
+            status: "failed",
+          },
+        );
+        if (!failed) {
+          return false;
+        }
+        // SES pauses the Project, not a Domain: every Domain it holds in this region is
+        // refused from now on, and the same pause is what the api makes when SES reports the
+        // tenant's status, so whichever comes first tells the Project once. This one goes by
+        // the refusal, not by the status now: if SES restored the tenant meanwhile, the
+        // recheck job lifts it.
+        yield* pauseProjectDomains(tx, paused);
+        yield* emitWebhookEvent(tx, {
+          event: {
+            data: {
+              delivery_id: delivery.id,
+              error: PROJECT_SENDING_PAUSED,
+              message_id: delivery.messageId,
+            },
+            type: messageFailed.type,
+          },
+          messageTags: delivery.messageTags,
+          organizationId: delivery.organizationId,
+        });
+        return true;
+      }),
+    );
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new EmailDeliveryPersistenceError({
+          cause,
+          deliveryId: delivery.id,
+          operation: "update_status",
+        }),
+    ),
+  );
+
+/**
  * Ends every Delivery left `sending` for longer than `STUCK_SENDING_AGE`, whose job is gone or
  * held up: `sent` when SES's kept answer says it took the send, otherwise `failed` with the
  * reason the job's dead-letter step would have given, `message.failed` and its Usage released.
@@ -441,6 +537,12 @@ export const endStuckDeliveries = Effect.gen(function* () {
           case "live":
             // Not reachable while the age is longer than the lease; its owner has it.
             return;
+          case "project_sending_paused":
+            failureMessage = PROJECT_SENDING_PAUSED;
+            break;
+          case "message_rejected":
+            failureMessage = SES_REJECTED_MESSAGE;
+            break;
           case "refused":
             failureMessage = SES_REFUSED;
             break;
@@ -448,7 +550,15 @@ export const endStuckDeliveries = Effect.gen(function* () {
             failureMessage = OUTCOME_UNKNOWN;
             break;
         }
-        if (yield* failDelivery(db, { ...delivery, status: "sending" }, failureMessage)) {
+        const failed =
+          state.kind === "project_sending_paused"
+            ? yield* failProjectSendingPaused(db, {
+                ...delivery,
+                claimedAt: state.claimedAt,
+                region: state.region,
+              })
+            : yield* failDelivery(db, { ...delivery, status: "sending" }, failureMessage);
+        if (failed) {
           // No job runs again to make a release Redis refused, so it is retried here. If
           // Redis stays down past the retries the failure is logged and the reservation is
           // left: no later pass reads a `failed` Delivery, so the Project's count for the
@@ -543,6 +653,29 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   providerMessageId: state.providerMessageId,
                 });
                 return yield* confirmUsage(loaded.id);
+              case "project_sending_paused":
+                // The run SES answered could not write the outcome: this one does, from
+                // that answer, without asking SES again.
+                yield* failProjectSendingPaused(db, {
+                  claimedAt: state.claimedAt,
+                  id: loaded.id,
+                  messageId: loaded.messageId,
+                  messageTags: message.tags,
+                  organizationId: appEnvironment.organizationId,
+                  region: state.region,
+                });
+                return yield* new MessageDeliveryTerminalError({
+                  deliveryId: loaded.id,
+                  message: PROJECT_SENDING_PAUSED,
+                  stage: "send",
+                });
+              case "message_rejected":
+                // Sending it again would be rejected again: the dead-letter step fails it.
+                return yield* new MessageDeliveryTerminalError({
+                  deliveryId: loaded.id,
+                  message: SES_REJECTED_MESSAGE,
+                  stage: "send",
+                });
               case "refused":
                 // SES did not take it, so a later run may claim and send it again.
                 yield* updateDelivery(
@@ -782,89 +915,6 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           });
 
           const backend = yield* EmailBackend;
-          const failProjectSendingPaused = (error: EmailBackendRejected, claimedAt: Date) =>
-            Effect.gen(function* () {
-              const failureMessage = "SES paused sending for this Project";
-              yield* db.transaction((tx) =>
-                Effect.gen(function* () {
-                  const paused = {
-                    defaultRegion: backend.defaultRegion,
-                    organizationId: appEnvironment.organizationId,
-                    region: registration.region ?? backend.defaultRegion,
-                  };
-                  // The Domains this will pause before the Delivery, as removing a Domain or
-                  // taking it by a claim locks them, so neither waits on this while this
-                  // waits on it; and all of them in one order, because SES refuses every
-                  // send of a paused Project at once, each from a Domain of its own.
-                  yield* lockProjectDomains(tx, paused).pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new EmailDeliveryPersistenceError({
-                          cause,
-                          deliveryId: loaded.id,
-                          operation: "update_status",
-                        }),
-                    ),
-                  );
-                  const failed = yield* updateDelivery(
-                    tx,
-                    { claimedAt, id: loaded.id },
-                    {
-                      completedAt: new Date(),
-                      error: { message: failureMessage, retryable: false },
-                      status: "failed",
-                    },
-                  );
-                  if (!failed) {
-                    return;
-                  }
-                  // SES pauses the Project, not a Domain: every Domain it holds in this region
-                  // is refused from now on, and the same pause is what the api makes when SES
-                  // reports the tenant's status, so whichever comes first tells the Project
-                  // once. This one goes by the refusal, not by the status now: if SES restored
-                  // the tenant meanwhile, the recheck job lifts it.
-                  yield* pauseProjectDomains(tx, paused).pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new EmailDeliveryPersistenceError({
-                          cause,
-                          deliveryId: loaded.id,
-                          operation: "update_status",
-                        }),
-                    ),
-                  );
-                  yield* emitWebhookEvent(tx, {
-                    event: {
-                      data: {
-                        delivery_id: loaded.id,
-                        error: failureMessage,
-                        message_id: loaded.messageId,
-                      },
-                      type: messageFailed.type,
-                    },
-                    messageTags: message.tags,
-                    organizationId: appEnvironment.organizationId,
-                  }).pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new MessageDeliveryRetryableError({
-                          cause,
-                          deliveryId: loaded.id,
-                          message: "Failed to emit message.failed",
-                          stage: "webhooks",
-                        }),
-                    ),
-                  );
-                }),
-              );
-              return yield* new MessageDeliveryTerminalError({
-                cause: error,
-                deliveryId: loaded.id,
-                message: failureMessage,
-                stage: "send",
-              });
-            });
-
           const sendMessage = {
             attachments: attachments.length > 0 ? [...attachments] : undefined,
             bcc: bccEmails.length > 0 ? bccEmails : null,
@@ -992,9 +1042,10 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     // keep that answer and put the Delivery back as it was accepted. If the
                     // requeue is not written, the kept answer tells the next run so.
                     const refused = (
+                      answer: string,
                       failure: MessageDeliveryRetryableError | MessageDeliveryTerminalError,
                     ) =>
-                      keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
+                      keepSesAnswer(loaded.id, claimedAt, answer).pipe(
                         Effect.andThen(
                           updateDelivery(
                             db,
@@ -1008,6 +1059,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     // What may pass by itself (a throttle, the account paused, credentials or
                     // configuration ops are changing, a network failure) is sent again later.
                     const retried = refused(
+                      REFUSED,
                       new MessageDeliveryRetryableError({
                         cause: error,
                         deliveryId: loaded.id,
@@ -1021,6 +1073,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     // in SES's sandbox, a recipient) as verified in the region: a state of the
                     // Domain or the account that someone has to fix first.
                     const rejected = refused(
+                      REFUSED_MESSAGE,
                       new MessageDeliveryTerminalError({
                         cause: error,
                         deliveryId: loaded.id,
@@ -1033,10 +1086,38 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                         switch (error.reason) {
                           // A Project Sending Pause is SES isolating this Project: retrying
                           // cannot get past it, and other Projects keep sending.
-                          case "project_sending_paused":
-                            return keepSesAnswer(loaded.id, claimedAt, REFUSED).pipe(
-                              Effect.andThen(failProjectSendingPaused(error, claimedAt)),
+                          case "project_sending_paused": {
+                            const region = registration.region ?? backend.defaultRegion;
+                            return keepSesAnswer(
+                              loaded.id,
+                              claimedAt,
+                              `${REFUSED_PROJECT_PAUSED}${region}`,
+                            ).pipe(
+                              Effect.andThen(
+                                failProjectSendingPaused(db, {
+                                  claimedAt,
+                                  id: loaded.id,
+                                  messageId: loaded.messageId,
+                                  messageTags: message.tags,
+                                  organizationId: appEnvironment.organizationId,
+                                  region,
+                                }),
+                              ),
+                              Effect.andThen(
+                                // Typed as the other refusals fail, so the branches agree.
+                                Effect.fail<
+                                  MessageDeliveryRetryableError | MessageDeliveryTerminalError
+                                >(
+                                  new MessageDeliveryTerminalError({
+                                    cause: error,
+                                    deliveryId: loaded.id,
+                                    message: PROJECT_SENDING_PAUSED,
+                                    stage: "send",
+                                  }),
+                                ),
+                              ),
                             );
+                          }
                           case "message_rejected":
                             return rejected;
                           default:
@@ -1164,6 +1245,28 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   message: "Another run is sending the Delivery",
                   stage: "claim",
                 });
+              case "project_sending_paused": {
+                const failed = yield* failProjectSendingPaused(db, {
+                  claimedAt: state.claimedAt,
+                  id: deliveryId,
+                  messageId: delivery.messageId,
+                  messageTags: delivery.message?.tags ?? null,
+                  organizationId,
+                  region: state.region,
+                });
+                if (!failed) {
+                  // Another run moved it meanwhile; settle it on the next run.
+                  return yield* new MessageDeliveryRetryableError({
+                    deliveryId,
+                    message: "The Delivery changed while it was being failed",
+                    stage: "dead_letter",
+                  });
+                }
+                return yield* releaseUsage(deliveryId);
+              }
+              case "message_rejected":
+                failureMessage = SES_REJECTED_MESSAGE;
+                break;
               case "refused":
                 failureMessage = SES_REFUSED;
                 break;
