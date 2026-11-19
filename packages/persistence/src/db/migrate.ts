@@ -50,6 +50,121 @@ export class MigrationError extends Data.TaggedError("MigrationError")<{
 }
 
 /**
+ * Whether stored Contact emails still have to be normalized: the `contact` table is there
+ * and the constraint that keeps them lower-case is not. False on an empty database, where
+ * there is nothing to normalize, and for good once the constraint's migration has run.
+ */
+const CONTACT_EMAILS_UNCHECKED = `
+  select to_regclass('contact') is not null and not exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass('contact') and conname = 'contact_email_lower_check'
+  ) as unchecked`;
+
+/**
+ * Lower-cases every stored Contact email, which the `contact_email_lower_check` migration
+ * then holds the table to. It is data, which a generated migration cannot carry, so the
+ * step runs it first, in one transaction of its own.
+ *
+ * Contacts of one App Environment that then share an address become one. The survivor is the
+ * row already lower-case if there is one, since that is the row sends have been finding. It
+ * keeps the strictest Suppression any of them had (with that row's reason and time), is
+ * unsubscribed if any was, and holds every Topic unsubscribe and Segment membership among
+ * them: nothing that stops a send is lost. It is deleted only if all of them were.
+ *
+ * The table lock keeps writers out, so no Suppression lands on a row between its being read
+ * and removed; the previous release's accepts and notifications wait for the commit.
+ */
+const NORMALIZE_CONTACT_EMAILS = [
+  "begin",
+  "lock table contact in share row exclusive mode",
+  `create temporary table contact_email_merge on commit drop as
+    select
+      id,
+      first_value(id) over (
+        partition by organization_app_environment_id, lower(email)
+        order by (email = lower(email)) desc, (deleted_at is null) desc, created_at, id
+      ) as survivor_id
+    from contact
+    where (organization_app_environment_id, lower(email)) in (
+      select organization_app_environment_id, lower(email) from contact where email <> lower(email)
+    )`,
+  // One source of each (survivor, Topic) and (survivor, Segment) moves to the survivor, its own
+  // first; the rest go with the Contacts removed below.
+  `update contact_topic_unsubscribe set contact_id = kept.survivor_id
+    from (
+      select distinct on (merge.survivor_id, unsubscribe.topic_id) unsubscribe.id, merge.survivor_id
+      from contact_topic_unsubscribe unsubscribe
+      join contact_email_merge merge on merge.id = unsubscribe.contact_id
+      order by
+        merge.survivor_id, unsubscribe.topic_id,
+        (merge.id = merge.survivor_id) desc, unsubscribe.created_at, unsubscribe.id
+    ) kept
+    where contact_topic_unsubscribe.id = kept.id
+      and contact_topic_unsubscribe.contact_id <> kept.survivor_id`,
+  `update segment_member set contact_id = kept.survivor_id
+    from (
+      select distinct on (merge.survivor_id, member.segment_id) member.id, merge.survivor_id
+      from segment_member member
+      join contact_email_merge merge on merge.id = member.contact_id
+      order by
+        merge.survivor_id, member.segment_id,
+        (merge.id = merge.survivor_id) desc, member.created_at, member.id
+    ) kept
+    where segment_member.id = kept.id and segment_member.contact_id <> kept.survivor_id`,
+  `update contact set
+      email = lower(contact.email),
+      unsubscribed = merged.unsubscribed,
+      suppression_severity = strictest.suppression_severity,
+      suppression_reason = strictest.suppression_reason,
+      suppressed_at = strictest.suppressed_at,
+      deleted_at = merged.deleted_at,
+      first_name = merged.first_name,
+      last_name = merged.last_name,
+      properties = merged.properties,
+      created_at = merged.created_at,
+      updated_at = now()
+    from (
+      select
+        merge.survivor_id,
+        bool_or(source.unsubscribed) as unsubscribed,
+        case when bool_or(source.deleted_at is null) then null else max(source.deleted_at) end
+          as deleted_at,
+        min(source.created_at) as created_at,
+        -- The survivor's own name where it has one, else the oldest source's.
+        (array_agg(source.first_name order by (source.id = merge.survivor_id) desc, source.created_at, source.id)
+          filter (where source.first_name is not null))[1] as first_name,
+        (array_agg(source.last_name order by (source.id = merge.survivor_id) desc, source.created_at, source.id)
+          filter (where source.last_name is not null))[1] as last_name,
+        -- A key several of them have keeps the survivor's value, else the newest: the last
+        -- one aggregated wins.
+        (
+          select jsonb_object_agg(
+            property.key, property.value
+            order by (holder.id = merge.survivor_id), holder.created_at, holder.id
+          )
+          from contact_email_merge held
+          join contact holder on holder.id = held.id
+          cross join lateral jsonb_each(
+            case when jsonb_typeof(holder.properties) = 'object' then holder.properties end
+          ) property
+          where held.survivor_id = merge.survivor_id
+        ) as properties,
+        (array_agg(
+          source.id
+          order by
+            (case source.suppression_severity when 'all' then 2 when 'marketing' then 1 else 0 end) desc,
+            (source.id = merge.survivor_id) desc, source.suppressed_at, source.id
+        ))[1] as strictest_id
+      from contact_email_merge merge
+      join contact source on source.id = merge.id
+      group by merge.survivor_id
+    ) merged
+    join contact strictest on strictest.id = merged.strictest_id
+    where contact.id = merged.survivor_id`,
+  "delete from contact where id in (select id from contact_email_merge where id <> survivor_id)",
+];
+
+/**
  * The one wait the migrate step and the apps' check share: try again every two seconds
  * for `waitFor`, one log line with the reason per failed attempt, then fail with the last
  * attempt's error. The wait is counted between attempts, so an attempt must bound itself.
@@ -121,12 +236,39 @@ export const migrateDatabase = (options: {
           // An image without its migrations fails here, as a migration that cannot run.
           const migrationsFolder = resolveMigrationsFolder();
           await client.query("SELECT pg_advisory_lock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
+          const unchecked = await client.query<{ unchecked: boolean }>(CONTACT_EMAILS_UNCHECKED);
+          let contacts = { merged: 0, normalized: 0 };
+          if (unchecked.rows[0]?.unchecked) {
+            for (const statement of NORMALIZE_CONTACT_EMAILS) {
+              await client.query(statement);
+            }
+            const counted = await client.query<{ merged: number; normalized: number }>(
+              `select
+                (count(*) filter (where id <> survivor_id))::int as merged,
+                (count(*) filter (where id = survivor_id))::int as normalized
+              from contact_email_merge`,
+            );
+            contacts = counted.rows[0] ?? contacts;
+            await client.query("commit");
+          }
           const result = await migrate(drizzle({ client }), { migrationsFolder });
           if (result != null) {
             throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
           }
+          return contacts;
         },
-      }),
+      }).pipe(
+        Effect.flatMap((contacts) =>
+          contacts.normalized > 0
+            ? Effect.logInfo("Normalized stored Contact emails to lower case").pipe(
+                Effect.annotateLogs({
+                  contacts: contacts.normalized,
+                  mergedIntoThem: contacts.merged,
+                }),
+              )
+            : Effect.void,
+        ),
+      ),
     // Ending the session is what releases the lock. An unlock query of its own would, on a
     // connection that was lost, reject and take the place of the error that says why.
     (client) => Effect.promise(() => client.end().catch(() => undefined)),
