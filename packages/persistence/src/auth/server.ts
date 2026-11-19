@@ -117,6 +117,10 @@ export const createAuth = ({
     baseURL: baseUrl,
     basePath: AUTH_BASE_PATH,
     trustedOrigins,
+    // Nothing impersonates: the dashboard has no screen for it, and a session opened by
+    // impersonating belongs to the other user, so removing its admin's role would not end
+    // it. Both paths answer 404, for admins too.
+    disabledPaths: ["/admin/impersonate-user", "/admin/stop-impersonating"],
     onAPIError: { errorURL: errorUrl },
     database: drizzleAdapter(db, {
       provider: "pg",

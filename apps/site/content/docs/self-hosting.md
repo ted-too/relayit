@@ -110,7 +110,7 @@ A platform admin is a user who operates the deployment. Nobody is one until you 
 The role is full control over every account, so give it only to people you would trust with the database. A platform admin:
 
 - sees the dashboard's Admin pages, which list every Project, and pauses and unpauses Domains;
-- passes every admin endpoint of the sign-in service (better-auth's `/auth/admin/*`): listing, creating and removing users, setting any user's password, banning and unbanning, impersonating any user who is not an admin, and changing any user's role, their own included.
+- passes every admin endpoint of the sign-in service (better-auth's `/auth/admin/*`): listing, creating and removing users, setting any user's password, banning and unbanning, and changing any user's role, their own included. Impersonating a user is switched off: `/auth/admin/impersonate-user` and `/auth/admin/stop-impersonating` answer 404 for everyone.
 
 Grant the role to a user who has signed up, and remove it, with the command in the api image:
 
@@ -135,11 +135,29 @@ Both take effect at once:
 
 The command prints how many open sessions it updated or ended; the last line it prints is the outcome. If it found none, it says so, names the Redis host and key prefix it searched, and does not claim the user was signed out: if that user is signed in, the command ran against a different Redis or `REDIS_KEY_PREFIX` than the api uses, and the change has not reached their sessions. It also warns when that Redis holds no session of any user, which on a deployment anyone is signed in to means the same thing.
 
-It exits non-zero without claiming success if it could not confirm the sessions. Exit codes: `2` wrong arguments, `3` no user with that email, `4` the environment is incomplete, `5` the database could not be reached, `6` the sessions could not be confirmed (Redis unreachable, or a session read back unchanged), `7` the role was removed but no session of the user was found and the session store it searched (`REDIS_URL`, `REDIS_KEY_PREFIX`) holds no session of any user. On a deployment anyone is signed in to, that means it looked in the wrong place: fix the two variables and run it again. If nobody is signed in to the deployment, the removal is complete and `7` can be ignored. The message says whether the role was changed in the database before it stopped. If it was, run the command again: until it succeeds, a removed admin's open sessions may still have platform admin access.
+It exits non-zero without claiming success if it could not confirm the sessions. Exit codes: `2` wrong arguments, `3` no user with that email, `4` the environment is incomplete, `5` the database could not be reached, `6` the sessions could not be confirmed (Redis unreachable, or a session read back unchanged), `7` the role was removed, or the user banned, but no session of theirs was found and the session store it searched (`REDIS_URL`, `REDIS_KEY_PREFIX`) holds no session of any user. On a deployment anyone is signed in to, that means it looked in the wrong place: fix the two variables and run it again. If nobody is signed in to the deployment, the change is complete and `7` can be ignored. The message says whether the change was made in the database before it stopped. If it was, run the command again: until it succeeds, a removed admin's open sessions may still have platform admin access, and a banned user's may still be signed in.
 
 An existing admin can also grant the role through better-auth's own `/auth/admin/set-role`, which updates the user's open sessions too. Use the command to remove the role: `set-role` does not sign the user out, and a session left open can keep the old role.
 
 Don't change the role by editing the `user` table. A signed-in user's sessions are kept in Redis, each with its own copy of the user and their role, and `/auth/admin/*` goes by that copy. A role removed in the database alone stays in those sessions until they end, and a session in use keeps renewing, so the user you demoted keeps those endpoints.
+
+### Banning a user
+
+The same command bans a user and lifts the ban, with the same ways to run it, the same output and the same exit codes:
+
+```bash
+docker compose exec api bun platform-admin.js ban someone@their-domain.com
+docker compose exec api bun platform-admin.js unban someone@their-domain.com
+```
+
+- `ban` ends every session the user has open and refuses their sign-in, by password or GitHub, until the ban is lifted. It has no expiry. It bans whoever is named, a platform admin and yourself included, so check the email.
+- `unban` lifts the ban. The user signs in again; nothing they owned was removed.
+
+A ban is of the person, not of their Projects. A Project's API keys belong to the Project, so its sends are still accepted and delivered, and its other members still sign in. To stop a Project's mail as well, pause its Domains on the Admin pages.
+
+A platform admin can also ban through better-auth's `/auth/admin/ban-user`, which takes an expiry and ends the user's sessions too, and lift a ban through `/auth/admin/unban-user`.
+
+Don't ban by editing the `user` table, for the reason above: the user's open sessions stay open. A Project's dashboard operations and the Admin pages read the ban from the table and refuse them, but the sign-in service's own endpoints (`/auth/*`: the user's account, their Projects' members and invitations) go by the session and keep answering until it ends. If a ban was made that way, run `ban` for the user to end their sessions.
 
 ## Environment variables
 

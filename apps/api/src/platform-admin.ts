@@ -1,19 +1,25 @@
 /**
- * `bun platform-admin.js grant|remove <email>`, run by an operator in the api's container:
- * how a deployment's platform admins are made and unmade. The first admin has no admin to
- * grant them the role, and a role written straight to the database is not seen by the
- * sessions the user already has (see `setPlatformAdmin`).
+ * `bun platform-admin.js grant|remove|ban|unban <email>`, run by an operator in the api's
+ * container: how a deployment's platform admins are made and unmade, and how a user is
+ * banned. The first admin has no admin to grant them the role, and a role or a ban written
+ * straight to the database is not seen by the sessions the user already has (see
+ * `setPlatformAdmin` and `setBanned`).
  *
  * It reads the api's whole environment and builds better-auth exactly as the api does, so
  * it reaches the api's sessions and rewrites them in the shape the api stores.
  *
  * Exit codes: 0 changed and confirmed, 2 usage, 3 no such user, 4 environment, 5 database,
- * 6 the sessions could not be confirmed, 7 the role was removed but no session of the user
- * was found and the session store it searched holds no session of anyone. The last line printed is the outcome: a failing
- * Redis logs its reconnects, and better-auth its own errors, before it.
+ * 6 the sessions could not be confirmed, 7 the role was removed or the user banned but no
+ * session of theirs was found and the session store it searched holds no session of anyone.
+ * The last line printed is the outcome: a failing Redis logs its reconnects, and
+ * better-auth its own errors, before it.
  */
 import { JobsLive } from "@repo/jobs";
-import { hasStoredSessions, setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
+import {
+  hasStoredSessions,
+  setBanned,
+  setPlatformAdmin,
+} from "@repo/persistence/auth/platform-admin";
 import { makeDbLive } from "@repo/persistence/db/effect";
 import { makeRedisClient, makeRedisLive } from "@repo/redis";
 import { Effect, Layer, Redacted } from "effect";
@@ -23,8 +29,12 @@ import { changedLines, unconfirmedLine } from "./platform-admin-outcome";
 
 const args = Bun.argv.slice(2);
 const [action, email] = args;
-if (args.length !== 2 || (action !== "grant" && action !== "remove") || !email) {
-  console.error("Usage: bun platform-admin.js grant|remove <email>");
+if (
+  args.length !== 2 ||
+  (action !== "grant" && action !== "remove" && action !== "ban" && action !== "unban") ||
+  !email
+) {
+  console.error("Usage: bun platform-admin.js grant|remove|ban|unban <email>");
   process.exit(2);
 }
 
@@ -38,7 +48,9 @@ const program = Effect.gen(function* () {
   const config = yield* apiConfig;
   const { sessions } = yield* Effect.gen(function* () {
     const { auth } = yield* ApiAuth;
-    return yield* setPlatformAdmin(auth, { admin: action === "grant", email });
+    return yield* action === "grant" || action === "remove"
+      ? setPlatformAdmin(auth, { admin: action === "grant", email })
+      : setBanned(auth, { banned: action === "ban", email });
   }).pipe(
     Effect.provide(
       // What the api's better-auth hooks run with; nothing here reaches them.
@@ -87,10 +99,11 @@ const program = Effect.gen(function* () {
   })) {
     console.log(line);
   }
-  // A removal that searched a store with nobody's sessions in it has most likely looked in
-  // the wrong place, and the removed admin may still be signed in: a script must not read
-  // that as done. A grant is left at 0: a new deployment's first admin has no session yet.
-  if (action === "remove" && empty) {
+  // A removal or a ban that searched a store with nobody's sessions in it has most likely
+  // looked in the wrong place, and the user may still be signed in: a script must not read
+  // that as done. A grant is left at 0: a new deployment's first admin has no session yet;
+  // so is lifting a ban, which expects none.
+  if ((action === "remove" || action === "ban") && empty) {
     process.exitCode = 7;
   }
 }).pipe(
@@ -98,7 +111,10 @@ const program = Effect.gen(function* () {
   Effect.catch((error) => {
     switch (error._tag) {
       case "PlatformAdminUserNotFound":
-        return stop(3, `No user has the email ${error.email}. Sign up in the dashboard first.`);
+        return stop(
+          3,
+          `No user has the email ${error.email}.${action === "grant" ? " Sign up in the dashboard first." : ""}`,
+        );
       case "PlatformAdminSessionsStale":
         return stop(
           6,
@@ -111,7 +127,7 @@ const program = Effect.gen(function* () {
             : "The session store (REDIS_URL) could not be reached.";
         return stop(
           error.store === "database" ? 5 : 6,
-          error.roleChanged
+          error.rowChanged
             ? `${where} ${unconfirmedLine(action, "their sessions are not confirmed")}`
             : `${where} Nothing was changed.`,
         );
