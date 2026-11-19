@@ -191,6 +191,7 @@ export const verifyCustomDomainRegistration = (input: {
           // Counted from the row as it is now, held: a refresh or a proven claim may have
           // started the count again while SES and DNS were being asked, and a check that
           // wrote what it read before would undo that, or tell a new holder of a stop.
+          // Held as the row's other writers hold it, which lets accepts through.
           const [current] = yield* tx
             .select({
               lastCheckedAt: customDomain.lastCheckedAt,
@@ -199,7 +200,7 @@ export const verifyCustomDomainRegistration = (input: {
             })
             .from(customDomain)
             .where(eq(customDomain.id, customDomainId))
-            .for("update");
+            .for("no key update");
           // Removed while it was being checked: nothing to write, and no next check.
           if (!current) {
             return null;
