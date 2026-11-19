@@ -2,64 +2,84 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "RelayITSesAccount",
-      "Effect": "Allow",
-      "Action": "ses:GetAccount",
-      "Resource": "*"
-    },
-    {
-      "Sid": "RelayITSesIdentitiesAndSend",
+      "Sid": "RelayitDomainIdentities",
       "Effect": "Allow",
       "Action": [
         "ses:CreateEmailIdentity",
         "ses:GetEmailIdentity",
         "ses:DeleteEmailIdentity",
         "ses:PutEmailIdentityMailFromAttributes",
-        "ses:SendEmail"
+        "ses:ListResourceTenants"
       ],
       "Resource": "arn:aws:ses:*:ACCOUNT_ID:identity/*"
     },
     {
-      "Sid": "RelayITSesConfigurationSets",
+      "Sid": "RelayitSend",
       "Effect": "Allow",
-      "Action": ["ses:CreateConfigurationSet", "ses:CreateConfigurationSetEventDestination"],
-      "Resource": "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-default"
+      "Action": "ses:SendEmail",
+      "Resource": [
+        "arn:aws:ses:*:ACCOUNT_ID:identity/*",
+        "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-delivery-events"
+      ]
     },
     {
-      "Sid": "RelayITSesInboundReceiving",
+      "Sid": "RelayitConfigurationSet",
       "Effect": "Allow",
       "Action": [
-        "ses:CreateReceiptRuleSet",
-        "ses:CreateReceiptRule",
-        "ses:DescribeReceiptRuleSet",
-        "ses:SetActiveReceiptRuleSet"
+        "ses:CreateConfigurationSet",
+        "ses:CreateConfigurationSetEventDestination",
+        "ses:UpdateConfigurationSetEventDestination"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-delivery-events"
     },
     {
-      "Sid": "RelayITSesTenantStatus",
+      "Sid": "RelayitProjectTenants",
       "Effect": "Allow",
-      "Action": ["ses:GetTenant", "ses:GetReputationEntity"],
+      "Action": ["ses:CreateTenant", "ses:GetTenant", "ses:GetReputationEntity"],
       "Resource": "arn:aws:ses:*:ACCOUNT_ID:tenant/relayit-*"
     },
     {
-      "Sid": "RelayITTenantStatusEvents",
+      "Sid": "RelayitListTenants",
       "Effect": "Allow",
-      "Action": ["events:PutRule", "events:PutTargets"],
-      "Resource": "arn:aws:events:*:ACCOUNT_ID:rule/relayit-tenant-status-*"
+      "Action": "ses:ListTenants",
+      "Resource": "*"
     },
     {
-      "Sid": "RelayITSnsWebhooks",
+      "Sid": "RelayitAttachToProjectTenant",
+      "Effect": "Allow",
+      "Action": "ses:CreateTenantResourceAssociation",
+      "Resource": [
+        "arn:aws:ses:*:ACCOUNT_ID:tenant/relayit-*",
+        "arn:aws:ses:*:ACCOUNT_ID:identity/*",
+        "arn:aws:ses:*:ACCOUNT_ID:configuration-set/relayit-delivery-events"
+      ]
+    },
+    {
+      "Sid": "RelayitDetachIdentityFromProjectTenant",
+      "Effect": "Allow",
+      "Action": "ses:DeleteTenantResourceAssociation",
+      "Resource": [
+        "arn:aws:ses:*:ACCOUNT_ID:tenant/relayit-*",
+        "arn:aws:ses:*:ACCOUNT_ID:identity/*"
+      ]
+    },
+    {
+      "Sid": "RelayitNotificationTopic",
       "Effect": "Allow",
       "Action": [
         "sns:CreateTopic",
         "sns:GetTopicAttributes",
         "sns:SetTopicAttributes",
-        "sns:Subscribe",
-        "sns:Unsubscribe",
-        "sns:ListSubscriptionsByTopic"
+        "sns:ListSubscriptionsByTopic",
+        "sns:Subscribe"
       ],
-      "Resource": "arn:aws:sns:*:ACCOUNT_ID:relayit-*"
+      "Resource": "arn:aws:sns:*:ACCOUNT_ID:relayit-delivery-*"
+    },
+    {
+      "Sid": "RelayitTenantStatusEvents",
+      "Effect": "Allow",
+      "Action": ["events:PutRule", "events:PutTargets"],
+      "Resource": "arn:aws:events:*:ACCOUNT_ID:rule/relayit-tenant-status-*"
     }
   ]
 }

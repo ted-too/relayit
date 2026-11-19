@@ -39,6 +39,12 @@ export interface EmailDeliverHandlerOptions {
 /** What the Project reads in `message.failed` for each way a send can fail. */
 const SES_REFUSED = "SES send failed";
 const SES_REJECTED_MESSAGE = "SES rejected the message";
+/**
+ * SES paused sending and did not say for whom: the whole account, or this Project where the
+ * backend could not read its tenant's status. A Project Sending Pause it could read is the
+ * next one.
+ */
+const SES_SENDING_PAUSED = "SES paused sending";
 const PROJECT_SENDING_PAUSED = "SES paused sending for this Project";
 const OUTCOME_UNKNOWN = "The send was interrupted and its outcome is unknown; it is not sent again";
 
@@ -158,10 +164,12 @@ const sesAnswerKey = (deliveryId: string, claimedAt: Date) =>
 const ACCEPTED = "accepted:";
 /**
  * A refusal says which it was, because whoever ends the Delivery may not be the run SES
- * answered: one the job's retries may get past (`REFUSED` alone), the message itself, or a
- * Project Sending Pause, followed by the region SES paused the Project in.
+ * answered: one the job's retries may get past (`REFUSED` alone, or `REFUSED_PAUSED` when
+ * SES said sending is paused), the message itself, or a Project Sending Pause, followed by
+ * the region SES paused the Project in.
  */
 const REFUSED = "refused";
+const REFUSED_PAUSED = `${REFUSED}:paused`;
 const REFUSED_MESSAGE = `${REFUSED}:message`;
 const REFUSED_PROJECT_PAUSED = `${REFUSED}:project_sending_paused:`;
 
@@ -225,7 +233,10 @@ const sendingState = (delivery: { readonly id: string; readonly startedAt: Date 
       return { claimedAt, kind: "message_rejected" } as const;
     }
     if (answer === REFUSED) {
-      return { claimedAt, kind: "refused" } as const;
+      return { claimedAt, kind: "refused", message: SES_REFUSED } as const;
+    }
+    if (answer === REFUSED_PAUSED) {
+      return { claimedAt, kind: "refused", message: SES_SENDING_PAUSED } as const;
     }
     const now = yield* Clock.currentTimeMillis;
     return claimedAt.getTime() > now - Duration.toMillis(CLAIM_LEASE)
@@ -544,7 +555,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
             failureMessage = SES_REJECTED_MESSAGE;
             break;
           case "refused":
-            failureMessage = SES_REFUSED;
+            failureMessage = state.message;
             break;
           case "stale":
             failureMessage = OUTCOME_UNKNOWN;
@@ -688,7 +699,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 );
                 return yield* new MessageDeliveryRetryableError({
                   deliveryId: loaded.id,
-                  message: SES_REFUSED,
+                  message: state.message,
                   stage: "send",
                 });
               case "live":
@@ -1120,6 +1131,20 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                           }
                           case "message_rejected":
                             return rejected;
+                          // The account's pause may end within the retries. So may this
+                          // Project's, where the backend could not read whose pause it is
+                          // and so nothing can be paused for it; either way the Project is
+                          // told sending is paused, not only that the send failed.
+                          case "sending_paused":
+                            return refused(
+                              REFUSED_PAUSED,
+                              new MessageDeliveryRetryableError({
+                                cause: error,
+                                deliveryId: loaded.id,
+                                message: SES_SENDING_PAUSED,
+                                stage: "send",
+                              }),
+                            );
                           default:
                             return retried;
                         }
@@ -1268,7 +1293,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 failureMessage = SES_REJECTED_MESSAGE;
                 break;
               case "refused":
-                failureMessage = SES_REFUSED;
+                failureMessage = state.message;
                 break;
               case "stale":
                 failureMessage = OUTCOME_UNKNOWN;

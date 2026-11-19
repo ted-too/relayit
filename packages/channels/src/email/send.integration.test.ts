@@ -907,7 +907,9 @@ describe("an accepted email send", () => {
      * A send SES refused as `reason` whose outcome could not be written, the requeue
      * included: left `sending`, with only SES's kept answer to say what happened.
      */
-    const leftSending = (reason: "message_rejected" | "project_sending_paused") => {
+    const leftSending = (
+      reason: "message_rejected" | "project_sending_paused" | "sending_paused",
+    ) => {
       const lock = makeRowLock(testDatabaseUrl);
       const sent = { deliveryId: "", fqdn: "" };
       const backend = makeBackend((sender) =>
@@ -1044,6 +1046,31 @@ describe("an accepted email send", () => {
         ]);
       }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
     });
+
+    it.live.each(["its job's dead-letter step", "the worker, two days later"] as const)(
+      "for a pause SES named no one for, ends failed as paused and pauses nothing when ended by %s",
+      (ender) => {
+        const { backend, refused } = leftSending("sending_paused");
+        return Effect.gen(function* () {
+          const db = yield* DB;
+          const project = yield* refused;
+
+          yield* enders[ender](project.deliveryId);
+
+          expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+          expect(yield* deliveryOf(project.deliveryId)).toMatchObject({
+            error: { message: "SES paused sending" },
+            status: "failed",
+          });
+          expect(
+            yield* db.query.customDomain.findFirst({ where: { id: project.customDomainId } }),
+          ).toMatchObject({ isPaused: false });
+          expect(yield* eventsFor(project.organizationId, project.deliveryId)).toMatchObject([
+            { payload: { error: "SES paused sending" }, type: "message.failed" },
+          ]);
+        }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+      },
+    );
   });
 
   it.live("an SES error after it may have taken the send ends failed, never sent again", () => {
@@ -2305,6 +2332,41 @@ describe("an accepted email send", () => {
       );
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
+
+  // What the SES backend answers for the whole account paused, and for a Project Sending
+  // Pause it may not read the tenant of (no `ses:GetTenant`).
+  it.live(
+    "ends failed as paused, with no Domain paused, when SES paused sending for no one it named",
+    () => {
+      const backend = makeBackend(() =>
+        Effect.fail(new EmailBackendRejected({ reason: "sending_paused", region: "eu-central-1" })),
+      );
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const accepted = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        );
+
+        for (let pass = 0; pass < emailDeliverJob.retry.maxAttempts; pass += 1) {
+          yield* runWorker;
+        }
+
+        // Retried: the account's pause may end, and the tenant's status may become readable.
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(emailDeliverJob.retry.maxAttempts);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          error: { message: "SES paused sending" },
+          status: "failed",
+        });
+        expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+          { payload: { error: "SES paused sending" }, type: "message.failed" },
+        ]);
+        expect(
+          yield* db.query.customDomain.findFirst({ where: { id: project.customDomainId } }),
+        ).toMatchObject({ isPaused: false });
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    },
+  );
 
   it.live("ends failed with message.failed once SES has refused every retry", () => {
     const backend = makeBackend(() =>
