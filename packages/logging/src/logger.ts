@@ -4,23 +4,12 @@ import {
   Effect,
   Layer,
   Logger,
-  type LogLevel,
+  LogLevel,
   References,
   Schema,
   SchemaTransformation,
 } from "effect";
 import { failureAnnotations } from "./log-failure";
-
-const LEVELS = {
-  all: "All",
-  fatal: "Fatal",
-  error: "Error",
-  warn: "Warn",
-  info: "Info",
-  debug: "Debug",
-  trace: "Trace",
-  none: "None",
-} as const satisfies Record<string, LogLevel.LogLevel>;
 
 /**
  * `LOG_LEVEL`, `Info` when unset. Read in any case: most tools spell their levels `info`,
@@ -29,15 +18,11 @@ const LEVELS = {
 export const logLevelConfig = Config.schema(
   Schema.String.pipe(
     Schema.decodeTo(Schema.String, SchemaTransformation.toLowerCase()),
-    Schema.decodeTo(
-      Schema.Literals(["all", "fatal", "error", "warn", "info", "debug", "trace", "none"]),
-    ),
+    Schema.decodeTo(Schema.String, SchemaTransformation.capitalize()),
+    Schema.decodeTo(Schema.Literals(LogLevel.values)),
   ),
   "LOG_LEVEL",
-).pipe(
-  Config.map((level) => LEVELS[level]),
-  Config.withDefault("Info"),
-);
+).pipe(Config.withDefault("Info"));
 
 /** JSON lines under NODE_ENV=production, readable lines otherwise. */
 const logger = Logger.layer([
