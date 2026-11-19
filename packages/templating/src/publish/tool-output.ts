@@ -6,10 +6,6 @@ const MAX_LENGTH = 4000;
 // Tools report the real path, which on macOS is not the one `os.tmpdir()` gave.
 const spellings = (dir: string) => new Set([NodeFS.realpathSync(dir), dir]);
 
-/** Whether a path a tool reported lies inside `dir`, by either spelling of `dir`. */
-export const isInDirectory = (path: string, dir: string) =>
-  [...spellings(dir)].some((spelling) => path.startsWith(`${spelling}/`));
-
 /**
  * What `bun install` or the bundler said about a workspace, as its owner may read it: the
  * source it quotes is theirs, but the checkout's temp directory is the host's, so paths

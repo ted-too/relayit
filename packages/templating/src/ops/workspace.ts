@@ -9,7 +9,7 @@ import {
   scaffoldHostedWorkspace,
   withWorkspaceGitLock,
 } from "../git";
-import { normalizeWorkspacePath } from "../paths";
+import { isBunConfigPath, normalizeWorkspacePath } from "../paths";
 import {
   depsSyncHostedWorkspace,
   previewHostedWorkspaceEntry,
@@ -121,6 +121,13 @@ export const commitFiles = (input: {
         return yield* new TemplatingBuilderError({
           code: "invalid",
           message: "Lockfile is platform-owned; use deps sync instead of editing it.",
+        });
+      }
+      // Deleting one stays possible: a workspace that already holds one cannot build.
+      if (isBunConfigPath(path) && content !== null) {
+        return yield* new TemplatingBuilderError({
+          code: "invalid",
+          message: "A workspace cannot hold .npmrc or bunfig.toml.",
         });
       }
       if (path === "package.json" && content !== null) {

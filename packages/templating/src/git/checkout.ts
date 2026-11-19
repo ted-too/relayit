@@ -1,6 +1,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import { Effect } from "effect";
+import { isBunConfigPath } from "../paths";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { readTreeAtCommit } from "./commit";
 import { getBlob } from "./objects";
@@ -31,6 +32,18 @@ export const checkoutRefToDirectory = (input: {
         }),
       try: () => NodeFSP.mkdir(input.destDir, { recursive: true }),
     });
+
+    // Refused here, where a workspace's files reach the builder's disk, so no install or
+    // bundle ever starts beside one. A commit refuses them too, but a tree made before
+    // that may hold one.
+    const bunConfig = Object.keys(tree).find(isBunConfigPath);
+    if (bunConfig !== undefined) {
+      return yield* new TemplatingBuilderError({
+        code: "invalid",
+        detail: `Delete ${bunConfig} from the workspace.`,
+        message: "A workspace cannot hold .npmrc or bunfig.toml.",
+      });
+    }
 
     for (const [filePath, blobId] of Object.entries(tree)) {
       const blob = yield* getBlob(input.workspaceId, blobId);

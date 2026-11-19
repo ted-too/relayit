@@ -1,66 +1,59 @@
 import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
-import { isInDirectory, workspaceToolOutput } from "./tool-output";
+import { workspaceToolOutput } from "./tool-output";
 
 /** Bundle a React Email entry into a sealed ESM artifact. */
 export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: string }) =>
   Effect.gen(function* () {
-    const abs = NodePath.join(input.workspaceDir, input.entryPath);
-    // Isolate host provides a single React instance. React Email packages are
-    // sealed into the artifact — Bun cannot resolve bare `@react-email/*` imports
-    // from the ephemeral /tmp artifact path against the host package.
-    const result = yield* Effect.tryPromise({
-      // With `throw: false` a rejection is the bundler failing to run, not the source
-      // failing to build: the host's, so it gets no `detail`.
-      catch: () =>
-        new TemplatingBuilderError({
-          code: "failed",
-          message: "Failed to bundle workspace entry.",
-        }),
-      try: () =>
-        Bun.build({
-          entrypoints: [abs],
-          external: ["react", "react-dom", "react/jsx-runtime"],
-          format: "esm",
-          minify: false,
-          sourcemap: "none",
-          target: "bun",
-          // A failed build answers with its logs rather than rejecting with them.
-          throw: false,
-        }),
+    const failed = new TemplatingBuilderError({
+      code: "failed",
+      message: "Failed to bundle workspace entry.",
+    });
+    const runnerDir = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
+
+    const stdout = yield* Effect.tryPromise({
+      catch: () => failed,
+      try: async () => {
+        const proc = Bun.spawn(
+          [
+            "bun",
+            NodePath.join(runnerDir, "bundle-runner.ts"),
+            input.workspaceDir,
+            input.entryPath,
+          ],
+          {
+            // Not the checkout: Bun reads a `bunfig.toml` and `.env` from where it starts.
+            cwd: runnerDir,
+            // The bundler reads a customer's source, so it is handed nothing of the
+            // builder's environment: PATH to find bun, and NODE_ENV, which the bundle of a
+            // dependency that branches on it follows.
+            env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH },
+            stderr: "ignore",
+            stdout: "pipe",
+          },
+        );
+        const [text] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+        return text;
+      },
     });
 
-    if (!result.success) {
+    // The runner always answers one JSON line. Anything else is the bundler failing to
+    // run, not the source failing to build: the host's, so it gets no `detail`.
+    const answer = yield* Effect.try({
+      catch: () => failed,
+      try: () =>
+        JSON.parse(stdout) as { artifact: string; ok: true } | { detail: string; ok: false },
+    });
+
+    if (!answer.ok) {
       return yield* new TemplatingBuilderError({
         code: "failed",
-        // The bundler's messages, each with where in the workspace's source it points.
-        // An import can reach a file outside the checkout, and the bundler's message
-        // about one quotes it ('Expected "," but found "…"'), as its line does: such an
-        // error is reported in fixed words. This keeps a host file out of an error only;
-        // an import that succeeds still puts the file in the artifact (#143).
-        detail: workspaceToolOutput(
-          result.logs
-            .filter((log) => log.level === "error")
-            .map((log) =>
-              log.position && isInDirectory(log.position.file, input.workspaceDir)
-                ? `${log.position.file}:${log.position.line}:${log.position.column}: ${log.message}\n${log.position.lineText}`
-                : "A file outside the workspace failed to build.",
-            )
-            .join("\n"),
-          input.workspaceDir,
-        ),
+        detail: workspaceToolOutput(answer.detail, input.workspaceDir),
         message: "Failed to bundle workspace entry.",
       });
     }
 
-    const artifact = result.outputs[0];
-    if (!artifact) {
-      return yield* new TemplatingBuilderError({
-        code: "failed",
-        message: "No bundle output for workspace entry.",
-      });
-    }
-
-    return new Uint8Array(yield* Effect.promise(() => artifact.arrayBuffer()));
+    return new Uint8Array(Buffer.from(answer.artifact, "base64"));
   });

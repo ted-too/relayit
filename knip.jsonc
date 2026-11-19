@@ -54,6 +54,10 @@
       "drizzle": false,
       "entry": ["src/**/index.ts", "drizzle.config.ts"],
     },
+    "packages/templating": {
+      // Spawned by path from bundle.ts and copied into the template-builder image.
+      "entry": ["src/**/index.ts", "src/publish/bundle-runner.ts"],
+    },
     "packages/template-render": {
       // Spawned by path from render.ts and copied into the api, worker and template-builder images.
       "entry": ["src/**/index.ts", "src/react-email/isolate-runner.ts"],

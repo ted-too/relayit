@@ -1,63 +1,65 @@
 import { Effect } from "effect";
 import { TemplatingBuilderError } from "../rpc/errors";
 
-const FORBIDDEN_DEP_PREFIXES = [
-  "git+",
-  "github:",
-  "http:",
-  "https:",
-  "file:",
-  "link:",
-  "workspace:",
-] as const;
+// A registry version, range or dist-tag, or one of another registry package
+// (`npm:name@range`). Anything else Bun takes as somewhere to fetch or copy from, and a
+// path is copied from the builder's disk into node_modules, where the bundler may read
+// it: `../x`, `/x` and `user/repo` as much as `file:`, `link:`, `git+…` or a URL.
+const REGISTRY_SPEC_RE = /^(?:npm:(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+@)?[a-z0-9.*^~<>=|+ -]*$/i;
+// Allowed by the pattern above, and read as a tarball beside package.json.
+const TARBALL_RE = /\.(?:tgz|tar|tar\.gz)$/i;
 
-interface PackageJson {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-}
+const DEPENDENCY_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+  // These replace a dependency's spec, at any depth of nesting.
+  "overrides",
+  "resolutions",
+];
 
-function collectDeps(pkg: PackageJson): [string, string][] {
-  return Object.entries({
-    ...pkg.dependencies,
-    ...pkg.devDependencies,
-    ...pkg.peerDependencies,
-    ...pkg.optionalDependencies,
-  });
-}
+// Each is another way to name where a dependency comes from, or to rewrite one once it is
+// installed. An Email Workspace is one package, so none has a use here.
+const REFUSED_FIELDS = ["workspaces", "catalog", "catalogs", "patchedDependencies"];
 
-function isForbiddenSpec(spec: string): boolean {
-  const lower = spec.trim().toLowerCase();
-  return FORBIDDEN_DEP_PREFIXES.some((prefix) => lower.startsWith(prefix));
-}
+const isRegistrySpecs = (value: unknown): boolean =>
+  typeof value === "string"
+    ? REGISTRY_SPEC_RE.test(value.trim()) && !TARBALL_RE.test(value.trim())
+    : typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.values(value).every(isRegistrySpecs);
 
-/** Reject non-registry dependency specs before Bun install. */
-export const assertHardenedPackageJson = (
-  raw: string,
-): Effect.Effect<PackageJson, TemplatingBuilderError> => {
-  let pkg: PackageJson;
-  try {
-    pkg = JSON.parse(raw) as PackageJson;
-  } catch {
-    return Effect.fail(
-      new TemplatingBuilderError({
-        code: "invalid",
-        message: "package.json is not valid JSON.",
-      }),
-    );
-  }
+/** Refuse a package.json whose install would take anything from outside the registry. */
+export const assertHardenedPackageJson = (raw: string) =>
+  Effect.gen(function* () {
+    const pkg = yield* Effect.try({
+      catch: () =>
+        new TemplatingBuilderError({
+          code: "invalid",
+          message: "package.json is not valid JSON.",
+        }),
+      try: () => JSON.parse(raw) as unknown,
+    });
 
-  const forbidden = collectDeps(pkg).filter(([, spec]) => isForbiddenSpec(spec));
-
-  if (forbidden.length > 0) {
-    return Effect.fail(
-      new TemplatingBuilderError({
+    if (
+      typeof pkg !== "object" ||
+      pkg === null ||
+      Array.isArray(pkg) ||
+      REFUSED_FIELDS.some((field) => field in pkg) ||
+      DEPENDENCY_FIELDS.some(
+        (field) =>
+          field in pkg &&
+          !(
+            typeof (pkg as Record<string, unknown>)[field] === "object" &&
+            isRegistrySpecs((pkg as Record<string, unknown>)[field])
+          ),
+      )
+    ) {
+      return yield* new TemplatingBuilderError({
         code: "invalid",
         message: "package.json has disallowed dependency specs (registry versions only).",
-      }),
-    );
-  }
-
-  return Effect.succeed(pkg);
-};
+      });
+    }
+  });
