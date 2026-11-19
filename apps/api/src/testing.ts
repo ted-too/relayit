@@ -135,7 +135,7 @@ export const serve = (stubs: Stubs) =>
       apiServer({
         accept: stubs.accept,
         appOrigin: APP_ORIGIN,
-        dashboard: { billing: false, githubSignIn: false },
+        dashboard: { billing: false, emailWorkspaceEditing: true, githubSignIn: false },
         handleSes: stubs.handleSes,
         hostname: "127.0.0.1",
         port: 0,

@@ -10,13 +10,15 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { describe, expect, layer, test } from "@effect/vitest";
-import { makeLocalObjectStorageLive } from "@repo/object-storage";
+import { makeLocalObjectStorageLive, ObjectStorage } from "@repo/object-storage";
 import { setBanned, setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
+  emailDelivery,
   emailDomainRegistration,
   sandboxDomain,
+  templateChannelVariant,
   templatingWorkspace,
   templatingWorkspaceEntry,
   user,
@@ -69,7 +71,11 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           Layer.provideMerge(
             apiServer({
               appOrigin: APP,
-              dashboard: { billing: false, githubSignIn: false },
+              dashboard: {
+                billing: false,
+                emailWorkspaceEditing: config.emailWorkspaceEditing,
+                githubSignIn: false,
+              },
               hostname: "127.0.0.1",
               port: 0,
               unsubscribeSecrets: ["test-secret"],
@@ -89,6 +95,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
               BETTER_AUTH_SECRETS: "1:dashboard-test-secret-0123456789abcdef",
               DATABASE_URL: testDatabaseUrl,
               EMAIL_BACKEND: "fake",
+              EMAIL_WORKSPACE_EDITING: "enabled",
               LOG_LEVEL: "Error",
               NODE_ENV: "test",
               OBJECT_STORAGE: "local",
@@ -162,6 +169,34 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   );
 
   /**
+   * The api as an image runs it, with `EMAIL_WORKSPACE_EDITING` unset, beside a builder that
+   * only counts what reaches it.
+   */
+  let builderCalls = 0;
+  const frozenServer = Layer.unwrap(
+    Effect.gen(function* () {
+      const builder = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            fetch: () => {
+              builderCalls += 1;
+              return new Response("not a builder", { status: 500 });
+            },
+            hostname: "127.0.0.1",
+            port: 0,
+          }),
+        ),
+        (served) => Effect.promise(() => served.stop(true)),
+      );
+      return serverWith({
+        EMAIL_WORKSPACE_EDITING: "",
+        TEMPLATING_BUILDER_SECRET: "builder-test-secret",
+        TEMPLATING_BUILDER_URL: `http://127.0.0.1:${builder.port}`,
+      });
+    }),
+  );
+
+  /**
    * One request, read whole. `as` is a session cookie, `key` an API key; changes come from
    * the dashboard.
    */
@@ -227,7 +262,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
     it.effect("refuses every operation without a session, and reports the config without one", () =>
       Effect.gen(function* () {
         expect(yield* call("GET", "/config")).toMatchObject({
-          body: { billing: false, githubSignIn: false },
+          body: { billing: false, emailWorkspaceEditing: true, githubSignIn: false },
           status: 200,
         });
         for (const [method, path] of [
@@ -1590,6 +1625,185 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         expect(yield* create(`direct-${run.slice(-8).toLowerCase()}`)).toMatchObject({
           status: 200,
         });
+      }),
+    );
+  });
+
+  layer(frozenServer, { timeout: "60 seconds" })((it) => {
+    it.effect("refuses, while frozen, whatever would put new workspace source to use", () =>
+      Effect.gen(function* () {
+        const frozen = {
+          body: {
+            _tag: "EmailWorkspacesFrozen",
+            message: "Email Workspaces are frozen on this deployment.",
+          },
+          status: 403,
+        };
+        expect((yield* call("GET", "/config")).body).toMatchObject({
+          emailWorkspaceEditing: false,
+        });
+        const owner = yield* signUp("frozen");
+        const project = yield* createProject(owner, `Frozen ${run}`);
+        const p = `/projects/${project.slug}`;
+        const w = `${p}/workspaces/reactEmail`;
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        const workspaces = () =>
+          Effect.promise(() =>
+            db
+              .select()
+              .from(templatingWorkspace)
+              .where(eq(templatingWorkspace.organizationId, project.id)),
+          );
+
+        // A Project with no workspace gets none: nothing is made, in the catalog or the builder.
+        builderCalls = 0;
+        for (const path of [w, `${w}/files`, `${w}/files/content?path=package.json`]) {
+          expect(yield* call("GET", path, { as: owner })).toMatchObject(frozen);
+        }
+        expect(yield* call("GET", `${w}/entries`, { as: owner })).toMatchObject({
+          body: [],
+          status: 200,
+        });
+        expect(yield* workspaces()).toHaveLength(0);
+        expect(builderCalls).toBe(0);
+
+        // The Project as the freeze finds it: a workspace with two published Entries, one of
+        // them linked by a Template.
+        const storage = yield* ObjectStorage;
+        const artifactKey = `test/${run}/frozen-artifact.js`;
+        yield* storage.upload(
+          artifactKey,
+          new TextEncoder().encode(
+            'export default function Sealed(props) { return "Sealed for " + props.name; }\n',
+          ),
+        );
+        const [workspace] = yield* Effect.promise(() =>
+          db
+            .insert(templatingWorkspace)
+            .values({
+              kind: "reactEmail",
+              organizationId: project.id,
+              source: "hosted",
+              updatedAt: new Date(),
+            })
+            .returning(),
+        );
+        const [linked, unlinked] = yield* Effect.promise(() =>
+          db
+            .insert(templatingWorkspaceEntry)
+            .values(
+              ["reactEmail/linked.tsx", "reactEmail/unlinked.tsx"].map((path) => ({
+                artifactStorageKey: artifactKey,
+                path,
+                workspaceId: workspace?.id ?? "",
+              })),
+            )
+            .returning(),
+        );
+        const newTemplate = (name: string) =>
+          Effect.gen(function* () {
+            const created = yield* call("POST", `${p}/templates`, { as: owner, body: { name } });
+            expect(created.status).toBe(200);
+            return created.body as { readonly id: string; readonly slug: string };
+          });
+        const sealed = yield* newTemplate("Sealed");
+        const [variant] = yield* Effect.promise(() =>
+          db
+            .insert(templateChannelVariant)
+            .values({
+              channel: "email",
+              content: { subject: "Sealed" },
+              engine: "reactEmail",
+              templateId: sealed.id,
+              updatedAt: new Date(),
+              workspaceEntryId: linked?.id,
+            })
+            .returning(),
+        );
+
+        // Every operation that stores, installs, bundles, renders or seals source is refused
+        // before the builder hears of it.
+        for (const [path, body] of [
+          [`${w}/commits`, { changes: { "reactEmail/new.tsx": "export default () => null;" } }],
+          [`${w}/sync-dependencies`],
+          [`${w}/publish`],
+          [`${w}/entries/${linked?.id}/preview`, {}],
+        ] as const) {
+          expect(yield* call("POST", path, { as: owner, body })).toMatchObject(frozen);
+        }
+        expect(builderCalls).toBe(0);
+
+        // A Template takes no Entry it does not already link, whether it links another or none.
+        const unlinkedTemplate = yield* newTemplate("Unlinked");
+        for (const templateId of [sealed.id, unlinkedTemplate.id]) {
+          expect(
+            yield* call("PUT", `${p}/templates/${templateId}/email`, {
+              as: owner,
+              body: { subject: "Changed", workspaceEntryId: unlinked?.id },
+            }),
+          ).toMatchObject(frozen);
+        }
+        const variants = yield* Effect.promise(() => db.select().from(templateChannelVariant));
+        expect(variants.filter((row) => row.templateId === unlinkedTemplate.id)).toEqual([]);
+        expect(variants.find((row) => row.id === variant?.id)).toMatchObject({
+          content: { subject: "Sealed" },
+          workspaceEntryId: linked?.id,
+        });
+        // Its subject, beside the Entry it has, is still the Project's to change.
+        expect(
+          yield* call("PUT", `${p}/templates/${sealed.id}/email`, {
+            as: owner,
+            body: { subject: "Sealed again", workspaceEntryId: linked?.id },
+          }),
+        ).toMatchObject({ status: 200 });
+
+        // Reads of the workspace that exists still go to the builder.
+        expect(yield* call("GET", `${w}/entries`, { as: owner })).toMatchObject({
+          body: [{ path: "reactEmail/linked.tsx" }, { path: "reactEmail/unlinked.tsx" }],
+          status: 200,
+        });
+        expect((yield* call("GET", `${w}/files`, { as: owner })).status).not.toBe(403);
+        expect(builderCalls).toBeGreaterThan(0);
+
+        // Sends go on: the published artifact renders, and so does a primitive Template.
+        const fqdn = `${run}.frozen.example.test`;
+        const added = yield* call("POST", `${p}/domains`, { as: owner, body: { fqdn } });
+        yield* call("POST", `${p}/domains/${(added.body as { id: string }).id}/refresh`, {
+          as: owner,
+        });
+        const created = yield* call("POST", `${p}/api-keys`, { as: owner, body: { name: "K" } });
+        const { key } = created.body as { key: string };
+        const primitive = yield* newTemplate("Primitive");
+        yield* Effect.promise(() =>
+          db.insert(templateChannelVariant).values({
+            channel: "email",
+            content: { html: "<p>Plain for {{{name}}}</p>", subject: `Plain ${run}` },
+            engine: "primitive",
+            templateId: primitive.id,
+            updatedAt: new Date(),
+            variables: { name: { type: "string" } },
+          }),
+        );
+        for (const [template, subject, html] of [
+          [sealed, "Sealed again", "Sealed for Ada"],
+          [primitive, `Plain ${run}`, "<p>Plain for Ada</p>"],
+        ] as const) {
+          expect(
+            (yield* call("POST", "/messages/email", {
+              body: {
+                from: `hello@${fqdn}`,
+                template: { id: template.id, variables: { name: "Ada" } },
+                to: "someone@example.test",
+              },
+              key,
+            })).status,
+          ).toBe(201);
+          const deliveries = yield* Effect.promise(() =>
+            db.select().from(emailDelivery).where(eq(emailDelivery.subject, subject)),
+          );
+          expect(deliveries.filter((row) => row.html?.includes(html))).toHaveLength(1);
+        }
+        yield* Effect.promise(() => db.$client.end());
       }),
     );
   });

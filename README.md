@@ -128,7 +128,7 @@ Validated at process start (`apps/api/src/env.ts`).
 | `SES_REGIONS`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`                             | Same as worker; the api registers Domains with SES                                          |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3-compatible object storage; Bunny Storage S3-compatible zones are supported               |
 
-Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`; `CLIENT_IP_HEADER` (the header the proxy in front of the api puts the client's IP in, for per-client sign-in rate limits).
+Optional: `LOG_LEVEL`; `STRIPE_*` (Plans; absent, entitlements are unlimited); `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` (GitHub sign-in); `TEMPLATING_BUILDER_URL` and `TEMPLATING_BUILDER_SECRET` (Email Workspace Git ops); `AUTH_COOKIE_DOMAIN`; `CLIENT_IP_HEADER` (the header the proxy in front of the api puts the client's IP in, for per-client sign-in rate limits). `EMAIL_WORKSPACE_EDITING`: Email Workspaces are frozen unless it is `enabled`. Frozen, nobody can write, build, preview or publish workspace source, or link a Template to a Workspace Entry it does not already link; Templates already linked keep sending. Workspace code runs with access to the deployment's environment, `DATABASE_URL` included ([#163](https://github.com/ted-too/relayit/issues/163)), so enable it only where every member of every Project is trusted, such as a single-tenant self-host.
 
 ### Required environment (worker)
 

@@ -36,6 +36,10 @@ export const apiConfig = Effect.gen(function* () {
     clientIpHeader: Config.String("CLIENT_IP_HEADER").pipe(Config.option),
     databaseUrl: Config.Redacted("DATABASE_URL"),
     emailBackend: Config.Literals(["ses", "fake"], "EMAIL_BACKEND").pipe(Config.option),
+    // Workspace source runs with this deployment's environment when it is built and
+    // rendered (#143, #163), so only `enabled` lets it be written, built, previewed,
+    // published or newly linked. Unset or anything else, Email Workspaces are frozen.
+    emailWorkspaceEditing: Config.String("EMAIL_WORKSPACE_EDITING").pipe(Config.withDefault("")),
     github: Config.all({
       clientId: Config.String("GITHUB_CLIENT_ID"),
       clientSecret: Config.Redacted("GITHUB_CLIENT_SECRET"),
@@ -64,6 +68,7 @@ export const apiConfig = Effect.gen(function* () {
     // An optional group set to empty strings, as a platform's form leaves it, is unset.
     authCookieDomain: Option.filter(config.authCookieDomain, (domain) => domain !== ""),
     clientIpHeader: Option.filter(config.clientIpHeader, (header) => header !== ""),
+    emailWorkspaceEditing: config.emailWorkspaceEditing === "enabled",
     github: Option.filter(config.github, (github) => filled(github)),
     stripe: Option.filter(config.stripe, (stripe) => filled(stripe)),
     templatingBuilder: Option.filter(config.templatingBuilder, (builder) => filled(builder)),

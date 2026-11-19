@@ -24,7 +24,7 @@ import { Input } from "@repo/ui/components/ui/shad/input";
 import { cn } from "@repo/ui/lib/utils";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
@@ -119,6 +119,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // The api refuses every change while the deployment has editing off; the page says so
+  // once and offers none of them.
+  const { isEmailWorkspaceEditingEnabled: editing } = useRouteContext({ from: "__root__" });
 
   const [activePath, setActivePath] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -247,6 +250,9 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           }
           const entryPath = `reactEmail/${template.slug}.tsx`;
           const exists = files.paths.includes(entryPath);
+          if (!exists && !editing) {
+            return;
+          }
           if (!exists) {
             await commitFiles({
               message: `feat: add ${entryPath}`,
@@ -297,6 +303,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   }, [
     bootstrapped,
     commitFiles,
+    editing,
     orgSlug,
     queryClient,
     search.entryId,
@@ -373,7 +380,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   }
 
   async function handleSave() {
-    if (!activePath) {
+    if (!(activePath && editing)) {
       return;
     }
     try {
@@ -558,7 +565,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             </Button>
           )}
           <Button
-            disabled={!activePath || isSaving}
+            disabled={!editing || !activePath || isSaving}
             onClick={() => void handleSave()}
             variant="outline"
           >
@@ -566,22 +573,34 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
             Save
           </Button>
           <Button
-            disabled={!activePath || isPreviewing}
+            disabled={!editing || !activePath || isPreviewing}
             onClick={() => void handlePreview()}
             variant="outline"
           >
             Preview
           </Button>
-          <Button disabled={publishBlocked || isPublishing} onClick={() => void handlePublish()}>
+          <Button
+            disabled={!editing || publishBlocked || isPublishing}
+            onClick={() => void handlePublish()}
+          >
             Publish
           </Button>
         </div>
       </div>
 
+      {editing ? null : (
+        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm" role="status">
+          Editing is paused while a security fix is in progress. You can read this workspace, and
+          Templates already linked to a published Entry keep sending; saving, previewing and
+          publishing are off for now.
+        </p>
+      )}
+
       <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] gap-3">
         <aside className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border bg-card p-2 text-sm">
           <Button
             className="w-full"
+            disabled={!editing}
             onClick={() => {
               setNewFilePath("reactEmail/");
               setNewFileOpen(true);
@@ -686,7 +705,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                disabled={!activePath}
+                disabled={!editing || !activePath}
                 onClick={() => {
                   setEditorTab("preview");
                   if (previewHtml || isPreviewing) {
@@ -728,7 +747,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                   options={{
                     minimap: { enabled: false },
                     fontSize: 13,
-                    readOnly: activePath === "bun.lock",
+                    readOnly: !editing || activePath === "bun.lock",
                     wordWrap: "on",
                   }}
                   path={activePath}

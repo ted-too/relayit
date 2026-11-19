@@ -2,6 +2,7 @@ import {
   Conflict,
   DashboardApi,
   DashboardMember,
+  EmailWorkspacesFrozen,
   Invalid,
   NotFound,
   type OperationFailed,
@@ -15,13 +16,34 @@ import {
   type TemplatingBuilderError,
   type TemplatingBuilderRpcClient,
 } from "@repo/templating";
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { operationFailed } from "./failures";
 
 /**
+ * Whether the deployment lets Email Workspaces be edited (`EMAIL_WORKSPACE_EDITING`). Off,
+ * they are frozen: what would store, install, build, render or seal workspace source, or
+ * link a Template to an Entry it does not already link, is refused before the builder hears
+ * of it, and only reads of a workspace that already exists go through.
+ */
+export class EmailWorkspaceEditing extends Context.Service<EmailWorkspaceEditing, boolean>()(
+  "EmailWorkspaceEditing",
+) {}
+
+const frozenRefuses = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    if (!(yield* EmailWorkspaceEditing)) {
+      return yield* new EmailWorkspacesFrozen({
+        message: "Email Workspaces are frozen on this deployment.",
+      });
+    }
+    return yield* operation;
+  });
+
+/**
  * The Project's hosted Email Workspace of `kind`, made on first use. Its Git lives in the
- * builder; this is the catalog's row for it.
+ * builder; this is the catalog's row for it. Frozen, none is made, so a Project without one
+ * never reaches the builder.
  */
 const projectWorkspace = (kind: "reactEmail") =>
   Effect.gen(function* () {
@@ -33,6 +55,11 @@ const projectWorkspace = (kind: "reactEmail") =>
     const existing = yield* find;
     if (existing) {
       return existing;
+    }
+    if (!(yield* EmailWorkspaceEditing)) {
+      return yield* new EmailWorkspacesFrozen({
+        message: "Email Workspaces are frozen on this deployment.",
+      });
     }
     // A page's first reads arrive together and all find no row. The unique index lets one
     // insert win; the others do nothing, and every one reads the winner's row.
@@ -123,7 +150,14 @@ export const workspaceHandlers = HttpApiBuilder.group(DashboardApi, "workspaces"
       )
       .handle("listEntries", ({ params }) =>
         Effect.gen(function* () {
-          const workspace = yield* projectWorkspace(params.kind);
+          // Frozen, a Project with no workspace has no Entries, rather than a refusal the
+          // Template pages would have to read around.
+          const workspace = yield* projectWorkspace(params.kind).pipe(
+            Effect.catchTags({ EmailWorkspacesFrozen: () => Effect.undefined }),
+          );
+          if (!workspace) {
+            return [];
+          }
           const db = yield* DB;
           const entries = yield* db.query.templatingWorkspaceEntry
             .findMany({
@@ -153,28 +187,37 @@ export const workspaceHandlers = HttpApiBuilder.group(DashboardApi, "workspaces"
         ),
       )
       .handle("createCommit", ({ params, payload }) =>
-        withBuilder(params.kind, (client, workspaceId) =>
-          client.commitFiles({
-            changes: payload.changes,
-            ...(payload.message ? { message: payload.message } : {}),
-            workspaceId,
-          }),
+        frozenRefuses(
+          withBuilder(params.kind, (client, workspaceId) =>
+            client.commitFiles({
+              changes: payload.changes,
+              ...(payload.message ? { message: payload.message } : {}),
+              workspaceId,
+            }),
+          ),
         ),
       )
       .handle("syncDependencies", ({ params }) =>
-        withBuilder(params.kind, (client, workspaceId) => client.depsSync({ workspaceId })),
+        frozenRefuses(
+          withBuilder(params.kind, (client, workspaceId) => client.depsSync({ workspaceId })),
+        ),
       )
       .handle("publish", ({ params }) =>
-        withBuilder(params.kind, (client, workspaceId) => client.publish({ workspaceId })),
+        frozenRefuses(
+          withBuilder(params.kind, (client, workspaceId) => client.publish({ workspaceId })),
+        ),
       )
+      // A preview bundles and renders the workspace's current source.
       .handle("previewEntry", ({ params, payload }) =>
-        withBuilder(params.kind, (client, workspaceId) =>
-          client.preview({
-            entryId: params.entryId,
-            ...(payload.props ? { props: payload.props } : {}),
-            ...(payload.subject ? { subjectOverride: payload.subject } : {}),
-            workspaceId,
-          }),
+        frozenRefuses(
+          withBuilder(params.kind, (client, workspaceId) =>
+            client.preview({
+              entryId: params.entryId,
+              ...(payload.props ? { props: payload.props } : {}),
+              ...(payload.subject ? { subjectOverride: payload.subject } : {}),
+              workspaceId,
+            }),
+          ),
         ),
       ),
   ),

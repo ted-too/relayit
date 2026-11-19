@@ -17,6 +17,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     const userAgent = navigator.userAgent;
     return {
       isBillingEnabled: config.billing,
+      isEmailWorkspaceEditingEnabled: config.emailWorkspaceEditing,
       isGitHubAuthEnabled: config.githubSignIn,
       isMobile: MOBILE_REGEX.test(userAgent) || SCREEN_SIZE_REGEX.test(userAgent),
       sidebarOpen: document.cookie

@@ -52,6 +52,17 @@ export class RateLimited extends Schema.TaggedError<RateLimited>()(
   { httpApiStatus: 429 },
 ) {}
 
+/**
+ * The deployment has Email Workspace editing off (`EMAIL_WORKSPACE_EDITING`): workspace
+ * source is stored, built, previewed, published and newly linked nowhere. Nothing a member
+ * does lifts it.
+ */
+export class EmailWorkspacesFrozen extends Schema.TaggedError<EmailWorkspacesFrozen>()(
+  "EmailWorkspacesFrozen",
+  { message: Schema.String },
+  { httpApiStatus: 403 },
+) {}
+
 /** Something this deployment doesn't have configured, such as the template builder. */
 export class Unavailable extends Schema.TaggedError<Unavailable>()(
   "Unavailable",
