@@ -9,7 +9,7 @@ export const emailDeliverJob = defineJob({
     deliveryId: Schema.String,
     /**
      * Not read: the handler takes the purpose, and the Topic, from the Message. Still sent
-     * because the release before this one requires it of a job it runs during a rollout.
+     * because the release before this one requires it of a job it runs during a rollout (#172).
      */
     purpose: Schema.Literals(["transactional", "marketing"]),
     startDate: Schema.String,
