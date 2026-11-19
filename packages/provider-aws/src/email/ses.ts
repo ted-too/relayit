@@ -44,6 +44,12 @@ const NOT_SENT_TLS_CODES = new Set([
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
 ]);
 
+/** The HTTP status SES answered with, which the SDK keeps on the error it reports. */
+const httpStatusOf = (error: unknown) =>
+  typeof error === "object" && error !== null && "$metadata" in error
+    ? (error.$metadata as { readonly httpStatusCode?: number } | undefined)?.httpStatusCode
+    : undefined;
+
 /**
  * Whether a failed SendEmail proves SES never took the message: SES answered with a 4xx, or
  * the request never left (DNS or connect failed, by the failing syscall, or a listed TLS
@@ -54,8 +60,7 @@ const NOT_SENT_TLS_CODES = new Set([
 export const provesNotSent = (error: unknown) => {
   const fields =
     typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-  const status = (fields.$metadata as { readonly httpStatusCode?: number } | undefined)
-    ?.httpStatusCode;
+  const status = httpStatusOf(error);
   if (status !== undefined) {
     return status >= 400 && status < 500;
   }
@@ -218,8 +223,7 @@ export const makeSesEmailBackend = (config: SesConfig) =>
                 // key SES does not know) as an unmodelled 403. No retry gets past that, and
                 // the recheck job has to tell it from SES being down.
                 case "SdkError":
-                  return (error as { readonly $metadata?: { readonly httpStatusCode?: number } })
-                    .$metadata?.httpStatusCode === 403
+                  return httpStatusOf(error) === 403
                     ? new EmailBackendAuthenticationError({ cause: error, region })
                     : mapAwsError(error);
                 default:

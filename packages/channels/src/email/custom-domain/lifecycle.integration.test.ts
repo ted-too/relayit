@@ -971,7 +971,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
     });
 
     it.live("stays paused when SES pauses its new holder in the region too", () => {
-      const { layer, published } = boundaries();
+      const { layer, published, scheduled } = boundaries();
       return Effect.gen(function* () {
         const { claimantId, customDomainId, holderId } = yield* claimWithEndpoint();
         // The claimant already holds a Domain there, paused for its own pause.
@@ -983,11 +983,18 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         expect(yield* pauseForProject(holderId)).toBe(1);
 
         yield* publishProof(published, customDomainId, claimantId);
+        scheduled.length = 0;
         yield* checkOwnership(customDomainId, claimantId);
 
         expect(yield* pauseOf(customDomainId)).toEqual({
           isPaused: true,
           pausedReason: "project_sending_pause",
+        });
+        // Kept for the new holder's pause, so that pause's recheck is what must lift it:
+        // one is scheduled even if the holder's own were ending at this moment.
+        expect(scheduled).toContainEqual({
+          name: "email.recheck-project-sending-pause",
+          payload: { organizationId: claimantId, region: "eu-central-1" },
         });
         // Only its own Domain's pause was told; the claimed one changed nothing.
         expect(

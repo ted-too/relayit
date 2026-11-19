@@ -286,40 +286,72 @@ export const liftPreviousHolderPause = (
       customDomain.isPaused,
       eq(customDomain.pausedReason, "project_sending_pause"),
     );
-    const [registration] = yield* tx
-      .select({ region: emailDomainRegistration.region })
-      .from(emailDomainRegistration)
-      .where(eq(emailDomainRegistration.customDomainId, input.customDomainId));
-    const [holdersOwn] = yield* tx
-      .select({ id: customDomain.id })
-      .from(customDomain)
-      .where(
-        and(
-          ne(customDomain.id, input.customDomainId),
-          pausedForProject,
-          heldInRegion({
-            defaultRegion: input.defaultRegion,
+    const lifted = yield* Effect.gen(function* () {
+      const [registration] = yield* tx
+        .select({ region: emailDomainRegistration.region })
+        .from(emailDomainRegistration)
+        .where(eq(emailDomainRegistration.customDomainId, input.customDomainId));
+      const region = registration?.region ?? input.defaultRegion;
+      const [holdersOwn] = yield* tx
+        .select({ id: customDomain.id })
+        .from(customDomain)
+        .where(
+          and(
+            ne(customDomain.id, input.customDomainId),
+            pausedForProject,
+            heldInRegion({
+              defaultRegion: input.defaultRegion,
+              organizationId: input.organizationId,
+              region,
+            }),
+          ),
+        )
+        .limit(1);
+      if (holdersOwn) {
+        return { keptIn: region };
+      }
+      const [unpaused] = yield* tx
+        .update(customDomain)
+        .set({ isPaused: false, pausedReason: null })
+        .where(and(eq(customDomain.id, input.customDomainId), pausedForProject))
+        .returning({
+          id: customDomain.id,
+          isPaused: customDomain.isPaused,
+          pausedReason: customDomain.pausedReason,
+          verificationStatus: customDomain.verificationStatus,
+        });
+      return { unpaused };
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProjectSendingPauseError({
+            cause,
+            operation: "unpause_domains",
             organizationId: input.organizationId,
-            region: registration?.region ?? input.defaultRegion,
           }),
-        ),
-      )
-      .limit(1);
-    if (holdersOwn) {
+      ),
+    );
+    if (lifted.keptIn !== undefined) {
+      // The new holder's own pause was read without its lock, so SES may be restoring that
+      // Project right now: if its last recheck ran between that unpause and this commit, it
+      // found nothing paused and scheduled no other. This one is what lifts the Domain then.
+      yield* scheduleRecheck(
+        { organizationId: input.organizationId, region: lifted.keptIn },
+        RECHECK_EVERY,
+      );
       return;
     }
-    const [unpaused] = yield* tx
-      .update(customDomain)
-      .set({ isPaused: false, pausedReason: null })
-      .where(and(eq(customDomain.id, input.customDomainId), pausedForProject))
-      .returning({
-        id: customDomain.id,
-        isPaused: customDomain.isPaused,
-        pausedReason: customDomain.pausedReason,
-        verificationStatus: customDomain.verificationStatus,
-      });
-    if (unpaused) {
-      yield* emitDomainUpdated(tx, input.organizationId, unpaused);
+    if (lifted.unpaused) {
+      yield* emitDomainUpdated(tx, input.organizationId, lifted.unpaused).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProjectSendingPauseError({
+              cause,
+              operation: "emit_webhook",
+              organizationId: input.organizationId,
+            }),
+        ),
+      );
     }
   });
 

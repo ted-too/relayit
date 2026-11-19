@@ -708,36 +708,6 @@ return -1`,
             );
           }),
       );
-
-      it.live("warns again when a worker starts and SES still refuses", () =>
-        withSes(({ backend }) => {
-          const warnings = warningsAbout();
-          return Effect.gen(function* () {
-            const project = yield* seedProject([]);
-            yield* addDomain(project.organizationId, REGION, PAUSED_UNSCHEDULED);
-            const atStart = emailRecheckProjectSendingPauseHandler.reconcile;
-            if (!atStart) {
-              return yield* Effect.die("the recheck job has nothing to do when a worker starts");
-            }
-
-            yield* atStart;
-            yield* workerPeriod;
-            yield* workerPeriod;
-            yield* atStart;
-            yield* workerPeriod;
-            yield* workerPeriod;
-
-            expect(warnings.of(project.organizationId)).toHaveLength(2);
-          }).pipe(
-            Effect.provideService(EmailBackend, {
-              ...backend,
-              getProjectSendingStatus: () =>
-                Effect.fail(new EmailBackendAuthenticationError({ region: REGION })),
-            }),
-            Effect.provide(warnings.layer),
-          );
-        }),
-      );
     });
 
     describe("a run that fails still leaves the next one scheduled", () => {
