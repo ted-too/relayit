@@ -706,12 +706,25 @@ describe("an accepted email send", () => {
       sender === ours ? lock.lock(deliveryId).pipe(Effect.andThen(accept)) : accept,
     );
     return Effect.gen(function* () {
+      const db = yield* DB;
       const project = yield* seedProject({ dailySends: 1 });
       ours = project.fqdn;
-      const accepted = yield* acceptTransactionalEmail(
-        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
-      );
+      const bounced = `bounced-${project.organizationId}@example.com`;
+      const input = sendInput(project, `hello@${project.fqdn}`, "someone@example.com");
+      const accepted = yield* acceptTransactionalEmail({
+        ...input,
+        email: { ...input.email, cc: [{ email: bounced }] },
+      });
       deliveryId = accepted.deliveryId;
+      // Stripped by the run that sends, which never gets to record the send.
+      yield* db
+        .update(contact)
+        .set({
+          suppressedAt: new Date(),
+          suppressionReason: "hard_bounce",
+          suppressionSeverity: "all",
+        })
+        .where(eq(contact.email, bounced));
       yield* whileFailing(lock, runWorker);
       yield* lock.release;
       expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "sending" });
@@ -728,8 +741,15 @@ describe("an accepted email send", () => {
         providerMessageId: expect.stringMatching(/^ses-/),
         status: "sent",
       });
+      // The reconcile names who that run stripped: the Delivery kept them.
       expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
-        { payload: { provider_message_id: delivery?.providerMessageId }, type: "message.sent" },
+        {
+          payload: {
+            provider_message_id: delivery?.providerMessageId,
+            stripped: [{ email: bounced, reason: "suppression" }],
+          },
+          type: "message.sent",
+        },
       ]);
       // A sent Delivery keeps its Usage.
       const refused = yield* acceptTransactionalEmail(

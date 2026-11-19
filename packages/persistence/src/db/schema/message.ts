@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import { organizationAppEnvironment } from "./auth";
@@ -37,6 +38,11 @@ export const message = pgTable(
   (t) => [
     index("message_app_environment_created_idx").on(t.organizationAppEnvironmentId, t.createdAt),
     index("message_template_idx").on(t.templateId),
+    // For the foreign key: removing a Topic, as removing its Project does, looks up the
+    // Messages sent under it. Only marketing Messages have one.
+    index("message_topic_idx")
+      .on(t.topicId)
+      .where(sql`${t.topicId} IS NOT NULL`),
   ],
 );
 
