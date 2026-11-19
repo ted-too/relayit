@@ -287,6 +287,13 @@ export const liftPreviousHolderPause = (
       eq(customDomain.pausedReason, "project_sending_pause"),
     );
     const lifted = yield* Effect.gen(function* () {
+      const [paused] = yield* tx
+        .select({ id: customDomain.id })
+        .from(customDomain)
+        .where(and(eq(customDomain.id, input.customDomainId), pausedForProject));
+      if (!paused) {
+        return {};
+      }
       const [registration] = yield* tx
         .select({ region: emailDomainRegistration.region })
         .from(emailDomainRegistration)

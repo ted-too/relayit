@@ -920,6 +920,16 @@ export const completeDomainClaimTransfer = (input: {
           .from(customDomain)
           .where(eq(customDomain.id, input.customDomainId))
           .for("update");
+        // Read under the Domain's row, which every writer of its links holds.
+        const [claim] = yield* tx
+          .select({ status: organizationDomain.ownershipVerificationStatus })
+          .from(organizationDomain)
+          .where(
+            and(
+              eq(organizationDomain.customDomainId, input.customDomainId),
+              eq(organizationDomain.organizationId, input.organizationId),
+            ),
+          );
         const [proven] = yield* tx
           .update(organizationDomain)
           .set({ ...input.proof, ownershipVerificationStatus: "verified" })
@@ -954,11 +964,15 @@ export const completeDomainClaimTransfer = (input: {
             .filter(({ held }) => held === "verified")
             .map(({ organizationId }) => organizationId),
         });
-        yield* liftPreviousHolderPause(tx, {
-          customDomainId: input.customDomainId,
-          defaultRegion: (yield* EmailBackend).defaultRegion,
-          organizationId: input.organizationId,
-        });
+        // Only as the Domain changes hands: a check that proves the same claim a second
+        // time finds a pause that may by now be the new holder's own.
+        if (claim?.status !== "verified") {
+          yield* liftPreviousHolderPause(tx, {
+            customDomainId: input.customDomainId,
+            defaultRegion: (yield* EmailBackend).defaultRegion,
+            organizationId: input.organizationId,
+          });
+        }
         return true;
       }),
     )

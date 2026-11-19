@@ -943,6 +943,8 @@ describe("an accepted email send", () => {
       "its job's next run": () =>
         Effect.gen(function* () {
           for (let pass = 0; pass < 3; pass += 1) {
+            // A job whose dead-letter step failed is still held; another worker takes it.
+            yield* reclaimAll;
             yield* runWorker;
           }
         }),
@@ -1021,26 +1023,27 @@ describe("an accepted email send", () => {
       },
     );
 
-    it.live.each(["its job's dead-letter step", "the worker, two days later"] as const)(
-      "for the message itself, ends failed as rejected when ended by %s",
-      (ender) => {
-        const { backend, refused } = leftSending("message_rejected");
-        return Effect.gen(function* () {
-          const project = yield* refused;
+    it.live.each([
+      "its job's next run",
+      "its job's dead-letter step",
+      "the worker, two days later",
+    ] as const)("for the message itself, ends failed as rejected when ended by %s", (ender) => {
+      const { backend, refused } = leftSending("message_rejected");
+      return Effect.gen(function* () {
+        const project = yield* refused;
 
-          yield* enders[ender](project.deliveryId);
+        yield* enders[ender](project.deliveryId);
 
-          expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
-          expect(yield* deliveryOf(project.deliveryId)).toMatchObject({
-            error: { message: "SES rejected the message" },
-            status: "failed",
-          });
-          expect(yield* eventsFor(project.organizationId, project.deliveryId)).toMatchObject([
-            { payload: { error: "SES rejected the message" }, type: "message.failed" },
-          ]);
-        }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
-      },
-    );
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(yield* deliveryOf(project.deliveryId)).toMatchObject({
+          error: { message: "SES rejected the message" },
+          status: "failed",
+        });
+        expect(yield* eventsFor(project.organizationId, project.deliveryId)).toMatchObject([
+          { payload: { error: "SES rejected the message" }, type: "message.failed" },
+        ]);
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+    });
   });
 
   it.live("an SES error after it may have taken the send ends failed, never sent again", () => {
