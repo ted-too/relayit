@@ -30,7 +30,7 @@ Relayit generates a DKIM key for the domain, registers it with Amazon SES, and s
 
 On Relayit Cloud, a Plan limits how many custom Domains its Billing User's Projects can have between them: see [Plan limits](/docs/errors-and-limits#plan-limits). An add or a claim beyond the limit is refused.
 
-A Project can add a Domain ten times, and refresh its Domains thirty times, in any ten minutes. Past that the dashboard asks you to try again in a few minutes.
+Adding and refreshing are rate-limited: the Projects billed to one Billing User can, between them, add a Domain ten times and refresh Domains thirty times in a ten-minute window. Past that the dashboard asks you to try again in a few minutes.
 
 A domain can only belong to one Project at a time. If another Project already holds it, see [Claiming a domain from another Project](#claiming-a-domain-from-another-project).
 
