@@ -1,7 +1,10 @@
 export {
   computeNextCheckAt,
+  computeNextDomainCheckAt,
   defaultVerifyCadenceConfig,
+  domainChecksStopped,
   mergeVerificationStatus,
+  UNVERIFIED_DOMAIN_CHECKS,
   type VerifyCadenceConfig,
 } from "./cadence";
 export {

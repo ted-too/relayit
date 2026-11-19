@@ -159,6 +159,7 @@ describe("Domain Webhook Events", () => {
     ).toBe("not_verified");
     expect(
       Schema.decodeSync(domainUpdated.payload)({
+        checks_stopped: false,
         domain_id: "domn_test",
         paused: true,
         paused_reason: "project_sending_pause",

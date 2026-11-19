@@ -15,6 +15,7 @@ import { domainUpdated } from "@repo/webhooks/events";
 import { and, eq, ne, not, type SQL, sql } from "drizzle-orm";
 import { Clock, Data, Duration, Effect, Schema } from "effect";
 import { EmailBackend, EmailBackendUnavailable } from "../backend";
+import { domainChecksStopped } from "../verification/cadence";
 
 /** Where a Project Sending Pause is: SES keeps a Project's sending status per region. */
 interface ProjectInRegion {
@@ -140,18 +141,29 @@ export const lockProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegi
       ),
     );
 
-/** Tells a Project that a Domain it holds was paused or unpaused, whoever did it. */
+/** What `domain.updated` says of a Domain: the columns every writer that emits it returns. */
+export const domainUpdatedColumns = {
+  id: customDomain.id,
+  isPaused: customDomain.isPaused,
+  lastCheckedAt: customDomain.lastCheckedAt,
+  nextVerifyAt: customDomain.nextVerifyAt,
+  pausedReason: customDomain.pausedReason,
+  verificationStatus: customDomain.verificationStatus,
+};
+
+/**
+ * Tells a Project that a Domain it holds was paused or unpaused, whoever did it, or that
+ * Relayit stopped checking it because it stayed unverified.
+ */
 export const emitDomainUpdated = (
   tx: DatabaseTransaction,
   organizationId: string,
-  domain: Pick<
-    typeof customDomain.$inferSelect,
-    "id" | "isPaused" | "pausedReason" | "verificationStatus"
-  >,
+  domain: Pick<typeof customDomain.$inferSelect, keyof typeof domainUpdatedColumns>,
 ) =>
   emitWebhookEvent(tx, {
     event: {
       data: {
+        checks_stopped: domainChecksStopped(domain),
         domain_id: domain.id,
         paused: domain.isPaused,
         paused_reason: domain.pausedReason,
@@ -176,12 +188,7 @@ export const pauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInReg
       .update(customDomain)
       .set({ isPaused: true, pausedReason: "project_sending_pause" })
       .where(and(unpaused, heldInRegion(input)))
-      .returning({
-        id: customDomain.id,
-        isPaused: customDomain.isPaused,
-        pausedReason: customDomain.pausedReason,
-        verificationStatus: customDomain.verificationStatus,
-      })
+      .returning(domainUpdatedColumns)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -231,12 +238,7 @@ const unpauseProjectDomains = (tx: DatabaseTransaction, input: ProjectInRegion) 
       .update(customDomain)
       .set({ isPaused: false, pausedReason: null })
       .where(and(pausedHere, heldInRegion(input)))
-      .returning({
-        id: customDomain.id,
-        isPaused: customDomain.isPaused,
-        pausedReason: customDomain.pausedReason,
-        verificationStatus: customDomain.verificationStatus,
-      })
+      .returning(domainUpdatedColumns)
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -321,12 +323,7 @@ export const liftPreviousHolderPause = (
         .update(customDomain)
         .set({ isPaused: false, pausedReason: null })
         .where(and(eq(customDomain.id, input.customDomainId), pausedForProject))
-        .returning({
-          id: customDomain.id,
-          isPaused: customDomain.isPaused,
-          pausedReason: customDomain.pausedReason,
-          verificationStatus: customDomain.verificationStatus,
-        });
+        .returning(domainUpdatedColumns);
       return { unpaused };
     }).pipe(
       Effect.mapError(

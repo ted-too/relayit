@@ -5,6 +5,8 @@ import {
   ownershipChallengeValue,
 } from "@repo/channels/email/custom-domain";
 import {
+  domainChecksStopped,
+  emailVerifyCustomDomainJob,
   verifyCustomDomainOwnership,
   verifyCustomDomainRegistration,
 } from "@repo/channels/email/verification";
@@ -19,6 +21,7 @@ import {
   PlanLimitReached,
   RateLimited,
 } from "@repo/contracts/dashboard";
+import { Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { Redis } from "@repo/redis";
 import { Effect } from "effect";
@@ -139,6 +142,7 @@ const listDomains = (input: {
               id: true,
               isPaused: true,
               lastCheckedAt: true,
+              nextVerifyAt: true,
               pausedReason: true,
               provider: true,
               verificationStatus: true,
@@ -174,6 +178,7 @@ const listDomains = (input: {
           : ("pending" as const);
         return [
           {
+            checksStopped: false,
             createdAt: link.createdAt,
             dnsRecords: {
               dkimAndSpf: [],
@@ -204,6 +209,7 @@ const listDomains = (input: {
       }
       return [
         {
+          checksStopped: domainChecksStopped(customDomain),
           createdAt: customDomain.createdAt,
           dnsRecords: {
             dkimAndSpf: customDomain.dnsRecords.filter((record) =>
@@ -312,9 +318,24 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
           if (!registration) {
             return yield* operationFailed("Domain is not registered with SES.")(domain.id);
           }
-          yield* verifyCustomDomainRegistration({ db, domain, registration }).pipe(
-            Effect.catch(operationFailed("Failed to refresh Custom Domain verification.")),
-          );
+          // The holder asking is what starts the checks of a Domain left unverified again,
+          // from their first interval: its job is moved to the check this one set, which
+          // the worker's next start schedules if Redis loses it here.
+          const checked = yield* verifyCustomDomainRegistration({
+            db,
+            domain,
+            registration,
+            restart: true,
+          }).pipe(Effect.catch(operationFailed("Failed to refresh Custom Domain verification.")));
+          if (checked.nextCheckAt !== null) {
+            yield* (yield* Jobs)
+              .schedule(
+                emailVerifyCustomDomainJob,
+                { customDomainId: domain.id },
+                checked.nextCheckAt.getTime(),
+              )
+              .pipe(Effect.catch(operationFailed("Failed to schedule the Domain's next check.")));
+          }
           return yield* listedDomain({ customDomainId: params.domainId, organizationId });
         }),
       )

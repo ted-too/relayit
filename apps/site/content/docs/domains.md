@@ -74,7 +74,13 @@ This table only appears when you are claiming a domain that was already added to
 
 ## Verification
 
-After you publish the records, select **Refresh** on the Domain page. Relayit also re-checks on its own: every few minutes while records are missing (backing off to every 15 minutes), and every 12 hours once the Domain is verified.
+After you publish the records, select **Refresh** on the Domain page. Relayit also re-checks on its own:
+
+- **Once the Domain is verified**, every 12 hours.
+- **Until then**, 2 minutes after you add it, then at double the wait each time (4 minutes, 8, 16, and so on) up to every 12 hours. Refresh checks at once, whatever the wait.
+- **After about seven days unverified**, Relayit stops checking the Domain. Nothing is removed: the Domain stays in your Project with its records, its page says the checks have stopped, and a Webhook Endpoint subscribed to `domain.updated` receives an event with `checks_stopped: true`. Select **Refresh** to check it and start the automatic checks again for another week.
+
+A verified Domain that later loses a record is checked on the same schedule, from the 2-minute wait.
 
 Each record shows its own status, and the Domain shows an overall status:
 
@@ -95,7 +101,7 @@ A Domain is paused by Relayit, not by its Project, in one of two ways:
 - **Automatically**, when sending is paused for the whole Project because of its sending reputation (too many bounces or complaints, from any of its Domains). Every Domain the Project holds in that SES region is paused, with the reason **Project sending paused**, and is unpaused automatically once the Project's sending is restored.
 - **By one of Relayit's operators**, with the reason **Operator pause** or **Bad reputation**. It stays paused until an operator unpauses it.
 
-A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**. A Webhook Endpoint subscribed to `domain.updated` receives an event whenever a Domain is paused, unpaused, or paused for a different reason, by Relayit or by an operator, with `paused` and `paused_reason` (`project_sending_pause`, `manual_admin_pause`, `bad_reputation`, or `null` once unpaused) beside the Domain's `status`. It is sent to the Project that holds the Domain.
+A paused Domain shows a `paused` badge with the reason in the Domains list, a banner on its page, and **Can Send: No**. A Webhook Endpoint subscribed to `domain.updated` receives an event whenever a Domain is paused, unpaused, or paused for a different reason, by Relayit or by an operator, with `paused` and `paused_reason` (`project_sending_pause`, `manual_admin_pause`, `bad_reputation`, or `null` once unpaused) beside the Domain's `status` and `checks_stopped` (see [Verification](#verification)). It is sent to the Project that holds the Domain.
 
 While a Domain is paused:
 

@@ -1080,6 +1080,7 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
         expect(yield* domainEventsOf(claimantId)).toEqual([
           {
             payload: {
+              checks_stopped: false,
               domain_id: customDomainId,
               paused: false,
               paused_reason: null,
