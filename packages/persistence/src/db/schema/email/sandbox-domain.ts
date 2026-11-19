@@ -7,6 +7,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { typeid } from "typeid-js";
 import { domainPausedReasonEnum, domainVerificationStatusEnum } from "./domain";
 
@@ -40,7 +41,8 @@ export const sandboxDomain = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("sandbox_domain_root_domain_unique_idx").on(t.rootDomain),
+    // A name is the same name in any case, and SES holds one identity for it.
+    uniqueIndex("sandbox_domain_root_domain_unique_idx").on(sql`lower(${t.rootDomain})`),
     index("sandbox_domain_status_idx").on(t.verificationStatus),
     index("sandbox_domain_next_verify_at_idx").on(t.nextVerifyAt),
   ],

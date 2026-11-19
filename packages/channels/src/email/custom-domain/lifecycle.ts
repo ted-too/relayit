@@ -33,7 +33,7 @@ import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
-import { isAtOrUnderRoot } from "../sandbox/reserved";
+import { isAtOrUnderRoot, lockSandboxRoots } from "../sandbox/reserved";
 import { emailVerifyCustomDomainJob, emailVerifyOwnershipJob } from "../verification/jobs";
 import { emailDeleteDomainIdentityJob } from "./jobs";
 import {
@@ -639,6 +639,22 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     const row = yield* db
       .transaction((tx) =>
         Effect.gen(function* () {
+          // Read again under the lock that setting up a Sandbox Domain holds while it checks
+          // for a Domain on its root and writes its row: whichever of the two commits first,
+          // the other sees it.
+          yield* lockSandboxRoots(tx, "shared");
+          const [reservedSince] = yield* tx
+            .select({ id: sandboxDomain.id })
+            .from(sandboxDomain)
+            .where(isAtOrUnderRoot(input.fqdn, sandboxDomain.rootDomain))
+            .limit(1);
+          if (reservedSince) {
+            return yield* new CustomDomainReserved({
+              fqdn: input.fqdn,
+              message:
+                "This domain is reserved for the Sandbox Domain and can't be added to a Project.",
+            });
+          }
           yield* requireDomainAllowance(tx, { organizationId: input.organizationId });
           const [inserted] = yield* tx
             .insert(customDomain)
@@ -667,6 +683,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
         Effect.mapError((error) => {
           switch (error._tag) {
             case "CustomDomainError":
+            case "CustomDomainReserved":
             case "DomainLimitReached":
             case "DomainLimitUnreadable":
               return error;
