@@ -210,7 +210,7 @@ export const ensureSesTenantStatusEvents = ({
   }).pipe(
     Effect.catch((cause) =>
       Effect.logWarning(
-        "Failed to set up SES tenant sending-status events; a Project Sending Pause is noticed only when a send hits it, and its Domains stay paused until an admin unpauses them. The SES IAM policy needs events:PutRule, events:PutTargets, sns:GetTopicAttributes and sns:SetTopicAttributes (docs/aws-ses-iam-policy.json)",
+        "Failed to set up SES tenant sending-status events; a Project Sending Pause is noticed only when a send hits it, and lifted by the worker's recheck, within five minutes of SES restoring the Project. The SES IAM policy needs events:PutRule, events:PutTargets, sns:GetTopicAttributes and sns:SetTopicAttributes (docs/aws-ses-iam-policy.json)",
         { cause, tenantStatusRuleName, topicArn },
       ),
     ),

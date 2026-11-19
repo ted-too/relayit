@@ -310,6 +310,34 @@ describe("a send SES refuses because sending is paused", () => {
   });
 });
 
+describe("a send whose tenant SES will not let the credentials ensure", () => {
+  it.live("goes out untenanted, with a warning naming the permissions", () => {
+    // Every call is denied, the send too; only the ensure's warning is looked at.
+    const ses = answering(403, "AccessDeniedException");
+    const warnings: string[] = [];
+    return sendThrough(ses.url).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make(({ logLevel, message }) => {
+            if (logLevel === "Warn") {
+              warnings.push(JSON.stringify(message));
+            }
+          }),
+        ]),
+      ),
+      Effect.andThen(
+        Effect.sync(() => {
+          expect(ses.sends).toHaveLength(1);
+          expect(warnings).toHaveLength(1);
+          expect(warnings[0]).toContain("ses:CreateTenant");
+          expect(warnings[0]).toContain("ses:GetTenant");
+        }),
+      ),
+      Effect.ensuring(ses.stop),
+    );
+  });
+});
+
 describe("the SES backend's read of a Project's sending status", () => {
   const statusThrough = (endpoint: string) =>
     withSesAt(endpoint, (backend) =>

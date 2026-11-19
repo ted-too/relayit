@@ -131,7 +131,11 @@ describe("docs/aws-ses-iam-policy.json", () => {
       rule,
       ses("configuration-set/other"),
       ses("configuration-set/relayit-other"),
-      "arn:aws:ses:eu-central-1:000000000000:identity/example.com",
+      ses("configuration-set/relayit-delivery-other"),
+      // Each kind in another account.
+      ...[identity, configurationSet, tenant, topic, rule].map((resource) =>
+        resource.replace("ACCOUNT_ID", "000000000000"),
+      ),
       "arn:aws:sns:eu-central-1:ACCOUNT_ID:relayit-other",
       "arn:aws:events:eu-central-1:ACCOUNT_ID:rule/relayit-other",
       ses("tenant/other/tn-0123456789abcdef"),
