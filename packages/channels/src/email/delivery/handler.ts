@@ -66,12 +66,13 @@ const CLAIM_LEASE = Duration.minutes(2);
  * those, a send SES accepted could no longer be told from one it never answered.
  *
  * A day is about two hundred times the retry schedule and a seventh of that window. It is also
- * safe if the job does turn up later. On a claim older than its lease a run can only record a
- * kept acceptance as `sent`, or fail the Delivery, and the reconcile does the same from the
- * same answer under the same guarded write, so whichever is first, the other finds the outcome
- * written and adds nothing. The one difference: a refusal SES answered whose requeue was never
- * written is failed here, where a job with attempts left would have sent it again. That needs
- * the job held up for the whole day, which is why the age is a day and not an hour.
+ * safe if the job does turn up later. On a claim older than its lease a run records a kept
+ * acceptance as `sent`, requeues a kept refusal, and otherwise fails the Delivery. The
+ * reconcile does the first and the last from the same answer under the same guarded write, so
+ * whichever is first, the other finds the outcome written and adds nothing. A kept refusal (one
+ * SES answered whose requeue was never written) it fails, where a job with attempts left would
+ * have sent again: requeued with no job, the Delivery would be stuck `queued` instead. That
+ * needs the job held up for the whole age, which is why the age is a day and not an hour.
  */
 const STUCK_SENDING_AGE = Duration.hours(24);
 
@@ -426,7 +427,8 @@ export const endStuckDeliveries = Effect.gen(function* () {
               organizationId: delivery.organizationId,
               providerMessageId: state.providerMessageId,
             });
-            return yield* confirmUsage(delivery.id);
+            yield* confirmUsage(delivery.id);
+            return yield* Effect.logWarning("Recorded a Delivery left sending as sent");
           case "live":
             // Not reachable while the age is longer than the lease; its owner has it.
             return;
@@ -438,7 +440,10 @@ export const endStuckDeliveries = Effect.gen(function* () {
             break;
         }
         if (yield* failDelivery(db, { ...delivery, status: "sending" }, failureMessage)) {
-          // No job runs again to make a release Redis refused, so it is retried here.
+          // No job runs again to make a release Redis refused, so it is retried here. If
+          // Redis stays down past the retries the failure is logged and the reservation is
+          // left: no later pass reads a `failed` Delivery, so the Project's count for the
+          // period the send was reserved in stays one too high.
           yield* releaseUsage(delivery.id).pipe(
             Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 4 }),
           );
