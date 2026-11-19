@@ -1,10 +1,21 @@
 /**
  * Adding and removing a Domain against a real Postgres: who ends up holding it, whether it
  * ends up registered and checked, and that it goes with its last link and takes its SES
- * identity along. SES, public DNS and the job queue are the boundaries stubbed.
+ * identity along. SES, public DNS and the job queue are the boundaries stubbed, but for the
+ * one removal that runs its delete job on the real queue and through a worker (#131).
  */
 import { describe, expect, it, test } from "@effect/vitest";
-import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
+import {
+  DeadLetterStoreLive,
+  JobEnqueueError,
+  Jobs,
+  type JobsService,
+  registerJobHandler,
+} from "@repo/jobs";
+import { publishOutboxBatch } from "@repo/jobs/outbox";
+import { jobOutbox } from "@repo/jobs/outbox-schema";
+import { JOB_WORKER_GROUP } from "@repo/jobs/storage";
+import { processJobBatch } from "@repo/jobs/worker";
 import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -27,12 +38,14 @@ import {
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
+import { Redis } from "@repo/redis";
 import { and, count, eq, or, sql } from "drizzle-orm";
 import { Effect, Layer, Schedule } from "effect";
 import { typeid } from "typeid-js";
 import { EmailBackend, EmailBackendIdentityConflict, EmailBackendUnavailable } from "../backend";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { recordedJobs } from "../recorded-jobs-test-layer";
 import { ingestDeliveryEvents } from "../deliverability/notifications";
 import { pauseProjectDomains } from "../deliverability/project-sending-pause";
 import { createOwnershipToken, ownershipChallengeValue } from "./dns";
@@ -54,11 +67,14 @@ import {
 } from "./lifecycle";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
+const testRedisUrl = Bun.env.TEST_REDIS_URL;
 
-describe("Domain lifecycle (PostgreSQL)", () => {
-  if (!testDatabaseUrl) {
-    process.emitWarning("Skipping Domain lifecycle tests: TEST_DATABASE_URL is not set");
-    // The PostgreSQL test is opt-in.
+describe("Domain lifecycle (PostgreSQL and Redis)", () => {
+  if (!(testDatabaseUrl && testRedisUrl)) {
+    process.emitWarning(
+      "Skipping Domain lifecycle tests: TEST_DATABASE_URL and TEST_REDIS_URL are not both set",
+    );
+    // The PostgreSQL and Redis test is opt-in.
     test.skip("createCustomDomain", () => undefined);
     return;
   }
@@ -1118,6 +1134,7 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         expect(yield* domainEventsOf(claimantId)).toEqual([
           {
             payload: {
+              checks_stopped: false,
               domain_id: customDomainId,
               paused: false,
               paused_reason: null,
@@ -2268,6 +2285,76 @@ describe("Domain lifecycle (PostgreSQL)", () => {
         ),
     };
   };
+
+  it.live(
+    "a removal writes its identity's delete job to the outbox, and a worker runs it",
+    () => {
+      // Its own database, so the outbox holds this removal's job alone and no other test's
+      // worker pass publishes it first. The real queue in place of the stub.
+      const database = ownDatabase();
+      const { deletedIdentities, identities, layer } = boundaries({ databaseUrl: database.url });
+      const queue = recordedJobs(testRedisUrl);
+
+      const removal = Effect.gen(function* () {
+        const db = yield* DB;
+        const redis = yield* Redis;
+        const organizationId = yield* insertProject();
+        const fqdn = `${Bun.randomUUIDv7()}.example.test`;
+        const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
+        const dkimSelector = yield* selectorOf(customDomainId);
+        const outbox = db
+          .select({
+            jobName: jobOutbox.jobName,
+            payload: jobOutbox.payload,
+            status: jobOutbox.status,
+          })
+          .from(jobOutbox);
+        const records = db
+          .select({ dkimSelector: removedDomainIdentity.dkimSelector })
+          .from(removedDomainIdentity)
+          .where(eq(removedDomainIdentity.fqdn, fqdn));
+        expect(yield* outbox).toEqual([]);
+
+        yield* deleteCustomDomain({ customDomainId, organizationId });
+
+        // Committed with the removal: the Domain is gone, its identity is recorded, and the
+        // job that deletes it waits in the outbox. SES still holds the identity.
+        expect(yield* domainOf(fqdn)).toBeUndefined();
+        expect(yield* records).toEqual([{ dkimSelector }]);
+        expect(yield* outbox).toEqual([
+          {
+            jobName: "email.delete-domain-identity",
+            payload: expect.stringContaining(fqdn),
+            status: "pending",
+          },
+        ]);
+        expect(identities.get(fqdn)).toBe(dkimSelector);
+
+        // One pass of the worker: publish the outbox to Redis, then run what is ready.
+        const deleter = registerJobHandler(emailDeleteDomainIdentityHandler);
+        yield* redis.createConsumerGroup({ group: JOB_WORKER_GROUP, stream: deleter.stream });
+        yield* publishOutboxBatch({ batchSize: 10, claimTtlMs: 30_000, concurrency: 1 });
+        yield* processJobBatch([deleter], {
+          blockMs: 100,
+          concurrency: 1,
+          consumer: "test",
+          count: 10,
+        });
+
+        expect(yield* outbox).toMatchObject([{ status: "published" }]);
+        expect(deletedIdentities).toMatchObject([{ fqdn }]);
+        expect(identities.has(fqdn)).toBe(false);
+        expect(yield* records).toEqual([]);
+      });
+
+      return database.within(
+        removal.pipe(
+          Effect.provide(Layer.provideMerge(DeadLetterStoreLive, Layer.merge(layer, queue.layer))),
+        ),
+      );
+    },
+    30_000,
+  );
 
   it.live(
     "the sweep of every Domain removes those without a link, and only those",

@@ -236,6 +236,7 @@ return -1`,
           expect.arrayContaining(
             project.domainIds.map((domain_id) => ({
               payload: {
+                checks_stopped: false,
                 domain_id,
                 paused: true,
                 paused_reason: "project_sending_pause",
@@ -914,7 +915,13 @@ return -1`,
         yield* unpauseCustomDomain({ customDomainId: domainId });
 
         const changed = (paused: boolean, paused_reason: string | null) => ({
-          payload: { domain_id: domainId, paused, paused_reason, status: "verified" },
+          payload: {
+            checks_stopped: false,
+            domain_id: domainId,
+            paused,
+            paused_reason,
+            status: "verified",
+          },
           type: "domain.updated",
         });
         expect(yield* eventsOf(project.organizationId)).toEqual([

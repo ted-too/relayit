@@ -48,6 +48,12 @@ export class SandboxDomainRootHeld extends Data.TaggedError("SandboxDomainRootHe
   readonly rootDomain: string;
 }> {}
 
+/**
+ * How long publishing one set of records on Cloudflare may take, under `lockDomainIdentity`,
+ * before it is given up. One set is a few records, each a request or three.
+ */
+const MANAGED_DNS_TIMEOUT = "30 seconds";
+
 export interface EnsureSandboxDomainInput {
   readonly cloudflareZoneId: string;
   readonly rootDomain: string;
@@ -131,6 +137,22 @@ const registerSandboxIdentity = (input: {
                     sandboxDomainId,
                   }),
               ),
+              // As for the SES call below: a Cloudflare request that never answers would
+              // hold the worker's start, this connection and the name's identity lock.
+              // Each step is safe to repeat, so the next start publishes what this one
+              // did not.
+              Effect.timeoutOrElse({
+                duration: MANAGED_DNS_TIMEOUT,
+                orElse: () =>
+                  Effect.fail(
+                    new SandboxDomainError({
+                      message:
+                        "Cloudflare did not answer in time while publishing the sandbox domain's root DNS.",
+                      operation: "create",
+                      sandboxDomainId,
+                    }),
+                  ),
+              }),
             );
 
           // The root was a Project's Domain before, removed, and SES may still hold that
@@ -218,6 +240,20 @@ const registerSandboxIdentity = (input: {
                     sandboxDomainId,
                   }),
               ),
+              // The identity is in SES by now and nothing records it; the next start
+              // creates it again, which SES answers as it did here, and publishes these.
+              Effect.timeoutOrElse({
+                duration: MANAGED_DNS_TIMEOUT,
+                orElse: () =>
+                  Effect.fail(
+                    new SandboxDomainError({
+                      message:
+                        "Cloudflare did not answer in time while publishing the sandbox domain's MAIL FROM DNS.",
+                      operation: "register_identity",
+                      sandboxDomainId,
+                    }),
+                  ),
+              }),
             );
 
           yield* tx.insert(emailDomainRegistration).values({

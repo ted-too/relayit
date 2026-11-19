@@ -3,7 +3,8 @@
  * the release's apps start (docs/operations/deploys.md). Exits 0 once the database has
  * every migration this image carries, whether it applied them or found them applied, and
  * non-zero when it could not. A database it cannot connect to is tried again for two
- * minutes first; a migration that fails is not.
+ * minutes first; a migration that fails is not. Its waits for locks end too (five minutes
+ * for another run's advisory lock, 30 seconds for a table lock), failing the step.
  */
 import { logged } from "@repo/logging";
 import { migrateDatabase } from "@repo/persistence/db/migrate";
