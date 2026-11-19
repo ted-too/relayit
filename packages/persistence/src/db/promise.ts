@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import type { DatabaseConfig } from "./effect";
+import { type DatabaseConfig, SESSION_TIME_ZONE } from "./effect";
 import { relations } from "./relations";
 
 export interface PromiseDbConfig extends DatabaseConfig {
@@ -13,7 +13,11 @@ export interface PromiseDbConfig extends DatabaseConfig {
 }
 
 export const createPromiseDb = ({ databaseUrl, onPoolError }: PromiseDbConfig) => {
-  const pool = new Pool({ connectionString: databaseUrl });
+  // `pg` has no startup parameter for the zone but `options`, which the URL's own replaces.
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    options: `-c timezone=${SESSION_TIME_ZONE}`,
+  });
   // Without a listener `pg.Pool` re-raises idle-connection errors as an
   // unhandled `error` event, which takes the whole process down.
   pool.on("error", (error) => onPoolError?.(error));

@@ -14,6 +14,11 @@ export {
 export interface UsageReservationInput {
   readonly channel: ChannelType;
   readonly deliveryId: string;
+  /**
+   * When the send is scheduled for, if it is. The reservation is kept until then, however
+   * far past its billing period, so the send's confirm or release finds it (#160).
+   */
+  readonly dueAt?: Date;
   readonly organizationId: string;
   readonly purpose: MessagePurpose;
   readonly reservedAt: string;

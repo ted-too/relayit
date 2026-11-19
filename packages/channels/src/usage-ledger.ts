@@ -6,9 +6,10 @@ const COUNTER_KEY_PREFIX = "relayit:usage";
 /**
  * How long a reservation is kept once nothing more is expected of it: from its confirm or
  * release, so a job that runs again finds it finalized, and for one never finalized from the
- * end of the billing period it counts in. Until that period ends a reservation holds a place
- * in the counters and only its release gives it back; after it the counters have expired and
- * the hash holds nothing but the record, so it may go.
+ * end of the billing period it counts in, or from when its send is due if that is later.
+ * Until the period ends a reservation holds a place in the counters and only its release
+ * gives it back; after it the counters have expired and the hash holds nothing but the
+ * record, which the send's confirm or release still looks for when it falls due.
  */
 export const USAGE_TOMBSTONE_TTL_SECONDS = 90 * 24 * 60 * 60;
 
@@ -61,7 +62,7 @@ redis.call("HSET", reservation,
   "monthlyKey", monthly,
   "status", "reserved"
 )
-redis.call("EXPIRE", reservation, tonumber(ARGV[5]) + tonumber(ARGV[13]))
+redis.call("EXPIRE", reservation, tonumber(ARGV[13]))
 return 0
 `;
 
@@ -98,6 +99,8 @@ return 0
 
 export interface UsageLedgerDimensions {
   readonly channel: ChannelType;
+  /** When the send is scheduled for, if it is; not part of what a repeated reserve must match. */
+  readonly dueAt?: Date;
   readonly organizationId: string;
   readonly purpose: MessagePurpose;
   readonly reservedAt: string;
@@ -154,13 +157,14 @@ export const makeUsageLedger = (redis: RedisService) => ({
   reserve: (deliveryId: string, input: UsageLedgerDimensions, policy: UsageLedgerPolicy) => {
     const keys = counterKeys(policy, input);
     const reservedAt = new Date(input.reservedAt);
+    const untilPeriodEnd = secondsUntil(policy.periodEnd, reservedAt);
     return redis.evaluateNumber({
       args: [
         fingerprintOf(input, policy.billingUserId),
         limitArg(policy.dailyLimit),
         limitArg(policy.monthlyLimit),
         String(secondsUntilDayEnd(reservedAt)),
-        String(secondsUntil(policy.periodEnd, reservedAt)),
+        String(untilPeriodEnd),
         input.organizationId,
         policy.billingUserId,
         input.channel,
@@ -168,7 +172,10 @@ export const makeUsageLedger = (redis: RedisService) => ({
         input.reservedAt,
         policy.periodStart.toISOString(),
         policy.periodEnd.toISOString(),
-        String(USAGE_TOMBSTONE_TTL_SECONDS),
+        String(
+          Math.max(untilPeriodEnd, input.dueAt ? secondsUntil(input.dueAt, reservedAt) : 0) +
+            USAGE_TOMBSTONE_TTL_SECONDS,
+        ),
       ],
       keys: [reservationKey(deliveryId), keys.daily, keys.monthly],
       script: RESERVE_SCRIPT,

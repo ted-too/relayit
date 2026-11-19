@@ -1,6 +1,7 @@
 import { DB } from "@repo/persistence/db/effect";
 import type { ChannelType, MessagePurpose } from "@repo/persistence/db/schema";
 import { Context, Data, Effect, Layer, Schema } from "effect";
+import { billingUserOf } from "./billing-user";
 
 export interface UsagePolicyInput {
   readonly billingUserId?: string;
@@ -86,45 +87,18 @@ export const UsagePolicyLive = Layer.effect(
     return {
       resolve: (input) =>
         Effect.gen(function* () {
-          const organization = input.billingUserId
-            ? undefined
-            : yield* db.query.organization
-                .findFirst({
-                  columns: { billingUserId: true },
-                  where: { id: input.organizationId },
-                })
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new UsagePolicyError({
-                        cause,
-                        code: "billing_user_not_found",
-                        organizationId: input.organizationId,
-                      }),
-                  ),
-                );
-
           const billingUserId =
             input.billingUserId ??
-            organization?.billingUserId ??
-            (yield* db.query.member
-              .findFirst({
-                columns: { userId: true },
-                where: {
-                  organizationId: input.organizationId,
-                  role: "owner",
-                },
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new UsagePolicyError({
-                      cause,
-                      code: "billing_user_not_found",
-                      organizationId: input.organizationId,
-                    }),
-                ),
-              ))?.userId;
+            (yield* billingUserOf(db, input.organizationId).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new UsagePolicyError({
+                    cause,
+                    code: "billing_user_not_found",
+                    organizationId: input.organizationId,
+                  }),
+              ),
+            ));
 
           if (!billingUserId) {
             return yield* new UsagePolicyError({

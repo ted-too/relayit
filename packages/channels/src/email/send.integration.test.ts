@@ -37,6 +37,7 @@ import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { typeid } from "typeid-js";
 import { Usage, UsageLive, UsagePolicyLive } from "../usage";
+import { USAGE_TOMBSTONE_TTL_SECONDS } from "../usage-ledger";
 import { acceptTransactionalEmail } from "./accept";
 import type { AcceptTransactionalEmailInput } from "./accept/contracts";
 import {
@@ -942,6 +943,30 @@ describe("an accepted email send", () => {
       expect(
         (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
       ).toEqual(["message.scheduled", "message.sent"]);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
+  // #160. The reservation used to expire 90 days after the billing period it was made in,
+  // a month at most, so a send scheduled for later was sent with its confirm finding nothing.
+  it.live("keeps the Usage reservation of a send scheduled long past its billing period", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const redis = yield* Redis;
+      const project = yield* seedProject();
+      const untilDue = 400 * 86_400;
+      const accepted = yield* acceptTransactionalEmail({
+        ...sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+        scheduledAt: DateTime.makeUnsafe(Date.now() + untilDue * 1000),
+      });
+
+      const ttl = yield* redis.evaluateNumber({
+        args: [],
+        keys: [`relayit:usage:reservation:${accepted.deliveryId}`],
+        script: 'return redis.call("TTL", KEYS[1])',
+      });
+      // Still there when the send is due, and for as long after as one finalized is kept.
+      expect(ttl).toBeGreaterThanOrEqual(untilDue + USAGE_TOMBSTONE_TTL_SECONDS - 60);
+      expect(ttl).toBeLessThanOrEqual(untilDue + USAGE_TOMBSTONE_TTL_SECONDS + 60);
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
