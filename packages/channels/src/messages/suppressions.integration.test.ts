@@ -116,7 +116,7 @@ describe("the suppression lookup", () => {
         .insert(contact)
         .values({ email: "Bounced@Example.com", organizationAppEnvironmentId })
         .pipe(Effect.flip);
-      expect(String(refused.cause)).toContain("contact_email_lower_check");
+      expect(String(refused.cause)).toContain("contact_email_normalized_check");
     }).pipe(Effect.provide(services)),
   );
 });

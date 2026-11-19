@@ -145,7 +145,7 @@ describe("the migrate step and the apps' check for it", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("the step lower-cases stored Contact emails and merges the ones that then collide", () =>
+  it.live("the step normalizes stored Contact emails and merges the ones that then collide", () =>
     Effect.gen(function* () {
       const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
       // The database as the release before the constraint left it: every migration but
@@ -154,7 +154,7 @@ describe("the migrate step and the apps' check for it", () => {
         NodeFS.readFileSync(
           NodePath.join(import.meta.dirname, "../../drizzle", name, "migration.sql"),
           "utf8",
-        ).includes("contact_email_lower_check"),
+        ).includes("contact_email_normalized_check"),
       );
       expect(constraint).toBeGreaterThan(0);
       const before = yield* Effect.acquireRelease(
@@ -204,8 +204,8 @@ describe("the migrate step and the apps' check for it", () => {
              suppression_severity, suppression_reason, suppressed_at, deleted_at, created_at,
              updated_at)
           values
-            -- Alone in another case, suppressed.
-            ('cont_alone', 'oenv_a', 'Alone@Example.com', null, null, false,
+            -- Alone in another case with spaces around it, suppressed.
+            ('cont_alone', 'oenv_a', ' Alone@Example.com ', null, '{}', false,
              'all', 'hard_bounce', '2026-01-01', null, '2026-01-01', now()),
             -- A pair: the lower-case row sends have been finding, and a stricter older one.
             ('cont_pair_lower', 'oenv_a', 'pair@example.com', null, '{"plan":"pro","a":"lower"}',
@@ -240,14 +240,49 @@ describe("the migrate step and the apps' check for it", () => {
             ('sgmb_4', 'segm_vip', 'cont_three_b');`,
       );
 
-      // Twice at once, as two releases' steps would: one normalizes, the other finds it done.
-      yield* Effect.all(
-        [
-          migrateDatabase({ databaseUrl, waitFor: 0 }),
-          migrateDatabase({ databaseUrl, waitFor: 0 }),
-        ],
-        { concurrency: "unbounded" },
+      // The previous release unsubscribing a Contact that is about to be merged away, not
+      // yet committed when the step starts.
+      const unsubscribing = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const client = new Client({ connectionString: databaseUrl });
+          await client.connect();
+          await client.query("begin");
+          await client.query(
+            `insert into contact_topic_unsubscribe (id, contact_id, topic_id)
+              values ('ctun_late', 'cont_three_c', 'topc_offers')`,
+          );
+          return client;
+        }),
+        (client) => Effect.promise(() => client.end()),
       );
+
+      // Twice at once, as two releases' steps would: one normalizes, the other finds it done.
+      const steps = yield* Effect.forkChild(
+        Effect.all(
+          [
+            migrateDatabase({ databaseUrl, waitFor: 0 }),
+            migrateDatabase({ databaseUrl, waitFor: 0 }),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
+      // The step waits for the unsubscribe rather than merging around it: one step is at
+      // the tables' lock, the other at the advisory lock behind it.
+      yield* query(
+        databaseUrl,
+        `select pid from pg_stat_activity
+          where datname = current_database() and wait_event_type = 'Lock'`,
+      ).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 2,
+          schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
+        }),
+      );
+      expect(
+        yield* query(databaseUrl, "select email from contact where id = 'cont_alone'"),
+      ).toEqual([{ email: " Alone@Example.com " }]);
+      yield* Effect.promise(() => unsubscribing.query("commit"));
+      yield* Fiber.join(steps);
       expect(yield* applied(databaseUrl)).toEqual(carried);
 
       expect(
@@ -267,6 +302,7 @@ describe("the migrate step and the apps' check for it", () => {
           email: "alone@example.com",
           env: "oenv_a",
           id: "cont_alone",
+          properties: {},
           reason: "hard_bounce",
           severity: "all",
           suppressed: "2026-01-01",
@@ -337,7 +373,24 @@ describe("the migrate step and the apps' check for it", () => {
         { contact_id: "cont_pair_lower", topic_id: "topc_news" },
         { contact_id: "cont_pair_lower", topic_id: "topc_offers" },
         { contact_id: "cont_three_a", topic_id: "topc_news" },
+        // Made while the step waited, on a Contact the step then removed.
+        { contact_id: "cont_three_a", topic_id: "topc_offers" },
       ]);
+
+      // What the constraint is for: an address is stored one way only.
+      const refused = yield* Effect.tryPromise(async () => {
+        const client = new Client({ connectionString: databaseUrl });
+        await client.connect();
+        try {
+          await client.query(
+            `insert into contact (id, organization_app_environment_id, email, updated_at)
+              values ('cont_spaced', 'oenv_a', ' spaced@example.com', now())`,
+          );
+        } finally {
+          await client.end();
+        }
+      }).pipe(Effect.flip);
+      expect(refused.cause).toMatchObject({ constraint: "contact_email_normalized_check" });
       expect(
         yield* query(
           databaseUrl,

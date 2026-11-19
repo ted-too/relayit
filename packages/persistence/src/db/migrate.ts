@@ -42,7 +42,7 @@ export class DatabaseUnreachableError extends Data.TaggedError("DatabaseUnreacha
   override readonly message = "Could not reach the database";
 }
 
-/** The database was reached and the migrations did not apply; the run rolled back whole. */
+/** The database was reached and the step failed; the migrations it ran rolled back whole. */
 export class MigrationError extends Data.TaggedError("MigrationError")<{
   readonly cause: unknown;
 }> {
@@ -51,42 +51,45 @@ export class MigrationError extends Data.TaggedError("MigrationError")<{
 
 /**
  * Whether stored Contact emails still have to be normalized: the `contact` table is there
- * and the constraint that keeps them lower-case is not. False on an empty database, where
+ * and the constraint that keeps them normalized is not. False on an empty database, where
  * there is nothing to normalize, and for good once the constraint's migration has run.
  */
 const CONTACT_EMAILS_UNCHECKED = `
   select to_regclass('contact') is not null and not exists (
     select 1 from pg_constraint
-    where conrelid = to_regclass('contact') and conname = 'contact_email_lower_check'
+    where conrelid = to_regclass('contact') and conname = 'contact_email_normalized_check'
   ) as unchecked`;
 
 /**
- * Lower-cases every stored Contact email, which the `contact_email_lower_check` migration
- * then holds the table to. It is data, which a generated migration cannot carry, so the
- * step runs it first, in one transaction of its own.
+ * Lower-cases every stored Contact email and takes the spaces from around it, which the
+ * `contact_email_normalized_check` migration then holds the table to. It is data, which a
+ * generated migration cannot carry, so the step runs it first, in a transaction of its own:
+ * it stays done if a migration after it fails.
  *
  * Contacts of one App Environment that then share an address become one. The survivor is the
- * row already lower-case if there is one, since that is the row sends have been finding. It
+ * row already normalized if there is one, since that is the row sends have been finding. It
  * keeps the strictest Suppression any of them had (with that row's reason and time), is
  * unsubscribed if any was, and holds every Topic unsubscribe and Segment membership among
  * them: nothing that stops a send is lost. It is deleted only if all of them were.
  *
- * The table lock keeps writers out, so no Suppression lands on a row between its being read
- * and removed; the previous release's accepts and notifications wait for the commit.
+ * The locks keep writers out of all three tables. A Suppression cannot land on a Contact
+ * between its being read and removed, and neither can an unsubscribe, which locks only the
+ * Contact's key and would otherwise commit and then go with the row. The previous release's
+ * accepts, notifications and unsubscribes wait for the commit.
  */
 const NORMALIZE_CONTACT_EMAILS = [
   "begin",
-  "lock table contact in share row exclusive mode",
+  "lock table contact, contact_topic_unsubscribe, segment_member in share row exclusive mode",
   `create temporary table contact_email_merge on commit drop as
     select
       id,
       first_value(id) over (
-        partition by organization_app_environment_id, lower(email)
-        order by (email = lower(email)) desc, (deleted_at is null) desc, created_at, id
+        partition by organization_app_environment_id, lower(btrim(email))
+        order by (email = lower(btrim(email))) desc, (deleted_at is null) desc, created_at, id
       ) as survivor_id
     from contact
-    where (organization_app_environment_id, lower(email)) in (
-      select organization_app_environment_id, lower(email) from contact where email <> lower(email)
+    where (organization_app_environment_id, lower(btrim(email))) in (
+      select organization_app_environment_id, lower(btrim(email)) from contact where email <> lower(btrim(email))
     )`,
   // One source of each (survivor, Topic) and (survivor, Segment) moves to the survivor, its own
   // first; the rest go with the Contacts removed below.
@@ -112,7 +115,7 @@ const NORMALIZE_CONTACT_EMAILS = [
     ) kept
     where segment_member.id = kept.id and segment_member.contact_id <> kept.survivor_id`,
   `update contact set
-      email = lower(contact.email),
+      email = lower(btrim(contact.email)),
       unsubscribed = merged.unsubscribed,
       suppression_severity = strictest.suppression_severity,
       suppression_reason = strictest.suppression_reason,
@@ -120,7 +123,7 @@ const NORMALIZE_CONTACT_EMAILS = [
       deleted_at = merged.deleted_at,
       first_name = merged.first_name,
       last_name = merged.last_name,
-      properties = merged.properties,
+      properties = coalesce(merged.properties, contact.properties),
       created_at = merged.created_at,
       updated_at = now()
     from (
@@ -233,40 +236,48 @@ export const migrateDatabase = (options: {
       Effect.tryPromise({
         catch: (cause) => new MigrationError({ cause }),
         try: async () => {
-          // An image without its migrations fails here, as a migration that cannot run.
-          const migrationsFolder = resolveMigrationsFolder();
           await client.query("SELECT pg_advisory_lock($1, $2)", [LOCK_KEY1, LOCK_KEY2]);
           const unchecked = await client.query<{ unchecked: boolean }>(CONTACT_EMAILS_UNCHECKED);
-          let contacts = { merged: 0, normalized: 0 };
-          if (unchecked.rows[0]?.unchecked) {
-            for (const statement of NORMALIZE_CONTACT_EMAILS) {
-              await client.query(statement);
-            }
-            const counted = await client.query<{ merged: number; normalized: number }>(
-              `select
-                (count(*) filter (where id <> survivor_id))::int as merged,
-                (count(*) filter (where id = survivor_id))::int as normalized
-              from contact_email_merge`,
-            );
-            contacts = counted.rows[0] ?? contacts;
-            await client.query("commit");
+          if (!unchecked.rows[0]?.unchecked) {
+            return { merged: 0, normalized: 0 };
           }
-          const result = await migrate(drizzle({ client }), { migrationsFolder });
-          if (result != null) {
-            throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
+          for (const statement of NORMALIZE_CONTACT_EMAILS) {
+            await client.query(statement);
           }
-          return contacts;
+          const counted = await client.query<{ merged: number; normalized: number }>(
+            `select
+              (count(*) filter (where id <> survivor_id))::int as merged,
+              (count(*) filter (where id = survivor_id))::int as normalized
+            from contact_email_merge`,
+          );
+          await client.query("commit");
+          return counted.rows[0] ?? { merged: 0, normalized: 0 };
         },
       }).pipe(
-        Effect.flatMap((contacts) =>
+        // Said as soon as it is committed: a migration that fails after it does not undo it.
+        Effect.tap((contacts) =>
           contacts.normalized > 0
-            ? Effect.logInfo("Normalized stored Contact emails to lower case").pipe(
+            ? Effect.logInfo("Normalized stored Contact emails").pipe(
                 Effect.annotateLogs({
                   contacts: contacts.normalized,
                   mergedIntoThem: contacts.merged,
                 }),
               )
             : Effect.void,
+        ),
+        Effect.andThen(
+          Effect.tryPromise({
+            catch: (cause) => new MigrationError({ cause }),
+            try: async () => {
+              // An image without its migrations fails here, as a migration that cannot run.
+              const result = await migrate(drizzle({ client }), {
+                migrationsFolder: resolveMigrationsFolder(),
+              });
+              if (result != null) {
+                throw new Error(`Database migration failed with exit code: ${result.exitCode}`);
+              }
+            },
+          }),
         ),
       ),
     // Ending the session is what releases the lock. An unlock query of its own would, on a

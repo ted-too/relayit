@@ -83,9 +83,10 @@ export const contact = pgTable(
     uniqueIndex("contact_app_env_email_unique_idx").on(t.organizationAppEnvironmentId, t.email),
     // Every lookup compares the column as stored, and the unique index above is the only
     // thing keeping one Contact per address, so a stored email that differs from a send's
-    // normalized one only in case would hide its Suppression. Rows from before this are
-    // normalized by the migrate step (db/migrate.ts) before the constraint is added.
-    check("contact_email_lower_check", sql`${t.email} = lower(${t.email})`),
+    // normalized one in case or in spaces around it would hide its Suppression. Rows from
+    // before this are normalized by the migrate step (db/migrate.ts) before the constraint is
+    // added; the step runs while no constraint of this name exists, so keep the name.
+    check("contact_email_normalized_check", sql`${t.email} = lower(btrim(${t.email}))`),
     index("contact_properties_gin_idx").using("gin", t.properties),
     index("contact_unsubscribed_idx").on(t.unsubscribed),
     index("contact_suppression_reason_idx").on(t.suppressionReason),

@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "9",
   "dialect": "postgres",
-  "id": "b398fc40-9faf-4ec0-97e2-d5ca68db165e",
+  "id": "61403ecc-3091-4efe-b419-ab75b94af007",
   "prevIds": [
     "23f18d17-4e2c-49ee-afd8-3a3ad042549b"
   ],
@@ -78,10 +78,10 @@
         "contact"
       ],
       "writes": [
-        "s|ck|public.contact.contact_email_lower_check",
-        "n|ck|public.contact.contact_email_lower_check",
-        "e|ck|public.contact.contact_email_lower_check",
-        "n|con|public.contact.contact_email_lower_check"
+        "s|ck|public.contact.contact_email_normalized_check",
+        "n|ck|public.contact.contact_email_normalized_check",
+        "e|ck|public.contact.contact_email_normalized_check",
+        "n|con|public.contact.contact_email_normalized_check"
       ],
       "reads": [
         "n|tbl|public.contact",
@@ -96,8 +96,8 @@
       "row": {
         "schema": "public",
         "table": "contact",
-        "name": "contact_email_lower_check",
-        "value": "\"email\" = lower(\"email\")",
+        "name": "contact_email_normalized_check",
+        "value": "\"email\" = lower(btrim(\"email\"))",
         "entityType": "checks"
       }
     },
