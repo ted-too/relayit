@@ -109,16 +109,23 @@ describe("the migrate step and the apps' check for it", () => {
       yield* query(databaseUrl, `select pid ${waiting}`).pipe(
         Effect.repeat({
           until: (rows) => rows.length === 1,
-          schedule: Schedule.spaced("50 millis"),
+          // Bounded, so a step that never reaches the lock fails the assertion below
+          // rather than the test's timeout.
+          schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "3 seconds" })),
         }),
       );
-      yield* query(databaseUrl, `select pg_terminate_backend(pid) ${waiting}`);
+      expect(yield* query(databaseUrl, `select pg_terminate_backend(pid) ${waiting}`)).toHaveLength(
+        1,
+      );
 
       const error = yield* Fiber.join(step);
       expect(error).toBeInstanceOf(MigrationError);
       // Postgres's own words (57P01, admin_shutdown), not pg's for a client it gave up on.
       expect(error).toMatchObject({ cause: { code: "57P01" } });
-      expect(yield* applied(databaseUrl).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" });
+      // Nothing ran: Drizzle makes its table only once it has the lock.
+      expect(
+        yield* query(databaseUrl, "select to_regclass('drizzle.__drizzle_migrations') as made"),
+      ).toEqual([{ made: null }]);
 
       yield* Effect.promise(() => holder.query("select pg_advisory_unlock(872014331, 1)"));
       yield* migrateDatabase({ databaseUrl, waitFor: 0 });
