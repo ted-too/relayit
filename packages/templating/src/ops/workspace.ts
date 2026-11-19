@@ -9,13 +9,13 @@ import {
   scaffoldHostedWorkspace,
   withWorkspaceGitLock,
 } from "../git";
-import { normalizeWorkspacePath } from "../paths";
+import { isBunConfigPath, normalizeWorkspacePath } from "../paths";
 import {
   depsSyncHostedWorkspace,
   previewHostedWorkspaceEntry,
   publishHostedWorkspace,
 } from "../publish";
-import { assertHardenedPackageJson } from "../publish/package-json";
+import { hardenPackageJson } from "../publish/package-json";
 import { TemplatingBuilderError } from "../rpc/errors";
 
 const hasPackageManifest = (paths: readonly string[]) =>
@@ -117,14 +117,23 @@ export const commitFiles = (input: {
           message: "Invalid workspace path.",
         });
       }
-      if (path === "bun.lock" || path === "bun.lockb") {
+      // In any case: on a filesystem that ignores it, `Bun.lock` is the lockfile.
+      if (path.toLowerCase() === "bun.lock" || path.toLowerCase() === "bun.lockb") {
         return yield* new TemplatingBuilderError({
           code: "invalid",
           message: "Lockfile is platform-owned; use deps sync instead of editing it.",
         });
       }
+      // Deleting one stays possible: a workspace that already holds one cannot build.
+      if (isBunConfigPath(path) && content !== null) {
+        return yield* new TemplatingBuilderError({
+          code: "invalid",
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
+        });
+      }
       if (path === "package.json" && content !== null) {
-        yield* assertHardenedPackageJson(content);
+        yield* hardenPackageJson(content);
       }
       normalized[path] = content;
     }

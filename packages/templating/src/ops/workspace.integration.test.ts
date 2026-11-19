@@ -13,8 +13,8 @@ import { makeRedisLive, Redis } from "@repo/redis";
 import { renderSealedReactEmailArtifact } from "@repo/template-render/react-email";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { typeid } from "typeid-js";
-import { withWorkspaceGitLock } from "../git";
-import { commitFiles, listFiles, preview, publish } from "./workspace";
+import { commitFiles as gitCommitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
+import { commitFiles, depsSync, listFiles, preview, publish, readFile } from "./workspace";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 const testRedisUrl = Bun.env.TEST_REDIS_URL;
@@ -30,6 +30,22 @@ export default function HookedEmail({ name }: { name: string }) {
     <Html>
       <Body>
         <Text id={id}>Hello, {name}!</Text>
+      </Body>
+    </Html>
+  );
+}
+`;
+
+const COMPOSED_ENTRY = `import { Html, Body, Text } from "@react-email/components";
+import copy from "../lib/copy.json";
+import { greeting } from "../lib/greeting";
+
+export default function ComposedEmail({ name }: { name: string }) {
+  return (
+    <Html>
+      <Body>
+        <Text>{greeting(name)}</Text>
+        <Text>{copy.signoff}</Text>
       </Body>
     </Html>
   );
@@ -100,6 +116,12 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
     }
     return workspace.id;
   });
+
+  /** A directory of the host's, beside the checkouts and outside every one of them. */
+  const hostDirectory = Effect.acquireRelease(
+    Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-host-file-"))),
+    (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
+  );
 
   it.live(
     "answers every first read of a new workspace, though only one of them scaffolds it",
@@ -267,22 +289,109 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
   );
 
   it.live(
-    "does not quote a file outside the workspace that an Entry's import fails on",
+    "builds an Entry that imports the workspace's own files, in preview and on Publish",
     () =>
       Effect.gen(function* () {
-        const outside = yield* Effect.acquireRelease(
-          Effect.promise(() =>
-            NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-host-file-")),
-          ),
-          (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
-        );
-        // Not valid JSON, so the bundler's own message quotes it: 'found "hunter2"'.
-        const hostFile = NodePath.join(outside, "settings.json");
-        yield* Effect.promise(() => NodeFSP.writeFile(hostFile, '{ "host": 1 hunter2 }\n'));
         const workspaceId = yield* insertWorkspace;
         yield* commitFiles({
           changes: {
-            "reactEmail/reaching.tsx": `import settings from ${JSON.stringify(hostFile)};\nexport default function ReachingEmail() {\n  return <div>{String(settings)}</div>;\n}\n`,
+            "lib/copy.json": '{ "signoff": "The team" }\n',
+            "lib/greeting.ts": "export const greeting = (name: string) => `Hello, ${name}!`;\n",
+            "reactEmail/composed.tsx": COMPOSED_ENTRY,
+          },
+          workspaceId,
+        });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/composed.tsx", workspaceId },
+        });
+
+        const previewed = yield* preview({
+          entryId: entry?.id ?? "",
+          props: { name: "Grace" },
+          subjectOverride: "Hi",
+          workspaceId,
+        });
+        expect(previewed.text).toBe("Hello, Grace!\n\nThe team");
+
+        const published = yield* publish({ workspaceId });
+        expect(published.entries).toContainEqual({
+          id: entry?.id,
+          path: "reactEmail/composed.tsx",
+          pickable: true,
+        });
+      }).pipe(Effect.provide(services)),
+    120_000,
+  );
+
+  it.live(
+    "does not run an Entry's bundle-time macro, in preview or on Publish",
+    () =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        const ran = NodePath.join(outside, "macro-ran");
+        process.env.RELAYIT_TEST_BUILDER_SECRET = "from-the-builder";
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            delete process.env.RELAYIT_TEST_BUILDER_SECRET;
+          }),
+        );
+        const workspaceId = yield* insertWorkspace;
+        yield* commitFiles({
+          changes: {
+            // A macro's return value is inlined into the artifact, and its body runs
+            // wherever the bundler does.
+            "lib/secret.ts": `import { writeFileSync } from "node:fs";\nexport function secret() {\n  writeFileSync(${JSON.stringify(ran)}, "ran");\n  return process.env.RELAYIT_TEST_BUILDER_SECRET ?? "unset";\n}\n`,
+            "reactEmail/macro.tsx": `import { secret } from "../lib/secret.ts" with { type: "macro" };\nexport default function MacroEmail() {\n  return <div>{secret()}</div>;\n}\n`,
+          },
+          workspaceId,
+        });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/macro.tsx", workspaceId },
+        });
+
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({
+          code: "failed",
+          message: "Failed to bundle workspace entry.",
+        });
+        expect(failure.detail).toMatch(/^reactEmail\/macro\.tsx:3:\d+: Macros are disabled\n/);
+        expect(failure.detail).not.toContain("from-the-builder");
+
+        const unpublished = yield* Effect.flip(publish({ workspaceId }));
+        expect(unpublished.message).toBe("Failed to bundle workspace entry.");
+        const sealed = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/macro.tsx", workspaceId },
+        });
+        expect(sealed?.artifactStorageKey).toBeNull();
+
+        expect(yield* Effect.promise(() => NodeFSP.exists(ran))).toBe(false);
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live.each([
+    { how: "an absolute path", specifier: (hostFile: string) => hostFile },
+    {
+      // Every checkout is a directory of the same temp directory the host file is under.
+      how: "a path that climbs out with ..",
+      specifier: (hostFile: string) =>
+        `../../${NodePath.basename(NodePath.dirname(hostFile))}/${NodePath.basename(hostFile)}`,
+    },
+  ])(
+    "keeps a host file an Entry imports as text by $how out of preview and Publish",
+    ({ specifier }) =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        const hostFile = NodePath.join(outside, "environ");
+        yield* Effect.promise(() => NodeFSP.writeFile(hostFile, "DATABASE_URL=from-the-host\n"));
+        const workspaceId = yield* insertWorkspace;
+        yield* commitFiles({
+          changes: {
+            "reactEmail/reaching.tsx": `import environ from ${JSON.stringify(specifier(hostFile))} with { type: "text" };\nexport default function ReachingEmail() {\n  return <div>{environ}</div>;\n}\n`,
           },
           workspaceId,
         });
@@ -294,12 +403,204 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
         const failure = yield* Effect.flip(
           preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
         );
-
         expect(failure).toMatchObject({
           code: "failed",
-          detail: "A file outside the workspace failed to build.",
+          detail: "reactEmail/reaching.tsx: An import reaches outside the workspace.",
           message: "Failed to bundle workspace entry.",
         });
+
+        const unpublished = yield* Effect.flip(publish({ workspaceId }));
+        expect(unpublished.message).toBe("Failed to bundle workspace entry.");
+        const sealed = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/reaching.tsx", workspaceId },
+        });
+        expect(sealed?.artifactStorageKey).toBeNull();
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live(
+    "installs from the package.json it checked, not from the text a commit wrote",
+    () =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        yield* Effect.promise(() =>
+          Promise.all([
+            NodeFSP.writeFile(NodePath.join(outside, "package.json"), '{ "name": "host" }\n'),
+            NodeFSP.writeFile(NodePath.join(outside, "environ"), "DATABASE_URL=from-the-host\n"),
+          ]),
+        );
+        const workspaceId = yield* insertWorkspace;
+        // Bun installs from the first `dependencies` of two, and the check reads the last.
+        yield* commitFiles({
+          changes: {
+            "package.json": `{\n  "dependencies": { "host": ${JSON.stringify(outside)} },\n  "name": "relayit-email-workspace",\n  "type": "module",\n  "dependencies": { "@react-email/components": "^0.5.3", "react": "^19.2.6", "react-dom": "^19.2.6" }\n}\n`,
+            "reactEmail/reaching.tsx": `import environ from "host/environ" with { type: "text" };\nexport default function ReachingEmail() {\n  return <div>{environ}</div>;\n}\n`,
+          },
+          workspaceId,
+        });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/reaching.tsx", workspaceId },
+        });
+
+        yield* depsSync({ workspaceId });
+        const lockfile = yield* readFile({ path: "bun.lock", workspaceId });
+        expect(lockfile.content).not.toContain("host");
+
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({ message: "Failed to bundle workspace entry." });
+        expect(failure.detail).toContain('Could not resolve: "host/environ"');
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live(
+    "refuses to install from a lockfile that resolves a package to a URL",
+    () =>
+      Effect.gen(function* () {
+        const workspaceId = yield* insertWorkspace;
+        yield* listFiles({ workspaceId });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/welcome.tsx", workspaceId },
+        });
+        const scaffolded = yield* readFile({ path: "bun.lock", workspaceId });
+        // What a registry package's own dependency on a tarball URL leaves in the lockfile.
+        const requested: string[] = [];
+        const internal = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              fetch: (request) => {
+                requested.push(request.url);
+                return new Response("not found", { status: 404 });
+              },
+              hostname: "127.0.0.1",
+              port: 0,
+            }),
+          ),
+          (served) => Effect.promise(() => served.stop(true)),
+        );
+        yield* withWorkspaceGitLock(
+          workspaceId,
+          gitCommitFiles({
+            changes: {
+              "bun.lock": scaffolded.content.replace(
+                /"react": \["react@[^\]]+\]/,
+                `"react": ["react@http://127.0.0.1:${internal.port}/react.tgz", {}]`,
+              ),
+            },
+            message: "chore: forge the lockfile",
+            ref: HOSTED_DEV_REF,
+            workspaceId,
+          }),
+        );
+
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({
+          code: "invalid",
+          detail: "react is not installed from the npm registry.",
+        });
+        expect(yield* Effect.flip(publish({ workspaceId }))).toMatchObject({ code: "invalid" });
+        expect(requested).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live(
+    "resolves a deps sync from package.json alone, whatever the lockfile held",
+    () =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        const workspaceId = yield* insertWorkspace;
+        yield* listFiles({ workspaceId });
+        const scaffolded = yield* readFile({ path: "bun.lock", workspaceId });
+        // No commit can write the lockfile; one that named a path all the same would be
+        // installed from, and kept, by an install that started from it.
+        const forged = scaffolded.content.replace(
+          /"react": \["react@[^\]]+\]/,
+          `"react": ["react@file:${outside}", {}]`,
+        );
+        expect(forged).toContain("react@file:");
+        yield* withWorkspaceGitLock(
+          workspaceId,
+          gitCommitFiles({
+            changes: { "bun.lock": forged },
+            message: "chore: forge the lockfile",
+            ref: HOSTED_DEV_REF,
+            workspaceId,
+          }),
+        );
+
+        yield* depsSync({ workspaceId });
+
+        const synced = yield* readFile({ path: "bun.lock", workspaceId });
+        expect(synced.content).not.toContain("@file:");
+        expect(synced.content).toMatch(/"react": \["react@19\./);
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
+  it.live.each([
+    ".npmrc",
+    "bunfig.toml",
+    "reactEmail/.npmrc",
+    "package-lock.json",
+    "node_modules/react/index.js",
+  ])(
+    "refuses %s in a workspace, at a commit and in a tree that already holds one",
+    (path) =>
+      Effect.gen(function* () {
+        const workspaceId = yield* insertWorkspace;
+        yield* listFiles({ workspaceId });
+        const db = yield* DB;
+        const entry = yield* db.query.templatingWorkspaceEntry.findFirst({
+          where: { path: "reactEmail/welcome.tsx", workspaceId },
+        });
+
+        const refused = yield* Effect.flip(
+          commitFiles({ changes: { [path]: "registry=http://127.0.0.1:9/\n" }, workspaceId }),
+        );
+        expect(refused).toMatchObject({
+          code: "invalid",
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
+        });
+
+        // As a commit made before the refusal left it.
+        yield* withWorkspaceGitLock(
+          workspaceId,
+          gitCommitFiles({
+            changes: { [path]: "registry=http://127.0.0.1:9/\n" },
+            message: "chore: name a registry",
+            ref: HOSTED_DEV_REF,
+            workspaceId,
+          }),
+        );
+        const failure = yield* Effect.flip(
+          preview({ entryId: entry?.id ?? "", subjectOverride: "Hi", workspaceId }),
+        );
+        expect(failure).toMatchObject({
+          code: "invalid",
+          detail: `Delete ${path} from the workspace.`,
+          message:
+            "A workspace cannot hold .npmrc, bunfig.toml, another package manager's lockfile or node_modules.",
+        });
+        expect(yield* Effect.flip(publish({ workspaceId }))).toMatchObject({ code: "invalid" });
+        expect(yield* Effect.flip(depsSync({ workspaceId }))).toMatchObject({ code: "invalid" });
+
+        yield* commitFiles({ changes: { [path]: null }, workspaceId });
+        const previewed = yield* preview({
+          entryId: entry?.id ?? "",
+          props: { name: "Ada" },
+          subjectOverride: "Hi",
+          workspaceId,
+        });
+        expect(previewed.text).toBe("Welcome, Ada!");
       }).pipe(Effect.provide(services)),
     120_000,
   );

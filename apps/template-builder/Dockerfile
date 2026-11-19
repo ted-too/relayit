@@ -37,6 +37,8 @@ RUN echo '{"dependencies":{"react": "^19.3.1", "react-dom": "^19.3.1", "@react-e
 COPY --from=builder --chown=relayit:relayit /app/apps/template-builder/build ./
 COPY --from=builder --chown=relayit:relayit /app/packages/persistence/drizzle ./drizzle
 COPY --from=builder --chown=relayit:relayit /app/packages/template-render/src/react-email/isolate-runner.ts ./isolate-runner.ts
+# The process that bundles an Entry, spawned by path like the isolate. It imports only Bun.
+COPY --from=builder --chown=relayit:relayit /app/packages/templating/src/publish/bundle-runner.ts ./bundle-runner.ts
 
 # Internal Rpc. Railway sets PORT.
 USER relayit

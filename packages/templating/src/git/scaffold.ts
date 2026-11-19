@@ -1,8 +1,9 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { runBunInstall } from "../publish/bun-install";
+import { hardenPackageJson } from "../publish/package-json";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { commitFiles, listFilesAtRef, readFileAtRef } from "./commit";
 import { getRef, updateRef } from "./refs";
@@ -120,7 +121,13 @@ export const scaffoldHostedWorkspace = (workspaceId: string) =>
         changes["package.json"] = STARTER_PACKAGE_JSON;
       }
       if (!hasLock) {
-        changes["bun.lock"] = yield* generateLockfile(packageJson);
+        // Never from the text as committed. One that fails the check gets no lockfile:
+        // the next build refuses it in so many words, and a commit can still replace it.
+        const hardened = yield* Effect.option(hardenPackageJson(packageJson));
+        if (Option.isNone(hardened)) {
+          return { commitSha: existing };
+        }
+        changes["bun.lock"] = yield* generateLockfile(hardened.value);
       }
 
       const restored = yield* commitFiles({

@@ -10,7 +10,7 @@ import { checkoutRefToDirectory, HOSTED_DEV_REF, withWorkspaceGitLock } from "..
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
-import { assertHardenedPackageJson } from "./package-json";
+import { assertRegistryLockfile, hardenCheckedOutPackageJson } from "./package-json";
 import { workspaceToolOutput } from "./tool-output";
 
 // The Effect language service refuses an untyped `catch`, so the thrown value is carried
@@ -89,15 +89,8 @@ export const previewHostedWorkspaceEntry = (input: {
           workspaceId: input.workspaceId,
         });
 
-        const packageJson = yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Failed to read package.json.",
-            }),
-          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
-        });
-        yield* assertHardenedPackageJson(packageJson);
+        yield* hardenCheckedOutPackageJson(tempDir);
+        yield* assertRegistryLockfile(tempDir);
 
         const install = yield* runBunInstall({
           args: ["--frozen-lockfile", "--ignore-scripts"],

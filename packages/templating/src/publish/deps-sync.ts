@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { checkoutRefToDirectory, commitFiles, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
-import { assertHardenedPackageJson } from "./package-json";
+import { assertRegistryLockfile, hardenCheckedOutPackageJson } from "./package-json";
 
 /**
  * Hardened install on `dev`: rewrite platform-owned lockfile from current
@@ -34,15 +34,13 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
           workspaceId: input.workspaceId,
         });
 
-        const packageJson = yield* Effect.tryPromise({
-          catch: () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Failed to read package.json.",
-            }),
-          try: () => NodeFSP.readFile(NodePath.join(tempDir, "package.json"), "utf8"),
-        });
-        yield* assertHardenedPackageJson(packageJson);
+        yield* hardenCheckedOutPackageJson(tempDir);
+
+        // Resolved again from the checked package.json alone. An install keeps what the
+        // lockfile already resolved a package to, a path included, and installs from it.
+        yield* Effect.promise(() =>
+          NodeFSP.rm(NodePath.join(tempDir, "bun.lock"), { force: true }),
+        );
 
         const install = yield* runBunInstall({
           args: ["--ignore-scripts"],
@@ -55,6 +53,9 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
             message: "Deps sync install failed.",
           });
         }
+
+        // Before it is committed: a lockfile that names a URL is never the workspace's.
+        yield* assertRegistryLockfile(tempDir);
 
         const lockPath = NodePath.join(tempDir, "bun.lock");
         const lockfile = yield* Effect.tryPromise({

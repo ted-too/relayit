@@ -100,4 +100,47 @@ describe("runBunInstall", () => {
       expect(requested.join("\n")).not.toContain("from-the-builder");
     }),
   );
+
+  it.live("does not take the registry to ask from a workspace's .env", () =>
+    Effect.gen(function* () {
+      const dir = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-bun-install-")),
+        ),
+        (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
+      );
+      const requested: string[] = [];
+      const registry = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            fetch: (request) => {
+              requested.push(request.url);
+              return new Response("not found", { status: 404 });
+            },
+            hostname: "127.0.0.1",
+            port: 0,
+          }),
+        ),
+        (served) => Effect.promise(() => served.stop(true)),
+      );
+      yield* Effect.promise(() =>
+        Promise.all([
+          NodeFSP.writeFile(NodePath.join(dir, "package.json"), JSON.stringify({ name: "none" })),
+          NodeFSP.writeFile(
+            NodePath.join(dir, ".env"),
+            `BUN_CONFIG_REGISTRY=http://127.0.0.1:${registry.port}/\n`,
+          ),
+        ]),
+      );
+
+      // Asks the registry for the package, whichever registry that is.
+      yield* runBunInstall({
+        args: ["--ignore-scripts", "relayit-no-such-package@1.0.0"],
+        cwd: dir,
+        operation: "test",
+      });
+
+      expect(requested).toEqual([]);
+    }),
+  );
 });

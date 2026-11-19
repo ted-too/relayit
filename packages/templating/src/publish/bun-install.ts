@@ -23,12 +23,15 @@ export const runBunInstall = (input: {
 }) =>
   Effect.promise(async (): Promise<BunInstallResult> => {
     try {
-      const proc = Bun.spawn(["bun", "install", ...input.args], {
+      // `--no-env-file`: Bun would read a workspace's `.env`, and take the registry to ask
+      // from a `BUN_CONFIG_REGISTRY` in it.
+      const proc = Bun.spawn(["bun", "install", "--no-env-file", ...input.args], {
         cwd: input.cwd,
-        // A workspace may hold an `.npmrc`, in which Bun expands `${VAR}`: into the registry
-        // URL it requests, and into the stderr a failed preview shows the Project. So the
-        // install is handed only what it needs to run: where bun is, and where its cache
-        // and temp files go. Nothing else of the builder's environment reaches it.
+        // The install reads a customer's files, and Bun expands `${VAR}` in some of what it
+        // reads: into the registry URL it requests, and into the stderr a failed preview
+        // shows the Project. So it is handed only what it needs to run: where bun is, and
+        // where its cache and temp files go. Nothing else of the builder's environment
+        // reaches it.
         env: {
           BUN_INSTALL_IGNORE_SCRIPTS: "1",
           BUN_TMPDIR: process.env.BUN_TMPDIR,
