@@ -24,6 +24,13 @@ export class Invalid extends Schema.TaggedError<Invalid>()(
   { httpApiStatus: 422 },
 ) {}
 
+/** The Billing User's Plan allows no more of what the operation adds. */
+export class PlanLimitReached extends Schema.TaggedError<PlanLimitReached>()(
+  "PlanLimitReached",
+  { limit: Schema.Finite, message: Schema.String },
+  { httpApiStatus: 402 },
+) {}
+
 /** Something this deployment doesn't have configured, such as the template builder. */
 export class Unavailable extends Schema.TaggedError<Unavailable>()(
   "Unavailable",

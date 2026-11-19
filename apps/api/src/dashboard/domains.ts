@@ -16,6 +16,7 @@ import {
   Invalid,
   NotFound,
   type OperationFailed,
+  PlanLimitReached,
 } from "@repo/contracts/dashboard";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect } from "effect";
@@ -187,7 +188,25 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
           const created = yield* createCustomDomain({ fqdn: payload.fqdn, organizationId }).pipe(
-            Effect.catch(lifecycleFailure("Custom Domain operation failed.")),
+            Effect.catch(
+              (
+                error,
+              ): Effect.Effect<
+                never,
+                Conflict | Invalid | NotFound | OperationFailed | PlanLimitReached
+              > => {
+                switch (error._tag) {
+                  // Only an add or a claim meets the Plan's limit, so only this endpoint
+                  // declares the refusal.
+                  case "DomainLimitReached":
+                    return Effect.fail(
+                      new PlanLimitReached({ limit: error.limit, message: error.message }),
+                    );
+                  default:
+                    return lifecycleFailure("Custom Domain operation failed.")(error);
+                }
+              },
+            ),
           );
           return yield* listedDomain({ customDomainId: created.customDomainId, organizationId });
         }),

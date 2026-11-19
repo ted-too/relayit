@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, test } from "@effect/vitest";
 import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
+import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
@@ -20,6 +21,8 @@ import {
   organizationAppEnvironment,
   organizationDomain,
   sandboxDomain,
+  user,
+  userChannel,
   webhookEndpoint,
   webhookEvent,
 } from "@repo/persistence/db/schema";
@@ -180,7 +183,19 @@ describe("Domain lifecycle (PostgreSQL)", () => {
   const insertProject = Effect.fn(function* () {
     const db = yield* DB;
     const id = typeid("orgn").toString();
-    yield* db.insert(organization).values({ id, name: "Domains", slug: `domains-${id}` });
+    // A Billing User whose Plan sets no Domain limit; the limit has its own tests.
+    const billingUserId = `user_${id}`;
+    yield* db
+      .insert(user)
+      .values({ email: `${billingUserId}@example.test`, id: billingUserId, name: "Billing" });
+    yield* db.insert(userChannel).values({
+      channelType: "email",
+      limits: SELF_HOSTED_LIMITS.email,
+      userId: billingUserId,
+    });
+    yield* db
+      .insert(organization)
+      .values({ billingUserId, id, name: "Domains", slug: `domains-${id}` });
     return id;
   });
 

@@ -4,6 +4,7 @@ import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { EmailBackend } from "@repo/channels/email/backend";
 import { verifyCustomDomainRegistration } from "@repo/channels/email/verification/custom-identity";
 import { Jobs, JobsLive } from "@repo/jobs";
+import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
@@ -13,6 +14,8 @@ import {
   message,
   organization,
   organizationAppEnvironment,
+  user,
+  userChannel,
   webhookEndpoint,
 } from "@repo/persistence/db/schema";
 import { makeRedisClient, makeRedisLive } from "@repo/redis";
@@ -55,9 +58,22 @@ describe("fake email backend (PostgreSQL, Redis)", () => {
       const fqdn = `${run}.example.test`;
       const bounceAddress = "bounce@simulator.amazonses.com";
 
+      // Adding a Domain reads the Billing User's Plan; this one's sets no Domain limit.
+      const billingUserId = `user_fake_${run}`;
       yield* db
-        .insert(organization)
-        .values({ id: organizationId, name: "Fake backend", slug: `fake-${run}` });
+        .insert(user)
+        .values({ email: `${billingUserId}@example.test`, id: billingUserId, name: "Billing" });
+      yield* db.insert(userChannel).values({
+        channelType: "email",
+        limits: SELF_HOSTED_LIMITS.email,
+        userId: billingUserId,
+      });
+      yield* db.insert(organization).values({
+        billingUserId,
+        id: organizationId,
+        name: "Fake backend",
+        slug: `fake-${run}`,
+      });
       yield* db.insert(organizationAppEnvironment).values({ id: environmentId, organizationId });
       const { customDomainId } = yield* createCustomDomain({ fqdn, organizationId });
       const domain = yield* db.query.customDomain.findFirst({
