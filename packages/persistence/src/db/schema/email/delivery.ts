@@ -44,9 +44,11 @@ export const emailDelivery = pgTable(
     cc: jsonb("cc").$type<EmailAddressList>(),
     bcc: jsonb("bcc").$type<EmailAddressList>(),
     /**
-     * Who the worker took off `to`, `cc` and `bcc` before sending, which then name only who
-     * the send went to. Kept so `message.sent` can say so whichever run records it. A
-     * recipient stripped at accept is never written to the Delivery, here or there.
+     * Who the worker took off `to`, `cc` and `bcc` before sending, which on a claimed
+     * Delivery then name only who the send went to. Kept so `message.sent` can say so
+     * whichever run records it. A `skipped` Delivery was never claimed, so its recipients
+     * stay as accepted and all of them are here. A recipient stripped at accept is never
+     * written to the Delivery, here or there.
      */
     stripped: jsonb("stripped").$type<StrippedRecipient[]>(),
     replyTo: jsonb("reply_to").$type<EmailAddressList>(),

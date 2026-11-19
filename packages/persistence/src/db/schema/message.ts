@@ -24,7 +24,7 @@ export const message = pgTable(
      * The Topic a marketing Message is sent under: whose Unsubscribes stop it, and what its
      * List-Unsubscribe link opts out of. Null for a transactional one. A deleted Topic takes
      * its Unsubscribes with it, so a Message that outlives it is held only to the opt-out of
-     * all marketing.
+     * all marketing, and goes out without a List-Unsubscribe link, which needs a Topic.
      */
     topicId: text("topic_id").references(() => topic.id, { onDelete: "set null" }),
     templateId: text("template_id").references(() => template.id, {

@@ -46,7 +46,8 @@ const verify = (headers: Headers, rawBody: string, secret: string) => {
   const id = headers.get("webhook-id") ?? "";
   const timestamp = headers.get("webhook-timestamp") ?? "";
   // Refuse a request replayed long after it was signed.
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+  const age = Date.now() / 1000 - Number(timestamp);
+  if (!Number.isFinite(age) || Math.abs(age) > 300) {
     return false;
   }
   const expected = `v1=${createHmac("sha256", secret)
