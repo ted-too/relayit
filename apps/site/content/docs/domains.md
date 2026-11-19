@@ -78,7 +78,7 @@ After you publish the records, select **Refresh** on the Domain page. Relayit al
 
 - **Once the Domain is verified**, every 12 hours.
 - **Until then**, 2 minutes after you add it, then at double the wait each time (4 minutes, 8, 16, and so on) up to every 12 hours. Refresh checks at once, whatever the wait.
-- **After about seven days unverified**, Relayit stops checking the Domain. Nothing is removed: the Domain stays in your Project with its records, its page says the checks have stopped, and a Webhook Endpoint subscribed to `domain.updated` receives an event with `checks_stopped: true`. Select **Refresh** to check it and start the automatic checks again for another week.
+- **After about seven days unverified**, Relayit stops checking the Domain. Nothing is removed: the Domain stays in your Project with its records, and a Webhook Endpoint subscribed to `domain.updated` receives an event with `checks_stopped: true`. Select **Refresh** to check it and start the automatic checks again for another week.
 
 A verified Domain that later loses a record is checked on the same schedule, from the 2-minute wait.
 

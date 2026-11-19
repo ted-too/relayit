@@ -3,11 +3,12 @@
  * Project holds as a custom Domain, that it is one Sandbox Domain whatever case its root is
  * typed in, and that its registration waits its turn for the name, replaces a removed
  * Domain's identity, gives up an SES call that never answers and is checked even when its
- * first check was never scheduled. SES, Cloudflare and public DNS are the boundaries
- * stubbed; the job queue is the real one, on Redis and the outbox, recorded and made to fail
- * only where a test asks.
+ * first check was never scheduled. SES, Cloudflare, public DNS and the job queue are the
+ * boundaries stubbed, but for the Cloudflare call that never answers, which runs on the real
+ * queue (#131).
  */
 import { describe, expect, it, test } from "@effect/vitest";
+import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
 import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -56,7 +57,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
   }
 
   /**
-   * SES, Cloudflare and public DNS, the queue (`recordedJobs`), and what each was asked to do. `identities` is
+   * SES, Cloudflare, public DNS and the queue, and what each was asked to do. `identities` is
    * the SES account as SES keeps it: one identity to an FQDN, signing with one selector, which
    * a test may also fill with one Relayit did not make.
    */
@@ -75,8 +76,10 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
     const deletedIdentities: string[] = [];
     const identities = new Map<string, string>();
     const dnsOwners: string[] = [];
-    const jobs = recordedJobs(testRedisUrl, options);
-    const { enqueued, scheduled, scheduledAt } = jobs;
+    const scheduled: unknown[] = [];
+    /** When each of `scheduled` is due, in the same order. */
+    const scheduledAt: number[] = [];
+    const enqueued: unknown[] = [];
     const layer = Layer.mergeAll(
       Layer.succeed(EmailBackend, {
         createIdentity: ({ dkimSelector, fqdn, region }) =>
@@ -132,7 +135,27 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
         detectProvider: () => Promise.resolve("cloudflare"),
         evaluate: () => Promise.resolve({ matches: false, warnings: [] }),
       }),
-      jobs.layer,
+      Layer.succeed(Jobs, {
+        cancel: (() => Effect.void) as JobsService["cancel"],
+        enqueue: ((_contract: unknown, payload: unknown) => {
+          enqueued.push(payload);
+          return Effect.void;
+        }) as JobsService["enqueue"],
+        schedule: ((contract: { readonly name: string }, payload: unknown, at?: number) => {
+          if (options.failSchedule?.()) {
+            return Effect.fail(
+              new JobEnqueueError({
+                cause: "Redis is down",
+                jobName: contract.name,
+                stage: "schedule",
+              }),
+            );
+          }
+          scheduled.push(payload);
+          scheduledAt.push(at ?? Number.NaN);
+          return Effect.void;
+        }) as JobsService["schedule"],
+      }),
       SymmetricCrypto.live(parseBetterAuthSecrets("1:sandbox-test-secret-0123456789abc")),
     ).pipe(Layer.provideMerge(makeDbLive({ databaseUrl: testDatabaseUrl })));
     return {
@@ -333,9 +356,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
 
       const [sandbox] = yield* sandboxesOn(root);
       expect(createdIdentities).toEqual([root]);
-      expect(scheduled).toEqual([
-        { name: "email.verify-sandbox-domain", payload: { sandboxDomainId: sandbox?.id } },
-      ]);
+      expect(scheduled).toEqual([{ sandboxDomainId: sandbox?.id }]);
       expect(
         yield* db
           .select({ region: emailDomainRegistration.region })
@@ -437,14 +458,12 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
 
       // Every Sandbox Domain in the database is reconciled, other tests' too.
       const at = scheduled.findIndex(
-        ({ payload }) => (payload as { sandboxDomainId?: string }).sandboxDomainId === sandbox?.id,
+        (payload) => (payload as { sandboxDomainId?: string }).sandboxDomainId === sandbox?.id,
       );
       expect(at).toBeGreaterThanOrEqual(0);
       expect(scheduledAt[at]).toBeGreaterThanOrEqual(before);
       expect(scheduledAt[at]).toBeLessThanOrEqual(Date.now());
-      expect(scheduled.map(({ payload }) => payload)).not.toContainEqual({
-        sandboxDomainId: unregistered?.id,
-      });
+      expect(scheduled).not.toContainEqual({ sandboxDomainId: unregistered?.id });
     }).pipe(Effect.provide(layer));
   });
 
@@ -480,7 +499,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
       ).toEqual([]);
 
       // The removed Domain's job, running late, leaves the Sandbox Domain's identity.
-      const [job] = enqueued.map(({ payload }) => payload as EmailDeleteDomainIdentityPayload);
+      const [job] = enqueued as EmailDeleteDomainIdentityPayload[];
       expect(job).toMatchObject({ dkimSelector: removedSelector, fqdn: root });
       yield* emailDeleteDomainIdentityHandler.handle(job ?? (yield* Effect.die("A job")), {
         attempt: 1,
@@ -558,9 +577,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
       expect(yield* sandboxesOn(root)).toEqual([sandbox]);
       expect(createdIdentities).toEqual([root]);
       expect(yield* registrationsOf(sandbox?.id)).toHaveLength(1);
-      expect(scheduled).toEqual([
-        { name: "email.verify-sandbox-domain", payload: { sandboxDomainId: sandbox?.id } },
-      ]);
+      expect(scheduled).toEqual([{ sandboxDomainId: sandbox?.id }]);
     }).pipe(Effect.provide(layer));
   });
 
@@ -585,10 +602,12 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
     ({ identities, message, operation, records }) => {
       let answers = false;
       let reached: Deferred.Deferred<void> | undefined;
-      const { createdIdentities, dnsOwners, layer, scheduled } = boundaries({
+      const { createdIdentities, dnsOwners, layer } = boundaries({
         dnsAnswers: (owner) => answers || !owner.endsWith(`:${records}`),
         onDnsUnanswered: () => (reached ? Deferred.succeed(reached, undefined) : Effect.void),
       });
+      // The real queue in place of the stub: the first check is scheduled in Redis.
+      const queue = recordedJobs(testRedisUrl);
       return Effect.gen(function* () {
         const root = newRoot();
         const calling = yield* Deferred.make<void>();
@@ -610,7 +629,7 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
         const [sandbox] = yield* sandboxesOn(root);
         expect(sandbox).toBeDefined();
         expect(yield* registrationsOf(sandbox?.id)).toEqual([]);
-        expect(scheduled).toEqual([]);
+        expect(queue.scheduled).toEqual([]);
         expect(createdIdentities).toHaveLength(identities);
 
         // Giving up released the name's lock and kept the row and its key: the next start
@@ -625,10 +644,10 @@ describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
             `sandbox:${sandbox?.id}:identity`,
           ]),
         );
-        expect(scheduled).toEqual([
+        expect(queue.scheduled).toEqual([
           { name: "email.verify-sandbox-domain", payload: { sandboxDomainId: sandbox?.id } },
         ]);
-      }).pipe(Effect.provide(layer));
+      }).pipe(Effect.provide(Layer.merge(layer, queue.layer)));
     },
   );
 

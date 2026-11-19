@@ -5,7 +5,6 @@ import {
   ownershipChallengeValue,
 } from "@repo/channels/email/custom-domain";
 import {
-  domainChecksStopped,
   emailVerifyCustomDomainJob,
   verifyCustomDomainOwnership,
   verifyCustomDomainRegistration,
@@ -142,7 +141,6 @@ const listDomains = (input: {
               id: true,
               isPaused: true,
               lastCheckedAt: true,
-              nextVerifyAt: true,
               pausedReason: true,
               provider: true,
               verificationStatus: true,
@@ -178,7 +176,6 @@ const listDomains = (input: {
           : ("pending" as const);
         return [
           {
-            checksStopped: false,
             createdAt: link.createdAt,
             dnsRecords: {
               dkimAndSpf: [],
@@ -209,7 +206,6 @@ const listDomains = (input: {
       }
       return [
         {
-          checksStopped: domainChecksStopped(customDomain),
           createdAt: customDomain.createdAt,
           dnsRecords: {
             dkimAndSpf: customDomain.dnsRecords.filter((record) =>

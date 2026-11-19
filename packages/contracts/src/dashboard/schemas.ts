@@ -185,8 +185,6 @@ export const DnsRecord = Schema.Struct({
 export type DnsRecord = typeof DnsRecord.Type;
 
 export const Domain = Schema.Struct({
-  /** Left unverified until Relayit stopped checking it; a refresh starts the checks again. */
-  checksStopped: Schema.Boolean,
   createdAt: Schema.Date,
   dnsRecords: Schema.Struct({
     dkimAndSpf: Schema.Array(DnsRecord),

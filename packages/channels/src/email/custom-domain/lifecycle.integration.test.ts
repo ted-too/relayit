@@ -1,11 +1,17 @@
 /**
  * Adding and removing a Domain against a real Postgres: who ends up holding it, whether it
  * ends up registered and checked, and that it goes with its last link and takes its SES
- * identity along. SES and public DNS are the boundaries stubbed; the job queue is the real
- * one, on Redis and the outbox, recorded and made to fail only where a test asks.
+ * identity along. SES, public DNS and the job queue are the boundaries stubbed, but for the
+ * one removal that runs its delete job on the real queue and through a worker (#131).
  */
 import { describe, expect, it, test } from "@effect/vitest";
-import { DeadLetterStoreLive, Jobs, registerJobHandler } from "@repo/jobs";
+import {
+  DeadLetterStoreLive,
+  JobEnqueueError,
+  Jobs,
+  type JobsService,
+  registerJobHandler,
+} from "@repo/jobs";
 import { publishOutboxBatch } from "@repo/jobs/outbox";
 import { jobOutbox } from "@repo/jobs/outbox-schema";
 import { JOB_WORKER_GROUP } from "@repo/jobs/storage";
@@ -74,8 +80,8 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
   }
 
   /**
-   * SES and public DNS as each test sets them, and the queue (`recordedJobs`); what was
-   * scheduled, cancelled and enqueued, by job, the SES identities the account holds (`identities`, FQDN to DKIM selector,
+   * SES, public DNS and the queue as each test sets them; what was scheduled, cancelled and
+   * enqueued, by job, the SES identities the account holds (`identities`, FQDN to DKIM selector,
    * which a test may also fill with one Relayit did not make), those created and deleted,
    * and the TXT values published
    * in DNS. `beforeKeyLoad` runs as a Domain's DKIM key is read, which an add does between
@@ -93,9 +99,14 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
       readonly failSchedule?: () => boolean;
     } = {},
   ) => {
-    const jobs = recordedJobs(testRedisUrl, options);
-    const { cancelled, enqueued, enqueuedFor, scheduled, scheduledAt } = jobs;
+    const scheduled: { readonly name: string; readonly payload: unknown }[] = [];
+    /** When each of `scheduled` is due, in the same order. */
+    const scheduledAt: number[] = [];
     const published = new Set<string>();
+    const cancelled: { readonly name: string; readonly payload: unknown }[] = [];
+    const enqueued: { readonly name: string; readonly payload: unknown }[] = [];
+    /** When each of `enqueued` was delayed until, in the same order. */
+    const enqueuedFor: (number | undefined)[] = [];
     const deletedIdentities: { readonly fqdn: string; readonly region: string | null }[] = [];
     const createdIdentities: string[] = [];
     // The SES account as SES keeps it: one identity to an FQDN, signing with one selector.
@@ -147,7 +158,50 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
         detectProvider: () => Promise.resolve("cloudflare"),
         evaluate: ({ value }) => Promise.resolve({ matches: published.has(value), warnings: [] }),
       }),
-      jobs.layer,
+      Layer.succeed(Jobs, {
+        cancel: ((contract: { readonly name: string }, payload?: unknown) => {
+          if (options.failCancel) {
+            return Effect.fail(
+              new JobEnqueueError({
+                cause: "Redis is down",
+                jobName: contract.name,
+                stage: "cancel",
+              }),
+            );
+          }
+          cancelled.push({ name: contract.name, payload });
+          return Effect.void;
+        }) as JobsService["cancel"],
+        enqueue: ((
+          contract: { readonly name: string },
+          payload: { readonly fqdn?: string },
+          _transaction?: unknown,
+          enqueueOptions?: { readonly delayUntil?: number },
+        ) => {
+          if (payload.fqdn !== undefined && payload.fqdn === options.failEnqueueFor?.()) {
+            return Effect.fail(
+              new JobEnqueueError({ cause: "refused", jobName: contract.name, stage: "outbox" }),
+            );
+          }
+          enqueued.push({ name: contract.name, payload });
+          enqueuedFor.push(enqueueOptions?.delayUntil);
+          return Effect.void;
+        }) as JobsService["enqueue"],
+        schedule: ((contract: { readonly name: string }, payload: unknown, at?: number) => {
+          if (options.failSchedule?.()) {
+            return Effect.fail(
+              new JobEnqueueError({
+                cause: "Redis is down",
+                jobName: contract.name,
+                stage: "schedule",
+              }),
+            );
+          }
+          scheduled.push({ name: contract.name, payload });
+          scheduledAt.push(at ?? Number.NaN);
+          return Effect.void;
+        }) as JobsService["schedule"],
+      }),
       EmailManagedDns.noop(),
       Layer.effect(
         SymmetricCrypto,
@@ -2236,9 +2290,10 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
     "a removal writes its identity's delete job to the outbox, and a worker runs it",
     () => {
       // Its own database, so the outbox holds this removal's job alone and no other test's
-      // worker pass publishes it first.
+      // worker pass publishes it first. The real queue in place of the stub.
       const database = ownDatabase();
       const { deletedIdentities, identities, layer } = boundaries({ databaseUrl: database.url });
+      const queue = recordedJobs(testRedisUrl);
 
       const removal = Effect.gen(function* () {
         const db = yield* DB;
@@ -2293,7 +2348,9 @@ describe("Domain lifecycle (PostgreSQL and Redis)", () => {
       });
 
       return database.within(
-        removal.pipe(Effect.provide(Layer.provideMerge(DeadLetterStoreLive, layer))),
+        removal.pipe(
+          Effect.provide(Layer.provideMerge(DeadLetterStoreLive, Layer.merge(layer, queue.layer))),
+        ),
       );
     },
     30_000,

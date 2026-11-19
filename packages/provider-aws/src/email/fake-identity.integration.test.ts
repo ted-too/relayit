@@ -7,7 +7,7 @@ import { EmailBackend } from "@repo/channels/email/backend";
 import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle";
 import { DnsLookups } from "@repo/channels/email/dns-lookups";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
-import { recordedJobs } from "@repo/channels/email/recorded-jobs-test-layer";
+import { Jobs, type JobsService } from "@repo/jobs";
 import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
@@ -18,22 +18,18 @@ import { typeid } from "typeid-js";
 import { makeFakeEmailBackend } from "./fake";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
-const testRedisUrl = Bun.env.TEST_REDIS_URL;
 const testName = "a Domain named as an identity Relayit did not make is refused, and it stays";
 
-describe("fake email backend's identities (PostgreSQL and Redis)", () => {
-  if (!(testDatabaseUrl && testRedisUrl)) {
-    process.emitWarning(
-      "Skipping fake email backend identity test: TEST_DATABASE_URL and TEST_REDIS_URL are not both set",
-    );
-    // The PostgreSQL and Redis test is opt-in.
+describe("fake email backend's identities (PostgreSQL)", () => {
+  if (!testDatabaseUrl) {
+    process.emitWarning("Skipping fake email backend identity test: TEST_DATABASE_URL unset");
+    // The PostgreSQL test is opt-in.
     test.skip(testName, () => undefined);
     return;
   }
 
   it.live(testName, () => {
-    // The real queue: a removal's delete job would go to the outbox, and be recorded here.
-    const jobs = recordedJobs(testRedisUrl);
+    const enqueued: unknown[] = [];
     const layer = Layer.mergeAll(
       EmailManagedDns.noop(),
       SymmetricCrypto.live(parseBetterAuthSecrets("1:fake-identity-test-secret-0123456789")),
@@ -41,7 +37,15 @@ describe("fake email backend's identities (PostgreSQL and Redis)", () => {
         detectProvider: () => Promise.resolve("unknown"),
         evaluate: () => Promise.resolve({ matches: true, warnings: [] }),
       }),
-      jobs.layer,
+      // The queue is a boundary here, and records what a removal enqueues.
+      Layer.succeed(Jobs, {
+        cancel: (() => Effect.void) as JobsService["cancel"],
+        enqueue: ((_contract: unknown, payload: unknown) => {
+          enqueued.push(payload);
+          return Effect.void;
+        }) as JobsService["enqueue"],
+        schedule: (() => Effect.void) as JobsService["schedule"],
+      }),
     ).pipe(Layer.provideMerge(makeDbLive({ databaseUrl: testDatabaseUrl })));
 
     return Effect.gen(function* () {
@@ -79,7 +83,7 @@ describe("fake email backend's identities (PostgreSQL and Redis)", () => {
 
       // The Domain that add wrote never had an identity: nothing is recorded or enqueued to
       // delete one, so trying the name again costs no more than the first time.
-      expect(jobs.enqueued).toEqual([]);
+      expect(enqueued).toEqual([]);
       expect(yield* db.query.removedDomainIdentity.findMany({ where: { fqdn } })).toEqual([]);
       expect(yield* Effect.flip(add)).toMatchObject({ _tag: "CustomDomainIdentityConflict" });
 

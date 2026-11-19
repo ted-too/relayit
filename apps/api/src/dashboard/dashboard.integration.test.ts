@@ -1274,7 +1274,6 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           body: { fqdn: `${run}.stopped.example.test` },
         });
         const domainId = (added.body as { id: string }).id;
-        expect(added.body).toMatchObject({ checksStopped: false });
         // As a week of checks that found it unverified leave it: checked, with no next
         // check, and no job scheduled.
         const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
@@ -1287,15 +1286,10 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             .where(eq(customDomain.id, domainId));
           await redis.send("ZREM", [scheduled, domainId]);
         });
-        expect(yield* call("GET", `${p}/domains`, { as: owner })).toMatchObject({
-          body: [{ checksStopped: true, id: domainId, verificationStatus: "not_verified" }],
-          status: 200,
-        });
-
         // The fake backend verifies it at this check; what matters is that it has a next one.
         expect(
           yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner }),
-        ).toMatchObject({ body: { checksStopped: false }, status: 200 });
+        ).toMatchObject({ status: 200 });
 
         const { dueAt, row } = yield* Effect.promise(async () => ({
           dueAt: await redis.send("ZSCORE", [scheduled, domainId]),

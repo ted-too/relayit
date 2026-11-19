@@ -99,19 +99,6 @@ function RouteComponent() {
             </AlertDescription>
           </Alert>
         )}
-        {domain.checksStopped && (
-          <Alert className="px-3 py-3" variant="warning">
-            <RiErrorWarningFill />
-            <AlertTitle>Relayit has stopped checking this Domain</AlertTitle>
-            <AlertDescription>
-              <p>
-                It stayed unverified for about a week, so its DNS records are no longer checked
-                automatically. Publish the records below, then select Refresh: that checks it now
-                and starts the automatic checks again.
-              </p>
-            </AlertDescription>
-          </Alert>
-        )}
         <div className="grid grid-cols-5 gap-6">
           {(
             [
