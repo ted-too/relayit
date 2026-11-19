@@ -157,7 +157,7 @@ A ban is of the person, not of their Projects. A Project's API keys belong to th
 
 A platform admin can also ban through better-auth's `/auth/admin/ban-user`, which takes an expiry and ends the user's sessions too, and lift a ban through `/auth/admin/unban-user`.
 
-Prefer the command to editing the `user` table. A ban written to the table (`banned`, with or without `ban_expires`) is honoured at once: every request from the user's open sessions is refused with 403, in the dashboard and on the sign-in service's endpoints (`/auth/*`), until the ban is lifted or expires. The sessions stay open, though, refused rather than ended; `ban` ends them and reports how many.
+Prefer the command to editing the `user` table. A ban written to the table (`banned`, with or without `ban_expires`) is honoured at once: every request from the user's open sessions is refused with 403, in the dashboard and on the sign-in service's endpoints (`/auth/*`), until the ban is lifted or expires. The dashboard sends them to the sign-in page, where signing in is refused too. The sessions stay open, though, refused rather than ended, and signing out still works; `ban` ends them and reports how many.
 
 ## Environment variables
 

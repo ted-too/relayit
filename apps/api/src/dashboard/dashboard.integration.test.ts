@@ -856,8 +856,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           const again = signedIn.cookies.map((cookie) => cookie.split(";")[0]).join("; ");
           expect((yield* keys(again)).status).toBe(200);
 
-          // A ban written straight to the database leaves the session open; the Project's
-          // operations refuse it by the row, until the ban lapses.
+          // A ban written straight to the database leaves the session open; it is refused
+          // by the row wherever the session is resolved, until the ban lapses.
           const setBan = (banned: boolean, banExpires: Date | null) =>
             Effect.promise(async () => {
               const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
@@ -915,10 +915,8 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
               await db.update(user).set({ banExpires, banned }).where(eq(user.email, email));
               await db.$client.end();
             });
-          expect(yield* createKey).toMatchObject({
-            body: { key: expect.any(String) },
-            status: 200,
-          });
+          const key = yield* createKey;
+          expect(key).toMatchObject({ body: { key: expect.any(String) }, status: 200 });
 
           // No session of theirs is ended: only the row says they are banned.
           yield* setBan(true, null);
@@ -930,6 +928,41 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
             body: { _tag: "Forbidden", message: "This account is banned." },
             status: 403,
           });
+
+          // Signing in is not the session's doing: the banned user is refused as anyone
+          // banned is, and somebody else can sign in from the same browser.
+          expect(
+            yield* call("POST", "/auth/sign-in/email", {
+              as: owner,
+              body: { email, password: "a-long-password" },
+            }),
+          ).toMatchObject({
+            body: { code: "BANNED_USER", message: expect.stringContaining("You have been banned") },
+            status: 403,
+          });
+          yield* signUp("row-banned-other");
+          expect(
+            (yield* call("POST", "/auth/sign-in/email", {
+              as: owner,
+              body: { email: `row-banned-other-${run}@example.test`, password: "a-long-password" },
+            })).status,
+          ).toBe(200);
+          // The ban is of the person: the Project's key answers as it did, even beside
+          // their cookie.
+          const send = (as?: string) =>
+            call("POST", "/messages/email", {
+              as,
+              body: {
+                from: "nobody@example.test",
+                subject: "Hi",
+                text: "Hi",
+                to: "a@example.test",
+              },
+              key: (key.body as { key: string }).key,
+            });
+          const sent = yield* send();
+          expect([401, 403, 500]).not.toContain(sent.status);
+          expect(yield* send(owner)).toMatchObject({ body: sent.body, status: sent.status });
 
           // It lapses at its expiry, and stands until then.
           yield* setBan(true, new Date(Date.now() + 60 * 60 * 1000));

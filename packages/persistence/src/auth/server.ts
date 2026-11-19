@@ -200,18 +200,28 @@ export const createAuth = ({
     },
     plugins: [
       admin(),
-      // A banned user's open session is refused on every endpoint, over HTTP and through
-      // `auth.api`, which is how the dashboard's routes resolve a session. The ban is read
-      // from the user's row: the session holds its own copy of the user in Redis for as
-      // long as it lives, which a ban written straight to the database never reaches. A ban
-      // with an expiry lapses at it, as better-auth treats one at sign-in. Signing out is
-      // let through, so the refused session can be ended from its own browser.
+      // A banned user's open session is refused on every endpoint that acts for it, over
+      // HTTP and through `auth.api`, which is how the dashboard's routes resolve a session.
+      // The ban is read from the user's row: the session holds its own copy of the user in
+      // Redis for as long as it lives, which a ban written straight to the database never
+      // reaches. A ban with an expiry lapses at it, as better-auth treats one at sign-in.
+      //
+      // Let through, whatever cookie comes with them: signing out; signing in or up, which
+      // open a session for whoever proves who they are (the admin plugin refuses a banned
+      // one), so the browser a refused session is in can still be used; and an endpoint
+      // with no path, which only the server calls: verifying an API key is one, and a ban
+      // is of the person, not of a Project's keys.
       {
         id: "banned-user",
         hooks: {
           before: [
             {
-              matcher: (ctx) => ctx.path !== "/sign-out",
+              matcher: (ctx) =>
+                ctx.path !== undefined &&
+                ctx.path !== "/sign-out" &&
+                !["/sign-in/", "/sign-up/", "/callback/"].some((open) =>
+                  ctx.path?.startsWith(open),
+                ),
               handler: createAuthMiddleware(async (ctx) => {
                 const session = await getSessionFromCtx(ctx);
                 if (!session) {
