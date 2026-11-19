@@ -515,7 +515,7 @@ describe("the migrate step and the apps' check for it", () => {
       }).pipe(Effect.scoped),
   );
 
-  it.live("the step fails when Postgres stops answering it, and does not hang ending", () =>
+  it.live("the step fails when Postgres stops answering it", () =>
     Effect.gen(function* () {
       const databaseUrl = yield* emptyDatabase(testDatabaseUrl);
       yield* lockHolder(databaseUrl);
@@ -565,8 +565,7 @@ describe("the migrate step and the apps' check for it", () => {
       expect(error).toMatchObject({
         cause: { message: "Postgres did not answer within 10 seconds" },
       });
-      // Its next question, at most two seconds off, ten for the answer, five to end a
-      // session that never says goodbye.
+      // Its next question, at most two seconds off, and ten for the answer.
       expect(Date.now() - silenced).toBeLessThan(20_000);
     }).pipe(Effect.scoped),
   );
