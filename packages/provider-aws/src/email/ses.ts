@@ -10,6 +10,7 @@ import {
 } from "@repo/channels/email/backend";
 import { Effect, Layer } from "effect";
 import { AwsUnexpectedResponseError, createAwsErrorMapper } from "../errors";
+import type { EventsClient, SesClient, SnsClient } from "../operations";
 import { deleteSesDomainIdentity, ensureSesDomainIdentity } from "./identity";
 import { ensureSesInfrastructure, SES_CONFIGURATION_SET_NAME } from "./infrastructure";
 import { ensureSesTenant, isSesTenantPaused, sesTenantSendingStatus } from "./tenant";
@@ -75,34 +76,39 @@ const ensuredTenants = new Set<string>();
 
 const clientsFor = (config: SesConfig, region: string) =>
   Effect.gen(function* () {
-    return {
-      events: yield* EventBridge,
-      // Only for SendEmail: a send the SDK retried after a reset or a 5xx could reach the
-      // recipient twice. The delivery job decides what happens after an unanswered send.
-      // Each send also opens its own connection. A kept-alive one that SES or the network
-      // dropped while idle fails the write with the same reset a send SES took and never
-      // answered does, and that outcome has to count as unknown; on a new connection a
-      // send that cannot reach SES fails at connect, which proves nothing went out.
-      sendOnce: yield* Effect.gen(function* () {
-        return yield* SESv2;
-      }).pipe(
-        // Fresh, or the client the layer below built (with the SDK's retries) is shared.
-        Effect.provide(
-          Layer.fresh(
-            SESv2.layer({
-              credentials: config,
-              maxAttempts: 1,
-              region,
-              requestHandler: {
-                httpAgent: { keepAlive: false },
-                httpsAgent: { keepAlive: false },
-              },
-            }),
-          ),
+    // Typed as the operations the IAM policy grants: see `AWS_OPERATIONS`.
+    const events: EventsClient = yield* EventBridge;
+    // Only for SendEmail: a send the SDK retried after a reset or a 5xx could reach the
+    // recipient twice. The delivery job decides what happens after an unanswered send.
+    // Each send also opens its own connection. A kept-alive one that SES or the network
+    // dropped while idle fails the write with the same reset a send SES took and never
+    // answered does, and that outcome has to count as unknown; on a new connection a
+    // send that cannot reach SES fails at connect, which proves nothing went out.
+    const sendOnce: Pick<SesClient, "sendEmail"> = yield* Effect.gen(function* () {
+      return yield* SESv2;
+    }).pipe(
+      // Fresh, or the client the layer below built (with the SDK's retries) is shared.
+      Effect.provide(
+        Layer.fresh(
+          SESv2.layer({
+            credentials: config,
+            maxAttempts: 1,
+            region,
+            requestHandler: {
+              httpAgent: { keepAlive: false },
+              httpsAgent: { keepAlive: false },
+            },
+          }),
         ),
       ),
-      ses: yield* SESv2,
-      sns: yield* SNS,
+    );
+    const ses: SesClient = yield* SESv2;
+    const sns: SnsClient = yield* SNS;
+    return {
+      events,
+      sendOnce,
+      ses,
+      sns,
     };
   }).pipe(
     Effect.provide(
@@ -133,12 +139,15 @@ export const makeSesEmailBackend = (config: SesConfig) =>
         : Effect.fail(new EmailBackendConfigurationError({ code: "unknown_region", region }));
     };
 
+    /** Regions already warned that the credentials may not read a tenant's status. */
+    const tenantStatusDenied = new Set<string>();
+
     /**
      * Fail open: a tenant we could not ensure (e.g. IAM lacks ses:CreateTenant) sends
      * untenanted, as before tenants existed, and is retried on the next send.
      */
     const ensureTenantForSend = (
-      ses: SESv2.Type,
+      ses: SesClient,
       input: {
         readonly identityFqdn: string;
         readonly region: string;
@@ -295,7 +304,27 @@ export const makeSesEmailBackend = (config: SesConfig) =>
                   SendingPausedException: (error) =>
                     tenantName
                       ? isSesTenantPaused(ses, tenantName).pipe(
-                          Effect.orElseSucceed(() => false),
+                          // Unread, the pause is reported as SES gave it, for no one in
+                          // particular: pausing the Project's Domains on a guess would
+                          // leave them paused after an account's pause ended.
+                          Effect.catch((cause) => {
+                            if (httpStatusOf(cause) !== 403) {
+                              return Effect.logWarning(
+                                "SES paused sending and the Project's tenant status could not be read; treating the pause as the account's",
+                                { cause, region, tenantName },
+                              ).pipe(Effect.as(false));
+                            }
+                            // SES models no access-denied error: a 403 is the credentials.
+                            // Once per region, or every send of a paused Project says it.
+                            if (tenantStatusDenied.has(region)) {
+                              return Effect.succeed(false);
+                            }
+                            tenantStatusDenied.add(region);
+                            return Effect.logWarning(
+                              'SES paused sending and refused to say whether for this Project or the whole account: the SES IAM policy needs ses:GetTenant (docs/aws-ses-iam-policy.json). Until it is granted a Project Sending Pause pauses no Domain; its sends are accepted, retried and fail as "SES paused sending"',
+                              { cause, region, tenantName },
+                            ).pipe(Effect.as(false));
+                          }),
                           Effect.flatMap((tenantPaused) =>
                             Effect.fail(
                               tenantPaused

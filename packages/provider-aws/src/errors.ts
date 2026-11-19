@@ -9,6 +9,7 @@ import {
   EmailBackendUnavailable,
 } from "@repo/channels/email/backend";
 import { Data, type Effect } from "effect";
+import type { SesOperation, SnsOperation } from "./operations";
 
 export class AwsUnexpectedResponseError extends Data.TaggedError("AwsUnexpectedResponseError")<{
   readonly missingField:
@@ -72,25 +73,6 @@ export type AwsWebhookError =
   | AwsWebhookPayloadError;
 
 type EffectError<T> = T extends Effect.Effect<unknown, infer Error, unknown> ? Error : never;
-
-type SesOperation =
-  | "createConfigurationSet"
-  | "createConfigurationSetEventDestination"
-  | "createEmailIdentity"
-  | "createTenant"
-  | "createTenantResourceAssociation"
-  | "deleteEmailIdentity"
-  | "deleteTenantResourceAssociation"
-  | "getEmailIdentity"
-  | "getReputationEntity"
-  | "getTenant"
-  | "listResourceTenants"
-  | "listTenants"
-  | "putEmailIdentityMailFromAttributes"
-  | "sendEmail"
-  | "updateConfigurationSetEventDestination";
-
-type SnsOperation = "createTopic" | "listSubscriptionsByTopic" | "setTopicAttributes" | "subscribe";
 
 type AwsError =
   | AwsUnexpectedResponseError

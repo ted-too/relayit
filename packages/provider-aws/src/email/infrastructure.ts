@@ -1,10 +1,8 @@
-import type { EventBridge } from "@effect-aws/client-eventbridge";
-import type { SESv2 } from "@effect-aws/client-sesv2";
-import type { SNS } from "@effect-aws/client-sns";
 import { EmailBackendConfigurationError } from "@repo/channels/email/backend";
 import { UNRECORDED_SEND_GRACE_SECONDS } from "@repo/channels/email/deliverability";
 import { Effect } from "effect";
 import { type AwsErrorMapper, AwsUnexpectedResponseError } from "../errors";
+import type { EventsClient, SesClient, SnsClient } from "../operations";
 import { ensureSesTenantStatusEvents } from "./tenant-status";
 
 export const SES_CONFIGURATION_SET_NAME = "relayit-delivery-events";
@@ -96,7 +94,7 @@ export const sesNotificationDeliveryPolicy = (graceSeconds: number) => {
   };
 };
 
-const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl: string) =>
+const ensureTopicAndSubscription = (sns: SnsClient, topicName: string, webhookUrl: string) =>
   Effect.gen(function* () {
     const topic = yield* sns.createTopic({ Name: topicName });
     const topicArn = topic.TopicArn;
@@ -152,7 +150,7 @@ const ensureTopicAndSubscription = (sns: SNS.Type, topicName: string, webhookUrl
     return topicArn;
   });
 
-const ensureEventDestination = (ses: SESv2.Type, destinationName: string, topicArn: string) =>
+const ensureEventDestination = (ses: SesClient, destinationName: string, topicArn: string) =>
   Effect.gen(function* () {
     yield* ses
       .createConfigurationSet({
@@ -199,11 +197,11 @@ export const ensureSesInfrastructure = ({
   sns,
 }: {
   deliveryWebhookUrl: string;
-  events: EventBridge.Type;
+  events: EventsClient;
   mapAwsError: AwsErrorMapper;
   region: string;
-  ses: SESv2.Type;
-  sns: SNS.Type;
+  ses: SesClient;
+  sns: SnsClient;
 }) =>
   Effect.gen(function* () {
     const webhookUrl = yield* validateWebhookUrl(deliveryWebhookUrl, region);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Logger } from "effect";
 import type { EmailBackendService } from "@repo/channels/email/backend";
 import { makeSesEmailBackend, provesNotSent } from "./ses";
 
@@ -200,6 +200,113 @@ describe("the SES backend's send", () => {
       expect(error).toMatchObject({ _tag: "EmailBackendUnavailable" });
       expect(sends).toHaveLength(1);
     }).pipe(Effect.ensuring(Effect.sync(() => server.stop(true))));
+  });
+});
+
+describe("a send SES refuses because sending is paused", () => {
+  /**
+   * SES with a tenant for the Project, refusing every send as paused and answering the
+   * read of the tenant with `tenant`.
+   */
+  const pausedSes = (tenant: () => Response) => {
+    const server = Bun.serve({
+      fetch: (request) => {
+        switch (new URL(request.url).pathname) {
+          case "/v2/email/tenants":
+            return Response.json({
+              TenantArn: "arn:aws:ses:eu-central-1:123456789012:tenant/relayit-orgn_paused/tn-1",
+            });
+          case "/v2/email/tenants/resources":
+            return Response.json({});
+          case "/v2/email/tenants/get":
+            return tenant();
+          default:
+            return new Response(JSON.stringify({ message: "Sending paused" }), {
+              headers: {
+                "content-type": "application/json",
+                "x-amzn-errortype": "SendingPausedException",
+              },
+              status: 400,
+            });
+        }
+      },
+      port: 0,
+    });
+    return { stop: Effect.sync(() => void server.stop(true)), url: server.url.origin };
+  };
+
+  /** What each of `count` sends from the Project fails with, and the warnings logged. */
+  const refusals = (endpoint: string, count: number) => {
+    const warnings: string[] = [];
+    return withSesAt(endpoint, (backend) =>
+      Effect.forEach(Array.from({ length: count }), () =>
+        Effect.flip(
+          backend.send({
+            message: {
+              bcc: null,
+              cc: null,
+              from: { address: "hello@example.com", normalized: "hello@example.com" },
+              headers: null,
+              html: null,
+              replyTo: null,
+              sender: { identityFqdn: "example.com", projectId: "orgn_paused" },
+              subject: "Hello",
+              text: "Hello",
+              to: ["someone@example.com"],
+            },
+            region: "eu-central-1",
+          }),
+        ),
+      ),
+    ).pipe(
+      Effect.map((errors) => ({ errors, warnings })),
+      Effect.provide(
+        Logger.layer([
+          Logger.make(({ logLevel, message }) => {
+            if (logLevel === "Warn") {
+              warnings.push(JSON.stringify(message));
+            }
+          }),
+        ]),
+      ),
+    );
+  };
+
+  it.live("is a Project Sending Pause when SES says the Project's tenant is disabled", () => {
+    const ses = pausedSes(() => Response.json({ Tenant: { SendingStatus: "DISABLED" } }));
+    return Effect.gen(function* () {
+      const { errors, warnings } = yield* refusals(ses.url, 1);
+
+      expect(errors).toMatchObject([
+        { _tag: "EmailBackendRejected", reason: "project_sending_paused" },
+      ]);
+      expect(warnings).toEqual([]);
+    }).pipe(Effect.ensuring(ses.stop));
+  });
+
+  it.live("is paused for no one in particular, and says so once, without ses:GetTenant", () => {
+    // What SES answers an IAM user without ses:GetTenant: a 403 it has no modelled error for.
+    const ses = pausedSes(
+      () =>
+        new Response(JSON.stringify({ message: "Not authorized" }), {
+          headers: {
+            "content-type": "application/json",
+            "x-amzn-errortype": "AccessDeniedException",
+          },
+          status: 403,
+        }),
+    );
+    return Effect.gen(function* () {
+      const { errors, warnings } = yield* refusals(ses.url, 2);
+
+      // Not a Project Sending Pause, which would pause the Project's Domains on a guess.
+      expect(errors).toMatchObject([
+        { _tag: "EmailBackendRejected", reason: "sending_paused" },
+        { _tag: "EmailBackendRejected", reason: "sending_paused" },
+      ]);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("ses:GetTenant");
+    }).pipe(Effect.ensuring(ses.stop));
   });
 });
 
