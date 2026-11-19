@@ -253,6 +253,12 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
         ),
       );
 
+      // A Domain left unverified until its checks stopped is not scheduled again: its
+      // holder's refresh, or a claim on it being proven, schedules the next.
+      if (result.nextCheckAt === null) {
+        return;
+      }
+
       yield* jobs
         .schedule(
           emailVerifyCustomDomainJob,
@@ -276,7 +282,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
     const jobs = yield* Jobs;
     const rows = yield* db.query.customDomain
       .findMany({
-        columns: { id: true, nextVerifyAt: true },
+        columns: { id: true, lastCheckedAt: true, nextVerifyAt: true },
         with: { registration: { columns: { id: true } } },
       })
       .pipe(
@@ -294,9 +300,14 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
     // scheduled in Redis after its registration commits, so it can fail or be lost, and the
     // Domain records no next check until one has run: such a Domain is due now, or it would
     // stay unverified until someone added it again. One with no registration has nothing to
-    // check; adding it again registers it.
+    // check; adding it again registers it. One a check has run for and that has no next
+    // check was left unverified until its checks stopped, and a restart does not start
+    // them again.
     yield* Effect.forEach(
-      rows.filter((row) => row.nextVerifyAt !== null || row.registration !== null),
+      rows.filter(
+        (row) =>
+          row.nextVerifyAt !== null || (row.registration !== null && row.lastCheckedAt === null),
+      ),
       (row) =>
         jobs.schedule(
           emailVerifyCustomDomainJob,

@@ -26,6 +26,7 @@ import { and, eq, inArray, isNull, ne, notExists, or, type SQL, sql } from "driz
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import {
+  domainUpdatedColumns,
   emitDomainUpdated,
   liftPreviousHolderPause,
 } from "../deliverability/project-sending-pause";
@@ -632,7 +633,11 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
           );
         }
 
-        yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
+        // Only a Domain no check has run for: every check counts toward the ones its holder
+        // has left before they stop, and a claim must not spend another Project's.
+        if (existing.lastCheckedAt === null) {
+          yield* scheduleCustomDomainVerification({ customDomainId: existing.id });
+        }
 
         return { customDomainId: existing.id, kind: "claim" as const };
       }
@@ -774,12 +779,7 @@ const setDomainPause = (
       .update(customDomain)
       .set(values)
       .where(and(eq(customDomain.id, customDomainId), changes))
-      .returning({
-        id: customDomain.id,
-        isPaused: customDomain.isPaused,
-        pausedReason: customDomain.pausedReason,
-        verificationStatus: customDomain.verificationStatus,
-      });
+      .returning(domainUpdatedColumns);
     if (!changed) {
       const [existing] = yield* tx
         .select({ id: customDomain.id })
@@ -1014,6 +1014,12 @@ export const completeDomainClaimTransfer = (input: {
         // Only as the Domain changes hands: a check that proves the same claim a second
         // time finds a pause that may by now be the new holder's own.
         if (claim?.status !== "verified") {
+          // Its checks start again for the new holder, who is not the one that left it
+          // unverified until they stopped: due now, from the first interval.
+          yield* tx
+            .update(customDomain)
+            .set({ nextVerifyAt: new Date(), verifyBackoffLevel: 0 })
+            .where(eq(customDomain.id, input.customDomainId));
           yield* liftPreviousHolderPause(tx, {
             customDomainId: input.customDomainId,
             defaultRegion: (yield* EmailBackend).defaultRegion,

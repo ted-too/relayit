@@ -15,6 +15,8 @@ import { setBanned, setPlatformAdmin } from "@repo/persistence/auth/platform-adm
 import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
 import {
+  customDomain,
+  emailDnsRecord,
   emailDomainRegistration,
   sandboxDomain,
   templatingWorkspace,
@@ -22,7 +24,8 @@ import {
   user,
 } from "@repo/persistence/db/schema";
 import { makeDbLive } from "@repo/persistence/db/effect";
-import { makeRedisLive } from "@repo/redis";
+import { jobKeys } from "@repo/jobs/storage";
+import { makeRedisClient, makeRedisLive } from "@repo/redis";
 import {
   makeBuilderAuthServerLayer,
   TemplatingBuilderHandlersLive,
@@ -1259,6 +1262,55 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           ),
         ).toEqual({ verificationStatus: "verified" });
         yield* Effect.promise(() => db.$client.end());
+      }),
+    );
+
+    it.effect("starts a stopped Domain's checks again when its holder refreshes it", () =>
+      Effect.gen(function* () {
+        const owner = yield* signUp("stopped");
+        const project = yield* createProject(owner, `Stopped ${run.slice(-8)}`);
+        const p = `/projects/${project.slug}`;
+        const added = yield* call("POST", `${p}/domains`, {
+          as: owner,
+          body: { fqdn: `${run}.stopped.example.test` },
+        });
+        const domainId = (added.body as { id: string }).id;
+        // As a week of checks that found it unverified leave it: checked, with no next
+        // check, and no job scheduled. The fake backend finds every record published, so
+        // the Domain is left with none to find and stays unverified at the refresh.
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        const redis = makeRedisClient({ url: testRedisUrl });
+        const scheduled = `test:${run}:${jobKeys("email.verify-custom-domain").scheduled}`;
+        yield* Effect.promise(async () => {
+          await db
+            .update(customDomain)
+            .set({ lastCheckedAt: new Date(), nextVerifyAt: null, verifyBackoffLevel: 21 })
+            .where(eq(customDomain.id, domainId));
+          await db.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, domainId));
+          await redis.send("ZREM", [scheduled, domainId]);
+        });
+        expect(
+          yield* call("POST", `${p}/domains/${domainId}/refresh`, { as: owner }),
+        ).toMatchObject({ body: { verificationStatus: "not_verified" }, status: 200 });
+
+        const { dueAt, row } = yield* Effect.promise(async () => ({
+          dueAt: await redis.send("ZSCORE", [scheduled, domainId]),
+          row: await db.query.customDomain.findFirst({
+            columns: { lastCheckedAt: true, nextVerifyAt: true, verifyBackoffLevel: true },
+            where: { id: domainId },
+          }),
+        }));
+        // Counted from the start again: the first wait, not none.
+        expect(row?.verifyBackoffLevel).toBe(1);
+        expect((row?.nextVerifyAt?.getTime() ?? 0) - (row?.lastCheckedAt?.getTime() ?? 0)).toBe(
+          120_000,
+        );
+        // Its job is scheduled for that check.
+        expect(Number(dueAt)).toBe(row?.nextVerifyAt?.getTime());
+        yield* Effect.promise(async () => {
+          redis.close();
+          await db.$client.end();
+        });
       }),
     );
 

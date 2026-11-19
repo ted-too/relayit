@@ -4,7 +4,8 @@
  * typed in, and that its registration waits its turn for the name, replaces a removed
  * Domain's identity, gives up an SES call that never answers and is checked even when its
  * first check was never scheduled. SES, Cloudflare, public DNS and the job queue are the
- * boundaries stubbed.
+ * boundaries stubbed, but for the Cloudflare call that never answers, which runs on the real
+ * queue (#131).
  */
 import { describe, expect, it, test } from "@effect/vitest";
 import { JobEnqueueError, Jobs, type JobsService } from "@repo/jobs";
@@ -37,16 +38,20 @@ import {
 } from "../custom-domain/lifecycle";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { recordedJobs } from "../recorded-jobs-test-layer";
 import { emailVerifySandboxDomainHandler } from "../verification/handlers";
 import { ensureSandboxDomain } from "./provision";
 import { lockSandboxRoots } from "./reserved";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
+const testRedisUrl = Bun.env.TEST_REDIS_URL;
 
-describe("ensureSandboxDomain (PostgreSQL)", () => {
-  if (!testDatabaseUrl) {
-    process.emitWarning("Skipping Sandbox Domain tests: TEST_DATABASE_URL is not set");
-    // The PostgreSQL test is opt-in.
+describe("ensureSandboxDomain (PostgreSQL and Redis)", () => {
+  if (!(testDatabaseUrl && testRedisUrl)) {
+    process.emitWarning(
+      "Skipping Sandbox Domain tests: TEST_DATABASE_URL and TEST_REDIS_URL are not both set",
+    );
+    // The PostgreSQL and Redis test is opt-in.
     test.skip("ensureSandboxDomain", () => undefined);
     return;
   }
@@ -59,8 +64,12 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
   const boundaries = (
     options: {
       readonly createIdentityAnswers?: () => boolean;
+      /** Whether Cloudflare answers the publishing of that owner's records; it does unless told. */
+      readonly dnsAnswers?: (owner: string) => boolean;
       readonly failSchedule?: () => boolean;
       readonly onCreateIdentity?: () => Effect.Effect<void>;
+      /** Runs as a publishing that will not be answered is asked for. */
+      readonly onDnsUnanswered?: () => Effect.Effect<void>;
     } = {},
   ) => {
     const createdIdentities: string[] = [];
@@ -111,8 +120,14 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       Layer.succeed(EmailManagedDns, {
         cloudflareEnabled: true,
         reconcile: ({ owner }) =>
-          Effect.sync(() => {
+          Effect.suspend(() => {
+            if (options.dnsAnswers?.(owner) === false) {
+              return (options.onDnsUnanswered?.() ?? Effect.void).pipe(
+                Effect.andThen(Effect.never),
+              );
+            }
             dnsOwners.push(owner);
+            return Effect.void;
           }),
         remove: () => Effect.void,
       }),
@@ -565,6 +580,73 @@ describe("ensureSandboxDomain (PostgreSQL)", () => {
       expect(scheduled).toEqual([{ sandboxDomainId: sandbox?.id }]);
     }).pipe(Effect.provide(layer));
   });
+
+  it.effect.each([
+    {
+      identities: 0,
+      message: "Cloudflare did not answer in time while publishing the sandbox domain's root DNS.",
+      operation: "create",
+      records: "root",
+      what: "its root's DKIM and DMARC records",
+    },
+    {
+      identities: 1,
+      message:
+        "Cloudflare did not answer in time while publishing the sandbox domain's MAIL FROM DNS.",
+      operation: "register_identity",
+      records: "identity",
+      what: "its MAIL FROM records",
+    },
+  ])(
+    "gives up a Cloudflare call for $what that never answers, and the next start registers it",
+    ({ identities, message, operation, records }) => {
+      let answers = false;
+      let reached: Deferred.Deferred<void> | undefined;
+      const { createdIdentities, dnsOwners, layer } = boundaries({
+        dnsAnswers: (owner) => answers || !owner.endsWith(`:${records}`),
+        onDnsUnanswered: () => (reached ? Deferred.succeed(reached, undefined) : Effect.void),
+      });
+      // The real queue in place of the stub: the first check is scheduled in Redis.
+      const queue = recordedJobs(testRedisUrl);
+      return Effect.gen(function* () {
+        const root = newRoot();
+        const calling = yield* Deferred.make<void>();
+        reached = calling;
+
+        const starting = yield* Effect.forkChild(
+          Effect.flip(ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root })),
+        );
+        yield* Deferred.await(calling);
+        yield* TestClock.adjust("30 seconds");
+        expect(yield* Fiber.join(starting)).toMatchObject({
+          _tag: "SandboxDomainError",
+          message,
+          operation,
+        });
+        const [sandbox] = yield* sandboxesOn(root);
+        expect(sandbox).toBeDefined();
+        expect(yield* registrationsOf(sandbox?.id)).toEqual([]);
+        expect(queue.scheduled).toEqual([]);
+        expect(createdIdentities).toHaveLength(identities);
+
+        // Giving up released the name's lock and kept the row and its key: the next start
+        // publishes both sets of records and registers the same Sandbox Domain.
+        answers = true;
+        yield* ensureSandboxDomain({ cloudflareZoneId: "zone", rootDomain: root });
+        expect(yield* sandboxesOn(root)).toEqual([sandbox]);
+        expect(yield* registrationsOf(sandbox?.id)).toEqual([{ region: "eu-central-1" }]);
+        expect(dnsOwners).toEqual(
+          expect.arrayContaining([
+            `sandbox:${sandbox?.id}:root`,
+            `sandbox:${sandbox?.id}:identity`,
+          ]),
+        );
+        expect(queue.scheduled).toEqual([
+          { name: "email.verify-sandbox-domain", payload: { sandboxDomainId: sandbox?.id } },
+        ]);
+      }).pipe(Effect.provide(Layer.merge(layer, queue.layer)));
+    },
+  );
 
   it.live("is refused for a Domain being added on its root as it is set up", () => {
     const { createdIdentities, layer } = boundaries();

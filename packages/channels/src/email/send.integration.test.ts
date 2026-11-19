@@ -1360,6 +1360,7 @@ describe("an accepted email send", () => {
           expect(domainEvents).toEqual([
             {
               payload: {
+                checks_stopped: false,
                 domain_id: project.customDomainId,
                 paused: true,
                 paused_reason: "project_sending_pause",

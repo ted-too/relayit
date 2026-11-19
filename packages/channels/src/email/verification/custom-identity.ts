@@ -1,3 +1,4 @@
+import { Jobs } from "@repo/jobs";
 import type { Database, DatabaseExecutor } from "@repo/persistence/db/effect";
 import {
   type CustomDomain,
@@ -17,8 +18,16 @@ import {
   completeDomainClaimTransfer,
   removeDomainLink,
 } from "../custom-domain/lifecycle";
+import { domainUpdatedColumns, emitDomainUpdated } from "../deliverability/project-sending-pause";
 import { DnsLookups } from "../dns-lookups";
-import { computeNextCheckAt, defaultVerifyCadenceConfig, mergeVerificationStatus } from "./cadence";
+import {
+  computeNextCheckAt,
+  computeNextDomainCheckAt,
+  defaultVerifyCadenceConfig,
+  domainChecksStopped,
+  mergeVerificationStatus,
+} from "./cadence";
+import { emailVerifyCustomDomainJob } from "./jobs";
 
 export class VerifyCustomDomainError extends Data.TaggedError("VerifyCustomDomainError")<{
   readonly cause?: unknown;
@@ -34,7 +43,8 @@ export interface CustomDomainVerifyResult {
   readonly activeRecords: number;
   readonly customDomainId: string;
   readonly missingRecords: number;
-  readonly nextCheckAt: Date;
+  /** Null when the Domain stayed unverified until its checks stopped, or is gone. */
+  readonly nextCheckAt: Date | null;
   readonly verificationStatus: DomainVerificationStatus;
 }
 
@@ -114,12 +124,16 @@ const verifyCustomDomainDnsRecords = (db: DatabaseExecutor, customDomainId: stri
 
 /**
  * Asks SES how the domain's identity stands, checks its DNS records, and rolls both up
- * into the domain's status and next check.
+ * into the domain's status and next check. A Domain left unverified is checked less and
+ * less often and then not at all (`UNVERIFIED_DOMAIN_CHECKS`); the check that stops them
+ * tells the Project holding it (`domain.updated`), and nothing is removed. `restart` is the
+ * holder asking: the count of unverified checks starts again, and with it the checks.
  */
 export const verifyCustomDomainRegistration = (input: {
-  readonly db: DatabaseExecutor;
-  readonly domain: Pick<CustomDomain, "fqdn" | "id" | "verifyBackoffLevel">;
+  readonly db: Database;
+  readonly domain: Pick<CustomDomain, "fqdn" | "id">;
   readonly registration: EmailDomainRegistration;
+  readonly restart?: boolean;
 }) =>
   Effect.gen(function* () {
     const backend = yield* EmailBackend;
@@ -171,24 +185,64 @@ export const verifyCustomDomainRegistration = (input: {
     });
 
     const now = new Date();
-    const cadence = computeNextCheckAt({
-      backoffLevel: input.domain.verifyBackoffLevel,
-      config: defaultVerifyCadenceConfig,
-      from: now,
-      // SES can lag the DNS records: poll at the pace of whichever is further behind.
-      verificationStatus:
-        registrationStatus === "verified" ? verificationStatus : registrationStatus,
-    });
-
-    yield* input.db
-      .update(customDomain)
-      .set({
-        lastCheckedAt: now,
-        nextVerifyAt: cadence.nextCheckAt,
-        verificationStatus,
-        verifyBackoffLevel: cadence.backoffLevel,
-      })
-      .where(eq(customDomain.id, customDomainId))
+    const nextCheckAt = yield* input.db
+      .transaction((tx) =>
+        Effect.gen(function* () {
+          // Counted from the row as it is now, held: a refresh or a proven claim may have
+          // started the count again while SES and DNS were being asked, and a check that
+          // wrote what it read before would undo that, or tell a new holder of a stop.
+          // Held as the row's other writers hold it, which lets accepts through.
+          const [current] = yield* tx
+            .select({
+              lastCheckedAt: customDomain.lastCheckedAt,
+              nextVerifyAt: customDomain.nextVerifyAt,
+              verifyBackoffLevel: customDomain.verifyBackoffLevel,
+            })
+            .from(customDomain)
+            .where(eq(customDomain.id, customDomainId))
+            .for("no key update");
+          // Removed while it was being checked: nothing to write, and no next check.
+          if (!current) {
+            return null;
+          }
+          const cadence = computeNextDomainCheckAt({
+            from: now,
+            unverifiedChecks: input.restart ? 0 : current.verifyBackoffLevel,
+            // SES can lag the DNS records: poll at the pace of whichever is further behind.
+            verificationStatus:
+              registrationStatus === "verified" ? verificationStatus : registrationStatus,
+          });
+          const [checked] = yield* tx
+            .update(customDomain)
+            .set({
+              lastCheckedAt: now,
+              nextVerifyAt: cadence.nextCheckAt,
+              verificationStatus,
+              verifyBackoffLevel: cadence.unverifiedChecks,
+            })
+            .where(eq(customDomain.id, customDomainId))
+            .returning(domainUpdatedColumns);
+          // Told once, by the check that stops them: one that finds them already stopped
+          // changes nothing.
+          if (checked && cadence.nextCheckAt === null && !domainChecksStopped(current)) {
+            const holders = yield* tx
+              .select({ organizationId: organizationDomain.organizationId })
+              .from(organizationDomain)
+              .where(
+                and(
+                  eq(organizationDomain.customDomainId, customDomainId),
+                  eq(organizationDomain.ownershipVerificationStatus, "verified"),
+                ),
+              );
+            yield* Effect.forEach(
+              holders,
+              ({ organizationId }) => emitDomainUpdated(tx, organizationId, checked),
+              { discard: true },
+            );
+          }
+          return cadence.nextCheckAt;
+        }),
+      )
       .pipe(
         Effect.mapError(
           (cause) =>
@@ -205,7 +259,7 @@ export const verifyCustomDomainRegistration = (input: {
       activeRecords: dns.activeRecords,
       customDomainId,
       missingRecords: dns.missingRecords,
-      nextCheckAt: cadence.nextCheckAt,
+      nextCheckAt,
       verificationStatus,
     } satisfies CustomDomainVerifyResult;
   });
@@ -336,6 +390,29 @@ export const verifyCustomDomainOwnership = (input: {
             }),
         ),
       );
+      if (took) {
+        // The Domain's checks may have stopped while its last holder left it unverified,
+        // and its new holder has asked for nothing but the Domain: the transfer made a
+        // check due now, and this is its job. Lost, the worker's next start schedules it.
+        yield* (yield* Jobs)
+          .schedule(
+            emailVerifyCustomDomainJob,
+            { customDomainId: input.customDomain.id },
+            now.getTime(),
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new VerifyCustomDomainError({
+                  cause,
+                  customDomainId: input.customDomain.id,
+                  message: "Failed to schedule the claimed Domain's verification.",
+                  operation: "claim",
+                  organizationId: input.organizationId,
+                }),
+            ),
+          );
+      }
       return {
         customDomainId: input.customDomain.id,
         organizationId: input.organizationId,
