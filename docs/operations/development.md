@@ -32,7 +32,7 @@ What the apps reach, and what `.env.example` sets so that none of it is real:
 
 `bun run dev` sets `NODE_ENV=development`, so the fake and local storage are the defaults there even without the first two lines. Both run only under `NODE_ENV` development or test: an app started any other way, a deployed image included, refuses to start with either.
 
-`TEMPLATING_BUILDER_SECRET` connects the api to the builder; without it the Template catalog works but Email Workspaces don't. `BETTER_AUTH_SECRETS` signs sessions and seals DKIM keys.
+`TEMPLATING_BUILDER_SECRET` connects the api to the builder; without it the Template catalog works but Email Workspaces don't. `EMAIL_WORKSPACE_EDITING=enabled` lets them be edited; a `.env` written before the variable existed lacks it, so its workspaces are read-only until the line is added. `BETTER_AUTH_SECRETS` signs sessions and seals DKIM keys.
 
 ## The fake email backend
 

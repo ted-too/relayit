@@ -97,9 +97,13 @@ export const ProjectRef = Schema.Struct({
   slug: Schema.String,
 });
 
-/** Whether this deployment bills through Stripe and offers GitHub sign-in. */
+/**
+ * Whether this deployment bills through Stripe, offers GitHub sign-in, and lets Email
+ * Workspaces be edited, previewed and published (`EMAIL_WORKSPACE_EDITING=enabled`).
+ */
 export const DashboardConfig = Schema.Struct({
   billing: Schema.Boolean,
+  emailWorkspaceEditing: Schema.Boolean,
   githubSignIn: Schema.Boolean,
 });
 

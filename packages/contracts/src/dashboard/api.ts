@@ -13,6 +13,7 @@ import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   Conflict,
+  EmailWorkspacesFrozen,
   Invalid,
   NotFound,
   OperationFailed,
@@ -190,8 +191,9 @@ export class TemplatesApi extends HttpApiGroup.make("templates")
       success: Template,
     }).annotate(RequiresPermission, { template: ["update"] }),
     // Replaces the email variant with one linking a published Workspace Entry.
+    // Frozen, it may only change the subject beside the Entry already linked.
     HttpApiEndpoint.put("setEmail", "/:templateId/email", {
-      error: failures,
+      error: [...failures, EmailWorkspacesFrozen],
       params: template,
       payload: LinkReactEmailInput,
       success: Template,
@@ -201,10 +203,17 @@ export class TemplatesApi extends HttpApiGroup.make("templates")
   .prefix("/projects/:orgSlug/templates") {}
 
 const workspace = { ...project, kind: WorkspaceKind };
-/** The template builder answers these; without it they are `Unavailable`. */
-const builderFailures = [...failures, Unavailable];
+/**
+ * The template builder answers these; without it they are `Unavailable`. While the
+ * deployment has editing off, the ones that store, install, build, render or seal workspace
+ * source are `EmailWorkspacesFrozen`, as is any of them for a Project with no workspace yet.
+ */
+const builderFailures = [...failures, Unavailable, EmailWorkspacesFrozen];
 
-/** A Project's Email Workspace, made on first read. Git operations go to the template builder. */
+/**
+ * A Project's Email Workspace, made on first read unless the deployment has editing off.
+ * Git operations go to the template builder.
+ */
 export class WorkspacesApi extends HttpApiGroup.make("workspaces")
   .add(
     HttpApiEndpoint.get("get", "/", {

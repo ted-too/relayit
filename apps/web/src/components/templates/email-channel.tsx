@@ -13,7 +13,7 @@ import {
 } from "@repo/ui/components/ui/coss/dialog";
 import { Input } from "@repo/ui/components/ui/shad/input";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useParams, useRouteContext } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { queries } from "@/lib/queries";
@@ -40,6 +40,7 @@ function subjectFromVariant(template: Template) {
 
 export function TemplateEmailChannel({ template }: { template: Template }) {
   const { orgSlug } = useParams({ from: "/_authd/$orgSlug" });
+  const { isEmailWorkspaceEditingEnabled: editing } = useRouteContext({ from: "__root__" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [subject, setSubject] = useState(() => subjectFromVariant(template) || template.name);
 
@@ -159,7 +160,8 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
           </Button>
         ) : null}
         <Button
-          disabled={subject.trim().length === 0}
+          // Frozen, the api keeps a Template on the Entry it already links.
+          disabled={!editing || subject.trim().length === 0}
           onClick={() => setPickerOpen(true)}
           variant="outline"
         >
@@ -185,21 +187,23 @@ export function TemplateEmailChannel({ template }: { template: Template }) {
             Open in editor
           </Button>
         ) : null}
-        <Button
-          render={
-            <Link
-              params={{ orgSlug }}
-              search={{
-                templateId: template.id,
-                intent: "create-new",
-              }}
-              to="/$orgSlug/automations/templates/workspace"
-            />
-          }
-        >
-          <RiAddLine />
-          Create new Entry
-        </Button>
+        {editing ? (
+          <Button
+            render={
+              <Link
+                params={{ orgSlug }}
+                search={{
+                  templateId: template.id,
+                  intent: "create-new",
+                }}
+                to="/$orgSlug/automations/templates/workspace"
+              />
+            }
+          >
+            <RiAddLine />
+            Create new Entry
+          </Button>
+        ) : null}
       </div>
 
       <EntryPickerDialog

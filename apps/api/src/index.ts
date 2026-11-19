@@ -15,6 +15,7 @@ const apiProgram = Effect.gen(function* () {
     appOrigin: config.appUrl.origin,
     dashboard: {
       billing: Option.isSome(config.stripe),
+      emailWorkspaceEditing: config.emailWorkspaceEditing,
       githubSignIn: Option.isSome(config.github),
     },
     hostname: config.hostname,

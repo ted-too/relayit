@@ -56,7 +56,7 @@ describe("API key auth (PostgreSQL, Redis)", () => {
               });
             },
             appOrigin: APP,
-            dashboard: { billing: false, githubSignIn: false },
+            dashboard: { billing: false, emailWorkspaceEditing: true, githubSignIn: false },
             hostname: "127.0.0.1",
             port: 0,
             unsubscribeSecrets: ["test-secret"],

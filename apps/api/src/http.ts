@@ -15,6 +15,7 @@ import {
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import { Api, MAX_SEND_BODY_BYTES } from "./api";
 import { dashboardRoutes } from "./dashboard/http";
+import { EmailWorkspaceEditing } from "./dashboard/workspaces";
 import { ApiKeyAuthLive, LegacyApiKeyAuthLive } from "./lib/api-key";
 import { bodyLimit } from "./lib/body-limit";
 import { RequestValidationLive } from "./lib/validation";
@@ -95,8 +96,12 @@ export const apiServer = (options: {
   readonly hostname: string;
   readonly port: number;
   readonly appOrigin: string;
-  /** What the dashboard's `GET /config` reports. */
-  readonly dashboard: { readonly billing: boolean; readonly githubSignIn: boolean };
+  /** What the dashboard's `GET /config` reports; `emailWorkspaceEditing` off also freezes Email Workspaces. */
+  readonly dashboard: {
+    readonly billing: boolean;
+    readonly emailWorkspaceEditing: boolean;
+    readonly githubSignIn: boolean;
+  };
   /** Every better-auth secret, current first, any of which may have signed an unsubscribe link. */
   readonly unsubscribeSecrets: ReadonlyArray<string>;
   readonly accept?: typeof acceptTransactionalEmail;
@@ -157,6 +162,7 @@ export const apiServer = (options: {
       },
     },
   ).pipe(
+    Layer.provide(Layer.succeed(EmailWorkspaceEditing, options.dashboard.emailWorkspaceEditing)),
     // Bun closes a connection idle this long, by its documentation even while the route
     // is still answering. A send may spend `ATTACHMENTS_DEADLINE_SECONDS` on its
     // attachments, then up to 30 seconds more on the rest of accept (the sender and

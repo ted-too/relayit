@@ -2,6 +2,7 @@ import {
   Conflict,
   DashboardApi,
   DashboardMember,
+  EmailWorkspacesFrozen,
   Invalid,
   NotFound,
   type Template,
@@ -18,6 +19,7 @@ import { and, count, eq, isNull, ne } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { operationFailed } from "./failures";
+import { EmailWorkspaceEditing } from "./workspaces";
 
 const templateNotFound = new NotFound({ message: "Template not found." });
 const archived = new Conflict({ message: "Archived Templates cannot be updated." });
@@ -223,6 +225,19 @@ export const templateHandlers = HttpApiBuilder.group(DashboardApi, "templates", 
             organizationId,
             templateId: params.templateId,
           });
+          const currentEmail = existing.channelVariants.find(
+            (variant) => variant.channel === "email",
+          );
+          // Frozen, sends render only artifacts already linked: an Entry published and
+          // never linked may hold source nobody has sent with yet.
+          if (
+            !(yield* EmailWorkspaceEditing) &&
+            currentEmail?.workspaceEntryId !== payload.workspaceEntryId
+          ) {
+            return yield* new EmailWorkspacesFrozen({
+              message: "Email Workspaces are frozen on this deployment.",
+            });
+          }
           const db = yield* DB;
           const entry = yield* db.query.templatingWorkspaceEntry
             .findFirst({ where: { id: payload.workspaceEntryId }, with: { workspace: true } })
@@ -252,9 +267,6 @@ export const templateHandlers = HttpApiBuilder.group(DashboardApi, "templates", 
             variables: null,
             workspaceEntryId: entry.id,
           };
-          const currentEmail = existing.channelVariants.find(
-            (variant) => variant.channel === "email",
-          );
           yield* (
             currentEmail
               ? db

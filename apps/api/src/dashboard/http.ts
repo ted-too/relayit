@@ -22,14 +22,15 @@ const contractPaths = () => {
 
 /**
  * The dashboard's operations, at the paths `DashboardApi` gives them. `appOrigin` is the
- * only origin a change is accepted from; `billing` and `githubSignIn` are what `GET /config`
- * reports. Each path also takes `OPTIONS`, so the CORS middleware these routes are given
- * (`http.ts`) answers the browser's preflight; without a route the request would 404 before
- * reaching it.
+ * only origin a change is accepted from; `billing`, `emailWorkspaceEditing` and `githubSignIn`
+ * are what `GET /config` reports. Each path also takes `OPTIONS`, so the CORS middleware
+ * these routes are given (`http.ts`) answers the browser's preflight; without a route the
+ * request would 404 before reaching it.
  */
 export const dashboardRoutes = (options: {
   readonly appOrigin: string;
   readonly billing: boolean;
+  readonly emailWorkspaceEditing: boolean;
   readonly githubSignIn: boolean;
 }) =>
   Layer.mergeAll(
@@ -39,7 +40,11 @@ export const dashboardRoutes = (options: {
           HttpApiBuilder.group(DashboardApi, "config", (handlers) =>
             Effect.succeed(
               handlers.handle("get", () =>
-                Effect.succeed({ billing: options.billing, githubSignIn: options.githubSignIn }),
+                Effect.succeed({
+                  billing: options.billing,
+                  emailWorkspaceEditing: options.emailWorkspaceEditing,
+                  githubSignIn: options.githubSignIn,
+                }),
               ),
             ),
           ),
