@@ -76,7 +76,7 @@ Every accepted `POST /messages/email` request creates:
 
 Messages created through `/messages/email` are always transactional. Marketing sends will go through Campaigns, which are coming soon.
 
-Delivery happens in the background. A `201` means the Message was accepted and queued, not that it reached the inbox. If a Domain is paused or removed after a send was queued, the queued Delivery fails at send time.
+Delivery happens in the background. A `201` means the Message was accepted and queued, not that it reached the inbox. If a Domain is paused or removed after a send was queued, the queued Delivery fails at send time. A Delivery that could not be started within a day of when it was due (a day after it was accepted, or after its `scheduled_at`) fails with `message.failed` instead of being sent late.
 
 ## Usage and Plans
 
