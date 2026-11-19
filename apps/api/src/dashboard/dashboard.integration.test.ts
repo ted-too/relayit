@@ -1056,6 +1056,62 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect("holds better-auth and a signed-in member to the body limit", () =>
+      Effect.gen(function* () {
+        const cookie = yield* signUp("limit");
+        const tooLarge = {
+          code: "payload_too_large",
+          message: "Request body exceeds the 1 MiB limit.",
+        };
+        const padding = "a".repeat(2 * 1024 * 1024);
+
+        const signedUp = yield* call("POST", "/auth/sign-up/email", {
+          body: { email: `big-${run}@example.test`, name: padding, password: "a-long-password" },
+        });
+        expect(signedUp).toMatchObject({ body: tooLarge, status: 413 });
+        const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+        expect(
+          yield* Effect.promise(() =>
+            db
+              .select()
+              .from(user)
+              .where(eq(user.email, `big-${run}@example.test`)),
+          ),
+        ).toEqual([]);
+        expect(
+          yield* call("POST", "/projects", { as: cookie, body: { name: padding, slug: "big" } }),
+        ).toMatchObject({ body: tooLarge, status: 413 });
+
+        // better-auth is handed the body the api read: a sign-in sent without a
+        // Content-Length signs in.
+        const origin = yield* Origin;
+        const chunked = yield* Effect.promise(() =>
+          fetch(`${origin}/auth/sign-in/email`, {
+            body: new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    JSON.stringify({
+                      email: `limit-${run}@example.test`,
+                      password: "a-long-password",
+                    }),
+                  ),
+                );
+                controller.close();
+              },
+            }),
+            duplex: "half",
+            headers: { "content-type": "application/json", origin: APP },
+            method: "POST",
+          }),
+        );
+        expect(chunked.status).toBe(200);
+        expect(yield* Effect.promise(() => chunked.json())).toMatchObject({
+          user: { email: `limit-${run}@example.test` },
+        });
+      }),
+    );
+
     it.effect("sends a sign-in failure with nowhere else to go to the dashboard's sign-in", () =>
       Effect.gen(function* () {
         const origin = yield* Origin;

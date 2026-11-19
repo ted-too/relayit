@@ -171,3 +171,50 @@ export const request = (
       status: response.status,
     };
   });
+
+/**
+ * A request that announces `bytes` (40 MiB unless given) and sends 1 KiB: an answer can only
+ * come from a handler that isn't waiting for the rest.
+ */
+export const announced = (
+  origin: string,
+  path: string,
+  headers: Record<string, string>,
+  bytes = 40 * 1024 * 1024,
+) =>
+  Effect.promise(async () => {
+    let received = "";
+    const answered = Promise.withResolvers<string>();
+    const socket = await Bun.connect({
+      hostname: "127.0.0.1",
+      port: Number(new URL(origin).port),
+      socket: {
+        close: () => answered.resolve(received),
+        data: (_socket, chunk) => {
+          received += chunk.toString();
+          const [head, body] = received.split("\r\n\r\n");
+          const length = Number(/content-length: (\d+)/i.exec(head ?? "")?.[1]);
+          if (body !== undefined && body.length >= length) {
+            answered.resolve(received);
+          }
+        },
+      },
+    });
+    socket.write(
+      [
+        `POST ${path} HTTP/1.1`,
+        "host: api.test",
+        `content-length: ${bytes}`,
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        "",
+        `{"html":"${"a".repeat(1024)}`,
+      ].join("\r\n"),
+    );
+    const response = await Promise.race([
+      answered.promise,
+      Bun.sleep(2000).then(() => "no answer while the body is unread"),
+    ]);
+    socket.end();
+    const [head, body] = response.split("\r\n\r\n");
+    return { body, status: head?.split("\r\n")[0] };
+  });

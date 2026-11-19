@@ -13,9 +13,22 @@ export const authRoutes = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const { auth } = yield* ApiAuth;
     yield* router.add("*", `${AUTH_BASE_PATH}/*`, (request) =>
-      HttpServerRequest.toWeb(request).pipe(
+      // better-auth reads a web Request's body itself, with no limit. It is read here, under
+      // the limit `bodyLimit` gave this route, and handed over whole; the bytes are the
+      // sender's, which Stripe's signature needs.
+      Effect.all([HttpServerRequest.toWeb(request), request.arrayBuffer]).pipe(
         Effect.orDie,
-        Effect.flatMap((webRequest) => Effect.promise(() => auth.handler(webRequest))),
+        Effect.flatMap(([source, body]) =>
+          Effect.promise(() =>
+            auth.handler(
+              new Request(source.url, {
+                body: body.byteLength === 0 ? undefined : body,
+                headers: source.headers,
+                method: source.method,
+              }),
+            ),
+          ),
+        ),
         Effect.map(HttpServerResponse.fromWeb),
       ),
     );
