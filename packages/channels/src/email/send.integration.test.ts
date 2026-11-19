@@ -818,6 +818,40 @@ describe("an accepted email send", () => {
     }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
   });
 
+  it.live("ends failed, unsent, when its job comes for it more than a day late", () => {
+    const backend = makeBackend();
+    return Effect.gen(function* () {
+      const db = yield* DB;
+      // One send a day, so Usage still held would refuse the next.
+      const project = yield* seedProject({ dailySends: 1 });
+      const accepted = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      // Its job was held up for two days, and runs before any reconcile finds the Delivery.
+      yield* db
+        .update(emailDelivery)
+        .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
+        .where(eq(emailDelivery.id, accepted.deliveryId));
+
+      yield* runWorker;
+
+      const reason =
+        "The send could not be completed within a day of when it was due; it is not sent late";
+      expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+      expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        error: { message: reason, retryable: false },
+        status: "failed",
+      });
+      expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+        { payload: { error: reason }, type: "message.failed" },
+      ]);
+      const next = yield* acceptTransactionalEmail(
+        sendInput(project, `hello@${project.fqdn}`, "someone@example.com"),
+      );
+      expect(next.replayed).toBe(false);
+    }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
+  });
+
   it.live("is left to its job, and sent, while it has been queued for less than a day", () => {
     const backend = makeBackend();
     return Effect.gen(function* () {
@@ -857,22 +891,22 @@ describe("an accepted email send", () => {
         .update(emailDelivery)
         .set({ createdAt: new Date(Date.now() - 2 * 86_400_000) })
         .where(eq(emailDelivery.id, accepted.deliveryId));
+      const dueHoursAgo = (hours: number) =>
+        db
+          .update(message)
+          .set({ scheduledAt: new Date(Date.now() - hours * 3_600_000) })
+          .where(eq(message.id, accepted.messageId));
 
       yield* endStuckDeliveries;
       expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
 
-      // Due 19 hours ago, with no job having come for it: still within the day.
-      yield* Effect.gen(function* () {
-        yield* TestClock.setTime(Date.now() + 20 * 3_600_000);
-        yield* endStuckDeliveries;
-      }).pipe(Effect.provide(TestClock.layer()));
+      // No job having come for it, it is still within the day when it was due 19 hours ago.
+      yield* dueHoursAgo(19);
+      yield* endStuckDeliveries;
       expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "queued" });
 
-      // A day and more after it was due.
-      yield* Effect.gen(function* () {
-        yield* TestClock.setTime(Date.now() + 26 * 3_600_000);
-        yield* endStuckDeliveries;
-      }).pipe(Effect.provide(TestClock.layer()));
+      yield* dueHoursAgo(25);
+      yield* endStuckDeliveries;
 
       expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
       expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({ status: "failed" });

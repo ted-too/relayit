@@ -85,10 +85,13 @@ const CLAIM_LEASE = Duration.minutes(2);
  * later. That needs the job held up for the whole age, which is why the age is a day and not
  * an hour.
  *
- * A `queued` Delivery this old is failed too, never sent and never given a new job. SES has not
- * been called for it, so nothing here risks a second send: the only thing that sends is a job's
- * claim from `queued`, which a `failed` Delivery never matches, so a job that does turn up
- * finds the outcome written and only releases the Usage again. Looking for the job instead
+ * A `queued` Delivery this long past when it was due is failed too, never sent and never given
+ * a new job, and the claim refuses one for the same condition, so whether its job is lost or
+ * only late it ends the same way: a job that claims first is failed by its dead-letter step,
+ * with the reason the reconcile gives. SES has not been called for it, so nothing here risks a
+ * second send: the only thing that sends is a job's claim from `queued`, which a `failed`
+ * Delivery never matches, so a job that does turn up finds the outcome written and only
+ * releases the Usage again. Looking for the job instead
  * (the outbox, the stream, its pending entries, the delayed set) cannot be done in one step,
  * and a job moving between them would be missed. Enqueueing another was rejected because the
  * age cannot tell a lost job from one held up: every pass would add a job for each Delivery of
@@ -96,6 +99,18 @@ const CLAIM_LEASE = Duration.minutes(2);
  * when a password reset or a receipt is worth less than hearing that it failed.
  */
 const STUCK_AGE = Duration.hours(24);
+
+/**
+ * Whether a Delivery was due before `cutoff`: accepted before it and, if it was scheduled,
+ * scheduled for before it. One condition for the two that hold a send to `STUCK_AGE`: the
+ * claim, which refuses a Delivery past it, and `endStuckDeliveries`, which ends one no job
+ * came for.
+ */
+const dueBefore = (cutoff: Date) =>
+  sql<boolean>`(${emailDelivery.createdAt} < ${cutoff.toISOString()} and not exists (
+    select 1 from ${messageTable}
+    where ${messageTable.id} = ${emailDelivery.messageId}
+      and ${messageTable.scheduledAt} >= ${cutoff.toISOString()}))`;
 
 /**
  * How many times one run strips and claims before leaving the Delivery to the job's retry. A
@@ -544,11 +559,7 @@ export const endStuckDeliveries = Effect.gen(function* () {
         // One SES refused and a run put back to `queued` is aged from its accept like any
         // other: with a job held up for most of the day it can be failed here while that job
         // still has retries left, which is the same choice of failing over sending late.
-        and(
-          eq(emailDelivery.status, "queued"),
-          lt(emailDelivery.createdAt, cutoff),
-          or(isNull(messageTable.scheduledAt), lt(messageTable.scheduledAt, cutoff)),
-        ),
+        and(eq(emailDelivery.status, "queued"), dueBefore(cutoff)),
       ),
     );
 
@@ -993,6 +1004,12 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               // complaint suppressed since the strip above is never sent to. The claim also
               // writes the recipients it sends to, so the Delivery names no one it stripped.
               const sender = senderMaySend(appEnvironment.organizationId);
+              const claimMillis = yield* Clock.currentTimeMillis;
+              // Nor is it sent more than `STUCK_AGE` after it was due: its job was held up
+              // that long, and `endStuckDeliveries` fails what this run does not reach first.
+              const inTime = sql<boolean>`not ${dueBefore(
+                new Date(claimMillis - Duration.toMillis(STUCK_AGE)),
+              )}`;
               const recipientsUnsuppressed = sql<boolean>`not exists (select 1 from ${contact} where ${suppressedAmong(
                 {
                   emails: [...toEmails, ...ccEmails, ...bccEmails].map(normalizeContactEmail),
@@ -1005,7 +1022,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 .set({
                   bcc: loaded.bcc && bccEmails,
                   cc: loaded.cc && ccEmails,
-                  startedAt: new Date(yield* Clock.currentTimeMillis),
+                  startedAt: new Date(claimMillis),
                   status: "sending",
                   to: toEmails,
                 })
@@ -1016,6 +1033,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     sender.domainUnpaused,
                     sender.domainHeld,
                     sender.sandboxOpen,
+                    inTime,
                     recipientsUnsuppressed,
                   ),
                 )
@@ -1039,7 +1057,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 // `queued` whose sender may send was refused for a recipient, or for something
                 // lifted since: either way no run has it, so this one goes round again.
                 const [unclaimed] = yield* db
-                  .select({ status: emailDelivery.status, ...sender })
+                  .select({ inTime, status: emailDelivery.status, ...sender })
                   .from(emailDelivery)
                   .where(eq(emailDelivery.id, loaded.id))
                   .pipe(
@@ -1072,6 +1090,13 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                       deliveryId: loaded.id,
                       message: "The Project no longer holds the sending Domain",
                       stage: "domain",
+                    });
+                  }
+                  if (!unclaimed.inTime) {
+                    return yield* new MessageDeliveryTerminalError({
+                      deliveryId: loaded.id,
+                      message: NOT_SENT_IN_TIME,
+                      stage: "deadline",
                     });
                   }
                   return true;
