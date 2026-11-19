@@ -1753,7 +1753,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
         expect(
           yield* call("PUT", `${p}/templates/${sealed.id}/email`, {
             as: owner,
-            body: { subject: "Sealed again", workspaceEntryId: linked?.id },
+            body: { subject: `Sealed ${run}`, workspaceEntryId: linked?.id },
           }),
         ).toMatchObject({ status: 200 });
 
@@ -1785,7 +1785,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           }),
         );
         for (const [template, subject, html] of [
-          [sealed, "Sealed again", "Sealed for Ada"],
+          [sealed, `Sealed ${run}`, "Sealed for Ada"],
           [primitive, `Plain ${run}`, "<p>Plain for Ada</p>"],
         ] as const) {
           expect(
