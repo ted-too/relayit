@@ -61,7 +61,7 @@ const CONTACT_EMAILS_UNCHECKED = `
   ) as unchecked`;
 
 /**
- * Lower-cases every stored Contact email and takes the spaces from around it, which the
+ * Lower-cases every stored Contact email and takes the whitespace from around it, which the
  * `contact_email_normalized_check` migration then holds the table to. It is data, which a
  * generated migration cannot carry, so the step runs it first, in a transaction of its own:
  * it stays done if a migration after it fails.
@@ -77,6 +77,10 @@ const CONTACT_EMAILS_UNCHECKED = `
  * Contact's key and would otherwise commit and then go with the row. The previous release's
  * accepts, notifications and unsubscribes wait for the commit.
  */
+/** A stored email as a send's normalized address has it: lower-case, no whitespace around it. */
+const normalized = (column: string) =>
+  String.raw`lower(regexp_replace(${column}, '^\s+|\s+$', '', 'g'))`;
+
 const NORMALIZE_CONTACT_EMAILS = [
   "begin",
   "lock table contact, contact_topic_unsubscribe, segment_member in share row exclusive mode",
@@ -84,12 +88,12 @@ const NORMALIZE_CONTACT_EMAILS = [
     select
       id,
       first_value(id) over (
-        partition by organization_app_environment_id, lower(btrim(email))
-        order by (email = lower(btrim(email))) desc, (deleted_at is null) desc, created_at, id
+        partition by organization_app_environment_id, ${normalized("email")}
+        order by (email = ${normalized("email")}) desc, (deleted_at is null) desc, created_at, id
       ) as survivor_id
     from contact
-    where (organization_app_environment_id, lower(btrim(email))) in (
-      select organization_app_environment_id, lower(btrim(email)) from contact where email <> lower(btrim(email))
+    where (organization_app_environment_id, ${normalized("email")}) in (
+      select organization_app_environment_id, ${normalized("email")} from contact where email <> ${normalized("email")}
     )`,
   // One source of each (survivor, Topic) and (survivor, Segment) moves to the survivor, its own
   // first; the rest go with the Contacts removed below.
@@ -115,7 +119,7 @@ const NORMALIZE_CONTACT_EMAILS = [
     ) kept
     where segment_member.id = kept.id and segment_member.contact_id <> kept.survivor_id`,
   `update contact set
-      email = lower(btrim(contact.email)),
+      email = ${normalized("contact.email")},
       unsubscribed = merged.unsubscribed,
       suppression_severity = strictest.suppression_severity,
       suppression_reason = strictest.suppression_reason,

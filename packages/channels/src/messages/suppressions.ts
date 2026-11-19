@@ -14,7 +14,7 @@ export class MessageSuppressionLookupError extends Data.TaggedError(
 
 /**
  * The Contacts of one App Environment whose address is among `emails` (normalized). The column
- * is compared as stored: `contact_email_lower_check` keeps every stored email lower-case, so
+ * is compared as stored: `contact_email_normalized_check` keeps every stored email normalized, so
  * a normalized address finds its Contact, through the unique index.
  */
 export const contactsAmong = (input: {

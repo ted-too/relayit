@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "9",
   "dialect": "postgres",
-  "id": "61403ecc-3091-4efe-b419-ab75b94af007",
+  "id": "f3f2e842-0ce8-4051-b3b3-7bca19d6b80b",
   "prevIds": [
     "23f18d17-4e2c-49ee-afd8-3a3ad042549b"
   ],
@@ -97,7 +97,7 @@
         "schema": "public",
         "table": "contact",
         "name": "contact_email_normalized_check",
-        "value": "\"email\" = lower(btrim(\"email\"))",
+        "value": "\"email\" = lower(\"email\") and \"email\" !~ '^\\s|\\s$'",
         "entityType": "checks"
       }
     },

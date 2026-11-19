@@ -204,8 +204,8 @@ describe("the migrate step and the apps' check for it", () => {
              suppression_severity, suppression_reason, suppressed_at, deleted_at, created_at,
              updated_at)
           values
-            -- Alone in another case with spaces around it, suppressed.
-            ('cont_alone', 'oenv_a', ' Alone@Example.com ', null, '{}', false,
+            -- Alone in another case with whitespace around it, as from a file, suppressed.
+            ('cont_alone', 'oenv_a', E' Alone@Example.com\\r\\n', null, '{}', false,
              'all', 'hard_bounce', '2026-01-01', null, '2026-01-01', now()),
             -- A pair: the lower-case row sends have been finding, and a stricter older one.
             ('cont_pair_lower', 'oenv_a', 'pair@example.com', null, '{"plan":"pro","a":"lower"}',
@@ -268,7 +268,7 @@ describe("the migrate step and the apps' check for it", () => {
       );
       // The step waits for the unsubscribe rather than merging around it: one step is at
       // the tables' lock, the other at the advisory lock behind it.
-      yield* query(
+      const waiting = yield* query(
         databaseUrl,
         `select pid from pg_stat_activity
           where datname = current_database() and wait_event_type = 'Lock'`,
@@ -278,9 +278,11 @@ describe("the migrate step and the apps' check for it", () => {
           schedule: Schedule.spaced("50 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
         }),
       );
+      // Not reached in time would mean the commit below came first and nothing was raced.
+      expect(waiting).toHaveLength(2);
       expect(
         yield* query(databaseUrl, "select email from contact where id = 'cont_alone'"),
-      ).toEqual([{ email: " Alone@Example.com " }]);
+      ).toEqual([{ email: " Alone@Example.com\r\n" }]);
       yield* Effect.promise(() => unsubscribing.query("commit"));
       yield* Fiber.join(steps);
       expect(yield* applied(databaseUrl)).toEqual(carried);
@@ -384,7 +386,7 @@ describe("the migrate step and the apps' check for it", () => {
         try {
           await client.query(
             `insert into contact (id, organization_app_environment_id, email, updated_at)
-              values ('cont_spaced', 'oenv_a', ' spaced@example.com', now())`,
+              values ('cont_spaced', 'oenv_a', E'spaced@example.com\\r', now())`,
           );
         } finally {
           await client.end();
