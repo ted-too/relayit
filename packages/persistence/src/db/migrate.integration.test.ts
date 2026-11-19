@@ -266,8 +266,8 @@ describe("the migrate step and the apps' check for it", () => {
           { concurrency: "unbounded" },
         ),
       );
-      // The step waits for the unsubscribe rather than merging around it: one step is at
-      // the tables' lock, the other at the advisory lock behind it.
+      // Both steps are waiting, one behind the unsubscribe and the other behind the first, so
+      // the unsubscribe commits while a step is under way. That it is kept is asserted below.
       const waiting = yield* query(
         databaseUrl,
         `select pid from pg_stat_activity

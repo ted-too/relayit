@@ -61,6 +61,13 @@ const CONTACT_EMAILS_UNCHECKED = `
   ) as unchecked`;
 
 /**
+ * A stored email as `normalizeContactEmail` leaves any address the api accepts: lower-case,
+ * no whitespace around it.
+ */
+const normalized = (column: string) =>
+  String.raw`lower(regexp_replace(${column}, '^\s+|\s+$', '', 'g'))`;
+
+/**
  * Lower-cases every stored Contact email and takes the whitespace from around it, which the
  * `contact_email_normalized_check` migration then holds the table to. It is data, which a
  * generated migration cannot carry, so the step runs it first, in a transaction of its own:
@@ -77,10 +84,6 @@ const CONTACT_EMAILS_UNCHECKED = `
  * Contact's key and would otherwise commit and then go with the row. The previous release's
  * accepts, notifications and unsubscribes wait for the commit.
  */
-/** A stored email as a send's normalized address has it: lower-case, no whitespace around it. */
-const normalized = (column: string) =>
-  String.raw`lower(regexp_replace(${column}, '^\s+|\s+$', '', 'g'))`;
-
 const NORMALIZE_CONTACT_EMAILS = [
   "begin",
   "lock table contact, contact_topic_unsubscribe, segment_member in share row exclusive mode",
@@ -208,7 +211,10 @@ const retryFor =
  * Only the connection is retried, for `waitFor`: a Postgres that is still starting, or
  * restarting, should not fail a release that would have gone through seconds later. Once
  * connected, nothing is: a migration that failed will fail again, and a connection lost
- * part-way has rolled the run back, which is for a person to look at.
+ * part-way has rolled the migrations back, which is for a person to look at.
+ *
+ * Before the migrations it normalizes stored Contact emails, if that is still to do, and
+ * commits that by itself: it stays done when a migration after it fails.
  */
 export const migrateDatabase = (options: {
   readonly databaseUrl: string;
