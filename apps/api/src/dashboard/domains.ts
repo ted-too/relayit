@@ -83,7 +83,8 @@ const SES_CALL_WINDOW_SECONDS = 10 * 60;
  * Counts one add or refresh and refuses it over the limit, before SES is called. Counted
  * against the Project's Billing User, as the Plan's Domain limit is, because a Project
  * costs nothing to make: counted by Project, a loop would only have to make another. A
- * Project with no Billing User is counted alone. A counter in Redis with a fixed window, as
+ * Project with no Billing User recorded is counted alone, not with its owner's others as
+ * that limit counts it: it takes a Billing User since deleted, or never recorded. A counter in Redis with a fixed window, as
  * better-auth keeps for `/auth/*`: the window starts at the first call and the counter
  * expires with it.
  */

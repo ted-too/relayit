@@ -35,7 +35,7 @@ export class PlanLimitReached extends Schema.TaggedError<PlanLimitReached>()(
   { httpApiStatus: 402 },
 ) {}
 
-/** The Project has done this too often for now; trying again later is all there is to do. */
+/** This has been done too often for now; trying again later is all there is to do. */
 export class RateLimited extends Schema.TaggedError<RateLimited>()(
   "RateLimited",
   { message: Schema.String },

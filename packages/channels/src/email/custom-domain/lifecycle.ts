@@ -619,11 +619,13 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
                 organizationId: input.organizationId,
                 unprovenOnly: true,
               }).pipe(
-                Effect.andThen(
-                  cancelOwnershipCheck({
-                    customDomainId: existing.id,
-                    organizationId: input.organizationId,
-                  }),
+                Effect.flatMap((removed) =>
+                  removed.unlinked
+                    ? cancelOwnershipCheck({
+                        customDomainId: existing.id,
+                        organizationId: input.organizationId,
+                      })
+                    : Effect.void,
                 ),
               ),
             ),
