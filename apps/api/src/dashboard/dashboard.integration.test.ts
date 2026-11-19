@@ -874,6 +874,15 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           (yield* call("POST", "/projects", { as: impersonating, body: { name: "Impersonating" } }))
             .status,
         ).toBe(401);
+        // What ends it everywhere, better-auth's own endpoints included: a ban of the
+        // impersonated user, lifted afterwards.
+        const impersonated = `impersonated-${run}@example.test`;
+        expect(yield* setBanned(auth, { banned: true, email: impersonated })).toEqual({
+          sessions: 2,
+        });
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toBeNull();
+        yield* setBanned(auth, { banned: false, email: impersonated });
+        expect((yield* call("GET", "/auth/get-session", { as: impersonating })).body).toBeNull();
         // The admin is still who they were.
         expect((yield* call("GET", "/auth/get-session", { as: operator })).body).toMatchObject({
           user: { email: `impersonator-${run}@example.test` },
