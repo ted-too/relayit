@@ -19,9 +19,10 @@ import {
   type OrganizationDomainInsert,
   organizationAppEnvironment,
   organizationDomain,
+  removedDomainIdentity,
   sandboxDomain,
 } from "@repo/persistence/db/schema";
-import { and, count, eq, inArray, isNotNull, ne, not, notExists, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emitDomainUpdated } from "../deliverability/project-sending-pause";
@@ -29,6 +30,7 @@ import type { DomainKeyMaterial } from "../dkim";
 import { createDomainKeyMaterial } from "../dkim";
 import { DnsLookups } from "../dns-lookups";
 import { EmailManagedDns } from "../managed-dns";
+import { isAtOrUnderRoot } from "../sandbox/reserved";
 import { emailVerifyCustomDomainJob, emailVerifyOwnershipJob } from "../verification/jobs";
 import { emailDeleteDomainIdentityJob } from "./jobs";
 import {
@@ -71,6 +73,17 @@ export class CustomDomainNotFound extends Data.TaggedError("CustomDomainNotFound
 
 /** The FQDN is a Sandbox Domain's, or a name under one: Relayit's own, never a Project's. */
 export class CustomDomainReserved extends Data.TaggedError("CustomDomainReserved")<{
+  readonly fqdn: string;
+  readonly message: string;
+}> {}
+
+/**
+ * SES already has an identity of this FQDN that Relayit did not make for this Domain, so the
+ * Domain can't be registered: taking the identity over would hand whoever added the name
+ * another sender's identity before any proof of ownership.
+ */
+export class CustomDomainIdentityConflict extends Data.TaggedError("CustomDomainIdentityConflict")<{
+  readonly customDomainId: string;
   readonly fqdn: string;
   readonly message: string;
 }> {}
@@ -198,38 +211,71 @@ const registerCustomDomainIdentity = (input: {
               ),
             );
 
-          const identity = yield* backend
-            .createIdentity({
-              dkimPrivateKey: input.keyMaterial.dkimPrivateKey,
-              dkimSelector: input.keyMaterial.dkimSelector,
-              fqdn: input.fqdn,
-              region,
+          // The FQDN was a Domain before, removed, and SES may still hold that Domain's
+          // identity: its delete job has not run, or failed for good. SES names an identity
+          // by FQDN alone, so it goes first, here, as that job would delete it; the job
+          // then finds nothing of its Domain's. Only an identity recorded this way is
+          // Relayit's to replace: any other of this name is refused below, untouched.
+          const left = yield* tx
+            .select({
+              dkimSelector: removedDomainIdentity.dkimSelector,
+              id: removedDomainIdentity.id,
             })
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new CustomDomainError({
+            .from(removedDomainIdentity)
+            .where(
+              and(
+                eq(removedDomainIdentity.fqdn, input.fqdn),
+                or(isNull(removedDomainIdentity.region), eq(removedDomainIdentity.region, region)),
+              ),
+            );
+
+          const identity = yield* Effect.forEach(
+            left,
+            ({ dkimSelector }) =>
+              backend.deleteIdentity({ dkimSelector, fqdn: input.fqdn, region }),
+            { discard: true },
+          ).pipe(
+            Effect.andThen(
+              backend.createIdentity({
+                dkimPrivateKey: input.keyMaterial.dkimPrivateKey,
+                dkimSelector: input.keyMaterial.dkimSelector,
+                fqdn: input.fqdn,
+                region,
+              }),
+            ),
+            Effect.mapError((cause) => {
+              switch (cause._tag) {
+                case "EmailBackendIdentityConflict":
+                  return new CustomDomainIdentityConflict({
+                    customDomainId: input.customDomainId,
+                    fqdn: input.fqdn,
+                    message:
+                      "This domain already has an SES identity that Relayit can't take over, so Relayit can't register it. Whoever runs this Relayit deployment can remove that identity in SES.",
+                  });
+                default:
+                  return new CustomDomainError({
                     cause,
                     customDomainId: input.customDomainId,
                     message: "Failed to register the domain with SES.",
                     operation: "register_identity",
+                  });
+              }
+            }),
+            // A call that never answers would hold this connection, the Domain's row
+            // and the FQDN's identity lock with it. Adding the Domain again finishes it,
+            // for the Project that holds it and for one that claims it.
+            Effect.timeoutOrElse({
+              duration: IDENTITY_CALL_TIMEOUT,
+              orElse: () =>
+                Effect.fail(
+                  new CustomDomainError({
+                    customDomainId: input.customDomainId,
+                    message: "SES did not answer in time while registering the domain.",
+                    operation: "register_identity",
                   }),
-              ),
-              // A call that never answers would hold this connection, the Domain's row
-              // and the FQDN's identity lock with it. Adding the Domain again finishes it,
-              // for the Project that holds it and for one that claims it.
-              Effect.timeoutOrElse({
-                duration: IDENTITY_CALL_TIMEOUT,
-                orElse: () =>
-                  Effect.fail(
-                    new CustomDomainError({
-                      customDomainId: input.customDomainId,
-                      message: "SES did not answer in time while registering the domain.",
-                      operation: "register_identity",
-                    }),
-                  ),
-              }),
-            );
+                ),
+            }),
+          );
 
           yield* managedDns
             .reconcile({
@@ -256,12 +302,21 @@ const registerCustomDomainIdentity = (input: {
             region,
             verificationStatus: "not_verified",
           });
+          if (left.length > 0) {
+            yield* tx.delete(removedDomainIdentity).where(
+              inArray(
+                removedDomainIdentity.id,
+                left.map(({ id }) => id),
+              ),
+            );
+          }
         }),
       )
       .pipe(
         Effect.mapError((error) => {
           switch (error._tag) {
             case "CustomDomainError":
+            case "CustomDomainIdentityConflict":
               return error;
             default:
               return new CustomDomainError({
@@ -367,10 +422,7 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
     const [reserved] = yield* db
       .select({ id: sandboxDomain.id })
       .from(sandboxDomain)
-      .where(
-        // `right`, not `like`: an underscore in a name is a wildcard to `like`.
-        sql`lower(${input.fqdn}) = lower(${sandboxDomain.rootDomain}) or right(lower(${input.fqdn}), length(${sandboxDomain.rootDomain}) + 1) = '.' || lower(${sandboxDomain.rootDomain})`,
-      )
+      .where(isAtOrUnderRoot(input.fqdn, sandboxDomain.rootDomain))
       .limit(1)
       .pipe(
         Effect.mapError(
@@ -638,7 +690,18 @@ export const createCustomDomain = (input: CreateCustomDomainInput) =>
       db,
       fqdn: input.fqdn,
       keyMaterial,
-    });
+    }).pipe(
+      // Unlike a registration that failed, one refused can never be finished by adding the
+      // Domain again, so the Domain this add wrote goes with it.
+      Effect.tapErrorTag("CustomDomainIdentityConflict", () =>
+        removeDomainLink({
+          customDomainId: row.id,
+          db,
+          identityRefused: true,
+          organizationId: input.organizationId,
+        }),
+      ),
+    );
 
     yield* scheduleCustomDomainVerification({ customDomainId: row.id });
 
@@ -777,8 +840,7 @@ export const unpauseCustomDomain = (input: UnpauseCustomDomainInput) =>
  * Each update finds its own rows in the database, through the Message and App Environment:
  * a Project has more Deliveries than a query takes parameters, so their ids never come back
  * here, and the events are not found through the Deliveries just moved, which Postgres joins
- * badly when it has no statistics for them. `limit` moves that many events and that many
- * Deliveries at most, for a caller that goes in batches. Answers how many of each it moved.
+ * badly when it has no statistics for them.
  *
  * Whoever writes a Delivery or an event naming a Domain takes its row first (`KEY SHARE`),
  * so none is written behind this.
@@ -788,13 +850,12 @@ const detachDeliveries = (
   input: {
     readonly customDomainId: string;
     readonly fqdn: string;
-    readonly limit?: number;
     readonly organizationIds: readonly string[];
   },
 ) =>
   Effect.gen(function* () {
     if (input.organizationIds.length === 0) {
-      return { deliveries: 0, events: 0 };
+      return;
     }
     const theirs = inArray(organizationAppEnvironment.organizationId, input.organizationIds);
     const events = tx
@@ -817,36 +878,14 @@ const detachDeliveries = (
       )
       .where(and(eq(emailDelivery.customDomainId, input.customDomainId), theirs));
 
-    const clearedEvents = tx.$with("cleared_events").as(
-      tx
-        .update(emailDeliveryEvent)
-        .set({ customDomainId: null })
-        .where(
-          inArray(
-            emailDeliveryEvent.id,
-            input.limit === undefined ? events : events.limit(input.limit),
-          ),
-        )
-        .returning({ id: emailDeliveryEvent.id }),
-    );
-    const [clearedCount] = yield* tx
-      .with(clearedEvents)
-      .select({ rows: count() })
-      .from(clearedEvents);
-    const detached = tx.$with("detached").as(
-      tx
-        .update(emailDelivery)
-        .set({ customDomainId: null, removedDomainFqdn: input.fqdn })
-        .where(
-          inArray(
-            emailDelivery.id,
-            input.limit === undefined ? deliveries : deliveries.limit(input.limit),
-          ),
-        )
-        .returning({ id: emailDelivery.id }),
-    );
-    const [detachedCount] = yield* tx.with(detached).select({ rows: count() }).from(detached);
-    return { deliveries: detachedCount?.rows ?? 0, events: clearedCount?.rows ?? 0 };
+    yield* tx
+      .update(emailDeliveryEvent)
+      .set({ customDomainId: null })
+      .where(inArray(emailDeliveryEvent.id, events));
+    yield* tx
+      .update(emailDelivery)
+      .set({ customDomainId: null, removedDomainFqdn: input.fqdn })
+      .where(inArray(emailDelivery.id, deliveries));
   });
 
 /**
@@ -939,11 +978,16 @@ export const completeDomainClaimTransfer = (input: {
  * Project whose link went where no code saw it, and their events lose the reference by
  * their foreign key.
  */
-const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =>
+const removeUnlinkedDomain = (
+  tx: DatabaseTransaction,
+  customDomainId: string,
+  // SES has just refused the Domain an identity: it has none, and never will.
+  options: { readonly identityRefused?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const jobs = yield* Jobs;
     const [domain] = yield* tx
-      .select({ fqdn: customDomain.fqdn })
+      .select({ dkimSelector: customDomain.dkimSelector, fqdn: customDomain.fqdn })
       .from(customDomain)
       .where(eq(customDomain.id, customDomainId))
       .for("update");
@@ -965,11 +1009,26 @@ const removeUnlinkedDomain = (tx: DatabaseTransaction, customDomainId: string) =
       .returning({ region: emailDomainRegistration.region });
     // Enqueued even without a registration: an add that failed after SES made the identity
     // recorded none, always in the default region, and SES takes deleting no identity as done.
-    yield* jobs.enqueue(
-      emailDeleteDomainIdentityJob,
-      { fqdn: domain.fqdn, region: registration?.region ?? null },
-      tx,
-    );
+    // The selector keeps the job to this Domain's identity, so one of that name Relayit did
+    // not make stays. Recorded too, for an add of the FQDN that comes before the job has run.
+    // A registration found here says otherwise, whatever the caller was refused: another
+    // add of the Domain registered it since.
+    if (registration || !options.identityRefused) {
+      yield* tx.insert(removedDomainIdentity).values({
+        dkimSelector: domain.dkimSelector,
+        fqdn: domain.fqdn,
+        region: registration?.region ?? null,
+      });
+      yield* jobs.enqueue(
+        emailDeleteDomainIdentityJob,
+        {
+          dkimSelector: domain.dkimSelector,
+          fqdn: domain.fqdn,
+          region: registration?.region ?? null,
+        },
+        tx,
+      );
+    }
     // A Domain's records are the customer's to publish and exist only as these rows.
     yield* tx.delete(emailDnsRecord).where(eq(emailDnsRecord.customDomainId, customDomainId));
 
@@ -995,6 +1054,12 @@ export const removeDomainLink = (input: {
   readonly db: Database;
   readonly organizationId: string;
   readonly unprovenOnly?: boolean;
+  /**
+   * The link is of a first add SES has just refused an identity. Its Domain, if it goes,
+   * leaves no identity to record or delete: a record would only be read, and SES asked
+   * about it, by every later add of a name that stays refused.
+   */
+  readonly identityRefused?: boolean;
 }) =>
   input.db
     .transaction((tx) =>
@@ -1025,7 +1090,9 @@ export const removeDomainLink = (input: {
           organizationIds: unlinked.held === "verified" ? [input.organizationId] : [],
         });
         return {
-          domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId),
+          domainRemoved: yield* removeUnlinkedDomain(tx, input.customDomainId, {
+            identityRefused: input.identityRefused,
+          }),
           unlinked: true as const,
         };
       }),
@@ -1094,112 +1161,6 @@ export const removeUnlinkedDomains = (among?: readonly string[]) =>
       { discard: true },
     );
   });
-
-/** How many Deliveries, and how many events, one transaction of `detachStrayDeliveries` moves. */
-const STRAY_BATCH = 1000;
-
-/**
- * Detaches every Delivery that names a Domain its own Project does not hold, with its
- * events. None is left that way now: a Project's Deliveries are detached as it loses the
- * Domain. This is for the ones from before that was so, where a claim was proven and the old
- * holder's Deliveries went on naming the new holder's Domain; it runs as the worker starts
- * and finds nothing once they are gone. A Delivery of the Project that holds the Domain is
- * never a stray, whatever claims are pending on it.
- *
- * Finding the strays reads every Delivery that names a Domain, without a lock. Each batch
- * then takes its Domain's row, reads again that the Project does not hold it (a claim of its
- * own may have been proven since) and moves at most `STRAY_BATCH` Deliveries and as many
- * events, so sends from the Domain wait for one batch at a time, never for the whole of a
- * long history. One Domain that fails is logged and the rest still go.
- */
-export const detachStrayDeliveries = Effect.gen(function* () {
-  const db = yield* DB;
-  const holds = (organizationId: SQL | string, customDomainId: SQL | string) =>
-    sql`exists (
-      select 1 from ${organizationDomain}
-      where ${organizationDomain.customDomainId} = ${customDomainId}
-        and ${organizationDomain.organizationId} = ${organizationId}
-        and ${organizationDomain.ownershipVerificationStatus} = 'verified')`;
-  const strays = yield* db
-    .selectDistinct({
-      customDomainId: emailDelivery.customDomainId,
-      organizationId: organizationAppEnvironment.organizationId,
-    })
-    .from(emailDelivery)
-    .innerJoin(message, eq(message.id, emailDelivery.messageId))
-    .innerJoin(
-      organizationAppEnvironment,
-      eq(organizationAppEnvironment.id, message.organizationAppEnvironmentId),
-    )
-    .where(
-      and(
-        isNotNull(emailDelivery.customDomainId),
-        not(
-          holds(
-            sql`${organizationAppEnvironment.organizationId}`,
-            sql`${emailDelivery.customDomainId}`,
-          ),
-        ),
-      ),
-    )
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new CustomDomainError({
-            cause,
-            message: "Failed to list Deliveries naming a Domain their Project does not hold.",
-            operation: "delete",
-          }),
-      ),
-    );
-
-  yield* Effect.forEach(
-    strays,
-    ({ customDomainId, organizationId }) =>
-      Effect.gen(function* () {
-        if (!customDomainId) {
-          return;
-        }
-        let more = true;
-        while (more) {
-          more = yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              const [domain] = yield* tx
-                .select({ fqdn: customDomain.fqdn })
-                .from(customDomain)
-                .where(eq(customDomain.id, customDomainId))
-                .for("update");
-              const [held] = yield* tx
-                .select({ id: customDomain.id })
-                .from(customDomain)
-                .where(
-                  and(eq(customDomain.id, customDomainId), holds(organizationId, customDomainId)),
-                );
-              if (!domain || held) {
-                return false;
-              }
-              const moved = yield* detachDeliveries(tx, {
-                customDomainId,
-                fqdn: domain.fqdn,
-                limit: STRAY_BATCH,
-                organizationIds: [organizationId],
-              });
-              return moved.deliveries === STRAY_BATCH || moved.events === STRAY_BATCH;
-            }),
-          );
-        }
-      }).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("Failed to detach Deliveries from a Domain their Project lost", {
-            cause,
-            customDomainId,
-            organizationId,
-          }),
-        ),
-      ),
-    { discard: true },
-  );
-});
 
 /**
  * Stops the ownership check of a link that has been removed. The removal has happened by

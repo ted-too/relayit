@@ -1,7 +1,12 @@
 import { defineJobHandler } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
-import { customDomain, emailDomainRegistration, sandboxDomain } from "@repo/persistence/db/schema";
-import { eq, sql } from "drizzle-orm";
+import {
+  customDomain,
+  emailDomainRegistration,
+  removedDomainIdentity,
+  sandboxDomain,
+} from "@repo/persistence/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emailDeleteDomainIdentityJob } from "./jobs";
@@ -52,7 +57,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
             }
             // A call that never answers would hold this connection and the FQDN's identity
             // lock, and with it every registration of the FQDN. The retry deletes it.
-            yield* backend.deleteIdentity({ fqdn: payload.fqdn, region: payload.region }).pipe(
+            const deleted = yield* backend.deleteIdentity(payload).pipe(
               Effect.timeoutOrElse({
                 duration: IDENTITY_CALL_TIMEOUT,
                 orElse: () =>
@@ -65,6 +70,19 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
                   ),
               }),
             );
+            // The identity's record goes only with the identity. When SES had none of the
+            // Domain's, a create given up on may still land, and the record is what lets a
+            // later add of the FQDN delete it; a registration clears the ones it acted on.
+            if (deleted) {
+              yield* tx
+                .delete(removedDomainIdentity)
+                .where(
+                  and(
+                    eq(removedDomainIdentity.fqdn, payload.fqdn),
+                    eq(removedDomainIdentity.dkimSelector, payload.dkimSelector),
+                  ),
+                );
+            }
           }),
         )
         .pipe(
@@ -73,6 +91,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
               case "DeleteDomainIdentityHandlerError":
               case "EmailBackendAuthenticationError":
               case "EmailBackendConfigurationError":
+              case "EmailBackendIdentityConflict":
               case "EmailBackendMessageError":
               case "EmailBackendRateLimited":
               case "EmailBackendRejected":

@@ -103,10 +103,12 @@ describe("createCustomDomain", () => {
           execute: () => Effect.void,
           select: () => ({
             from: () => ({
-              where: () => ({
-                for: () => Effect.succeed([{ id: "dom_1" }]),
-                limit: () => Effect.succeed([]),
-              }),
+              // Awaited as it is for the identities removed Domains left: none.
+              where: () =>
+                Object.assign(Effect.succeed([]), {
+                  for: () => Effect.succeed([{ id: "dom_1" }]),
+                  limit: () => Effect.succeed([]),
+                }),
             }),
           }),
         }),

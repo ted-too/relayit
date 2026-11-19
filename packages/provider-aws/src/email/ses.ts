@@ -9,14 +9,9 @@ import {
 } from "@repo/channels/email/backend";
 import { Effect, Layer } from "effect";
 import { AwsUnexpectedResponseError, createAwsErrorMapper } from "../errors";
-import { ensureSesDomainIdentity } from "./identity";
+import { deleteSesDomainIdentity, ensureSesDomainIdentity } from "./identity";
 import { ensureSesInfrastructure, SES_CONFIGURATION_SET_NAME } from "./infrastructure";
-import {
-  detachSesIdentityFromTenants,
-  ensureSesTenant,
-  isSesTenantPaused,
-  sesTenantSendingStatus,
-} from "./tenant";
+import { ensureSesTenant, isSesTenantPaused, sesTenantSendingStatus } from "./tenant";
 import { sesTenantNameFor } from "./tenant-name";
 
 export interface SesConfig {
@@ -176,26 +171,12 @@ export const makeSesEmailBackend = (config: SesConfig) =>
           }).pipe(Effect.mapError(mapAwsError));
         }),
       defaultRegion,
-      deleteIdentity: ({ fqdn, region: recorded }) =>
+      deleteIdentity: ({ dkimSelector, fqdn, region: recorded }) =>
         Effect.gen(function* () {
           const { mapAwsError, region, ses } = yield* inRegion(recorded);
-          // Best effort: if this fails, deleteEmailIdentity below surfaces the real error
-          // while associations remain.
-          yield* detachSesIdentityFromTenants(ses, { fqdn, region }).pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("Failed to detach SES identity from tenants", {
-                cause,
-                fqdn,
-                region,
-              }),
-            ),
+          return yield* deleteSesDomainIdentity(ses, { dkimSelector, fqdn, region }).pipe(
+            Effect.mapError(mapAwsError),
           );
-          yield* ses
-            .deleteEmailIdentity({ EmailIdentity: fqdn })
-            .pipe(
-              Effect.catchTags({ NotFoundException: () => Effect.void }),
-              Effect.mapError(mapAwsError),
-            );
         }),
       ensureInfrastructure: ({ deliveryWebhookUrl }) =>
         Effect.forEach(

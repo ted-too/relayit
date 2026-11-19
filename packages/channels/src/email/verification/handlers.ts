@@ -270,6 +270,7 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
     const rows = yield* db.query.customDomain
       .findMany({
         columns: { id: true, nextVerifyAt: true },
+        with: { registration: { columns: { id: true } } },
       })
       .pipe(
         Effect.mapError(
@@ -282,13 +283,20 @@ export const emailVerifyCustomDomainHandler = defineJobHandler({
         ),
       );
 
+    // Every registered Domain, not only those a check has run for. A Domain's first check is
+    // scheduled in Redis after its registration commits, so it can fail or be lost, and the
+    // Domain records no next check until one has run: such a Domain is due now, or it would
+    // stay unverified until someone added it again. One with no registration has nothing to
+    // check; adding it again registers it.
     yield* Effect.forEach(
-      rows.filter((row) => row.nextVerifyAt !== null),
+      rows.filter((row) => row.nextVerifyAt !== null || row.registration !== null),
       (row) =>
         jobs.schedule(
           emailVerifyCustomDomainJob,
           { customDomainId: row.id },
-          new Date(row.nextVerifyAt as Date | string).getTime(),
+          row.nextVerifyAt === null
+            ? Date.now()
+            : new Date(row.nextVerifyAt as Date | string).getTime(),
         ),
       { concurrency: "unbounded" },
     ).pipe(

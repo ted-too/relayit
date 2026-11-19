@@ -14,13 +14,27 @@ import { Context, Data, type Effect } from "effect";
 export interface EmailBackendService {
   /** Where a new Domain is registered: the first of `SES_REGIONS`. */
   readonly defaultRegion: string;
+  /**
+   * Creates the Domain's identity, signing with its DKIM key. The account can hold
+   * identities Relayit did not make (by hand, or another system's), and SES names one by its
+   * FQDN alone, so one that already exists is taken as the Domain's only when it signs with
+   * this very selector: the one an earlier attempt at this registration made. Any other
+   * fails with `EmailBackendIdentityConflict` and is left exactly as it was.
+   */
   readonly createIdentity: (
     input: EmailIdentityRef & {
       readonly dkimPrivateKey: string;
       readonly dkimSelector: string;
     },
   ) => Effect.Effect<IdentityResult, EmailBackendError>;
-  readonly deleteIdentity: (input: EmailIdentityRef) => Effect.Effect<void, EmailBackendError>;
+  /**
+   * Deletes the identity a Domain was registered as: the one signing with `dkimSelector`.
+   * An identity of that name signing with anything else is not that Domain's and stays.
+   * Answers whether it deleted one: false when there was none, or none of the Domain's.
+   */
+  readonly deleteIdentity: (
+    input: EmailIdentityRef & { readonly dkimSelector: string },
+  ) => Effect.Effect<boolean, EmailBackendError>;
   /** The configuration set and notification topic in every region, pointed at the api. */
   readonly ensureInfrastructure: (input: {
     readonly deliveryWebhookUrl: string;
@@ -115,6 +129,15 @@ export class EmailBackendConfigurationError extends Data.TaggedError(
   readonly region: string;
 }> {}
 
+/**
+ * An identity of this name exists in the region that was not made with the Domain's DKIM
+ * selector, so it is not Relayit's to take over or replace. Nothing was changed.
+ */
+export class EmailBackendIdentityConflict extends Data.TaggedError("EmailBackendIdentityConflict")<{
+  readonly fqdn: string;
+  readonly region: string;
+}> {}
+
 export class EmailBackendRateLimited extends Data.TaggedError("EmailBackendRateLimited")<{
   readonly region: string;
   readonly retryAfterMs?: number;
@@ -142,6 +165,7 @@ export class EmailBackendUnavailable extends Data.TaggedError("EmailBackendUnava
 export type EmailBackendError =
   | EmailBackendAuthenticationError
   | EmailBackendConfigurationError
+  | EmailBackendIdentityConflict
   | EmailBackendMessageError
   | EmailBackendRateLimited
   | EmailBackendRejected

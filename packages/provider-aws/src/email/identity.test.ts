@@ -1,20 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Data, Effect } from "effect";
-import { ensureSesDomainIdentity, type SesIdentityClient } from "./identity";
+import { deleteSesDomainIdentity, ensureSesDomainIdentity } from "./identity";
 
 class NotFoundException extends Data.TaggedError("NotFoundException")<{
   readonly message: string;
 }> {}
 
-class BadRequestException extends Data.TaggedError("BadRequestException")<{
+class AlreadyExistsException extends Data.TaggedError("AlreadyExistsException")<{
   readonly message: string;
 }> {}
-
-class SdkError extends Data.TaggedError("SdkError")<{
-  readonly message: string;
-}> {}
-
-type Origin = "AWS_SES" | "EXTERNAL";
 
 const input = {
   dkimPrivateKey: "private-key",
@@ -43,124 +37,155 @@ const mailFrom = {
   ],
 };
 
-const makeSes = (options: {
-  readonly existingOrigin?: Origin;
-  readonly rejectExternalPut?: "BadRequestException" | "SdkError";
-}) => {
-  let origin: Origin | null = options.existingOrigin ?? null;
-  let deleted = false;
+interface Identity {
+  readonly mailFromDomain?: string;
+  readonly origin: "AWS_SES" | "EXTERNAL";
+  readonly tokens: readonly string[];
+}
+
+/** One SES region holding at most the identity `relayit.fyi`, answering as SES does. */
+const makeSes = (existing?: Identity) => {
+  let identity: Identity | null = existing ?? null;
+  const calls: string[] = [];
 
   const ses = {
-    createEmailIdentity: () => {
-      origin = "EXTERNAL";
+    createEmailIdentity: (request: {
+      readonly DkimSigningAttributes: { readonly DomainSigningSelector: string };
+    }) => {
+      calls.push("create");
+      if (identity) {
+        return Effect.fail(new AlreadyExistsException({ message: "Already exists" }));
+      }
+      identity = {
+        origin: "EXTERNAL",
+        tokens: [request.DkimSigningAttributes.DomainSigningSelector],
+      };
       return Effect.succeed({});
     },
     deleteEmailIdentity: () => {
-      deleted = true;
-      origin = null;
+      calls.push("delete");
+      identity = null;
       return Effect.succeed({});
     },
-    getEmailIdentity: () =>
-      origin
+    deleteTenantResourceAssociation: () => {
+      calls.push("detach");
+      return Effect.succeed({});
+    },
+    getEmailIdentity: () => {
+      calls.push("get");
+      return identity
         ? Effect.succeed({
-            DkimAttributes: { SigningAttributesOrigin: origin },
+            DkimAttributes: { SigningAttributesOrigin: identity.origin, Tokens: identity.tokens },
           })
-        : Effect.fail(new NotFoundException({ message: "Not found" })),
-    putEmailIdentityDkimSigningAttributes: () => {
-      if (!origin) {
-        return Effect.fail(new NotFoundException({ message: "Not found" }));
+        : Effect.fail(new NotFoundException({ message: "Not found" }));
+    },
+    listResourceTenants: () =>
+      Effect.succeed({ ResourceTenants: [{ TenantName: "relayit-orgn_1" }] }),
+    listTenants: () =>
+      Effect.succeed({
+        Tenants: [{ TenantArn: "arn:aws:ses:eu-central-1:123456789012:tenant/relayit-orgn_1" }],
+      }),
+    putEmailIdentityMailFromAttributes: (request: { readonly MailFromDomain: string }) => {
+      calls.push("mail-from");
+      if (identity) {
+        identity = { ...identity, mailFromDomain: request.MailFromDomain };
       }
-      if (options.rejectExternalPut === "BadRequestException") {
-        return Effect.fail(
-          new BadRequestException({
-            message: "Cannot switch Easy DKIM to BYODKIM",
-          }),
-        );
-      }
-      if (options.rejectExternalPut === "SdkError") {
-        return Effect.fail(
-          new SdkError({
-            message: "Already exists",
-          }),
-        );
-      }
-      origin = "EXTERNAL";
       return Effect.succeed({});
     },
-    putEmailIdentityMailFromAttributes: () => Effect.succeed({}),
-  } as unknown as SesIdentityClient;
+  };
 
   return {
-    get deleted() {
-      return deleted;
+    calls,
+    get identity() {
+      return identity;
     },
-    get origin() {
-      return origin;
-    },
-    ses,
+    // The stub answers the calls these functions make, not the whole SES client.
+    ses: ses as unknown as Parameters<typeof deleteSesDomainIdentity>[0] &
+      Parameters<typeof ensureSesDomainIdentity>[0],
   };
 };
 
-describe("ensureSesDomainIdentity", () => {
-  it.effect("creates a BYODKIM identity when SES has none", () =>
-    Effect.gen(function* () {
-      const fake = makeSes({});
+/** Identities the account can hold that Relayit did not make for this Domain. */
+const outside = [
+  ["Easy DKIM, as the SES console makes one", { origin: "AWS_SES", tokens: ["a", "b", "c"] }],
+  ["BYODKIM with another selector", { origin: "EXTERNAL", tokens: ["relayitffff0000"] }],
+  ["Easy DKIM whose token is the selector", { origin: "AWS_SES", tokens: ["relayitabc123"] }],
+] as const satisfies readonly (readonly [string, Identity])[];
 
-      const result = yield* ensureSesDomainIdentity(fake.ses, input);
+describe("ensureSesDomainIdentity", () => {
+  it.effect("creates a BYODKIM identity with the Domain's selector when SES has none", () =>
+    Effect.gen(function* () {
+      const account = makeSes();
+
+      const result = yield* ensureSesDomainIdentity(account.ses, input);
 
       expect(result).toEqual({ mailFrom });
-      expect(fake.origin).toBe("EXTERNAL");
-      expect(fake.deleted).toBe(false);
-    }),
-  );
-
-  it.effect("rewrites an existing Easy DKIM identity to BYODKIM", () =>
-    Effect.gen(function* () {
-      const fake = makeSes({ existingOrigin: "AWS_SES" });
-
-      yield* ensureSesDomainIdentity(fake.ses, input);
-
-      expect(fake.origin).toBe("EXTERNAL");
-      expect(fake.deleted).toBe(false);
-    }),
-  );
-
-  it.effect("replaces Easy DKIM when SES rejects the BYODKIM conversion", () =>
-    Effect.gen(function* () {
-      const fake = makeSes({
-        existingOrigin: "AWS_SES",
-        rejectExternalPut: "BadRequestException",
+      expect(account.identity).toEqual({
+        mailFromDomain: "send.relayit.fyi",
+        origin: "EXTERNAL",
+        tokens: ["relayitabc123"],
       });
-
-      yield* ensureSesDomainIdentity(fake.ses, input);
-
-      expect(fake.origin).toBe("EXTERNAL");
-      expect(fake.deleted).toBe(true);
     }),
   );
 
-  it.effect("replaces Easy DKIM when the conversion error is wrapped as SdkError", () =>
+  it.effect("takes the identity an earlier attempt made with the Domain's selector", () =>
     Effect.gen(function* () {
-      const fake = makeSes({
-        existingOrigin: "AWS_SES",
-        rejectExternalPut: "SdkError",
+      const account = makeSes({ origin: "EXTERNAL", tokens: ["relayitabc123"] });
+
+      const result = yield* ensureSesDomainIdentity(account.ses, input);
+
+      expect(result).toEqual({ mailFrom });
+      expect(account.calls).toEqual(["create", "get", "mail-from"]);
+    }),
+  );
+
+  it.effect.each(outside)("refuses %s, and leaves it untouched", ([, existing]) =>
+    Effect.gen(function* () {
+      const account = makeSes(existing);
+
+      const error = yield* Effect.flip(ensureSesDomainIdentity(account.ses, input));
+
+      expect(error).toMatchObject({
+        _tag: "EmailBackendIdentityConflict",
+        fqdn: "relayit.fyi",
+        region: "eu-central-1",
       });
+      expect(account.identity).toEqual(existing);
+      expect(account.calls).toEqual(["create", "get"]);
+    }),
+  );
+});
 
-      yield* ensureSesDomainIdentity(fake.ses, input);
+describe("deleteSesDomainIdentity", () => {
+  it.effect("deletes the identity made with the Domain's selector, off its tenants first", () =>
+    Effect.gen(function* () {
+      const account = makeSes({ origin: "EXTERNAL", tokens: ["relayitabc123"] });
 
-      expect(fake.origin).toBe("EXTERNAL");
-      expect(fake.deleted).toBe(true);
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(true);
+
+      expect(account.identity).toBeNull();
+      expect(account.calls).toEqual(["get", "detach", "delete"]);
     }),
   );
 
-  it.effect("updates DKIM keys on an existing BYODKIM identity", () =>
+  it.effect.each(outside)("leaves %s", ([, existing]) =>
     Effect.gen(function* () {
-      const fake = makeSes({ existingOrigin: "EXTERNAL" });
+      const account = makeSes(existing);
 
-      yield* ensureSesDomainIdentity(fake.ses, input);
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(false);
 
-      expect(fake.origin).toBe("EXTERNAL");
-      expect(fake.deleted).toBe(false);
+      expect(account.identity).toEqual(existing);
+      expect(account.calls).toEqual(["get"]);
+    }),
+  );
+
+  it.effect("has nothing to delete when SES has no identity of that name", () =>
+    Effect.gen(function* () {
+      const account = makeSes();
+
+      expect(yield* deleteSesDomainIdentity(account.ses, input)).toBe(false);
+
+      expect(account.calls).toEqual(["get"]);
     }),
   );
 });

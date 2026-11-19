@@ -86,7 +86,6 @@ type SesOperation =
   | "getTenant"
   | "listResourceTenants"
   | "listTenants"
-  | "putEmailIdentityDkimSigningAttributes"
   | "putEmailIdentityMailFromAttributes"
   | "sendEmail"
   | "updateConfigurationSetEventDestination";
@@ -106,6 +105,7 @@ export const createAwsErrorMapper =
     switch (error._tag) {
       case "EmailBackendAuthenticationError":
       case "EmailBackendConfigurationError":
+      case "EmailBackendIdentityConflict":
       case "EmailBackendMessageError":
       case "EmailBackendRateLimited":
       case "EmailBackendRejected":
