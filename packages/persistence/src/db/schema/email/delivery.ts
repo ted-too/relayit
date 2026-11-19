@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import type { EmailAddressList, EmailFrom, EmailHeaders } from "../../validators/channels/email";
-import { type DeliveryError, deliveryStatusEnum } from "../channels";
+import { type DeliveryError, deliveryStatusEnum, type StrippedRecipient } from "../channels";
 import { message } from "../message";
 import { customDomain } from "./custom-domain";
 import { sandboxDomain } from "./sandbox-domain";
@@ -43,6 +43,14 @@ export const emailDelivery = pgTable(
     to: jsonb("to").$type<EmailAddressList>().notNull(),
     cc: jsonb("cc").$type<EmailAddressList>(),
     bcc: jsonb("bcc").$type<EmailAddressList>(),
+    /**
+     * Who the worker took off `to`, `cc` and `bcc` before sending, which on a claimed
+     * Delivery then name only who the send went to. Kept so `message.sent` can say so
+     * whichever run records it. A `skipped` Delivery was never claimed, so its recipients
+     * stay as accepted and all of them are here. A recipient stripped at accept is never
+     * written to the Delivery, here or there.
+     */
+    stripped: jsonb("stripped").$type<StrippedRecipient[]>(),
     replyTo: jsonb("reply_to").$type<EmailAddressList>(),
     subject: text("subject").notNull(),
     html: text("html"),

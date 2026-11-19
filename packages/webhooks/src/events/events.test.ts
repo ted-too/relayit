@@ -8,6 +8,7 @@ import {
   domainCreated,
   domainUpdated,
   messageScheduled,
+  messageSent,
   webhookEventDefinitions,
 } from "./index";
 
@@ -58,6 +59,17 @@ describe("Delivery Webhook Events", () => {
 
     expect(payload.reason).toBe("suppression");
   });
+
+  test("decodes a skip for Unsubscribes, and no reason it does not know", () => {
+    const decode = Schema.decodeUnknownSync(deliverySkipped.payload);
+    const skipped = { delivery_id: "edlv_test", message_id: "msg_test" };
+
+    expect(decode({ ...skipped, reason: "unsubscribed" })).toEqual({
+      ...skipped,
+      reason: "unsubscribed",
+    });
+    expect(() => decode({ ...skipped, reason: "paused" })).toThrow();
+  });
 });
 
 describe("Message Webhook Events", () => {
@@ -70,6 +82,26 @@ describe("Message Webhook Events", () => {
 
     expect(messageScheduled.type).toBe("message.scheduled");
     expect(payload.message_id).toBe("msg_test");
+  });
+
+  test("decodes a sent Message with and without stripped recipients", () => {
+    const decode = Schema.decodeUnknownSync(messageSent.payload);
+    const sent = {
+      delivery_id: "edlv_test",
+      message_id: "msg_test",
+      provider_message_id: "provider_test",
+    };
+    const stripped = [
+      { email: "bounced@example.com", reason: "suppression" },
+      { email: "reader@example.com", reason: "unsubscribed" },
+    ];
+
+    // As every `message.sent` was before the field existed.
+    expect(decode(sent)).toEqual(sent);
+    expect(decode({ ...sent, stripped })).toEqual({ ...sent, stripped });
+    expect(() =>
+      decode({ ...sent, stripped: [{ email: "bounced@example.com", reason: "paused" }] }),
+    ).toThrow();
   });
 
   test("rejects an incomplete scheduled Message payload", () => {

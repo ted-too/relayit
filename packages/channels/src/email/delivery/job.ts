@@ -7,10 +7,12 @@ export const emailDeliverJob = defineJob({
   payload: Schema.Struct({
     billingUserId: Schema.String,
     deliveryId: Schema.String,
+    /**
+     * Not read: the handler takes the purpose, and the Topic, from the Message. Still sent
+     * because the release before this one requires it of a job it runs during a rollout (#172).
+     */
     purpose: Schema.Literals(["transactional", "marketing"]),
     startDate: Schema.String,
-    /** Campaign Topic id — required for List-Unsubscribe on marketing sends. */
-    topicId: Schema.optionalKey(Schema.String),
   }),
   retry: {
     backoff: {

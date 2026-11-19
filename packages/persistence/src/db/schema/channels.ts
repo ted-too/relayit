@@ -55,4 +55,13 @@ export interface DeliveryError {
   retryable?: boolean;
 }
 
+/**
+ * A recipient the worker took off a Delivery before sending, and why: a Suppression, or (a
+ * marketing send only) an Unsubscribe from its Topic or from all marketing.
+ */
+export interface StrippedRecipient {
+  email: string;
+  reason: "suppression" | "unsubscribed";
+}
+
 export const messagePurposeEnum = pgEnum("message_purpose", AVAILABLE_MESSAGE_PURPOSES);

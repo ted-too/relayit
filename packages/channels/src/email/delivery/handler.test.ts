@@ -41,7 +41,9 @@ const baseDelivery = {
     appEnvironment: { organizationId: "org_test" },
     id: "msg_test",
     organizationAppEnvironmentId: "oenv_test",
+    purpose: "transactional" as "marketing" | "transactional",
     tags: null as Record<string, string> | null,
+    topicId: null as string | null,
   },
   messageId: "msg_test",
   providerMessageId: null,
@@ -359,6 +361,11 @@ describe("emailDeliverHandler", () => {
     let sentHeaders: Record<string, string> | null | undefined;
     const { db } = makeDb({
       contactId: "cont_test",
+      // The Message says it is marketing and names the Topic; the job below says neither.
+      delivery: {
+        ...baseDelivery,
+        message: { ...baseDelivery.message, purpose: "marketing", topicId: "topc_test" },
+      },
       orgSlug: "acme",
     });
     const handler = makeEmailDeliverHandler({
@@ -366,36 +373,27 @@ describe("emailDeliverHandler", () => {
       apiOrigin: "https://api.example.com",
     });
 
-    return handler
-      .handle(
-        {
-          ...payload,
-          purpose: "marketing",
-          topicId: "topc_test",
-        },
-        execution,
-      )
-      .pipe(
-        Effect.provide(
-          testLayer(db, {
-            send: ({ message }) => {
-              sentHeaders = message.headers;
-              return Effect.succeed({ providerMessageId: "pm_unsub" });
-            },
-          }),
-        ),
-        Effect.map(() => {
-          expect(sentHeaders).toEqual(
-            expect.objectContaining({
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            }),
-          );
-          expect(sentHeaders?.["List-Unsubscribe"]).toContain(
-            "https://api.example.com/unsubscribe/acme/cont_test?",
-          );
-          expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
-          return true;
+    return handler.handle(payload, execution).pipe(
+      Effect.provide(
+        testLayer(db, {
+          send: ({ message }) => {
+            sentHeaders = message.headers;
+            return Effect.succeed({ providerMessageId: "pm_unsub" });
+          },
         }),
-      );
+      ),
+      Effect.map(() => {
+        expect(sentHeaders).toEqual(
+          expect.objectContaining({
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          }),
+        );
+        expect(sentHeaders?.["List-Unsubscribe"]).toContain(
+          "https://api.example.com/unsubscribe/acme/cont_test?",
+        );
+        expect(sentHeaders?.["List-Unsubscribe"]).toContain("topic=topc_test");
+        return true;
+      }),
+    );
   });
 });
