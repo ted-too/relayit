@@ -30,6 +30,10 @@ describe("assertHardenedPackageJson", () => {
 
   // Bun copies a directory dependency into node_modules, where an Entry can import it.
   it.effect.each([
+    "..",
+    ".",
+    " .. ",
+    "npm:other@..",
     "../outside",
     "/etc",
     "./vendor/package",
@@ -51,6 +55,7 @@ describe("assertHardenedPackageJson", () => {
       Effect.all([
         refused({ dependencies: { package: "1.0.0" }, [field]: { package: "file:/etc" } }),
         refused({ [field]: { parent: { package: "../outside" } } }),
+        refused({ [field]: { package: ".." } }),
       ]),
   );
 

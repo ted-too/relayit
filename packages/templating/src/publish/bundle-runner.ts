@@ -25,7 +25,8 @@ const inWorkspace = (path: string) => path.startsWith(`${workspaceDir}/`);
 // Not an inline argument: `macros` is missing from Bun's types, and an object literal
 // would be refused for it. It is what `bun build --no-macros` sets; the runtime flag and
 // bunfig's `macros = false` do not reach `Bun.build`. A bundle-time macro is the
-// workspace's code run here, so bundle.test.ts holds a Bun upgrade to this still working.
+// workspace's code run here, so the macro test in workspace.integration.test.ts holds a
+// Bun upgrade to this still working.
 const config = {
   entrypoints: [NodePath.join(workspaceDir, entryPath)],
   // The render isolate provides a single React instance. React Email packages are sealed
@@ -55,13 +56,8 @@ const config = {
         // linked dependency in node_modules, a tsconfig `paths` entry. Returning nothing
         // leaves the load to the bundler.
         build.onLoad({ filter: /.*/ }, (args) => {
-          let real: string;
-          try {
-            real = NodeFS.realpathSync(args.path);
-          } catch {
-            return undefined;
-          }
-          if (!inWorkspace(real)) {
+          // A path that cannot be resolved throws here, which refuses it too.
+          if (!inWorkspace(NodeFS.realpathSync(args.path))) {
             throw new Error(OUTSIDE_WORKSPACE);
           }
           return undefined;

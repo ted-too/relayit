@@ -13,7 +13,7 @@ export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: 
     });
     const runnerDir = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 
-    const stdout = yield* Effect.tryPromise({
+    const { stderr, stdout } = yield* Effect.tryPromise({
       catch: () => failed,
       try: async () => {
         const proc = Bun.spawn(
@@ -30,12 +30,16 @@ export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: 
             // builder's environment: PATH to find bun, and NODE_ENV, which the bundle of a
             // dependency that branches on it follows.
             env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH },
-            stderr: "ignore",
+            stderr: "pipe",
             stdout: "pipe",
           },
         );
-        const [text] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-        return text;
+        const [out, err] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ]);
+        return { stderr: err, stdout: out };
       },
     });
 
@@ -45,7 +49,11 @@ export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: 
       catch: () => failed,
       try: () =>
         JSON.parse(stdout) as { artifact: string; ok: true } | { detail: string; ok: false },
-    });
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.logWarning("Bundle runner gave no answer").pipe(Effect.annotateLogs({ stderr })),
+      ),
+    );
 
     if (!answer.ok) {
       return yield* new TemplatingBuilderError({

@@ -4,8 +4,10 @@ import { TemplatingBuilderError } from "../rpc/errors";
 // A registry version, range or dist-tag, or one of another registry package
 // (`npm:name@range`). Anything else Bun takes as somewhere to fetch or copy from, and a
 // path is copied from the builder's disk into node_modules, where the bundler may read
-// it: `../x`, `/x` and `user/repo` as much as `file:`, `link:`, `git+…` or a URL.
-const REGISTRY_SPEC_RE = /^(?:npm:(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+@)?[a-z0-9.*^~<>=|+ -]*$/i;
+// it: `../x`, `/x` and `user/repo` as much as `file:`, `link:`, `git+…` or a URL. No
+// version starts with a dot, and `..` alone is the checkout's parent directory.
+const REGISTRY_SPEC_RE =
+  /^(?:npm:(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+@)?(?!\.)[a-z0-9.*^~<>=|+ -]*$/i;
 // Allowed by the pattern above, and read as a tarball beside package.json.
 const TARBALL_RE = /\.(?:tgz|tar|tar\.gz)$/i;
 
