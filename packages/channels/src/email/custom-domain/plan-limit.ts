@@ -1,7 +1,8 @@
 import type { DatabaseTransaction } from "@repo/persistence/db/effect";
-import { member, organization, organizationDomain, userChannel } from "@repo/persistence/db/schema";
-import { and, countDistinct, eq, exists, isNull, ne, or } from "drizzle-orm";
+import { organization, organizationDomain, userChannel } from "@repo/persistence/db/schema";
+import { and, countDistinct, eq, ne } from "drizzle-orm";
 import { Data, Effect, Schema } from "effect";
+import { billingUserIdOf, billingUserOf } from "../../billing-user";
 
 /** The Billing User's Plan allows no further Domain. */
 export class DomainLimitReached extends Data.TaggedError("DomainLimitReached")<{
@@ -57,18 +58,7 @@ export const requireDomainAllowance = (
   input: { readonly customDomainId?: string; readonly organizationId: string },
 ) =>
   Effect.gen(function* () {
-    // The Billing User as the Usage policy resolves it: the Project's, else its owner.
-    const [project] = yield* tx
-      .select({ billingUserId: organization.billingUserId })
-      .from(organization)
-      .where(eq(organization.id, input.organizationId));
-    const billingUserId =
-      project?.billingUserId ??
-      (yield* tx
-        .select({ userId: member.userId })
-        .from(member)
-        .where(and(eq(member.organizationId, input.organizationId), eq(member.role, "owner")))
-        .limit(1))[0]?.userId;
+    const billingUserId = yield* billingUserOf(tx, input.organizationId);
     if (!billingUserId) {
       return yield* new DomainLimitUnreadable({
         code: "billing_user_not_found",
@@ -110,24 +100,7 @@ export const requireDomainAllowance = (
       .innerJoin(organization, eq(organization.id, organizationDomain.organizationId))
       .where(
         and(
-          or(
-            eq(organization.billingUserId, billingUserId),
-            and(
-              isNull(organization.billingUserId),
-              exists(
-                tx
-                  .select({ id: member.id })
-                  .from(member)
-                  .where(
-                    and(
-                      eq(member.organizationId, organization.id),
-                      eq(member.role, "owner"),
-                      eq(member.userId, billingUserId),
-                    ),
-                  ),
-              ),
-            ),
-          ),
+          eq(billingUserIdOf, billingUserId),
           input.customDomainId
             ? ne(organizationDomain.customDomainId, input.customDomainId)
             : undefined,

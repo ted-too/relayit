@@ -165,6 +165,35 @@ describe("a Plan's Domain limit (PostgreSQL)", () => {
     }).pipe(Effect.provide(live)),
   );
 
+  it.live("a Project billed to its owners counts toward the one who is its Billing User", () =>
+    Effect.gen(function* () {
+      const db = yield* DB;
+      const [longest, newer] = [yield* insertBillingUser(1), yield* insertBillingUser(1)];
+      const shared = yield* insertProject(null);
+      yield* db.insert(member).values([
+        {
+          createdAt: new Date("2026-02-01T00:00:00Z"),
+          organizationId: shared,
+          role: "owner",
+          userId: newer,
+        },
+        {
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          organizationId: shared,
+          role: "owner",
+          userId: longest,
+        },
+      ]);
+      const longestOwn = yield* insertProject(longest);
+      const newerOwn = yield* insertProject(newer);
+
+      yield* add(shared);
+      // The shared Project's Domain took the longest-standing owner's one place, not both.
+      expect(yield* Effect.flip(add(longestOwn))).toMatchObject(reached(1, 1));
+      expect((yield* add(newerOwn)).kind).toBe("created");
+    }).pipe(Effect.provide(live)),
+  );
+
   it.live("a claim counts from the moment it is made, and is refused at the limit", () =>
     Effect.gen(function* () {
       const holderId = yield* insertProject(yield* insertBillingUser(null));

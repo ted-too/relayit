@@ -441,6 +441,7 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
       .reserve({
         channel: "email",
         deliveryId,
+        ...(input.scheduledAt ? { dueAt: DateTime.toDate(input.scheduledAt) } : {}),
         organizationId: input.organizationId,
         purpose: "transactional",
         reservedAt,

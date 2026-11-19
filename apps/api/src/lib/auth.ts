@@ -1,3 +1,4 @@
+import { billingUserOf } from "@repo/channels/billing-user";
 import { removeDeletedProjectDomains } from "@repo/channels/email/custom-domain";
 import { allocateSandboxDomain } from "@repo/channels/email/sandbox";
 import type { Jobs } from "@repo/jobs";
@@ -11,7 +12,7 @@ import {
   createAuthMiddleware,
   getSessionFromCtx,
 } from "@repo/persistence/auth/server";
-import type { DB } from "@repo/persistence/db/effect";
+import { DB } from "@repo/persistence/db/effect";
 import { createPromiseDb, type PromiseDb } from "@repo/persistence/db/promise";
 import { organization, user } from "@repo/persistence/db/schema";
 import { makeRedisClient } from "@repo/redis";
@@ -52,6 +53,7 @@ export class ApiAuth extends Context.Service<
         // The pool and the Redis client report connection trouble from callbacks, and
         // better-auth's hooks are promises; run those effects with the app's services.
         const services = yield* Effect.context<DB | Jobs>();
+        const effectDb = yield* DB;
         const runFork = (effect: Effect.Effect<void>) => Effect.runForkWith(services)(effect);
         const runPromise = <A, E>(effect: Effect.Effect<A, E, DB | Jobs>) =>
           Effect.runPromiseWith(services)(effect);
@@ -135,17 +137,6 @@ export class ApiAuth extends Context.Service<
           Parameters<typeof removeDeletedProjectDomains>[0]["links"]
         >();
 
-        const billingUserOf = async (organizationId: string) => {
-          const row = await db.query.organization.findFirst({
-            columns: { billingUserId: true },
-            where: { id: organizationId },
-            with: {
-              members: { columns: { userId: true }, limit: 1, where: { role: "owner" } },
-            },
-          });
-          return row?.billingUserId ?? row?.members[0]?.userId ?? null;
-        };
-
         const auth = createAuth({
           baseUrl: config.apiUrl.origin,
           clientIpHeader: Option.getOrUndefined(config.clientIpHeader),
@@ -167,7 +158,10 @@ export class ApiAuth extends Context.Service<
               }
               const session = await getSessionFromCtx(ctx);
               const userId = session?.user?.id;
-              if (userId && (await billingUserOf(organizationId)) === userId) {
+              if (
+                userId &&
+                (await runPromise(billingUserOf(effectDb, organizationId))) === userId
+              ) {
                 throw new APIError("BAD_REQUEST", { message: BILLING_USER_LEAVING });
               }
             }),
@@ -251,7 +245,7 @@ export class ApiAuth extends Context.Service<
                   );
                 },
                 beforeRemoveMember: async ({ member: removed, organization: from }) => {
-                  if ((await billingUserOf(from.id)) === removed.userId) {
+                  if ((await runPromise(billingUserOf(effectDb, from.id))) === removed.userId) {
                     throw new APIError("BAD_REQUEST", { message: BILLING_USER_LEAVING });
                   }
                 },
