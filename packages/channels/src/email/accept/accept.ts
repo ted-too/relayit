@@ -18,7 +18,7 @@ import {
   resolveAppEnvironment,
   upsertMessageContacts,
 } from "../../messages/accept";
-import { filterSuppressedContacts } from "../../messages/suppressions";
+import { filterStoppedRecipients } from "../../messages/suppressions";
 import { Usage, type UsagePolicyResult } from "../../usage";
 import { isBlockedAttachmentFilename } from "../attachment-policy";
 import { emailDeliverJob } from "../delivery/job";
@@ -179,10 +179,11 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
       organizationId: input.organizationId,
     });
     const appEnvironment = yield* resolveAppEnvironment(db, input);
-    const to = yield* filterSuppressedContacts(db, {
+    const to = yield* filterStoppedRecipients(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
       purpose: "transactional",
+      topicId: null,
       recipients: input.email.to,
     }).pipe(
       Effect.mapError(
@@ -194,10 +195,11 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
           }),
       ),
     );
-    const cc = yield* filterSuppressedContacts(db, {
+    const cc = yield* filterStoppedRecipients(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
       purpose: "transactional",
+      topicId: null,
       recipients: input.email.cc,
     }).pipe(
       Effect.mapError(
@@ -209,10 +211,11 @@ export const acceptTransactionalEmail = (input: AcceptTransactionalEmailInput) =
           }),
       ),
     );
-    const bcc = yield* filterSuppressedContacts(db, {
+    const bcc = yield* filterStoppedRecipients(db, {
       organizationAppEnvironmentId: appEnvironment.id,
       organizationId: input.organizationId,
       purpose: "transactional",
+      topicId: null,
       recipients: input.email.bcc,
     }).pipe(
       Effect.mapError(

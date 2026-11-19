@@ -4,7 +4,7 @@ import { contact, organization, organizationAppEnvironment } from "@repo/persist
 import { sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { typeid } from "typeid-js";
-import { contactsAmong, filterSuppressedContacts, suppressedAmong } from "./suppressions";
+import { contactsAmong, filterStoppedRecipients, stoppedAmong } from "./suppressions";
 
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 
@@ -57,7 +57,26 @@ describe("the suppression lookup", () => {
           .select({ email: contact.email })
           .from(contact)
           .where(
-            suppressedAmong({ emails, organizationAppEnvironmentId, purpose: "transactional" }),
+            stoppedAmong({
+              emails,
+              organizationAppEnvironmentId,
+              purpose: "transactional",
+              topicId: null,
+            }),
+          )}`,
+      );
+      // The same for a marketing send, which also asks after Unsubscribes.
+      const marketingStrip = yield* db.execute<{ "QUERY PLAN": string }>(
+        sql`explain ${db
+          .select({ email: contact.email })
+          .from(contact)
+          .where(
+            stoppedAmong({
+              emails,
+              organizationAppEnvironmentId,
+              purpose: "marketing",
+              topicId: "topc_any",
+            }),
           )}`,
       );
       // What a bounce or complaint runs for each recipient it suppresses.
@@ -81,7 +100,7 @@ describe("the suppression lookup", () => {
           )}`,
       );
 
-      for (const plan of [strip, suppress, byAppEnvironment]) {
+      for (const plan of [strip, marketingStrip, suppress, byAppEnvironment]) {
         const text = plan.rows.map((row) => row["QUERY PLAN"]).join("\n");
         expect(text).toContain("contact_app_env_email_unique_idx");
         expect(text).not.toContain("Seq Scan");
@@ -100,14 +119,15 @@ describe("the suppression lookup", () => {
         suppressionSeverity: "all",
       });
 
-      const { kept, stripped } = yield* filterSuppressedContacts(db, {
+      const { kept, stripped } = yield* filterStoppedRecipients(db, {
         organizationAppEnvironmentId,
         organizationId,
         purpose: "transactional",
         recipients: [{ email: "Bounced@Example.COM" }, { email: "fine@example.com" }],
+        topicId: null,
       });
 
-      expect(stripped).toEqual([{ email: "Bounced@Example.COM" }]);
+      expect(stripped).toEqual([{ email: "Bounced@Example.COM", reason: "suppression" }]);
       expect(kept).toEqual([{ email: "fine@example.com" }]);
 
       // The lookup compares the column as stored, so a Contact stored in any other case

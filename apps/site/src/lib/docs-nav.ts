@@ -28,6 +28,7 @@ export const docsNav: readonly DocsNavGroup[] = [
   {
     items: [
       { kind: "page", slug: "errors-and-limits", title: "Errors and limits" },
+      { kind: "page", slug: "webhook-events", title: "Webhook events" },
       { kind: "page", slug: "legacy-send", title: "Legacy send endpoints" },
       {
         href: "https://api.relayit.io/docs",

@@ -64,6 +64,7 @@ What exists today:
 - **Contacts are created from sends.** When you send to a recipient, Relayit creates or updates the Contact. If you pass a Contact object, its `first_name`, `last_name`, and `properties` are stored.
 - **Automatic suppression.** When SES reports a hard bounce or a complaint, Relayit suppresses that address. Hard bounces suppress the address for all mail. Complaints suppress it for marketing mail.
 - **Suppressed recipients are stripped.** On a transactional send, any recipient suppressed for all mail is removed and listed in the `stripped` array of the response. If every recipient is suppressed, the send fails with `all_recipients_suppressed`.
+- **Suppression is checked again before sending.** A recipient suppressed after the send was accepted is left out when the email goes out, and named in the `stripped` list of the [`message.sent` Webhook Event](/docs/webhook-events#messagesent). If no recipient is left, the Delivery ends `skipped`.
 
 Coming soon: a Contacts screen in the dashboard, manual suppression management, Topics for marketing consent, and Segments for targeting.
 

@@ -15,6 +15,18 @@ export const messageSent = defineWebhookEvent({
     delivery_id: Schema.String,
     message_id: Schema.String,
     provider_message_id: Schema.String,
+    /**
+     * The recipients the worker took off the Delivery before sending, for a Suppression or
+     * an Unsubscribe made after the send was accepted. Present only when there are any.
+     */
+    stripped: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          email: Schema.String,
+          reason: Schema.Literals(["suppression", "unsubscribed"]),
+        }),
+      ),
+    ),
   }),
   type: "message.sent",
 });

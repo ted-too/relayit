@@ -1,0 +1,124 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "aed3cf0d-1ef6-4d30-9f16-1c74d7ffdeb6",
+  "prevIds": [
+    "fbfa9f89-e742-41db-bc9f-97438eda2ee5"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "email_delivery",
+        "stripped"
+      ],
+      "writes": [
+        "s|col|public.email_delivery.stripped",
+        "n|col|public.email_delivery.stripped",
+        "e|col|public.email_delivery.stripped"
+      ],
+      "reads": [
+        "n|tbl|public.email_delivery",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "message",
+        "topic_id"
+      ],
+      "writes": [
+        "s|col|public.message.topic_id",
+        "n|col|public.message.topic_id",
+        "e|col|public.message.topic_id"
+      ],
+      "reads": [
+        "n|tbl|public.message",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "message"
+      ],
+      "writes": [
+        "s|fk|public.message.message_topic_id_topic_id_fkey",
+        "n|fk|public.message.message_topic_id_topic_id_fkey",
+        "e|fk|public.message.message_topic_id_topic_id_fkey",
+        "n|con|public.message.message_topic_id_topic_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.message",
+        "n|sch|public",
+        "n|tbl|public.topic",
+        "n|sch|public",
+        "n|col|public.message.topic_id",
+        "n|col|public.topic.id",
+        "e|uniqueness|public.topic.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "email_delivery",
+        "name": "stripped",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "message",
+        "name": "topic_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "message",
+        "name": "message_topic_id_topic_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "topic_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "topic",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "SET NULL",
+        "entityType": "fks"
+      }
+    }
+  ]
+}

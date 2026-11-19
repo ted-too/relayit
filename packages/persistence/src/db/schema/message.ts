@@ -2,6 +2,7 @@ import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { typeid } from "typeid-js";
 import { organizationAppEnvironment } from "./auth";
 import { messagePurposeEnum } from "./channels";
+import { topic } from "./contact";
 import { template } from "./templating/template";
 
 /**
@@ -18,6 +19,13 @@ export const message = pgTable(
       .notNull()
       .references(() => organizationAppEnvironment.id, { onDelete: "cascade" }),
     purpose: messagePurposeEnum("purpose").notNull(),
+    /**
+     * The Topic a marketing Message is sent under: whose Unsubscribes stop it, and what its
+     * List-Unsubscribe link opts out of. Null for a transactional one. A deleted Topic takes
+     * its Unsubscribes with it, so a Message that outlives it is held only to the opt-out of
+     * all marketing.
+     */
+    topicId: text("topic_id").references(() => topic.id, { onDelete: "set null" }),
     templateId: text("template_id").references(() => template.id, {
       onDelete: "set null",
     }),

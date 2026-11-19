@@ -16,6 +16,7 @@ import { makeLocalObjectStorageLive, ObjectStorage } from "@repo/object-storage"
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
 import {
   contact,
+  contactTopicUnsubscribe,
   customDomain,
   emailDelivery,
   emailDomainRegistration,
@@ -24,6 +25,7 @@ import {
   organization,
   organizationDomain,
   sandboxDomain,
+  topic,
   user,
   userChannel,
   webhookEndpoint,
@@ -422,6 +424,27 @@ const sendInput = (
     },
     organizationId: project.organizationId,
   }) satisfies AcceptTransactionalEmailInput;
+
+/**
+ * No marketing send is accepted yet, so one is accepted as transactional and its Message made
+ * a Campaign's, under a Topic of the Project's. Its job still says transactional: what the
+ * Message says, not the job, decides who it is not sent to.
+ */
+const acceptMarketingEmail = (input: AcceptTransactionalEmailInput) =>
+  Effect.gen(function* () {
+    const db = yield* DB;
+    const accepted = yield* acceptTransactionalEmail(input);
+    const [created] = yield* db
+      .insert(topic)
+      .values({ name: "Product news", organizationId: input.organizationId })
+      .returning({ id: topic.id });
+    const topicId = created?.id ?? "";
+    yield* db
+      .update(message)
+      .set({ purpose: "marketing", topicId })
+      .where(eq(message.id, accepted.messageId));
+    return { ...accepted, topicId };
+  });
 
 const deliveryOf = (deliveryId: string) =>
   Effect.gen(function* () {
@@ -2440,16 +2463,33 @@ describe("an accepted email send", () => {
             to: message.to,
           })),
         ).toEqual([{ bcc: null, cc: null, to: [address("kept")] }]);
-        // The Delivery names who it went to, as one whose recipient was stripped at accept does.
-        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+        // Each as the Project wrote it, in the order of to, cc and bcc.
+        const stripped = [
+          { email: address("To").replace("example", "Example"), reason: "suppression" },
+          { email: address("cc"), reason: "suppression" },
+          { email: address("bcc"), reason: "suppression" },
+        ];
+        // The Delivery names who it went to, as one whose recipient was stripped at accept
+        // does, and keeps who the worker stripped.
+        const delivery = yield* deliveryOf(accepted.deliveryId);
+        expect(delivery).toMatchObject({
           bcc: [],
           cc: [],
           status: "sent",
+          stripped,
           to: [address("kept")],
         });
-        expect(
-          (yield* eventsFor(project.organizationId, accepted.deliveryId)).map(({ type }) => type),
-        ).toEqual(["message.sent"]);
+        expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toEqual([
+          {
+            payload: {
+              delivery_id: accepted.deliveryId,
+              message_id: accepted.messageId,
+              provider_message_id: delivery?.providerMessageId,
+              stripped,
+            },
+            type: "message.sent",
+          },
+        ]);
       }).pipe(
         Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
       );
@@ -2578,6 +2618,289 @@ describe("an accepted email send", () => {
       }).pipe(
         Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
       );
+    },
+  );
+
+  it.live(
+    "message.sent names a recipient stripped by a run SES refused, when a later run sends it",
+    () => {
+      let ours = "";
+      let refusals = 0;
+      const backend = makeBackend((sender) => {
+        if (sender !== ours || refusals > 0) {
+          return accept;
+        }
+        refusals += 1;
+        return Effect.fail(new EmailBackendRateLimited({ region: "eu-central-1" }));
+      });
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        ours = project.fqdn;
+        const address = (name: string) => `${name}-${project.organizationId}@example.com`;
+        const input = sendInput(project, `hello@${project.fqdn}`, address("kept"), [ATTACHMENT]);
+        const accepted = yield* acceptTransactionalEmail({
+          ...input,
+          email: {
+            ...input.email,
+            cc: [{ email: address("later") }],
+            to: [{ email: address("kept") }, { email: address("first") }],
+          },
+        });
+        const suppress = (name: string) =>
+          db
+            .update(contact)
+            .set({
+              suppressedAt: new Date(),
+              suppressionReason: "hard_bounce",
+              suppressionSeverity: "all",
+            })
+            .where(eq(contact.email, address(name)))
+            .pipe(Effect.orDie);
+
+        // The first run strips one recipient, claims, and SES refuses the send.
+        storage.hook.whileLoading = suppress("first");
+        yield* runWorker;
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          cc: [address("later")],
+          status: "queued",
+          stripped: [{ email: address("first"), reason: "suppression" }],
+          to: [address("kept")],
+        });
+
+        // The run that sends it strips another, and the event names both.
+        storage.hook.whileLoading = suppress("later");
+        yield* runWorker;
+
+        const stripped = [
+          { email: address("first"), reason: "suppression" },
+          { email: address("later"), reason: "suppression" },
+        ];
+        expect(backend.sendsFrom(project.fqdn).map(({ message }) => message.to)).toEqual([
+          [address("kept")],
+          [address("kept")],
+        ]);
+        expect(yield* deliveryOf(accepted.deliveryId)).toMatchObject({
+          cc: [],
+          status: "sent",
+          stripped,
+          to: [address("kept")],
+        });
+        expect(yield* eventsFor(project.organizationId, accepted.deliveryId)).toMatchObject([
+          { payload: { stripped }, type: "message.sent" },
+        ]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live.each(["from its Topic", "from all marketing"] as const)(
+    "a Contact unsubscribing %s while attachments load stops a marketing send, not a transactional one",
+    (unsubscribes) => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        // One marketing send a day, so the skipped send's Usage must be given back.
+        const project = yield* seedProject({ dailySends: 1 });
+        const reader = `reader-${project.organizationId}@example.com`;
+        const marketing = yield* acceptMarketingEmail(
+          sendInput(project, `hello@${project.fqdn}`, reader, [ATTACHMENT]),
+        );
+        const [{ id: contactId } = { id: "" }] = yield* db
+          .select({ id: contact.id })
+          .from(contact)
+          .where(eq(contact.email, reader));
+        // The run has read the Delivery and found its recipient subscribed; the Unsubscribe
+        // lands before it claims.
+        storage.hook.whileLoading = (
+          unsubscribes === "from its Topic"
+            ? db.insert(contactTopicUnsubscribe).values({ contactId, topicId: marketing.topicId })
+            : db.update(contact).set({ unsubscribed: true }).where(eq(contact.id, contactId))
+        ).pipe(Effect.orDie);
+
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+        const stripped = [{ email: reader, reason: "unsubscribed" }];
+        expect(yield* deliveryOf(marketing.deliveryId)).toMatchObject({
+          error: { details: { reason: "unsubscribed" }, message: "All recipients unsubscribed" },
+          status: "skipped",
+          stripped,
+          to: [reader],
+        });
+        expect(yield* eventsFor(project.organizationId, marketing.deliveryId)).toEqual([
+          {
+            payload: {
+              delivery_id: marketing.deliveryId,
+              message_id: marketing.messageId,
+              reason: "unsubscribed",
+            },
+            type: "delivery.skipped",
+          },
+        ]);
+
+        // An Unsubscribe is never from transactional mail: the same Contact, still
+        // unsubscribed, gets one, on the Usage the skipped send gave back.
+        storage.hook.whileLoading = Effect.void;
+        const transactional = yield* acceptTransactionalEmail(
+          sendInput(project, `hello@${project.fqdn}`, reader, [ATTACHMENT]),
+        );
+
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn).map(({ message }) => message.to)).toEqual([
+          [reader],
+        ]);
+        const sent = yield* deliveryOf(transactional.deliveryId);
+        expect(sent).toMatchObject({ status: "sent", stripped: null, to: [reader] });
+        expect(yield* eventsFor(project.organizationId, transactional.deliveryId)).toEqual([
+          {
+            payload: {
+              delivery_id: transactional.deliveryId,
+              message_id: transactional.messageId,
+              provider_message_id: sent?.providerMessageId,
+            },
+            type: "message.sent",
+          },
+        ]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live(
+    "a marketing send goes to who is left, with their unsubscribe link, and names the rest",
+    () => {
+      const backend = makeBackend();
+      const storage = makeStorageWithDownloadHook();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const address = (name: string) => `${name}-${project.organizationId}@example.com`;
+        const input = sendInput(project, `hello@${project.fqdn}`, address("kept"), [ATTACHMENT]);
+        const marketing = yield* acceptMarketingEmail({
+          ...input,
+          email: {
+            ...input.email,
+            bcc: [{ email: address("everything") }],
+            cc: [{ email: address("complained") }],
+            to: [{ email: address("kept") }, { email: address("topic") }],
+          },
+        });
+        const contacts = yield* db
+          .select({ email: contact.email, id: contact.id })
+          .from(contact)
+          .where(like(contact.email, address("%")));
+        const idOf = (name: string) =>
+          contacts.find(({ email }) => email === address(name))?.id ?? "";
+        const [other] = yield* db
+          .insert(topic)
+          .values({ name: "Another Topic", organizationId: project.organizationId })
+          .returning({ id: topic.id });
+        // Before the run: one out of the Message's Topic, one out of all marketing, and the
+        // recipient who stays out of some other Topic, which this Message is not sent under.
+        yield* db.insert(contactTopicUnsubscribe).values([
+          { contactId: idOf("topic"), topicId: marketing.topicId },
+          { contactId: idOf("kept"), topicId: other?.id ?? "" },
+        ]);
+        yield* db
+          .update(contact)
+          .set({ unsubscribed: true })
+          .where(eq(contact.id, idOf("everything")));
+        // And a complaint while the attachments load.
+        storage.hook.whileLoading = db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "complaint",
+            suppressionSeverity: "marketing",
+          })
+          .where(eq(contact.id, idOf("complained")))
+          .pipe(Effect.orDie);
+
+        yield* runWorker;
+
+        const [sent] = backend.sendsFrom(project.fqdn);
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(1);
+        expect(sent?.message).toMatchObject({ bcc: null, cc: null, to: [address("kept")] });
+        // One recipient is left, so the mail can carry a link that unsubscribes exactly them
+        // from the Message's Topic, though the job said the send was transactional.
+        expect(sent?.message.headers?.["List-Unsubscribe"]).toContain(
+          `/${idOf("kept")}?msg=${marketing.messageId}`,
+        );
+        expect(sent?.message.headers?.["List-Unsubscribe"]).toContain(`topic=${marketing.topicId}`);
+        const stripped = [
+          { email: address("topic"), reason: "unsubscribed" },
+          { email: address("complained"), reason: "suppression" },
+          { email: address("everything"), reason: "unsubscribed" },
+        ];
+        expect(yield* deliveryOf(marketing.deliveryId)).toMatchObject({
+          bcc: [],
+          cc: [],
+          status: "sent",
+          stripped,
+          to: [address("kept")],
+        });
+        expect(yield* eventsFor(project.organizationId, marketing.deliveryId)).toMatchObject([
+          { payload: { stripped }, type: "message.sent" },
+        ]);
+      }).pipe(
+        Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer, storage.layer)),
+      );
+    },
+  );
+
+  it.live(
+    "a marketing Delivery with one recipient suppressed and the other unsubscribed is skipped for suppression",
+    () => {
+      const backend = makeBackend();
+      return Effect.gen(function* () {
+        const db = yield* DB;
+        const project = yield* seedProject();
+        const address = (name: string) => `${name}-${project.organizationId}@example.com`;
+        const input = sendInput(project, `hello@${project.fqdn}`, address("unsubscribed"));
+        const marketing = yield* acceptMarketingEmail({
+          ...input,
+          email: { ...input.email, cc: [{ email: address("complained") }] },
+        });
+        yield* db
+          .update(contact)
+          .set({ unsubscribed: true })
+          .where(eq(contact.email, address("unsubscribed")));
+        // Both a complaint and an Unsubscribe: reported as the Suppression.
+        yield* db
+          .update(contact)
+          .set({
+            suppressedAt: new Date(),
+            suppressionReason: "complaint",
+            suppressionSeverity: "marketing",
+            unsubscribed: true,
+          })
+          .where(eq(contact.email, address("complained")));
+
+        yield* runWorker;
+
+        expect(backend.sendsFrom(project.fqdn)).toHaveLength(0);
+        // The event has one reason for the Delivery, the stricter; the row has each one's.
+        expect(yield* deliveryOf(marketing.deliveryId)).toMatchObject({
+          error: {
+            details: { reason: "suppression" },
+            message: "All recipients suppressed or unsubscribed",
+          },
+          status: "skipped",
+          stripped: [
+            { email: address("unsubscribed"), reason: "unsubscribed" },
+            { email: address("complained"), reason: "suppression" },
+          ],
+        });
+        expect(yield* eventsFor(project.organizationId, marketing.deliveryId)).toMatchObject([
+          { payload: { reason: "suppression" }, type: "delivery.skipped" },
+        ]);
+      }).pipe(Effect.provide(services(testDatabaseUrl, testRedisUrl, backend.layer)));
     },
   );
 

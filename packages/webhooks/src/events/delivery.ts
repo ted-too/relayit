@@ -36,7 +36,11 @@ export const deliverySkipped = defineWebhookEvent({
   payload: Schema.Struct({
     delivery_id: Schema.String,
     message_id: Schema.String,
-    reason: Schema.String,
+    /**
+     * Why no recipient was left. A Delivery with some stopped by a Suppression and the rest
+     * by an Unsubscribe says `suppression`.
+     */
+    reason: Schema.Literals(["suppression", "unsubscribed"]),
   }),
   type: "delivery.skipped",
 });

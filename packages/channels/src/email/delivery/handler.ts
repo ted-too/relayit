@@ -19,7 +19,7 @@ import {
   MessageDeliveryRetryableError,
   MessageDeliveryTerminalError,
 } from "../../messages/delivery";
-import { filterSuppressedContacts, suppressedAmong } from "../../messages/suppressions";
+import { filterStoppedRecipients, stoppedAmong } from "../../messages/suppressions";
 import { Usage } from "../../usage";
 import { EmailBackend } from "../backend";
 import {
@@ -148,6 +148,7 @@ const senderMaySend = (organizationId: string) => ({
 /**
  * Writes `values` only while the Delivery is still in the state this run saw (`queued`, or
  * the claim made at `claimedAt`), so a run that lost a race never overwrites another's outcome.
+ * Answers the row's stripped recipients when it wrote, nothing when it did not.
  */
 const updateDelivery = (
   db: DatabaseExecutor,
@@ -168,9 +169,9 @@ const updateDelivery = (
           : eq(emailDelivery.status, "queued"),
       ),
     )
-    .returning({ messageId: emailDelivery.messageId })
+    .returning({ stripped: emailDelivery.stripped })
     .pipe(
-      Effect.map(([updated]) => updated !== undefined),
+      Effect.map(([updated]) => updated),
       Effect.mapError(
         (cause) =>
           new EmailDeliveryPersistenceError({
@@ -276,7 +277,8 @@ const sendingState = (delivery: { readonly id: string; readonly startedAt: Date 
 /**
  * Records a Delivery SES has accepted as sent, with its message.sent event. Only the claim
  * SES answered changes, so recording it twice emits nothing twice; false when it was already
- * recorded.
+ * recorded. The event names the recipients the worker stripped from what the Delivery's row
+ * holds, so it says the same whether the run that sent it records it or a later one does.
  */
 const recordSent = (
   db: Database,
@@ -306,6 +308,7 @@ const recordSent = (
               delivery_id: input.deliveryId,
               message_id: input.messageId,
               provider_message_id: input.providerMessageId,
+              ...(sent.stripped?.length ? { stripped: sent.stripped } : {}),
             },
             type: messageSent.type,
           },
@@ -786,11 +789,12 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           const suppressionInput = {
             organizationAppEnvironmentId: message.organizationAppEnvironmentId,
             organizationId: appEnvironment.organizationId,
-            // What accept wrote with the Delivery, not what the job says: a job that named
-            // the wrong purpose must not get past a `marketing` Suppression.
+            // What was written with the Delivery, not what the job says: a job that named
+            // the wrong purpose must not get past a `marketing` Suppression or an Unsubscribe.
             purpose: message.purpose,
+            topicId: message.topicId,
           };
-          const to = yield* filterSuppressedContacts(db, {
+          const to = yield* filterStoppedRecipients(db, {
             ...suppressionInput,
             recipients: loaded.to.map((email) => ({ email })),
           }).pipe(
@@ -804,7 +808,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 }),
             ),
           );
-          const cc = yield* filterSuppressedContacts(db, {
+          const cc = yield* filterStoppedRecipients(db, {
             ...suppressionInput,
             recipients: (loaded.cc ?? []).map((email) => ({ email })),
           }).pipe(
@@ -818,7 +822,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 }),
             ),
           );
-          const bcc = yield* filterSuppressedContacts(db, {
+          const bcc = yield* filterStoppedRecipients(db, {
             ...suppressionInput,
             recipients: (loaded.bcc ?? []).map((email) => ({ email })),
           }).pipe(
@@ -833,7 +837,22 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             ),
           );
 
+          // With those an earlier run stripped before a claim SES then refused: that run
+          // narrowed the row's recipients, so none of them is looked at again here.
+          const stripped = [
+            ...(loaded.stripped ?? []),
+            ...to.stripped,
+            ...cc.stripped,
+            ...bcc.stripped,
+          ];
+
           if (to.kept.length === 0 && cc.kept.length === 0 && bcc.kept.length === 0) {
+            // `delivery.skipped` has one reason for the Delivery. When a Suppression stopped
+            // some recipients and an Unsubscribe the rest, it says the stricter; the row's
+            // `stripped` has each recipient's own.
+            const suppression = stripped.some((recipient) => recipient.reason === "suppression");
+            const unsubscribed = stripped.some((recipient) => recipient.reason === "unsubscribed");
+            const reason = suppression ? "suppression" : "unsubscribed";
             yield* db.transaction((tx) =>
               Effect.gen(function* () {
                 const skipped = yield* updateDelivery(
@@ -842,11 +861,16 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   {
                     completedAt: new Date(),
                     error: {
-                      details: { reason: "suppression" },
-                      message: "All recipients suppressed",
+                      details: { reason },
+                      message: !unsubscribed
+                        ? "All recipients suppressed"
+                        : suppression
+                          ? "All recipients suppressed or unsubscribed"
+                          : "All recipients unsubscribed",
                       retryable: false,
                     },
                     status: "skipped",
+                    stripped,
                   },
                 );
                 if (!skipped) {
@@ -861,7 +885,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     data: {
                       delivery_id: loaded.id,
                       message_id: loaded.messageId,
-                      reason: "suppression",
+                      reason,
                     },
                     type: deliverySkipped.type,
                   },
@@ -882,7 +906,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             );
             return yield* new MessageDeliveryTerminalError({
               deliveryId: loaded.id,
-              message: "No deliverable recipients after suppression",
+              message: "No recipient left after Suppressions and Unsubscribes",
               stage: "suppressions",
             });
           }
@@ -912,12 +936,14 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           const toEmails = to.kept.map((recipient) => recipient.email);
           const ccEmails = cc.kept.map((recipient) => recipient.email);
           const bccEmails = bcc.kept.map((recipient) => recipient.email);
-          const topicId = payload.topicId ?? null;
+          // The purpose and the Topic are the Message's, as for the strip: the header and what
+          // stops the send are then decided from the same row.
+          const topicId = message.topicId;
 
           let contactId: string | null = null;
           let orgSlug: string | null = null;
           if (
-            payload.purpose === "marketing" &&
+            message.purpose === "marketing" &&
             topicId &&
             toEmails.length === 1 &&
             ccEmails.length === 0 &&
@@ -971,7 +997,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
             existing: loaded.headers,
             messageId: loaded.messageId,
             orgSlug,
-            purpose: payload.purpose,
+            purpose: message.purpose,
             secret: listUnsubscribe.secret,
             toCount: toEmails.length,
             topicId,
@@ -999,10 +1025,11 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
           const restrip = yield* Effect.uninterruptible(
             Effect.gen(function* () {
               // Only a run that moves it from `queued` may send it, and only while its sender may
-              // send and no recipient this run kept is suppressed: a Domain paused or lost to
-              // another Project since accept is never sent from, and a Contact a bounce or
-              // complaint suppressed since the strip above is never sent to. The claim also
-              // writes the recipients it sends to, so the Delivery names no one it stripped.
+              // send and no recipient this run kept is suppressed or unsubscribed: a Domain
+              // paused or lost to another Project since accept is never sent from, and a
+              // Contact a bounce or complaint suppressed since the strip above, or who
+              // unsubscribed since, is never sent to. The claim also writes the recipients it
+              // sends to and the ones it stripped, each where the Delivery keeps them.
               const sender = senderMaySend(appEnvironment.organizationId);
               const claimMillis = yield* Clock.currentTimeMillis;
               // Nor is it sent more than `STUCK_AGE` after it was due: its job was held up
@@ -1010,11 +1037,12 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
               const inTime = sql<boolean>`not ${dueBefore(
                 new Date(claimMillis - Duration.toMillis(STUCK_AGE)),
               )}`;
-              const recipientsUnsuppressed = sql<boolean>`not exists (select 1 from ${contact} where ${suppressedAmong(
+              const recipientsUnstopped = sql<boolean>`not exists (select 1 from ${contact} where ${stoppedAmong(
                 {
                   emails: [...toEmails, ...ccEmails, ...bccEmails].map(normalizeContactEmail),
                   organizationAppEnvironmentId: message.organizationAppEnvironmentId,
                   purpose: message.purpose,
+                  topicId: message.topicId,
                 },
               )})`;
               const [claimed] = yield* db
@@ -1024,6 +1052,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                   cc: loaded.cc && ccEmails,
                   startedAt: new Date(claimMillis),
                   status: "sending",
+                  stripped: stripped.length > 0 ? stripped : null,
                   to: toEmails,
                 })
                 .where(
@@ -1034,7 +1063,7 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                     sender.domainHeld,
                     sender.sandboxOpen,
                     inTime,
-                    recipientsUnsuppressed,
+                    recipientsUnstopped,
                   ),
                 )
                 .returning({ startedAt: emailDelivery.startedAt })
@@ -1054,8 +1083,9 @@ export const makeEmailDeliverHandler = (listUnsubscribe: EmailDeliverHandlerOpti
                 // One read tells a sender that may not send from a claim another run made. The
                 // dead-letter step records the first and tells the Project; a duplicate run of
                 // the job retries later, to find what the other run did. A Delivery still
-                // `queued` whose sender may send was refused for a recipient, or for something
-                // lifted since: either way no run has it, so this one goes round again.
+                // `queued` whose sender may send was refused for a recipient (suppressed or
+                // unsubscribed since the strip), or for something lifted since: either way no
+                // run has it, so this one goes round again.
                 const [unclaimed] = yield* db
                   .select({ inTime, status: emailDelivery.status, ...sender })
                   .from(emailDelivery)
