@@ -8,10 +8,11 @@ import { createCustomDomain } from "@repo/channels/email/custom-domain/lifecycle
 import { DnsLookups } from "@repo/channels/email/dns-lookups";
 import { EmailManagedDns } from "@repo/channels/email/managed-dns";
 import { Jobs, type JobsService } from "@repo/jobs";
+import { SELF_HOSTED_LIMITS } from "@repo/persistence/auth/plans";
 import { parseBetterAuthSecrets } from "@repo/persistence/crypto/auth-secrets";
 import { SymmetricCrypto } from "@repo/persistence/crypto/symmetric";
 import { DB, makeDbLive } from "@repo/persistence/db/effect";
-import { organization } from "@repo/persistence/db/schema";
+import { organization, user, userChannel } from "@repo/persistence/db/schema";
 import { Effect, Layer } from "effect";
 import { typeid } from "typeid-js";
 import { makeFakeEmailBackend } from "./fake";
@@ -51,9 +52,22 @@ describe("fake email backend's identities (PostgreSQL)", () => {
       const db = yield* DB;
       const fake = yield* makeFakeEmailBackend("fake");
       const organizationId = typeid("orgn").toString();
+      // Adding a Domain reads the Billing User's Plan; this one's sets no Domain limit.
+      const billingUserId = `user_${organizationId}`;
       yield* db
-        .insert(organization)
-        .values({ id: organizationId, name: "Outside", slug: `outside-${organizationId}` });
+        .insert(user)
+        .values({ email: `${billingUserId}@example.test`, id: billingUserId, name: "Billing" });
+      yield* db.insert(userChannel).values({
+        channelType: "email",
+        limits: SELF_HOSTED_LIMITS.email,
+        userId: billingUserId,
+      });
+      yield* db.insert(organization).values({
+        billingUserId,
+        id: organizationId,
+        name: "Outside",
+        slug: `outside-${organizationId}`,
+      });
       const fqdn = `${Bun.randomUUIDv7()}.example.test`;
       // As a person makes one in the SES console, or another system on the same account.
       yield* fake.addOutsideIdentity({ fqdn, region: null });

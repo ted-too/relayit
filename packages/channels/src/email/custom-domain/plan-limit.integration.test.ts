@@ -34,7 +34,7 @@ describe("a Plan's Domain limit (PostgreSQL)", () => {
       createIdentity: ({ fqdn }) =>
         Effect.succeed({ mailFrom: { domain: `send.${fqdn}`, records: [] } }),
       defaultRegion: "eu-central-1",
-      deleteIdentity: () => Effect.void,
+      deleteIdentity: () => Effect.succeed(true),
       ensureInfrastructure: () => Effect.void,
       getIdentityStatus: () => Effect.die("unused"),
       getProjectSendingStatus: () => Effect.die("unused"),

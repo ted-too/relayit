@@ -250,7 +250,7 @@ const registerCustomDomainIdentity = (input: {
                     customDomainId: input.customDomainId,
                     fqdn: input.fqdn,
                     message:
-                      "This domain already has an SES identity that Relayit can't take over, so it can't be added. Contact support if it should send through Relayit.",
+                      "This domain already has an SES identity that Relayit can't take over, so it can't be added. Whoever runs this Relayit deployment can remove that identity in SES.",
                   });
                 default:
                   return new CustomDomainError({
@@ -1011,7 +1011,9 @@ const removeUnlinkedDomain = (
     // recorded none, always in the default region, and SES takes deleting no identity as done.
     // The selector keeps the job to this Domain's identity, so one of that name Relayit did
     // not make stays. Recorded too, for an add of the FQDN that comes before the job has run.
-    if (hasIdentity) {
+    // A registration found here says otherwise, whatever the caller was refused: another
+    // add of the Domain registered it since.
+    if (hasIdentity || registration) {
       yield* tx.insert(removedDomainIdentity).values({
         dkimSelector: domain.dkimSelector,
         fqdn: domain.fqdn,
