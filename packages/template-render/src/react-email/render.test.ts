@@ -98,7 +98,14 @@ export default function Email() {
       subject: "Hello",
     });
 
-    expect(result).toMatchObject({ ok: false, error: { code: "render_failed" } });
+    // Named by its place in the artifact, not by the host's temp directory.
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "render_failed",
+        message: "Cannot find package 'is-number' imported from artifact.mjs",
+      },
+    });
   });
 
   it("gives the artifact's process.env only what the runner needs", async () => {

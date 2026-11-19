@@ -22,8 +22,13 @@ export async function renderSealedReactEmailArtifact(input: {
   mergePreviewProps?: boolean;
   timeoutMs?: number;
 }): Promise<ReactEmailRenderResult> {
-  const tempDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-react-email-"));
+  // The real path, as the isolate's errors name it, so it can be cut from them below.
+  const tempDir = await NodeFSP.realpath(
+    await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-react-email-")),
+  );
   const artifactPath = NodePath.join(tempDir, "artifact.mjs");
+  // A failure's message is shown to the Project, and the temp directory is the host's.
+  const withoutTempDir = (message: string) => message.replaceAll(`${tempDir}/`, "");
 
   try {
     const bytes =
@@ -88,13 +93,16 @@ export async function renderSealedReactEmailArtifact(input: {
         ok: false,
         error: {
           code: "render_failed",
-          message: stderr.trim() || "Sealed artifact isolate produced no output",
+          message: withoutTempDir(stderr.trim()) || "Sealed artifact isolate produced no output",
         },
       };
     }
 
     try {
-      return JSON.parse(line) as ReactEmailRenderResult;
+      const result = JSON.parse(line) as ReactEmailRenderResult;
+      return result.ok
+        ? result
+        : { ...result, error: { ...result.error, message: withoutTempDir(result.error.message) } };
     } catch {
       return {
         ok: false,

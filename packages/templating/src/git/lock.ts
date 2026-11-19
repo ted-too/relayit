@@ -30,55 +30,58 @@ export const withWorkspaceGitLock = <A, E, R>(
   workspaceId: string,
   effect: Effect.Effect<A, E, R>,
   options?: { readonly waitFor: Duration.Input },
-): Effect.Effect<A, E | TemplatingBuilderError, R | Redis> =>
-  Effect.gen(function* () {
-    const redis = yield* Redis;
-    const key = lockKey(workspaceId);
-    const token = crypto.randomUUID();
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const redis = yield* Redis;
+      const key = lockKey(workspaceId);
+      const token = crypto.randomUUID();
 
-    const acquire = redis
-      .evaluateNumber({
-        args: [token, String(LOCK_TTL_SECONDS)],
-        keys: [key],
-        script: ACQUIRE_SCRIPT,
-      })
-      .pipe(
-        Effect.mapError(
-          () =>
-            new TemplatingBuilderError({
-              code: "failed",
-              message: "Failed to acquire workspace lock.",
-            }),
-        ),
-        Effect.filterOrFail(
-          (acquired) => acquired === 1,
-          () =>
-            new TemplatingBuilderError({
-              code: "busy",
-              message: "Workspace is busy; retry shortly.",
-            }),
-        ),
-      );
-    yield* options
-      ? acquire.pipe(
-          Effect.retry({
-            schedule: Schedule.spaced("100 millis").pipe(
-              Schedule.upTo({ duration: options.waitFor }),
-            ),
-            while: (error) => error.code === "busy",
-          }),
-        )
-      : acquire;
-
-    return yield* effect.pipe(
-      Effect.ensuring(
+      // One pair, so a caller interrupted while Redis is taking the lock still releases
+      // it: the take runs uninterrupted to its answer, and a take that got the lock has
+      // its release registered before the interruption is seen.
+      const take = Effect.acquireRelease(
         redis
           .evaluateNumber({
-            args: [token],
+            args: [token, String(LOCK_TTL_SECONDS)],
             keys: [key],
-            script: RELEASE_SCRIPT,
+            script: ACQUIRE_SCRIPT,
           })
-          .pipe(Effect.ignore),
-      ),
-    );
-  });
+          .pipe(
+            Effect.mapError(
+              () =>
+                new TemplatingBuilderError({
+                  code: "failed",
+                  message: "Failed to acquire workspace lock.",
+                }),
+            ),
+            Effect.filterOrFail(
+              (acquired) => acquired === 1,
+              () =>
+                new TemplatingBuilderError({
+                  code: "busy",
+                  message: "Workspace is busy; retry shortly.",
+                }),
+            ),
+          ),
+        () =>
+          redis
+            .evaluateNumber({ args: [token], keys: [key], script: RELEASE_SCRIPT })
+            .pipe(Effect.ignore),
+      );
+      // Only the take is uninterruptible: a waiting caller can still be cancelled between
+      // its attempts.
+      yield* options
+        ? take.pipe(
+            Effect.retry({
+              schedule: Schedule.spaced("100 millis").pipe(
+                Schedule.upTo({ duration: options.waitFor }),
+              ),
+              while: (error) => error.code === "busy",
+            }),
+          )
+        : take;
+
+      return yield* effect;
+    }),
+  );

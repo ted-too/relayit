@@ -7,6 +7,7 @@ import {
   RiLoader4Line,
   RiSaveLine,
 } from "@remixicon/react";
+import { Invalid } from "@repo/contracts/dashboard";
 import { Badge } from "@repo/ui/components/reui/badge";
 import { Button } from "@repo/ui/components/ui/coss/button";
 import {
@@ -130,6 +131,8 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   propsByPathRef.current = propsByPath;
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewSubject, setPreviewSubject] = useState<string | null>(null);
+  // Why the last preview failed, in the bundler's or the render's own words.
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [editorTab, setEditorTab] = useState<EditorTab>("code");
   const [propsOpen, setPropsOpen] = useState(true);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -137,7 +140,15 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   const [newFilePath, setNewFilePath] = useState("reactEmail/");
 
   const filesQuery = useQuery(queries.organizations.bySlug(orgSlug).workspace(KIND).files);
-  const entriesQuery = useQuery(queries.organizations.bySlug(orgSlug).workspace(KIND).entries);
+  // A new workspace's Entry rows are written by the scaffold its first files read starts
+  // and waits for. Read beside that read, the list is empty and nothing refetches it, so
+  // it is read once the files have answered: again even if a list is cached, since a
+  // Template's page may have read an empty one moments before.
+  const entriesQuery = useQuery({
+    ...queries.organizations.bySlug(orgSlug).workspace(KIND).entries,
+    enabled: filesQuery.isSuccess,
+    staleTime: 0,
+  });
   const templateQuery = useQuery({
     ...queries.organizations.bySlug(orgSlug).template(search.templateId ?? ""),
     enabled: Boolean(search.templateId),
@@ -255,8 +266,11 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
           if (!cancelled) {
             setActivePath(entryPath);
           }
-        } else if (search.entryId && entriesQuery.data) {
-          const entry = entriesQuery.data.find((row) => row.id === search.entryId);
+        } else if (search.entryId) {
+          const entries = await queryClient.fetchQuery(
+            queries.organizations.bySlug(orgSlug).workspace(KIND).entries,
+          );
+          const entry = entries.find((row) => row.id === search.entryId);
           if (entry && !cancelled) {
             setActivePath(entry.path);
           }
@@ -283,7 +297,6 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
   }, [
     bootstrapped,
     commitFiles,
-    entriesQuery.data,
     orgSlug,
     queryClient,
     search.entryId,
@@ -301,6 +314,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
     setPropsJson(propsByPathRef.current[activePath] ?? "{}");
     setPreviewHtml(null);
     setPreviewSubject(null);
+    setPreviewError(null);
     setEditorTab("code");
     setPropsOpen(true);
   }, [activePath]);
@@ -425,6 +439,7 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
       });
       setPreviewHtml(result.html);
       setPreviewSubject(result.subject);
+      setPreviewError(null);
       if (activePath) {
         const nextJson = `${JSON.stringify(result.props, null, 2)}\n`;
         setPropsJson(nextJson);
@@ -432,6 +447,14 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
         setPropsOpen(false);
       }
     } catch (error) {
+      if (error instanceof Invalid && error.detail !== undefined) {
+        // The Entry's own source failed: show where, in place of the stale render.
+        setPreviewHtml(null);
+        setPreviewError(error.detail);
+        return;
+      }
+      // Not the reason for this failure: don't leave the last one beside the toast.
+      setPreviewError(null);
       toastError(error as never);
     }
   }
@@ -787,6 +810,13 @@ export function WorkspaceIde({ search }: { search: WorkspaceIdeSearch }) {
                     <div className="flex h-full items-center justify-center gap-2 text-muted-foreground text-sm">
                       <RiLoader4Line className="animate-spin" />
                       Rendering draft…
+                    </div>
+                  ) : previewError ? (
+                    <div className="flex h-full flex-col gap-3 overflow-auto p-6">
+                      <p className="font-medium text-red-700 text-sm">Preview failed</p>
+                      <pre className="whitespace-pre-wrap break-words font-mono text-neutral-800 text-xs">
+                        {previewError}
+                      </pre>
                     </div>
                   ) : previewHtml ? (
                     <iframe

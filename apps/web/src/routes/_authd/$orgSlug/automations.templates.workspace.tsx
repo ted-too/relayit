@@ -18,9 +18,7 @@ export const Route = createFileRoute("/_authd/$orgSlug/automations/templates/wor
     void context.queryClient.ensureQueryData(
       queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").files,
     );
-    void context.queryClient.ensureQueryData(
-      queries.organizations.bySlug(params.orgSlug).workspace("reactEmail").entries,
-    );
+    // The Entries are not read here: see `entriesQuery` in the IDE.
   },
   component: RouteComponent,
 });

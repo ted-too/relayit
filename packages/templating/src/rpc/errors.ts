@@ -14,7 +14,11 @@ export class TemplatingBuilderError extends Schema.TaggedError<TemplatingBuilder
     ]),
     /** Static human-readable summary — do not interpolate identifiers into this. */
     message: Schema.String,
-    /** Why, in the failing tool's own words (a render error's message), for the log. */
+    /**
+     * Why the workspace's own source failed, in the failing tool's words: an install's
+     * stderr, the bundler's messages, a render error. The api shows it to the Project's
+     * members, so it carries nothing of the host.
+     */
     detail: Schema.optional(Schema.String),
   },
 ) {}

@@ -1,11 +1,16 @@
 /**
  * The dashboard's operations over the real api server, better-auth and Postgres, with the
- * fake email backend and no template builder. The point is authorisation: every group
- * refuses a request without a session, a Project's operations refuse anyone who isn't its
- * member, a member's role decides what they may change, and a Project id taken from
- * another Project reaches nothing.
+ * fake email backend. The point is authorisation: every group refuses a request without a
+ * session, a Project's operations refuse anyone who isn't its member, a member's role
+ * decides what they may change, and a Project id taken from another Project reaches
+ * nothing. Only the last test, on a failed preview, runs a template builder, and its
+ * `bun install` needs the npm registry.
  */
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { describe, expect, layer, test } from "@effect/vitest";
+import { makeLocalObjectStorageLive } from "@repo/object-storage";
 import { setBanned, setPlatformAdmin } from "@repo/persistence/auth/platform-admin";
 import { ensureUserLimits } from "@repo/persistence/auth/plans";
 import { createPromiseDb } from "@repo/persistence/db/promise";
@@ -16,9 +21,17 @@ import {
   templatingWorkspaceEntry,
   user,
 } from "@repo/persistence/db/schema";
+import { makeDbLive } from "@repo/persistence/db/effect";
+import { makeRedisLive } from "@repo/redis";
+import {
+  makeBuilderAuthServerLayer,
+  TemplatingBuilderHandlersLive,
+  TemplatingBuilderRpcs,
+} from "@repo/templating";
 import { eq } from "drizzle-orm";
-import { ConfigProvider, Context, Effect, Layer } from "effect";
-import { HttpServer } from "effect/http";
+import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect";
+import { HttpRouter, HttpServer } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 import { apiConfig } from "../env";
 import { apiServer } from "../http";
 import { makeApiServices } from "../layers";
@@ -39,51 +52,113 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
   class Origin extends Context.Service<Origin, string>()("test/Origin") {}
 
   const run = Bun.randomUUIDv7();
-  const server = Layer.unwrap(
-    Effect.gen(function* () {
-      const config = yield* apiConfig;
-      return Layer.effect(
-        Origin,
-        Effect.gen(function* () {
-          const { address } = yield* HttpServer.HttpServer;
-          if (address._tag === "UnixPathAddress") {
-            return yield* Effect.die("the api listens on TCP");
-          }
-          return `http://127.0.0.1:${address.port}`;
-        }),
-      ).pipe(
-        Layer.provideMerge(
-          apiServer({
-            appOrigin: APP,
-            dashboard: { billing: false, githubSignIn: false },
-            hostname: "127.0.0.1",
-            port: 0,
-            unsubscribeSecrets: ["test-secret"],
+  const serverWith = (env: Record<string, string>) =>
+    Layer.unwrap(
+      Effect.gen(function* () {
+        const config = yield* apiConfig;
+        return Layer.effect(
+          Origin,
+          Effect.gen(function* () {
+            const { address } = yield* HttpServer.HttpServer;
+            if (address._tag === "UnixPathAddress") {
+              return yield* Effect.die("the api listens on TCP");
+            }
+            return `http://127.0.0.1:${address.port}`;
+          }),
+        ).pipe(
+          Layer.provideMerge(
+            apiServer({
+              appOrigin: APP,
+              dashboard: { billing: false, githubSignIn: false },
+              hostname: "127.0.0.1",
+              port: 0,
+              unsubscribeSecrets: ["test-secret"],
+            }),
+          ),
+          Layer.provideMerge(ApiAuth.layer({ ...config, rateLimit: false })),
+          Layer.provideMerge(makeApiServices(config)),
+        );
+      }),
+    ).pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              API_URL: "http://api.test",
+              APP_URL: APP,
+              BETTER_AUTH_SECRETS: "1:dashboard-test-secret-0123456789abcdef",
+              DATABASE_URL: testDatabaseUrl,
+              EMAIL_BACKEND: "fake",
+              LOG_LEVEL: "Error",
+              NODE_ENV: "test",
+              OBJECT_STORAGE: "local",
+              REDIS_KEY_PREFIX: `test:${run}:`,
+              REDIS_URL: testRedisUrl,
+              ...env,
+            },
           }),
         ),
-        Layer.provideMerge(ApiAuth.layer({ ...config, rateLimit: false })),
-        Layer.provideMerge(makeApiServices(config)),
-      );
-    }),
-  ).pipe(
-    Layer.provide(
-      ConfigProvider.layer(
-        ConfigProvider.fromEnv({
-          env: {
-            API_URL: "http://api.test",
-            APP_URL: APP,
-            BETTER_AUTH_SECRETS: "1:dashboard-test-secret-0123456789abcdef",
-            DATABASE_URL: testDatabaseUrl,
-            EMAIL_BACKEND: "fake",
-            LOG_LEVEL: "Error",
-            NODE_ENV: "test",
-            OBJECT_STORAGE: "local",
-            REDIS_KEY_PREFIX: `test:${run}:`,
-            REDIS_URL: testRedisUrl,
-          },
-        }),
       ),
-    ),
+    );
+  const server = serverWith({});
+
+  /**
+   * The api with a template builder beside it: the builder's own Rpc handlers on a local
+   * port, over the same Postgres and Redis, keeping objects in a temp directory. `bun
+   * install` runs for real, so these need the npm registry.
+   */
+  const serverWithBuilder = Layer.unwrap(
+    Effect.gen(function* () {
+      const objects = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "relayit-dashboard-test-")),
+        ),
+        (dir) => Effect.promise(() => NodeFSP.rm(dir, { force: true, recursive: true })),
+      );
+      const secret = "builder-test-secret";
+      const { dispose, handler } = HttpRouter.toWebHandler(
+        RpcServer.layer(TemplatingBuilderRpcs).pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              TemplatingBuilderHandlersLive,
+              makeBuilderAuthServerLayer(Redacted.make(secret)),
+            ).pipe(
+              Layer.provideMerge(
+                Layer.mergeAll(
+                  makeDbLive({ databaseUrl: testDatabaseUrl }),
+                  makeRedisLive({ keyPrefix: `test:${run}:`, url: testRedisUrl }),
+                  makeLocalObjectStorageLive(objects),
+                ),
+              ),
+            ),
+          ),
+          Layer.provide(
+            RpcServer.layerProtocolHttp({ path: "/rpc" }).pipe(
+              Layer.provide(RpcSerialization.layerNdjson),
+            ),
+          ),
+        ),
+      );
+      const builder = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            fetch: (request) => handler(request),
+            hostname: "127.0.0.1",
+            idleTimeout: 255,
+            port: 0,
+          }),
+        ),
+        (served) =>
+          Effect.promise(async () => {
+            await served.stop(true);
+            await dispose();
+          }),
+      );
+      return serverWith({
+        TEMPLATING_BUILDER_SECRET: secret,
+        TEMPLATING_BUILDER_URL: `http://127.0.0.1:${builder.port}`,
+      });
+    }),
   );
 
   /**
@@ -1345,6 +1420,48 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
           status: 200,
         });
       }),
+    );
+  });
+
+  layer(serverWithBuilder, { timeout: "60 seconds" })((it) => {
+    it.effect(
+      "tells the Project why a preview of its Entry failed",
+      () =>
+        Effect.gen(function* () {
+          const owner = yield* signUp("previewer");
+          const project = yield* createProject(owner, `Previewer ${run}`);
+          const w = `/projects/${project.slug}/workspaces/reactEmail`;
+          expect(
+            yield* call("POST", `${w}/commits`, {
+              as: owner,
+              body: {
+                changes: {
+                  "reactEmail/unclosed.tsx":
+                    "export default function UnclosedEmail() {\n  return <div>;\n}\n",
+                },
+              },
+            }),
+          ).toMatchObject({ status: 200 });
+          const entries = yield* call("GET", `${w}/entries`, { as: owner });
+          const entry = (entries.body as { readonly id: string; readonly path: string }[]).find(
+            (row) => row.path === "reactEmail/unclosed.tsx",
+          );
+
+          const preview = yield* call("POST", `${w}/entries/${entry?.id}/preview`, {
+            as: owner,
+            body: {},
+          });
+
+          expect(preview).toMatchObject({
+            body: {
+              _tag: "Invalid",
+              detail: expect.stringMatching(/^reactEmail\/unclosed\.tsx:2:\d+: /),
+              message: "Failed to bundle workspace entry.",
+            },
+            status: 422,
+          });
+        }),
+      120_000,
     );
   });
 });

@@ -5,12 +5,19 @@ import { DB } from "@repo/persistence/db/effect";
 import { templatingWorkspaceEntry } from "@repo/persistence/db/schema";
 import { renderSealedReactEmailArtifact } from "@repo/template-render/react-email";
 import { and, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { checkoutRefToDirectory, HOSTED_DEV_REF, withWorkspaceGitLock } from "../git";
 import { TemplatingBuilderError } from "../rpc/errors";
 import { runBunInstall } from "./bun-install";
 import { bundleReactEmailEntry } from "./bundle";
 import { assertHardenedPackageJson } from "./package-json";
+import { workspaceToolOutput } from "./tool-output";
+
+// The Effect language service refuses an untyped `catch`, so the thrown value is carried
+// in this until it is logged.
+class PreviewRenderNotRun extends Data.TaggedError("PreviewRenderNotRun")<{
+  readonly cause: unknown;
+}> {}
 
 export interface PreviewResult {
   commitSha: string;
@@ -100,6 +107,11 @@ export const previewHostedWorkspaceEntry = (input: {
         if (!install.ok) {
           return yield* new TemplatingBuilderError({
             code: "failed",
+            // An install that could not be started, or was killed, is the host's failure,
+            // not the workspace's: it is in the builder's log and gets no `detail`.
+            ...(install.exitCode === null
+              ? {}
+              : { detail: workspaceToolOutput(install.stderr, tempDir) }),
             message: "Preview install failed.",
           });
         }
@@ -110,12 +122,7 @@ export const previewHostedWorkspaceEntry = (input: {
         });
 
         const rendered = yield* Effect.tryPromise({
-          catch: (cause) =>
-            new TemplatingBuilderError({
-              code: "failed",
-              detail: String(cause),
-              message: "Preview render failed.",
-            }),
+          catch: (cause) => new PreviewRenderNotRun({ cause }),
           try: () =>
             renderSealedReactEmailArtifact({
               artifact,
@@ -124,12 +131,23 @@ export const previewHostedWorkspaceEntry = (input: {
               props: input.props ?? {},
               subjectOverride: input.subjectOverride,
             }),
-        });
+        }).pipe(
+          // The isolate could not be run at all: the host's failure, so it is logged
+          // here and not put in a `detail` the Project reads.
+          Effect.tapError(({ cause }) => Effect.logWarning("Preview render could not run", cause)),
+          Effect.mapError(
+            () =>
+              new TemplatingBuilderError({
+                code: "failed",
+                message: "Preview render failed.",
+              }),
+          ),
+        );
 
         if (!rendered.ok) {
           return yield* new TemplatingBuilderError({
             code: "failed",
-            detail: rendered.error.message,
+            detail: workspaceToolOutput(rendered.error.message, tempDir),
             message: "Preview render failed.",
           });
         }
