@@ -165,7 +165,10 @@ export const makeSesEmailBackend = (config: SesConfig) =>
         }),
         Effect.catch((cause) =>
           Effect.logWarning(
-            "Failed to ensure SES tenant; sending untenanted, on the account's reputation and past any pause of the Project's tenant. The SES IAM policy needs ses:CreateTenant, ses:GetTenant and ses:CreateTenantResourceAssociation (docs/aws-ses-iam-policy.json)",
+            // SES models no access-denied error: a 403 is the credentials.
+            httpStatusOf(cause) === 403
+              ? "Failed to ensure SES tenant; sending untenanted, on the account's reputation and past any pause of the Project's tenant. The SES IAM policy needs ses:CreateTenant, ses:GetTenant and ses:CreateTenantResourceAssociation (docs/aws-ses-iam-policy.json)"
+              : "Failed to ensure SES tenant; sending untenanted",
             {
               cause,
               identityFqdn: input.identityFqdn,
