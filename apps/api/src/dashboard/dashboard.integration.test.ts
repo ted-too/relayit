@@ -961,7 +961,7 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
               key: (key.body as { key: string }).key,
             });
           const sent = yield* send();
-          expect([401, 403, 500]).not.toContain(sent.status);
+          expect(sent.status).toBe(422);
           expect(yield* send(owner)).toMatchObject({ body: sent.body, status: sent.status });
 
           // It lapses at its expiry, and stands until then.
