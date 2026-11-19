@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import { Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -37,8 +38,10 @@ const deleteIdentity = (deleteIdentity: EmailBackendService["deleteIdentity"]) =
     )
     .pipe(
       Effect.provide(
-        Layer.merge(
+        Layer.mergeAll(
           Layer.succeed(DB, db),
+          // Reached only once SES has answered, which it never does here.
+          Layer.succeed(Jobs, { cancel: unsupported, enqueue: unsupported, schedule: unsupported }),
           Layer.succeed(EmailBackend, {
             createIdentity: unsupported,
             defaultRegion: "eu-central-1",

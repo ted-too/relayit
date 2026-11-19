@@ -17,8 +17,10 @@ import {
   NotFound,
   type OperationFailed,
   PlanLimitReached,
+  RateLimited,
 } from "@repo/contracts/dashboard";
 import { DB } from "@repo/persistence/db/effect";
+import { Redis } from "@repo/redis";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { operationFailed } from "./failures";
@@ -56,6 +58,46 @@ const lifecycleFailure =
         return operationFailed(message)(error);
     }
   };
+
+/**
+ * How often one Project may add a Domain and refresh one, in each ten minutes.
+ *
+ * SES allows one control-plane call a second in a region, for the whole account, and every
+ * Project's registrations and verification checks draw on it. A member, or a script, adding
+ * and removing names in a loop would otherwise use it all: a Plan limits how many Domains
+ * are held, not how often one is added. An add and the removal that makes room for the next
+ * cost SES up to eight calls between them (create, get, MAIL FROM; then the delete job's
+ * get, tenant lookups and delete, and its second look), a refresh one get, so these keep a
+ * Project to about a fifth of the quota however it tries.
+ */
+const SES_CALL_LIMITS = { add: 10, refresh: 30 } as const;
+const SES_CALL_WINDOW_SECONDS = 10 * 60;
+
+/**
+ * Counts one add or refresh against the Project and refuses it over the limit, before SES
+ * is called. A counter in Redis with a fixed window, as better-auth keeps for `/auth/*`:
+ * the window starts at the Project's first call and the counter expires with it.
+ */
+const limitSesCalls = (action: keyof typeof SES_CALL_LIMITS, organizationId: string) =>
+  Effect.gen(function* () {
+    const redis = yield* Redis;
+    const calls = yield* redis
+      .evaluateNumber({
+        args: [String(SES_CALL_WINDOW_SECONDS)],
+        keys: [`domain-ses-calls:${action}:${organizationId}`],
+        script:
+          "local n = redis.call('INCR', KEYS[1]) if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return n",
+      })
+      .pipe(Effect.catch(operationFailed("Failed to count the Project's Domain operations.")));
+    if (calls > SES_CALL_LIMITS[action]) {
+      return yield* new RateLimited({
+        message:
+          action === "add"
+            ? "This Project has added Domains too often. Try again in a few minutes."
+            : "This Project has refreshed Domains too often. Try again in a few minutes.",
+      });
+    }
+  });
 
 /**
  * A Project's Domains as the dashboard lists them, or the one `customDomainId` names.
@@ -188,6 +230,7 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
       .handle("create", ({ payload }) =>
         Effect.gen(function* () {
           const { organizationId } = yield* DashboardMember;
+          yield* limitSesCalls("add", organizationId);
           const created = yield* createCustomDomain({ fqdn: payload.fqdn, organizationId }).pipe(
             Effect.catch(
               (
@@ -233,6 +276,7 @@ export const domainHandlers = HttpApiBuilder.group(DashboardApi, "domains", (han
             );
             return yield* listedDomain({ customDomainId: params.domainId, organizationId });
           }
+          yield* limitSesCalls("refresh", organizationId);
           if (!domain.registration) {
             // A first add that failed partway left the Domain unregistered; adding it again,
             // as the holder, finishes the registration.

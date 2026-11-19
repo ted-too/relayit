@@ -35,6 +35,13 @@ export class PlanLimitReached extends Schema.TaggedError<PlanLimitReached>()(
   { httpApiStatus: 402 },
 ) {}
 
+/** The Project has done this too often for now; trying again later is all there is to do. */
+export class RateLimited extends Schema.TaggedError<RateLimited>()(
+  "RateLimited",
+  { message: Schema.String },
+  { httpApiStatus: 429 },
+) {}
+
 /** Something this deployment doesn't have configured, such as the template builder. */
 export class Unavailable extends Schema.TaggedError<Unavailable>()(
   "Unavailable",

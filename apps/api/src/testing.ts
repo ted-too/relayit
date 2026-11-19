@@ -19,6 +19,7 @@ import {
   type handleSesNotification,
   SesNotificationTopics,
 } from "@repo/provider-aws/email/webhooks";
+import { Redis, type RedisService } from "@repo/redis";
 import { Context, Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { apiServer } from "./http";
@@ -122,6 +123,7 @@ const unusedServices = Layer.mergeAll(
   Layer.succeed(SymmetricCrypto, {} as SymmetricCrypto["Service"]),
   Layer.succeed(Jobs, {} as JobsService),
   Layer.succeed(ObjectStorage, {} as ObjectStorageService),
+  Layer.succeed(Redis, {} as RedisService),
   Layer.succeed(Usage, {} as UsageService),
   Layer.succeed(SesNotificationTopics, {} as SesNotificationTopics["Service"]),
 );

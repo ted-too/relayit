@@ -1059,6 +1059,59 @@ describe("dashboard operations (PostgreSQL, Redis)", () => {
       }),
     );
 
+    it.effect(
+      "holds one Project to its share of adds and refreshes, and leaves the next alone",
+      () =>
+        Effect.gen(function* () {
+          const owner = yield* signUp("hurried");
+          const [busy, quiet] = [
+            yield* createProject(owner, `Busy ${run.slice(-8)}`),
+            yield* createProject(owner, `Quiet ${run.slice(-8)}`),
+          ];
+          const add = (project: { readonly slug: string }, fqdn: string) =>
+            call("POST", `/projects/${project.slug}/domains`, { as: owner, body: { fqdn } });
+
+          // Ten adds in ten minutes, whatever becomes of each: these all name one Domain.
+          const fqdn = `${run}.hurried.example.test`;
+          const added = yield* add(busy, fqdn);
+          expect(added.status).toBe(200);
+          for (let again = 1; again < 10; again += 1) {
+            expect((yield* add(busy, fqdn)).status).toBe(200);
+          }
+          const refused = `${run}.refused.example.test`;
+          expect(yield* add(busy, refused)).toEqual({
+            body: {
+              _tag: "RateLimited",
+              message: "This Project has added Domains too often. Try again in a few minutes.",
+            },
+            cookies: [],
+            status: 429,
+          });
+          // Refused before anything was written, and so before SES was asked for an identity:
+          // an add writes the Domain first.
+          const db = createPromiseDb({ databaseUrl: testDatabaseUrl });
+          yield* Effect.addFinalizer(() => Effect.promise(() => db.$client.end()));
+          expect(
+            yield* Effect.promise(() =>
+              db.query.customDomain.findFirst({ where: { fqdn: refused } }),
+            ),
+          ).toBeUndefined();
+          // Another Project is not held up, by the same member or for the same name.
+          expect((yield* add(quiet, refused)).status).toBe(200);
+
+          // A refresh asks SES for the identity each time, and has its own count.
+          const refresh = call(
+            "POST",
+            `/projects/${busy.slug}/domains/${(added.body as { id: string }).id}/refresh`,
+            { as: owner },
+          );
+          for (let refreshed = 0; refreshed < 30; refreshed += 1) {
+            expect((yield* refresh).status).toBe(200);
+          }
+          expect(yield* refresh).toMatchObject({ body: { _tag: "RateLimited" }, status: 429 });
+        }),
+    );
+
     it.effect("finishes registering a Domain on refresh when its first add stopped short", () =>
       Effect.gen(function* () {
         const owner = yield* signUp("unregistered");

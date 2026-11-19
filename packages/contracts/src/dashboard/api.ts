@@ -17,6 +17,7 @@ import {
   NotFound,
   OperationFailed,
   PlanLimitReached,
+  RateLimited,
   Unavailable,
 } from "./errors";
 import {
@@ -109,14 +110,14 @@ export class DomainsApi extends HttpApiGroup.make("domains")
     }).annotate(RequiresPermission, { domain: ["read"] }),
     // Adds the Domain, or claims one another Project holds.
     HttpApiEndpoint.post("create", "/", {
-      error: [...failures, PlanLimitReached],
+      error: [...failures, PlanLimitReached, RateLimited],
       params: project,
       payload: CreateDomainInput,
       success: Domain,
     }).annotate(RequiresPermission, { domain: ["create"] }),
     // Checks SES and DNS now rather than on the worker's cadence; for a claim, only its proof.
     HttpApiEndpoint.post("refresh", "/:domainId/refresh", {
-      error: failures,
+      error: [...failures, RateLimited],
       params: domain,
       success: Domain,
     }).annotate(RequiresPermission, { domain: ["create"] }),

@@ -1,4 +1,4 @@
-import { defineJobHandler } from "@repo/jobs";
+import { defineJobHandler, Jobs } from "@repo/jobs";
 import { DB } from "@repo/persistence/db/effect";
 import {
   customDomain,
@@ -7,10 +7,10 @@ import {
   sandboxDomain,
 } from "@repo/persistence/db/schema";
 import { and, eq, sql } from "drizzle-orm";
-import { Data, Effect } from "effect";
+import { Clock, Data, Effect } from "effect";
 import { EmailBackend } from "../backend";
 import { emailDeleteDomainIdentityJob } from "./jobs";
-import { IDENTITY_CALL_TIMEOUT, lockDomainIdentity } from "./lifecycle";
+import { IDENTITY_CALL_TIMEOUT, LATE_IDENTITY_GRACE_MS, lockDomainIdentity } from "./lifecycle";
 
 export class DeleteDomainIdentityHandlerError extends Data.TaggedError(
   "DeleteDomainIdentityHandlerError",
@@ -28,6 +28,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
     Effect.gen(function* () {
       const db = yield* DB;
       const backend = yield* EmailBackend;
+      const jobs = yield* Jobs;
       const region = payload.region ?? backend.defaultRegion;
 
       yield* db
@@ -70,18 +71,43 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
                   ),
               }),
             );
-            // The identity's record goes only with the identity. When SES had none of the
-            // Domain's, a create given up on may still land, and the record is what lets a
-            // later add of the FQDN delete it; a registration clears the ones it acted on.
-            if (deleted) {
-              yield* tx
-                .delete(removedDomainIdentity)
-                .where(
-                  and(
-                    eq(removedDomainIdentity.fqdn, payload.fqdn),
-                    eq(removedDomainIdentity.dkimSelector, payload.dkimSelector),
-                  ),
-                );
+            // The identity's record goes with the identity. When SES had none of the
+            // Domain's, a create given up on may still land for a while after the removal,
+            // and the record is what lets an add of the FQDN delete it meanwhile. So the
+            // record goes once that time has passed, and until then this job is queued to
+            // look once more when it has: that run deletes an identity that landed late, and
+            // the record either way. A record kept for good would have every registration
+            // of the FQDN ask SES about it, inside its own timeout.
+            const [cleared] = yield* tx
+              .delete(removedDomainIdentity)
+              .where(
+                and(
+                  eq(removedDomainIdentity.fqdn, payload.fqdn),
+                  eq(removedDomainIdentity.dkimSelector, payload.dkimSelector),
+                  deleted
+                    ? undefined
+                    : sql`${removedDomainIdentity.createdAt} <= now() - make_interval(secs => ${LATE_IDENTITY_GRACE_MS / 1000})`,
+                ),
+              )
+              .returning({ id: removedDomainIdentity.id });
+            if (deleted || cleared) {
+              return;
+            }
+            // Only while a record is left: one a registration has cleared was acted on there.
+            const [recorded] = yield* tx
+              .select({ id: removedDomainIdentity.id })
+              .from(removedDomainIdentity)
+              .where(
+                and(
+                  eq(removedDomainIdentity.fqdn, payload.fqdn),
+                  eq(removedDomainIdentity.dkimSelector, payload.dkimSelector),
+                ),
+              )
+              .limit(1);
+            if (recorded) {
+              yield* jobs.enqueue(emailDeleteDomainIdentityJob, payload, tx, {
+                delayUntil: (yield* Clock.currentTimeMillis) + LATE_IDENTITY_GRACE_MS,
+              });
             }
           }),
         )
@@ -96,6 +122,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
               case "EmailBackendRateLimited":
               case "EmailBackendRejected":
               case "EmailBackendUnavailable":
+              case "JobEnqueueError":
                 return error;
               default:
                 return new DeleteDomainIdentityHandlerError({
@@ -118,6 +145,7 @@ export const emailDeleteDomainIdentityHandler = defineJobHandler({
       case "EmailBackendAuthenticationError":
       case "EmailBackendRateLimited":
       case "EmailBackendUnavailable":
+      case "JobEnqueueError":
         return "retryable";
       default:
         return "terminal";
