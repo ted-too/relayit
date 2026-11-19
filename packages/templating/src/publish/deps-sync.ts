@@ -36,6 +36,12 @@ export const depsSyncHostedWorkspace = (input: { workspaceId: string }) =>
 
         yield* hardenCheckedOutPackageJson(tempDir);
 
+        // Resolved again from the checked package.json alone. An install keeps what the
+        // lockfile already resolved a package to, a path included, and installs from it.
+        yield* Effect.promise(() =>
+          NodeFSP.rm(NodePath.join(tempDir, "bun.lock"), { force: true }),
+        );
+
         const install = yield* runBunInstall({
           args: ["--ignore-scripts"],
           cwd: tempDir,

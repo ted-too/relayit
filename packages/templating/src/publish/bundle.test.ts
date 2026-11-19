@@ -87,6 +87,30 @@ describe("bundleReactEmailEntry", () => {
     }),
   );
 
+  // No import names the host file: the resolver follows the package's `main` to it.
+  it.live("refuses a directory whose package.json main climbs out to a host file", () =>
+    Effect.gen(function* () {
+      const { outside, workspaceDir } = yield* workspaceImporting(
+        'import value from "./probe" with { type: "text" };',
+      );
+      yield* Effect.promise(async () => {
+        const probe = NodePath.join(workspaceDir, "reactEmail", "probe");
+        await NodeFSP.mkdir(probe);
+        await NodeFSP.writeFile(
+          NodePath.join(probe, "package.json"),
+          JSON.stringify({
+            main: NodePath.relative(
+              await NodeFSP.realpath(probe),
+              NodePath.join(await NodeFSP.realpath(outside), "environ"),
+            ),
+          }),
+        );
+      });
+
+      yield* refusedAsOutside(workspaceDir);
+    }),
+  );
+
   it.live("builds without the workspace's tsconfig, which may extend a file of the host's", () =>
     Effect.gen(function* () {
       const { outside, workspaceDir } = yield* workspaceImporting("const value = <p>hello</p>;");
@@ -95,10 +119,14 @@ describe("bundleReactEmailEntry", () => {
           NodePath.join(outside, "tsconfig.json"),
           JSON.stringify({ compilerOptions: { jsxImportSource: "from-the-host" } }),
         );
-        // At both depths the bundler looks for one.
-        for (const dir of [workspaceDir, NodePath.join(workspaceDir, "reactEmail")]) {
+        // At both depths, and by both names, the bundler looks for one.
+        for (const path of [
+          "tsconfig.json",
+          "reactEmail/tsconfig.json",
+          "reactEmail/jsconfig.json",
+        ]) {
           await NodeFSP.writeFile(
-            NodePath.join(dir, "tsconfig.json"),
+            NodePath.join(workspaceDir, path),
             JSON.stringify({ extends: NodePath.join(outside, "tsconfig.json") }),
           );
         }

@@ -457,6 +457,40 @@ describe("workspace operations (PostgreSQL, Redis)", () => {
     120_000,
   );
 
+  it.live(
+    "resolves a deps sync from package.json alone, whatever the lockfile held",
+    () =>
+      Effect.gen(function* () {
+        const outside = yield* hostDirectory;
+        const workspaceId = yield* insertWorkspace;
+        yield* listFiles({ workspaceId });
+        const scaffolded = yield* readFile({ path: "bun.lock", workspaceId });
+        // No commit can write the lockfile; one that named a path all the same would be
+        // installed from, and kept, by an install that started from it.
+        const forged = scaffolded.content.replace(
+          /"react": \["react@[^\]]+\]/,
+          `"react": ["react@file:${outside}", {}]`,
+        );
+        expect(forged).toContain("react@file:");
+        yield* withWorkspaceGitLock(
+          workspaceId,
+          gitCommitFiles({
+            changes: { "bun.lock": forged },
+            message: "chore: forge the lockfile",
+            ref: HOSTED_DEV_REF,
+            workspaceId,
+          }),
+        );
+
+        yield* depsSync({ workspaceId });
+
+        const synced = yield* readFile({ path: "bun.lock", workspaceId });
+        expect(synced.content).not.toContain("@file:");
+        expect(synced.content).toMatch(/"react": \["react@19\./);
+      }).pipe(Effect.scoped, Effect.provide(services)),
+    120_000,
+  );
+
   it.live.each([".npmrc", "bunfig.toml", "reactEmail/.npmrc", "package-lock.json"])(
     "refuses %s in a workspace, at a commit and in a tree that already holds one",
     (path) =>

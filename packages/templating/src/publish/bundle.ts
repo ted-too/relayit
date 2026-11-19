@@ -19,6 +19,8 @@ export const bundleReactEmailEntry = (input: { entryPath: string; workspaceDir: 
         const proc = Bun.spawn(
           [
             "bun",
+            // Bun would read a `.env` beside the runner.
+            "--no-env-file",
             NodePath.join(runnerDir, "bundle-runner.ts"),
             input.workspaceDir,
             input.entryPath,
