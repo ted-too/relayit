@@ -287,9 +287,19 @@ describe("POST /messages/email", () => {
         headers,
         status: "HTTP/1.1 404 Not Found",
       });
+      // A client that keeps its connection open with megabytes of the body sent is the one
+      // that held a graceful shutdown for its 20 seconds.
+      expect(
+        yield* announced(
+          origin,
+          "/messages/email",
+          { "content-type": "application/json", "x-api-key": "rel_unknown" },
+          40 * 1024 * 1024,
+          true,
+        ),
+      ).toMatchObject({ headers, status: "HTTP/1.1 403 Forbidden" });
       expect(accepted).toEqual([]);
 
-      // A connection left waiting on its body holds a graceful shutdown for 20 seconds.
       const started = Date.now();
       yield* Scope.close(serving, Exit.void);
       expect(Date.now() - started).toBeLessThan(2000);

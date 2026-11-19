@@ -179,13 +179,15 @@ export const request = (
 
 /**
  * A request that announces `bytes` (40 MiB unless given) and sends 1 KiB: an answer can only
- * come from a handler that isn't waiting for the rest.
+ * come from a handler that isn't waiting for the rest. With `held`, it sends 4 MiB and
+ * never ends the connection itself, which is what leaves a server waiting on the body.
  */
 export const announced = (
   origin: string,
   path: string,
   headers: Record<string, string>,
   bytes = 40 * 1024 * 1024,
+  held = false,
 ) =>
   Effect.promise(async () => {
     let received = "";
@@ -215,11 +217,25 @@ export const announced = (
         `{"html":"${"a".repeat(1024)}`,
       ].join("\r\n"),
     );
+    if (held) {
+      // More than the socket buffers hold, so the server has body it is not reading. A
+      // write of nothing means the buffer is full or the server has closed: both end it.
+      const more = Buffer.alloc(64 * 1024, "a");
+      for (let sent = 0; sent < 4 * 1024 * 1024;) {
+        const wrote = socket.write(more);
+        if (wrote <= 0) {
+          break;
+        }
+        sent += wrote;
+      }
+    }
     const response = await Promise.race([
       answered.promise,
       Bun.sleep(2000).then(() => "no answer while the body is unread"),
     ]);
-    socket.end();
+    if (!held) {
+      socket.end();
+    }
     const [head, body] = response.split("\r\n\r\n");
     const [status, ...lines] = head?.split("\r\n") ?? [];
     return {
